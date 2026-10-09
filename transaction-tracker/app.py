@@ -13092,9 +13092,21 @@ def api_lsc_board():
     if staff and request.args.get("preview") == "1":
         return jsonify(preview_board_payload())
     payload = lsc_board_payload()
+    # Members see the board once THE DRAW is complete (Kerry 10/8: "When
+    # this is done ... It should show under the LONE STAR CUP under
+    # LEADERBOARD. All should be expandable to see the scorecards for each
+    # match and where pops will be"), or whenever board_live is on.
     if (payload.get("configured") and not payload.get("board_live")
             and not staff):
-        return jsonify({"configured": False})
+        import json as _json
+        from email_parser.lsc_draw import draw_complete
+        from email_parser.database import get_app_setting
+        try:
+            _eid = int((_json.loads(get_app_setting("lsc_matches") or "{}") or {}).get("event_id") or 0)
+        except (ValueError, TypeError):
+            _eid = 0
+        if not (_eid and draw_complete(_eid)):
+            return jsonify({"configured": False})
     # The skins payout is staff only (CA #726): members get the skins
     # counts, never a dollar or a staff flag, even once the board is live.
     return jsonify(payload if staff else strip_money(payload))

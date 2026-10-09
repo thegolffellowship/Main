@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.528.5";
+window.TGF_VERSION = "2.528.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.6",
+    date: "2026-10-08",
+    title: "The member Cup board: opens when THE DRAW is done, stacked names, a pops card per match, navy",
+    changes: [
+      "Kerry 10/8: \"It should show under the LONE STAR CUP under LEADERBOARD. All should be expandable to see the scorecards for each match and where pops will be.\"",
+      "Opening rule: members see the Cup board on LEADERBOARD → LONE STAR CUP once every session of THE DRAW is drawn. A partial or test draw never shows; board_live still opens it any time.",
+      "Pops before play: each unplayed match opens to a pops grid. It shows holes 1-18 with par and one row per player (one per pair in Foursomes), with a dot on each hole where that player gets a stroke off the lowest, plus each player's total. Played matches keep the hole-by-hole scorecard.",
+      "Course for the pops: a session not yet set up in Live Scoring takes par and stroke index from the Cup's course record, so the pops show the moment THE DRAW lands.",
+      "\"Make sure each player gets their names in Bitters and last names are caps per our rules. Stack full names rather than wrap.\" Each side's players sit on their own lines, First LAST in Bitter, with LAST in capitals for members and alumni, using the same rule as THE DRAW. Matches are numbered 1-28 through the weekend.",
+      "\"For the Lone Star Cup pages, make everything that is BLACK, LSC Navy.\" On the Cup tab, the match header bars, the MATCHES / SKINS toggle and the text are now Cup navy.",
+      "Test fix: test_lsc_preview's live cart-sign check now expects the sheet to print from THE DRAW (since v2.526.x), still never from the demo rounds."
+    ]
+  },
   {
     version: "2.528.5",
     date: "2026-10-08",

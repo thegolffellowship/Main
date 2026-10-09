@@ -182,6 +182,19 @@ def state(event_id: int, db_path=None) -> dict:
     return out
 
 
+def draw_complete(event_id: int, db_path=None) -> bool:
+    """Every session's pools fully drawn (THE DRAW is done). The member Cup
+    board opens on this (Kerry 10/8: "When this is done ... It should show
+    under the LONE STAR CUP under LEADERBOARD"), so a partial or test draw
+    never reaches members; board_live still opens it any time."""
+    try:
+        pl, st = pools(event_id, db_path), state(event_id, db_path)
+        return all(len(pl[k][p]["austin"]) > 0 and len(st[k][p]) >= len(pl[k][p]["austin"])
+                   for k in SESSIONS for p in POOLS)
+    except Exception:
+        return False
+
+
 FORMATS = {"fb": "fourball", "fs": "chapman", "sg": "singles"}
 
 

@@ -184,4 +184,24 @@ check("/member/cup-draw opens without a login, read-only",
       _mh.status_code == 200 and "const MEMBER = true" in _mt and 'id="intro"' not in _mt
       and 'id="reset"' not in _mt and 'data-s="fb"' not in _mt, _mh.status_code)
 check("the staff draw page is not the member view", "const MEMBER = false" in cl.get("/events/3329/cup-draw").get_data(as_text=True))
+# the member Cup board opens once THE DRAW is complete (Kerry 10/8)
+lsc_draw.clear(3329, "fb", db_path=DB); lsc_draw.clear(3329, "sg", db_path=DB)
+check("a partial draw keeps the member board closed",
+      lsc_draw.draw_complete(3329, db_path=DB) is False
+      and _mc.get("/api/lsc/board").get_json() == {"configured": False})
+for _k in ("fb", "fs", "sg"):
+    for _pool in ("low", "high"):
+        for _ in range(9):
+            _P = lsc_draw.pools(3329, db_path=DB)[_k][_pool]
+            _st = lsc_draw.state(3329, db_path=DB)[_k][_pool]
+            _ra = [e["key"] for e in _P["austin"] if all(x[0] != e["key"] for x in _st)]
+            _rs = [e["key"] for e in _P["sa"] if all(x[1] != e["key"] for x in _st)]
+            if not _ra:
+                break
+            any(lsc_draw.land(3329, _k, _pool, _ra[0], _s, db_path=DB).get("ok") for _s in _rs)
+_bd = _mc.get("/api/lsc/board").get_json()
+_m0 = ((_bd.get("sessions") or [{}])[0].get("matches") or [{}])[0]
+check("a complete draw opens the member board, with strokes before a ball is struck",
+      lsc_draw.draw_complete(3329, db_path=DB) and _bd.get("configured") is True
+      and len(_bd["sessions"]) == 3 and "strokes" in _m0, list(_m0)[:12])
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

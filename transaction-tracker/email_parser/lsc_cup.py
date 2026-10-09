@@ -1246,6 +1246,40 @@ def _apply_handicap_lock(conn, dial: dict, session_data: dict) -> dict:
     return out
 
 
+def _fill_event_course(conn, dial: dict, session_data: dict) -> dict:
+    """A session with no course yet (its Live Scoring round isn't seeded)
+    takes the Cup event's course: par and stroke index from the course
+    record, so the member board shows where the pops fall the moment THE
+    DRAW lands (Kerry 10/8: "All should be expandable to see the scorecards
+    for each match and where pops will be"). A seeded round's course is
+    never replaced. Never raises."""
+    try:
+        eid = int(dial.get("event_id") or 0)
+        if not eid:
+            return session_data
+        row = conn.execute("SELECT * FROM events WHERE id = ?", (eid,)).fetchone()
+        if not row:
+            return session_data
+        from email_parser.score_entry import _event_course_holes
+        out = dict(session_data or {})
+        cache = {}
+        for sess in dial.get("sessions") or []:
+            sid = sess.get("id")
+            data = dict(out.get(sid) or {})
+            if data.get("course"):
+                continue
+            n = int(sess.get("n_holes") or 18)
+            if n not in cache:
+                cache[n] = _event_course_holes(conn, dict(row), n)
+            if cache[n]:
+                data["course"] = cache[n]
+                out[sid] = data
+        return out
+    except Exception:
+        logger.exception("lsc_cup: event course fill failed")
+        return session_data
+
+
 def for_viewer(board: dict, customer_id) -> dict:
     """The board as one player sees it (Kerry 10/7, CoS #1398): in every
     session his own match comes first and carries `yours: True`, and
@@ -1405,6 +1439,7 @@ def _board_from_dial(conn, dial: dict, db_path=None, use_mock: bool = True,
                              "mock dial")
     has_scores = bool(session_data)
     session_data = _apply_handicap_lock(conn, dial, session_data)
+    session_data = _fill_event_course(conn, dial, session_data)
     _attach_player_stroke_index(conn, session_data)
     skins_ctx = _skins_ctx(conn, dial, db_path)
     board = compute_board(dial, session_data, names, skins_ctx)
@@ -1416,7 +1451,33 @@ def _board_from_dial(conn, dial: dict, db_path=None, use_mock: bool = True,
     # sessions preview it regardless — the route enforces this.
     board["board_live"] = bool(dial.get("board_live"))
     board["dial_warnings"] = validate_matches(dial)
+    _attach_display_lines(conn, dial, board, db_path)
     return board
+
+
+def _attach_display_lines(conn, dial: dict, board: dict, db_path=None) -> None:
+    """Each match side's players as their own lines, "First LAST" with the
+    LAST name in capitals for members and alumni (Kerry 10/8, on the member
+    board: "Make sure each player gets their names in Bitters and last names
+    are caps per our rules. Stack full names rather than wrap"). The same
+    names THE DRAW shows (`lsc_draw._display_names`, Kerry's member ruling
+    included). Never raises."""
+    try:
+        from email_parser.lsc_draw import _display_names
+        eid = int(dial.get("event_id") or 0)
+        lock = ((_setting_json(conn, "lsc_handicap_lock") or {}).get(str(eid)) or {}).get("players") or {}
+        cids = sorted({int(c) for sess in board.get("sessions") or [] for m in sess.get("matches") or []
+                       for p in m.get("players") or [] for c in p.get("customer_ids") or []})
+        shown = _display_names(eid, cids, lock, db_path)
+        names = roster_names(conn)
+        for sess in board.get("sessions") or []:
+            for m in sess.get("matches") or []:
+                for p in m.get("players") or []:
+                    p["lines"] = [shown.get(int(c)) or (lock.get(str(c)) or {}).get("name")
+                                  or names.get(int(c)) or names.get(str(c)) or f"#{c}"
+                                  for c in p.get("customer_ids") or []]
+    except Exception:
+        logger.exception("lsc_cup: display lines failed")
 
 
 def results_blockers(board: dict) -> list[str]:

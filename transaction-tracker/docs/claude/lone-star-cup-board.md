@@ -634,6 +634,13 @@ the Starter Sheet logo and Proxy logos too."
   on the page is +2px. v2.528.4: OFF only (`sideSum`), a Foursomes OFF
   centred on the pair, equal-height columns, and weekend numbering
   1-7 / 8-14 / 15-28.
+- **Member Cup board (v2.528.6):** `/api/lsc/board` serves members once
+  `lsc_draw.draw_complete` is true (or board_live is on). Players carry
+  `lines`, stacked "First LAST" from `lsc_draw._display_names`. A match
+  with no scores opens to `lscPopsGrid`, built from `detail.strokes` /
+  `hole_pars`. A session whose round isn't seeded takes the event's course
+  (`lsc_cup._fill_event_course`). Matches are numbered 1-28. The Cup tab
+  is navy where it was black.
 - **Members' draw page (v2.528.5):** `/member/cup-draw` is public (member
   tier, no login). It renders `cup_draw.html` with `member_view=True`: no
   intro, tabs or controls; the SUMMARY once all three sessions are drawn,

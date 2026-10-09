@@ -1705,6 +1705,29 @@
            team colors (Austin burnt orange, SA slate, same as the
            roster cards above). One 560px breakpoint, per standard. */
         #lsc-board { --mp-slate: #BF5700; --mp-clay: #4B6274; margin-top: 1.1rem; }
+        /* Kerry 10/8: "for the Lone Star Cup pages, make everything that is
+           BLACK, LSC Navy" */
+        #section-lone-star-cup { --text: var(--lsc-navy, #002855); color: var(--lsc-navy, #002855); }
+        #section-lone-star-cup .mpv2 .mp-match-meta { background: var(--lsc-navy, #002855); }
+        #section-lone-star-cup .lsc-bd-seg.sm button.on { background: var(--lsc-navy, #002855); }
+        #section-lone-star-cup .lsc-legend .li .ic { color: var(--lsc-navy, #002855); }
+        /* stacked "First LAST" names on the Cup's match strips */
+        .mpv2 .mp-strip-name.lscn b { text-transform: none; font: 700 0.95rem/1.25 'Bitter', Georgia, serif; }
+        .mpv2 .mp-strip-name.lscn { padding-top: 6px; padding-bottom: 6px; }
+        /* the pops grid (before a ball is struck) */
+        .lsc-pops-wrap { padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+        .lsc-pops { width: 100%; border-collapse: collapse; table-layout: fixed; font: 600 12px/1.2 'Barlow', 'Helvetica Neue', Arial, sans-serif; color: var(--lsc-navy, #002855); }
+        .lsc-pops th, .lsc-pops td { border: 1px solid #C9D1DD; text-align: center; padding: 3px 0; height: 22px; }
+        .lsc-pops th:first-child, .lsc-pops td.nm { width: 34%; text-align: left; padding: 3px 6px; font: 700 12px/1.2 'Bitter', Georgia, serif;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .lsc-pops tr.h th { background: var(--lsc-navy, #002855); color: #fff; font: 700 12px 'Bitter', Georgia, serif; }
+        .lsc-pops tr.par td { background: #ECEFF3; font-weight: 700; }
+        .lsc-pops tr.pl.s0 td.nm { box-shadow: inset 4px 0 0 #BF5700; padding-left: 9px; }
+        .lsc-pops tr.pl.s1 td.nm { box-shadow: inset 4px 0 0 #4B6274; padding-left: 9px; }
+        .lsc-pops .pd, .lsc-pops-key .pd { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--lsc-navy, #002855); margin: 0 1px; vertical-align: middle; }
+        .lsc-pops-key { font-size: 12px; color: #4A5F80; }
+        .lsc-pops-sum { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 12px 'Barlow', sans-serif; color: var(--lsc-navy, #002855); }
+        .lsc-pops-sum .pt.s0 b { color: #BF5700; } .lsc-pops-sum .pt.s1 b { color: #4B6274; }
         .lsc-bd-head { display: flex; align-items: stretch; border-radius: 12px;
             overflow: hidden; border: 1px solid var(--border); }
         .lsc-bd-head .t { flex: 1 1 0; display: flex; align-items: center;
@@ -2998,6 +3021,35 @@
             html += `<div class="lsc-bd-skflags">${sk.flags.map(f => `<div>${escapeHtml(f)}</div>`).join("")}</div>`;
         return `<div class="lsc-sk-sess">${html}</div>`;
     }
+    // THE POPS GRID for a Cup match before a ball is struck (Kerry 10/8:
+    // "All should be expandable to see the scorecards for each match and
+    // where pops will be"): holes, par, and one row per player (one per pair
+    // in Foursomes, one ball) with a dot on every hole he gets a stroke, from
+    // the engine's own detail.strokes (allowance applied, off the lowest).
+    function lscPopsGrid(m) {
+        const holes = (m.holes || []).map(h => h.hole);
+        if (!holes.length) return '';
+        const par = m.hole_pars || {}, st = m.strokes || {};
+        const chap = m.format === 'chapman';
+        const rows = [];
+        (m.players || []).forEach((p, si) => {
+            const ids = p.customer_ids || [], L = p.lines || [p.name];
+            if (chap) rows.push({ side: si, label: L.join(' & '), html: L.map(escapeHtml).join('<br>'), cid: ids[0] });
+            else ids.forEach((c, i) => rows.push({ side: si, label: L[i] || String(c), cid: c }));
+        });
+        const dots = (n) => n > 0 ? '<i class="pd"></i>'.repeat(Math.min(n, 3)) : '';
+        const nine = (hs) => {
+            const head = `<tr class="h"><th></th>${hs.map(h => `<th>${h}</th>`).join('')}</tr>`;
+            const parR = Object.keys(par).length ? `<tr class="par"><td class="nm">Par</td>${hs.map(h => `<td>${par[h] ?? par[String(h)] ?? ''}</td>`).join('')}</tr>` : '';
+            const pr = rows.map(r => `<tr class="pl s${r.side}"><td class="nm">${r.html || escapeHtml(r.label)}</td>${hs.map(h => `<td>${dots(((st[String(r.cid)] || {})[String(h)]) || 0)}</td>`).join('')}</tr>`).join('');
+            return `<table class="lsc-pops">${head}${parR}${pr}</table>`;
+        };
+        const total = (r) => Object.values(st[String(r.cid)] || {}).reduce((a, b) => a + (b || 0), 0);
+        const sums = rows.map(r => `<span class="pt s${r.side}">${escapeHtml(r.label)} <b>${total(r)}</b></span>`).join('');
+        return `<div class="lsc-pops-wrap">${nine(holes.slice(0, 9))}${holes.length > 9 ? nine(holes.slice(9)) : ''}
+            <div class="lsc-pops-key"><i class="pd"></i> a stroke (pop) on that hole, off the lowest in the match${chap ? ' · Foursomes: one ball, the team\'s strokes' : ''}</div>
+            <div class="lsc-pops-sum">${sums}</div></div>`;
+    }
     function lscBoardRender(box, d) {
         const A = (d.teams || {}).austin || {}, S = (d.teams || {}).sa || {};
         // Cup status (Kerry, CA #717): 1 a win, ½ a halve; level points
@@ -3032,7 +3084,11 @@
             // (the board_live gate), but the preview must say what it is.
             ? `<div class="lsc-bd-src">Preview on staged data &mdash; live scoring wires in from score entry on cup weekend.</div>`
             : "");
-        const sessions = (d.sessions || []).map(sess => {
+        // matches number through the weekend, 1-28, as the starter sheets and
+        // THE DRAW summary (Kerry 10/8)
+        const sessOff = [];
+        (d.sessions || []).reduce((t, x, i) => { sessOff[i] = t; return t + (x.matches || []).length; }, 0);
+        const sessions = (d.sessions || []).map((sess, si) => {
             let au = 0, sa = 0;
             (sess.matches || []).forEach(m => {
                 au += (m.points || {}).austin || 0;
@@ -3046,6 +3102,7 @@
                 const live = m.state === "live";
                 const o = {
                     aName, bName, live,
+                    aLines: (P[0] || {}).lines || null, bLines: (P[1] || {}).lines || null,
                     tie: m.state === "final" && !m.gg_winner_idx,
                     aWin: m.state === "final" && m.gg_winner_idx === 1,
                     bWin: m.state === "final" && m.gg_winner_idx === 2,
@@ -3064,9 +3121,10 @@
                               : (m.tee_time ? `${m.tee_time} TEE TIME` : "—"))
                     : (m.tee_time ? `${m.tee_time} TEE TIME` : "UPCOMING");
                 return mpMatchCard(o, {
-                    metaL: `Match ${i + 1}${fmtLbl ? " · " + fmtLbl : ""}`,
+                    metaL: `Match ${(sessOff[si] || 0) + i + 1}${fmtLbl ? " · " + fmtLbl : ""}`,
                     status, live,
                     hasResult: m.state !== "upcoming",
+                    cardHtml: m.state === "upcoming" ? lscPopsGrid(m) : null,
                     // the match's dial id, so a scorer link's FOLLOW THE CUP
                     // (?match=<id>) can open this card (Kerry 2026-10-07, #1357-6)
                     dataAttrs: (m.match_id ?? m.id) ? ` data-lsc-match="${escapeHtml(String(m.match_id ?? m.id))}"` : "",
@@ -5269,8 +5327,11 @@
         else if (o.aWin) { barCls = 'slate'; barTxt = o.margin || 'WON'; }
         else if (o.bWin) { barCls = 'clay'; barTxt = o.margin || 'WON'; }
         else { barCls = 'tie'; barTxt = o.margin || 'vs'; }
-        const aName = `<span class="mp-strip-name"><em>${escapeHtml(A.first)}</em><b>${escapeHtml(A.last)}</b></span>`;
-        const bName = `<span class="mp-strip-name right"><em>${escapeHtml(B.first)}</em><b>${escapeHtml(B.last)}</b></span>`;
+        // The Lone Star Cup passes each side's players as their own lines,
+        // "First LAST" in Bitter (Kerry 10/8: "Stack full names rather than wrap").
+        const stack = (L, right) => `<span class="mp-strip-name lscn${right ? ' right' : ''}">${L.map(n => `<b>${escapeHtml(n)}</b>`).join('')}</span>`;
+        const aName = o.aLines ? stack(o.aLines, false) : `<span class="mp-strip-name"><em>${escapeHtml(A.first)}</em><b>${escapeHtml(A.last)}</b></span>`;
+        const bName = o.bLines ? stack(o.bLines, true) : `<span class="mp-strip-name right"><em>${escapeHtml(B.first)}</em><b>${escapeHtml(B.last)}</b></span>`;
         return `<div class="mp-strip">${aMono}${aName}<span class="mp-strip-bar ${barCls}">${escapeHtml(barTxt)}</span>${bName}${bMono}</div>`;
     }
 
@@ -5687,6 +5748,17 @@
         const strip = mpStripHtml(o);
         const meta = `<div class="mp-match-meta"><span>${escapeHtml(opts.metaL)}</span><span class="status${opts.live ? ' live' : ''}">${escapeHtml(opts.status)}</span></div>`;
         const da = opts.dataAttrs || '';
+        if (!gen && opts.cardHtml) {
+            // a card body supplied by the caller (the Cup's pops grid before
+            // a ball is struck, Kerry 10/8: "expandable to see the scorecards
+            // for each match and where pops will be")
+            return `<div class="mp-match-card"${da}>
+            <div class="mp-card-head mp-clickable" role="button" tabindex="0" aria-expanded="false" aria-label="Show where the strokes fall">
+                ${meta}${strip}<div class="mp-card-toggle"><span class="mp-illus-note"></span><span class="mp-toggle-hint">&rsaquo; open card</span></div>${opts.prov || ''}
+            </div>
+            <div class="mp-scorecard" hidden>${opts.cardHtml}</div>
+        </div>`;
+        }
         if (!gen) {
             return `<div class="mp-match-card"${da}><div class="mp-card-head">${meta}${strip}${opts.liveNote || ''}${opts.prov || ''}</div></div>`;
         }

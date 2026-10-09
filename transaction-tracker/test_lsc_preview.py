@@ -82,7 +82,12 @@ check("cart sign tee time, hole and names (first + LAST, from customers)",
       and all(r["last"] == r["last"].upper() and r["last"] for x in signs for r in x["riders"]), signs[0])
 sun = [x for pg in appmod.cup_cart_signs_data(3329, preview=True, session_id="sun")["pages"] for x in pg]
 check("Sunday singles signs print one cart per team per group", sun and all(1 <= len(x["riders"]) <= 2 for x in sun), sun[:1])
-check("the live sign sheet never reads the demo rounds", appmod.cup_cart_signs_data(3329)["count"] == 0)
+# the live sheet prints from THE DRAW (the live dial's one match = 2 carts),
+# never from the demo rounds: no demo QR, only the live dial's players
+_live = appmod.cup_cart_signs_data(3329)
+_lv = [x for pg in _live["pages"] for x in pg]
+check("the live sign sheet never reads the demo rounds",
+      _live["count"] == 2 and not any(x.get("qr_svg") for x in _lv), _live["count"])
 held = [g for r in read["rounds"] for g in r.get("groups") or [] if g.get("lock_state") == "held"]
 check("exactly one demo group stays held (the HELD screen)", len(held) == 1, len(held))
 td = lsc_preview.teardown(db_path=DB)
