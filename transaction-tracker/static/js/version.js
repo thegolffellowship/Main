@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.533.4";
+window.TGF_VERSION = "2.533.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.533.5",
+    date: "2026-10-09",
+    title: "Lone Star Cup: the evening dinners in the weekend email and on Event Info",
+    changes: [
+      "Kerry 10/9: \"Need to add evening dinner venues and times and information/map. 7:30p tonight is at Sectionhand Steakhouse ... 8:00p tomorrow night is at Pogue Farm Market Seafood & Steakhouse.\" Each player's weekend email now lists Friday's 7:30 PM dinner at Sectionhand Steakhouse (4412 Hwy 377 S, Brownwood; shirts issued; website and map links) under Friday, and Saturday's 8:00 PM dinner at Pogue Farm Market Seafood & Steakhouse (map link) after his last Saturday match. Event Info's schedule carries the same two rows from the one copy (lsc_weekend_email.DINNERS). The email is still unsent; its approval code changes with this."
+    ]
+  },
   {
     version: "2.533.4",
     date: "2026-10-09",

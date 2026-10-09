@@ -60,9 +60,11 @@
   <section data-sec="schedule"{{ ID('schedule') }}>
     <dl class="sched">
       <div class="d"><dt>Fri · practice round</dt><dd>1:30–2:00 PM{% if practice_n %} · {{ practice_n }} players{% endif %}</dd></div>
-      <div class="d"><dt>Fri · dinner</dt><dd>Shirts issued · draw review</dd></div>
+      {% macro dinner(key, label) %}{% set dn = (dinners or {}).get(key) %}{% if dn %}<div class="d" data-dinner="{{ key }}"><dt>{{ label }} · dinner</dt><dd>{{ dn.time }} · {{ dn.venue }}{% if dn.where %} · {{ dn.where }}{% endif %}{% if dn.note %} · {{ dn.note }}{% endif %}{% for t, u in dn.links %} · <a href="{{ u }}" target="_blank" rel="noopener">{{ t }}</a>{% endfor %}</dd></div>{% endif %}{% endmacro %}
+      {{ dinner('fri', 'Fri') }}
       <div class="d"><dt>Sat AM · Fourball</dt><dd>8:30 AM · every 10 min · 7 matches</dd></div>
       <div class="d"><dt>Sat PM · Foursomes</dt><dd>1:30 PM · every 10 min · 7 matches</dd></div>
+      {{ dinner('sat', 'Sat') }}
       <div class="d"><dt>Sun · Singles</dt><dd>8:30 AM · every 10 min · 14 matches</dd></div>
       <div class="d"><dt>Sun · Cup presentation</dt><dd>After play</dd></div>
     </dl>

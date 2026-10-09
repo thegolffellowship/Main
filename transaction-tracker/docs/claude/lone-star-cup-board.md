@@ -1023,3 +1023,13 @@ happened and where the cup stands after team sessions. Then a final recap"
 - **Bridge:** `scoring-lsc-recap:<saturday|final>[|send[|force]]` (dry run =
   the plain text + the guard; html left out of the bridge reply).
 
+## Evening dinners (v2.533.5, Kerry 10/9)
+
+Kerry: "Need to add evening dinner venues and times and information/map". One
+copy, `lsc_weekend_email.DINNERS`: Fri 7:30 PM Sectionhand Steakhouse (4412 Hwy
+377 S, Brownwood; shirts issued; website + map) and Sat 8:00 PM Pogue Farm
+Market Seafood & Steakhouse (Kerry's map link). The weekend email puts each
+under its day (Friday after the practice round; Saturday after the player's
+last Saturday match, or under its own heading if he has none); Event Info's
+schedule renders the same rows (`dinner()` macro in `_lsc_info_body.html`,
+links open in a new tab so the scorer's HOW IT WORKS modal stays put).

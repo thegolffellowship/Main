@@ -65,6 +65,18 @@ check("his team named", "You play for <strong>Austin</strong>" in mj)
 check("the formats and the points line", "Foursomes (Chapman):" in mj and "28 points in all" in mj)
 check("every scorer note is in it", all(lwe._e(n) in mj for n in lwe.SCORER_NOTES))
 check("links to the live board and Event Info", lwe.BOARD_URL in mj and lwe.INFO_URL in mj)
+check("Friday dinner under Friday, with its address, website and map",
+      "Friday, October 9" in mj and "7:30 PM: Dinner at Sectionhand Steakhouse</strong>, 4412 Hwy 377 S, Brownwood" in mj
+      and "sectionhandsteakhouse.com" in mj and mj.index("Friday, October 9") < mj.index("Sectionhand")
+      < mj.index("Saturday, October 10"), mj)
+check("Saturday dinner after Saturday's last match, before Sunday, with the map",
+      mj.index("Match 2,") < mj.index("8:00 PM: Dinner at Pogue Farm Market Seafood &amp; Steakhouse")
+      < mj.index("Sunday, October 11") and "maps.app.goo.gl/uTGseEPBWC9uSKdH8" in mj, mj)
+ab = by[87]["html"]
+check("a Sunday-only player still gets both dinners, each under its day",
+      ab.index("Friday, October 9") < ab.index("Sectionhand") < ab.index("Saturday, October 10")
+      < ab.index("Pogue Farm") < ab.index("Sunday, October 11") if "Saturday, October 10" in ab else
+      ("Sectionhand" in ab and "Pogue Farm" in ab), ab)
 check("Adam (one round) gets Sunday only", "Match 3" in by[87]["html"] and "Fourball:" not in by[87]["html"].split("The formats")[0])
 
 print("the send is gated on Kerry's word for this exact batch")
@@ -89,6 +101,9 @@ js = open("static/js/lsc-info.js", encoding="utf-8").read()
 check("Event Info carries a Scoring tab from the one copy",
       'data-s="scoring"' in body and 'data-sec="scoring"' in body and "scorer_notes=SCORER_NOTES" in app_src
       and 'scoring: "scoring"' in js)
+
+check("Event Info lists both dinners from the one copy", "dinner('fri', 'Fri')" in body and "dinner('sat', 'Sat')" in body
+      and "dinners={d[\"key\"]: d for d in DINNERS}" in app_src)
 
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

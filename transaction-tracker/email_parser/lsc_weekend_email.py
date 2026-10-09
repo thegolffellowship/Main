@@ -63,6 +63,20 @@ SESSION_INFO = {
                 "low + 40% of the high handicap, off the lowest team in the match."),
     "singles": ("Singles", "One on one. 100% of course handicap, off the lower player."),
 }
+# THE EVENING DINNERS (Kerry 2026-10-09: "Need to add evening dinner venues and
+# times and information/map"). One copy, read by this email (under each day)
+# and by EVENT INFO's schedule (templates/_lsc_info_body.html).
+DINNERS = [
+    {"key": "fri", "date": "2026-10-09", "time": "7:30 PM", "venue": "Sectionhand Steakhouse",
+     "where": "4412 Hwy 377 S, Brownwood", "note": "Shirts issued",
+     "links": [("Website", "https://www.sectionhandsteakhouse.com"),
+               ("Map", "https://www.google.com/maps/search/?api=1&query="
+                       "Section+Hand+Steak+House+4412+Hwy+377+S+Brownwood+TX")]},
+    {"key": "sat", "date": "2026-10-10", "time": "8:00 PM",
+     "venue": "Pogue Farm Market Seafood & Steakhouse", "where": "", "note": "",
+     "links": [("Map", "https://maps.app.goo.gl/uTGseEPBWC9uSKdH8")]},
+]
+
 POINTS_LINE = ("Every match is worth 1 point, ½ each for a match all square after 18 (no extra "
                "holes). 28 points in all; San Antonio, the holders, keep the Cup on a 14–14 tie.")
 
@@ -101,6 +115,16 @@ def _short(url):
         return short_score_url(url) or url
     except Exception:
         return url
+
+
+def _dinner_html(d: dict) -> str:
+    """'7:30 PM: Dinner at Sectionhand Steakhouse, 4412 Hwy 377 S, Brownwood.
+    Shirts issued. Website · Map' as one paragraph under its day."""
+    links = " &middot; ".join(f'<a href="{_e(u)}">{_e(t)}</a>' for t, u in d.get("links") or [])
+    return (f'<p style="margin:8px 0 4px;"><strong>{_e(d["time"])}: Dinner at {_e(d["venue"])}</strong>'
+            + (f', {_e(d["where"])}' if d.get("where") else "") + "."
+            + (f' {_e(d["note"])}.' if d.get("note") else "")
+            + (f"<br>{links}" if links else "") + "</p>")
 
 
 def build(db_path=None) -> dict:
@@ -190,7 +214,7 @@ def build(db_path=None) -> dict:
                             group_mates = (f"Playing in your group: Match {tno}, "
                                            f"{nm((twin.get('austin') or [''])[0])} v "
                                            f"{nm((twin.get('sa') or [''])[0])}.")
-                    rounds.append({"session": s.get("id"), "day": _day(s.get("date")), "title": title,
+                    rounds.append({"session": s.get("id"), "day": _day(s.get("date")), "date": str(s.get("date") or "")[:10], "title": title,
                                    "how": how, "no": no, "tee": _clock(m.get("tee_time"), s.get("id")),
                                    "partner": partner, "opp": opp, "group": group_mates,
                                    "link": _short(links.get((s.get("id"), c)))})
@@ -204,9 +228,24 @@ def build(db_path=None) -> dict:
             h.append(f'<h3 style="margin:18px 0 4px;">{_e(_day(pr["date"]))}: Practice round</h3>'
                      f'<p style="margin:0;"><strong>{_e(pr["start"])}</strong>'
                      + (f' with {_e(mates)}' if mates else "") + '.</p>')
+        # Friday (no Cup round): the practice round when he plays it, then dinner
+        fri = DINNERS[0]
+        if not pr:
+            h.append(f'<h3 style="margin:18px 0 4px;">{_e(_day(fri["date"]))}</h3>')
+        h.append(_dinner_html(fri))
+        # the other dinners: each after that day's last match, or under its
+        # own day heading when he has no match that day
+        left = list(DINNERS[1:])
+
+        def _flush(before=None):
+            while left and (before is None or left[0]["date"] < before):
+                d = left.pop(0)
+                h.append(f'<h3 style="margin:18px 0 4px;">{_e(_day(d["date"]))}</h3>')
+                h.append(_dinner_html(d))
         last_day = None
-        for r in rounds:
+        for i, r in enumerate(rounds):
             if r["day"] != last_day:
+                _flush(r["date"])
                 h.append(f'<h3 style="margin:18px 0 4px;">{_e(r["day"])}</h3>')
                 last_day = r["day"]
             vs = (f'You &amp; {_e(" & ".join(r["partner"]))} v {_e(" & ".join(r["opp"]))}'
@@ -216,6 +255,10 @@ def build(db_path=None) -> dict:
                      + (f'<br>{_e(r["group"])}' if r["group"] else "")
                      + (f'<br><a href="{_e(r["link"])}">Your group\'s scorecard</a>' if r["link"] else "")
                      + '</p>')
+            nxt = rounds[i + 1]["day"] if i + 1 < len(rounds) else None
+            if left and left[0]["date"] == r["date"] and nxt != r["day"]:
+                h.append(_dinner_html(left.pop(0)))
+        _flush()
         h.append('<h3 style="margin:18px 0 4px;">The formats</h3><ul style="margin:0;">'
                  + "".join(f'<li><strong>{_e(t)}:</strong> {_e(w)}</li>'
                            for t, w in (SESSION_INFO[k] for k in ("fourball", "chapman", "singles")))
