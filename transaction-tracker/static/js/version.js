@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.531.8";
+window.TGF_VERSION = "2.531.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.9",
+    date: "2026-10-09",
+    title: "Cup scoring: the Cup's team score is the Cup tab's bar, pinned at the top",
+    changes: [
+      "Kerry 10/9: \"the top team score bar should resemble our other team score bar and be pinned up top\". On a Lone Star Cup scoring card the Cup standing is now the Cup tab's own bar (AUSTIN on orange with its points, the session and its score in navy, SAN ANTONIO on slate) and sits inside the pinned SCORING | LEADERBOARD bar, so it never scrolls away. The old white Lone Star Cup strip above the match is gone; the PREVIEW warning stays.",
+      "Kerry also asked why there were two team scores: the top bar is the whole Cup's points (all 28 matches); the TEAM SCORE · HOLE box under the players is only this hole's best net ball per side in this match (mockup Main, #1351 D2). Unchanged; it can go on his word."
+    ]
+  },
   {
     version: "2.531.8",
     date: "2026-10-09",

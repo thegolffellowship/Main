@@ -494,16 +494,19 @@
            be color coordinated as well." Austin burnt orange, San Antonio slate. */
         .se-x { font-family: Bitter, Georgia, serif; font-weight: 800; }
         @keyframes seChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
-        /* LONE STAR CUP team standings beside the match */
-        .se-cup { display: flex; align-items: stretch; border-radius: 10px; overflow: hidden; border: 1px solid #E5E7EB;
-                  font-size: 13px; }
-        .se-cup .lbl { background: var(--lsc-navy); color: #FFFFFF; font: 700 11px/1.2 Bitter, Georgia, serif; letter-spacing: 1px;
-                       text-transform: uppercase; padding: 8px 10px; display: flex; align-items: center; }
-        .se-cup .tm { flex: 1; display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; gap: 6px; }
-        .se-cup .tm b { font: 800 20px/1 Bitter, Georgia, serif; }
-        .se-cup .aus { border-left: 5px solid #BF5700; }
-        .se-cup .sa { border-left: 5px solid #4B6274; }
-        .se-cup .proj { display: block; font-size: 10px; color: #6B7280; }
+        /* THE CUP'S TEAM SCORE in the pinned toggle bar, the Cup tab's look */
+        #se-toggle { flex-wrap: wrap; }
+        #se-cupbar { flex: 0 0 100%; display: flex; justify-content: center; margin-top: 8px; }
+        .se-cupbar { display: flex; align-items: stretch; width: 100%; max-width: 448px; border-radius: 10px; overflow: hidden; color: #FFFFFF; }
+        .se-cupbar .t { flex: 1 1 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-width: 0; }
+        .se-cupbar .t.austin { background: #BF5700; justify-content: flex-start; }
+        .se-cupbar .t.sa { background: #4B6274; justify-content: flex-end; }
+        .se-cupbar .nm { font: 800 12px/1.1 Bitter, Georgia, serif; letter-spacing: 1px; white-space: nowrap; }
+        .se-cupbar .p { font: 800 24px/1 Bitter, Georgia, serif; }
+        .se-cupbar .mid { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                          background: var(--lsc-navy, #002855); padding: 4px 10px; text-align: center; }
+        .se-cupbar .mid .s { font: 700 10px/1.2 Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase; }
+        .se-cupbar .mid .v { font: 800 13px/1.2 Bitter, Georgia, serif; }
         /* THE TURN: each player's nine under his name, tap one to edit */
         .se-mini { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; margin-top: 6px; width: 100%; }
         .se-mini button { height: 32px; border-radius: 7px; border: 1px solid #E5E7EB; background: #FFFFFF; cursor: pointer;
@@ -849,6 +852,7 @@
                 }
             }
             app.innerHTML = banner + body;
+            placeCupBar();
             const focus = !!app.querySelector(".se-hole, .se-chk");
             // The SCORING | LEADERBOARD toggle on the scorer's board page
             // reads this (v2.523.0): the hole he is on and how many holes
@@ -1117,16 +1121,36 @@
             const mine = new Set(card.players.map((p) => p.customer_id));
             const ms = (card.match_status || []).filter((m) => m.sides.flat().some((c) => mine.has(c)));
             if (!ms.length) return "";
-            const half = (x) => { const w = Math.floor(x), f = x - w; return (w || f === 0 ? String(w) : "") + (f >= 0.5 ? "½" : ""); };
             const cs = card.cup_standings;
-            // Under each team: THIS SESSION's points in Kerry's title (mockup
-            // Main: "Fourball 2"); the big number is the overall. No "live".
-            const sx = cupSession();
-            const sub = (k) => sx ? `${sx.title} ${half(cs["session_" + k] || 0)}` : `live ${half(cs[k + "_projected"])}`;
-            const cup = cs ? `${cs.preview ? '<div class="se-warn se-demo">PREVIEW · demo scores</div>' : ""}<div class="se-cup"><span class="lbl">Lone Star Cup</span>
-                <span class="tm aus"><span>Austin<span class="proj">${sub("austin")}</span></span><b>${half(cs.austin)}</b></span>
-                <span class="tm sa"><span>San Antonio<span class="proj">${sub("sa")}</span></span><b>${half(cs.sa)}</b></span></div>` : "";
+            // the Cup's team score lives in the pinned bar under the toggle now
+            // (cupBar, Kerry 10/9); only the preview warning stays here
+            const cup = cs && cs.preview ? '<div class="se-warn se-demo">PREVIEW · demo scores</div>' : "";
             return `<div class="se-mstrip">${cup}${ms.map(matchCard).join("")}</div>`;
+        }
+        // THE CUP'S TEAM SCORE, PINNED (Kerry 10/9: "the top team score bar
+        // should resemble our other team score bar and be pinned up top"): the
+        // Cup tab's own bar — AUSTIN on orange, the session in navy, SAN
+        // ANTONIO on slate, overall points big — sitting in the pinned
+        // SCORING | LEADERBOARD bar so it never scrolls away.
+        function cupBar() {
+            const cs = card && card.cup_standings;
+            if (!cs) return "";
+            const half = (x) => { x = x || 0; const w = Math.floor(x), f = x - w; return (w || f === 0 ? String(w) : "") + (f >= 0.5 ? "½" : ""); };
+            const sx = cupSession();
+            const mid = sx ? `<span class="s">${sx.title}</span><span class="v">${half(cs.session_austin)} – ${half(cs.session_sa)}</span>`
+                           : `<span class="s">Lone Star Cup</span>`;
+            return `<div class="se-cupbar"><div class="t austin"><span class="nm">AUSTIN</span><span class="p">${half(cs.austin)}</span></div>
+                <div class="mid">${mid}</div>
+                <div class="t sa"><span class="p">${half(cs.sa)}</span><span class="nm">SAN ANTONIO</span></div></div>`;
+        }
+        function placeCupBar() {
+            const nav = document.getElementById("se-toggle");
+            if (!nav) return;
+            let slot = document.getElementById("se-cupbar");
+            const html = cupBar();
+            if (!html) { if (slot) slot.remove(); return; }
+            if (!slot) { slot = document.createElement("div"); slot.id = "se-cupbar"; nav.appendChild(slot); }
+            if (slot.innerHTML !== html) slot.innerHTML = html;
         }
         // THE STANDARD MATCH VIEW (Kerry 2026-09-26: "like the other match play
         // page ... if I click it it will show that match scorecard below it and
