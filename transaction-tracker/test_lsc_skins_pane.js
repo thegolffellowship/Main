@@ -98,6 +98,23 @@ check("every flighted player listed before a ball is struck", ["Pat Youngs", "Me
 check("the frozen index rides in Idx", hn.includes('<td class="bl hc">3.2</td>'), hn);
 check("no skins data -> nothing", pane({ skins: null }) === "");
 
+// Kerry 10/9: "Stack player names in team skins" — one partner per line,
+// first initial + LAST (the scoring page's match strip); Sunday unchanged
+const stk = JSON.parse(JSON.stringify(fsMember));
+stk.skins.groups[0].entries["M1:austin"].names = ["Luke Youngs", "Chris Cannon"];
+const hk = pane(stk);
+check("team name stacked: L. YOUNGS over C. CANNON",
+      hk.includes('<span class="evlb-nm-stack" title="Youngs &amp; Cloer"><span>L. YOUNGS</span><span>C. CANNON</span></span>'), hk);
+check("a team with no names list stacks its label's halves",
+      hk.includes("<span>YOUNGS</span><span>YOUNG</span>"), hk);
+check("the row keeps its plain name for sorting / lookups",
+      data(stk).overall_board[0].player_name === "Youngs & Cloer", JSON.stringify(data(stk).overall_board[0]));
+check("Sunday singles names are not stacked", !hn.includes("evlb-nm-stack") && hn.includes(">Pat Youngs<"), hn);
+// ONE team score per hole: the board's hole cell is the counting ball only
+// (compute_skins `cards` = [gross, pops] of the ball that counted)
+check("one score per team per hole (hole 2: the counting 4 with its pop, circled)",
+      /<td class="h"><span class="evlb-pops"[^>]*>[^<]*<\/span><span class="evlb-circ"[^>]*>4<\/span><\/td>/.test(hk), hk);
+
 // the renderer and its wiring are the event board's, not a copy
 check("lscSkinsPane draws through evlbStdBoard", cut("lscSkinsPane").includes("evlbStdBoard("));
 check("the Cup render wires its boards with evlbWireBoards", /evlbWireBoards\(box\)/.test(src));

@@ -94,29 +94,34 @@ tap-open hole-by-hole scorecards.
   board shows members its Won column once every card is in; the Cup never
   shows members a dollar (CA #726), and staff get Won only once that
   session's cards are all in (`_moneyHeld`). Guard `test_lsc_skins_pane.js`.
-  **DAILY WINNERS → PAYOUTS (v2.532.15, Kerry 10/9: "Daily Winner Amounts
-  should go to PAYOUTS so I can easily pay them per normal") — BUILT, NOT
+  **WINNERS → PAYOUTS, PER SESSION (v2.532.15 per day; per SESSION since
+  v2.534.0, Kerry 10/9: "Daily Winner Amounts should go to PAYOUTS so I can
+  easily pay them per normal", then "Session pots standalone") — BUILT, NOT
   APPLIED (Kerry ratifies first, rule 3b):** `email_parser/lsc_skins_payouts.py`
   `lsc_skins_payouts(apply=False)`, bridge `scoring-lsc-skins-payouts[:apply]`.
-  Reads the staff board (live, or the frozen `lsc_results` snapshot),
-  `plan_daily_skins` adds each winner's `per_player` cents up PER DAY (by
-  session `date`: Saturday = AM Fourball + PM Foursomes pots, Sunday = both
-  flights) and writes one `tgf_payouts` row per winner per day on event
-  3329's `tgf_events` row (`_ensure_tgf_event_row`), category `skins`,
-  description `LSC SAT Skins — Fourball ×2 (holes 3, 7) $41.67 · Foursomes
-  ×1 (hole 12) $20.83`, plus the usual pending ledger placeholder
-  (`_reconcile_payouts_with_venmo`) so the PAYOUTS page shows the Pay link
-  and the Venmo matcher can mark it PAID; `lsc_skins_pot` drains from it.
-  A day writes only when FINAL: every skins group with entrants that day is
-  `complete` AND every session that day is in `board.entry_sessions`
-  (scored from entered cards, never `lsc_mock_scores`). Idempotent on the
-  `LSC <DAY> Skins` description prefix + customer_id; a changed result
-  updates (amount, description, pending placeholder) or removes UNPAID rows
-  only; a PAID row is never touched (`paid_ok`, or `paid_differs` /
-  `paid_no_longer_wins` reported for Kerry). The prefix is not `auto:`, so
-  the GG auto-recorder's force path and `scoring-payouts-clear-auto` leave
-  these rows alone. Not scheduled: run by bridge. Guard
-  `test_lsc_skins_payouts.py`.
+  Reads the staff board (live, or the frozen `lsc_results` snapshot);
+  `plan_session_skins` takes each session's winners on their own (never
+  added up across a day) and writes one `tgf_payouts` row per winner per
+  SESSION on event 3329's `tgf_events` row (`_ensure_tgf_event_row`),
+  category `skins`, description `LSC SAT AM Skins — Fourball ×2 (holes 3, 7)
+  $41.67`, `LSC SAT PM Skins — Foursomes ×1 (hole 12) $57.50`, `LSC SUN Skins
+  — Flight 1 ×1 (hole 3) $28.75 · Flight 2 ...` (tag = day from `date` + AM/PM
+  from the session id, `session_tag`), plus the usual pending ledger
+  placeholder (`_reconcile_payouts_with_venmo`) so the PAYOUTS page shows the
+  Pay link and the Venmo matcher can mark it PAID; `lsc_skins_pot` drains
+  from it. A session writes as soon as IT is FINAL: every skins group with
+  entrants in it is `complete` AND it is in `board.entry_sessions` (scored
+  from entered cards, never `lsc_mock_scores`); the AM does not wait for the
+  PM. Idempotent on the `LSC <SESSION> Skins` description prefix +
+  customer_id; a changed result updates (amount, description, pending
+  placeholder) or removes UNPAID rows only; a PAID row is never touched
+  (`paid_ok`, or `paid_differs` / `paid_no_longer_wins` reported for Kerry).
+  An OLD per-day row (`LSC SAT Skins — ...`, none was ever written in
+  production): UNPAID is removed once (`delete_legacy_day_row`) when a
+  session of that day is written; PAID holds both sessions of that day for
+  Kerry (nobody paid twice). The prefix is not `auto:`, so the GG
+  auto-recorder's force path and `scoring-payouts-clear-auto` leave these
+  rows alone. Not scheduled: run by bridge. Guard `test_lsc_skins_payouts.py`.
   Sunday:
   individual gross skins flighted on the TGF 18-hole index FROZEN at the
   event (`_event_index_as_of` → `_handicap_index_18_by_customer`):
@@ -1033,3 +1038,37 @@ under its day (Friday after the practice round; Saturday after the player's
 last Saturday match, or under its own heading if he has none); Event Info's
 schedule renders the same rows (`dinner()` macro in `_lsc_info_body.html`,
 links open in a new tab so the scorer's HOW IT WORKS modal stays put).
+
+
+## Team skins board: stacked names, one team score; rules pinned (Kerry 10/9) — v2.534.0
+
+KERRY (verbatim): "Stack player names in team skins" and "So $575 available
+for each skins session. Session pots standalone. Team skins is Net based off
+of full team handicaps (not Off lowest) for that session. Both fourball and
+foursomes skins leaderboards should only show one team score. Not both player
+scores like fourball leaderboard and score entry. Singles is gross skins and
+divides Sunday pot evenly between high and low flights."
+
+- **Stacked names.** `compute_skins_payout` puts the partners' names on each
+  team entry (`groups[].entries[key].names`; names only, `strip_money` keeps
+  it). `lscSkinsEvlbData` turns them into `r._name_lines` ("L. YOUNGS",
+  "C. CANNON": first initial + LAST, as score_entry.html `matchCard` nm()).
+  The shared row renderer (`evlbOvrRowHtml`) honours `_name_lines` in the name
+  cell only (`.evlb-nm-stack`, the plain name as its title); `player_name`
+  stays the plain label for sorting and lookups, every other board is
+  unchanged, Sunday singles rows are unchanged.
+- **One team score.** The hole cells come from `compute_skins` `cards`: per
+  team per hole the counting ball only ([gross, pops]: best net ball in
+  Fourball, the one ball in Chapman). The N column = that ball's net summed;
+  team skins hide G. The Cup box is wired with `evlbWireBoards` only, so there
+  is no tap-to-expand drawer showing a partner's own card. Verified in
+  headless Chromium on a fixture where the Fourball partners post different
+  scores (desktop + phone, member + staff, Handicaps on, sorted, holes off).
+- **Rules pinned** (`tests/test_lsc_cup.py` `test_kerry_10_9_*`): $25 x the
+  buyers IN THAT SESSION (23 = $575; a session with 22 = $550, nothing shared),
+  Fourball 90% of each player off zero, Chapman 60/40 team handicap off zero,
+  Sunday gross split 50/50 between the flights, flight break 12.0 unchanged.
+- **Flight sizes** from the locked roster (`lsc_handicap_lock`, all 28):
+  Flight 1 (< 12.0) 15 (Austin 7, SA 8), Flight 2 (>= 12.0) 13 (Austin 7, SA
+  6). Who of them bought the skins decides the real split (the 10/7 note read
+  11 v 11 among 22 buyers; there are 23 buyers now).

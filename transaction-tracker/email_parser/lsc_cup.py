@@ -849,7 +849,12 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                             else phs.get(str(c)) for c in cids]
                     if vals and all(v is not None for v in vals):
                         ph = chapman_team_handicap(vals)
-                meta[k] = {"index": None, "ph": ph}
+                # the partners, one name each, so the board can stack
+                # them one per line (Kerry 10/9: "Stack player names in
+                # team skins"). Names only, no money: members get it.
+                meta[k] = {"index": None, "ph": ph,
+                           "names": [names.get(c) or names.get(str(c)) or f"#{c}"
+                                     for c in cids]}
             else:
                 c = cids[0]
                 ix = index.get(c) if index.get(c) is not None else index.get(str(c))
