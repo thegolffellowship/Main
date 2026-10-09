@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.9";
+window.TGF_VERSION = "2.532.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.10",
+    date: "2026-10-09",
+    title: "Cup scoring: each player's name in their team's color",
+    changes: [
+      "Kerry 10/9: \"Can you do something to connote each players chapter on their scoring entry rows?\" Shown three options, he chose: \"Simply colored names works. Do it.\" On a Lone Star Cup scoring card every player's name is now in their team's color, Austin burnt orange and San Antonio slate, on the hole screen and in the card tables. The tee-color bar on the left of each row is unchanged. Other events are unchanged."
+    ]
+  },
   {
     version: "2.532.9",
     date: "2026-10-09",

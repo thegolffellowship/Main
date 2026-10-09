@@ -807,6 +807,13 @@
         // so it can't win the hole. A triple without X is a ball in the hole,
         // so the cup never asks Ball in hole / Picked up.
         const cupOf = (cids) => { const m = matchOf(cids); return !!(m && m.session != null); };
+        // EACH PLAYER'S CHAPTER IN HIS NAME (Kerry 10/9: "Can you do something
+        // to connote each players chapter on their scoring entry rows?" ...
+        // "Simply colored names works. Do it"): a Cup player's name in his
+        // team's colour, Austin burnt orange, San Antonio slate.
+        const TEAM_INK = {austin: "#BF5700", sa: "#4B6274"};
+        const teamInk = (cids) => { const m = matchOf(cids); return m && m.session != null ? TEAM_INK[m.side] || "" : ""; };
+        const inkStyle = (cids) => { const c = teamInk(cids); return c ? ` style="color:${c}"` : ""; };
         const isX = (key, n, cids) => cupOf(cids) && value(key, n).v === hiOf(n) && markOf(key, n) === "picked_up";
         const needsMark = (n) => subjects().filter((s) => matchOf(s.cids) && !cupOf(s.cids)
             && value(s.key, n).v === hiOf(n) && !markOf(s.key, n)).map((s) => s.key);
@@ -1081,7 +1088,7 @@
                 const meta2 = [s.team ? teamPh(s.cids) : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
                                !s.team && s.ph != null ? "PH " + s.ph : null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
-                    <div class="se-who"><div class="se-name"><span class="nm">${esc(s.name)}</span>${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
+                    <div class="se-who"><div class="se-name"><span class="nm"${inkStyle(s.cids)}>${esc(s.name)}</span>${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
                     <div class="se-score" ${popLabel(s.cids, hole) ? `aria-label="${esc(popLabel(s.cids, hole))}"` : ""}>${popDots(s.cids, hole)}<div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${xx ? '<span class="se-x">X</span>' : shown}</div><div class="r">${rel}</div></div>
                     <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>
@@ -1204,6 +1211,11 @@
         // front nine keeps an empty TOT column so both nines line up.
         const colgroup = (nHoles, eighteen) => `<colgroup><col class="c-nm">${'<col class="c-h">'.repeat(nHoles)}<col class="c-sub">${eighteen ? '<col class="c-tot">' : ""}</colgroup>`;
         function nameCell(s, twoLine) {
+            const c = teamInk(s.cids);
+            const html = nameCellInner(s, twoLine);
+            return c ? `<span style="color:${c}">${html}</span>` : html;
+        }
+        function nameCellInner(s, twoLine) {
             const dot = s.cids.length === 1 ? teeDot(s.cids[0]) : "";
             // A foursomes pair on the card: one partner per line, like first / last.
             if (s.team && twoLine) return `${esc(first(byId(s.cids[0]).display_name))}${mtag(s.cids)}<span class="ln" style="font-family:Bitter,Georgia,serif;font-weight:700;color:inherit">${esc(first(byId(s.cids[1]).display_name))}</span>`;

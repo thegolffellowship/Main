@@ -189,5 +189,11 @@ check("the second Cup banner is hidden and HOW IT WORKS sits in the logo header"
       "body.lsc-solo #section-lone-star-cup .lsc-event { display: none; }" in cts
       and 'b.id = "lsc-hdr-hiw"' in cts and "hdr.appendChild(b)" in cts)
 
+# Kerry 10/9: "Simply colored names works. Do it" -- a Cup player's name in
+# his team's colour on the scoring rows and the card tables
+check("Cup player names carry the team colour (Austin orange, San Antonio slate)",
+      'const TEAM_INK = {austin: "#BF5700", sa: "#4B6274"};' in sep
+      and '<span class="nm"${inkStyle(s.cids)}>' in sep and "const c = teamInk(s.cids);" in sep)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

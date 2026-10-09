@@ -869,3 +869,8 @@ On `/member/score/board?t=` for a Cup round (`window.SOLO_CUP`):
 - HOW IT WORKS is an absolutely positioned `#lsc-hdr-hiw` at the right of the logo header; the logo stays centered. It opens the same popup.
 - The member Cup tab is unchanged.
 
+**Team-colored names on the scoring card (v2.532.10, Kerry 10/9).** "Simply colored names works. Do it."
+- On a Cup card, each player's name is in their team's color: Austin #BF5700, San Antonio #4B6274. This applies on the hole screen and in the card tables.
+- The colors come from `teamInk(cids)` in score_entry.html, which reads the player's side from `card.matches`.
+- The tee bar on the left of each row is unchanged.
+
