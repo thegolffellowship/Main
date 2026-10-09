@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.528.3";
+window.TGF_VERSION = "2.528.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.4",
+    date: "2026-10-08",
+    title: "THE DRAW summary: OFF only, Foursomes OFF centred on the pair, equal columns, matches 1-28",
+    changes: [
+      "Kerry 10/8, on the SUMMARY: \"keep only the final off low handicaps, remove the team row on the foursomes, but move the final off low handicaps centered on the team ... Try to make each columns matches end up the same height overall. Then remember the matches go from 1-28, so number them accordingly on the summary.\" The summary now shows only each name and its bold strokes off the lowest. In Foursomes, one OFF sits centred beside each pair, with no TEAM row. The three columns stretch to the same height, and the matches are numbered through the weekend: Fourball 1-7, Foursomes 8-14, Singles 15-28."
+    ]
+  },
   {
     version: "2.528.3",
     date: "2026-10-08",

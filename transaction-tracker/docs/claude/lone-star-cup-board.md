@@ -631,7 +631,9 @@ the Starter Sheet logo and Proxy logos too."
 - **THE DRAW summary (v2.528.3):** a SUMMARY tab (`data-s="sum"`) appears
   once all three sessions are drawn. It shows FOURBALL | FOURSOMES |
   SINGLES, every match in tee order, from `state` + `math`. All small text
-  on the page is +2px.
+  on the page is +2px. v2.528.4: OFF only (`sideSum`), a Foursomes OFF
+  centred on the pair, equal-height columns, and weekend numbering
+  1-7 / 8-14 / 15-28.
 - **Phone splash (v2.528.0):** `score_entry.group_is_cup` is true for a
   round in any LSC event (the practice round too), plus the `lsc:` and
   `lscprev:` session rounds. It holds 3 s (Kerry 10/8).

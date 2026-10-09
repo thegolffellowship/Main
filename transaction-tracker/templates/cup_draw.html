@@ -58,18 +58,19 @@ nav.sess button:focus-visible,.btn:focus-visible{outline:2px solid #FFD166;outli
 /* the column heads sit in one row above the grid, so the matches start level
    with the entrants and grow less far down the screen (Kerry 10/8) */
 .grid.ghd{align-items:center;margin-bottom:6px}
-.sumgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
+.sumgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:stretch}
 .sumcol{background:var(--panel);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:6px}
 .sumcol h3{font:800 16px/1 var(--display);letter-spacing:2px;text-transform:uppercase;margin:0 0 4px;text-align:center}
 .sumcol h3 small{display:block;font:500 14px var(--body);letter-spacing:0;text-transform:none;color:var(--muted);margin-top:4px}
 .m.sm{grid-template-columns:58px minmax(0,1fr);gap:8px;padding:5px 10px 5px 8px;min-height:0;background:var(--bg);border-left:0;border-right:0}
 .m.sm .c b{font-size:20px}
 .m.sm .st{display:flex;flex-direction:column;gap:3px;min-width:0}
-.m.sm .b{font-size:15px;padding-left:8px;border-radius:4px}
+.m.sm{flex:1 0 auto}
+.m.sm .b{font-size:15px;padding-left:8px;border-radius:4px;display:grid;grid-template-columns:minmax(0,1fr) 2em;column-gap:6px;align-items:center}
 .m.sm .b .n{text-align:left}
 .m.sm .ta{color:#F3A26A;border-left:4px solid var(--aus);background:linear-gradient(90deg,rgba(191,87,0,.3),transparent)}
 .m.sm .ts{color:#DCE6EF;border-left:4px solid var(--sa);background:linear-gradient(90deg,rgba(75,98,116,.6),transparent)}
-.m.sm .o{font-size:16px}.m.sm .h{font-size:14px}
+.m.sm .o{font-size:17px;text-align:center}
 .sess-h .rule .mo{font:800 15px var(--display);color:#fff}
 @media (max-width:900px){.sumgrid{grid-template-columns:1fr}}
 .grid.ghd .key{text-align:center;font-size:14px;color:var(--muted)}
@@ -237,13 +238,29 @@ function tabs(){
 // THE SUMMARY (Kerry 10/8: "a summary page that shows all MATCHES in 3 columns
 // side by side? FOURBALL | FOURSOMES | SINGLES"): every match in tee order,
 // Austin over San Antonio, each with its playing handicap and bold OFF.
+// One side of a summary card (Kerry 10/8: "keep only the final off low
+// handicaps, remove the team row on the foursomes, but move the final off low
+// handicaps centered on the team"): names, and the bold OFF beside each player
+// (Fourball, Singles) or one OFF centred on the pair (Foursomes).
+function sideSum(e,sd){
+  const names=e&&e.names&&e.names.length?e.names:[e?e.label:""];
+  if(!sd)return names.map(n=>`<span class="n">${esc(n)}</span><b class="o"></b>`).join("");
+  if(sd.ph!==undefined)
+    return names.map((n,i)=>`<span class="n" style="grid-row:${i+1}">${esc(n)}</span>`).join("")
+      +`<b class="o" style="grid-column:2;grid-row:1 / span ${names.length};align-self:center">${hv(sd.off)}</b>`;
+  return names.map((n,i)=>`<span class="n">${esc(n)}</span><b class="o">${hv((sd.players[i]||{}).off)}</b>`).join("");
+}
+// THE SUMMARY (Kerry 10/8): FOURBALL | FOURSOMES | SINGLES side by side, the
+// matches numbered through the weekend 1-28 (1-7 / 8-14 / 15-28, as the
+// starter sheets), every column stretched to the same height.
 function renderSummary(b){
-  const h=document.createElement("div");h.className="sess-h";h.innerHTML=`<h2>The Draw · Summary</h2><span class="rule">28 matches · 28 points · Austin over San Antonio · playing handicap · <b class="mo">bold</b> = off the lowest</span>`;b.appendChild(h);
+  const h=document.createElement("div");h.className="sess-h";h.innerHTML=`<h2>The Draw · Summary</h2><span class="rule">28 matches · 28 points · Austin over San Antonio · <b class="mo">bold</b> = strokes off the lowest (match handicap)</span>`;b.appendChild(h);
   const g=document.createElement("div");g.className="sumgrid";
   ["fb","fs","sg"].forEach(k=>{const s=SESS[k];
+    const off=k==="fs"?SESS.fb.pools.reduce((t,p)=>t+p.aus.length,0):k==="sg"?SESS.fb.pools.reduce((t,p)=>t+p.aus.length,0)*2:0;
     const cards=[];
     s.pools.forEach(p=>state[k][p.key].forEach((m,i)=>{const n=matchNo(s,p.key,i),mm=((math[k]||{})[p.key]||[])[i];
-      cards.push({n,html:`<div class="m sm"><div class="c"><b>${n+1}</b>${tee(s,n)}</div><div class="st"><div class="b ta">${side(p.aus.find(x=>x.key===m[0]),mm&&mm.a,false)}</div><div class="b ts">${side(p.sa.find(x=>x.key===m[1]),mm&&mm.s,false)}</div></div></div>`})}));
+      cards.push({n,html:`<div class="m sm"><div class="c"><b>${off+n+1}</b>${tee(s,n)}</div><div class="st"><div class="b ta">${sideSum(p.aus.find(x=>x.key===m[0]),mm&&mm.a)}</div><div class="b ts">${sideSum(p.sa.find(x=>x.key===m[1]),mm&&mm.s)}</div></div></div>`})}));
     cards.sort((x,y)=>x.n-y.n);
     const col=document.createElement("section");col.className="sumcol";
     col.innerHTML=`<h3>${s.title.split(" · ")[1]}<small>${s.title.split(" · ")[0]} · ${tee(s,0)}</small></h3>${cards.map(c=>c.html).join("")}`;
