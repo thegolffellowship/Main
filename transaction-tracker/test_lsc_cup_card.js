@@ -58,6 +58,10 @@ const strip = mpStripHtml({ aName: "Pat Youngs & Jeff Young", bName: "Adam Baker
                             aLines: ["Pat YOUNGS", "Jeff YOUNG"], bLines: ["Adam BAKER"], margin: "" });
 check("a pair's square stacks both partners' initials; a single keeps his own",
       /mp-strip-mono slate two">PY<br>JY</.test(strip) && /mp-strip-mono clay">AB</.test(strip), strip.slice(0, 200));
+const twinStrip = mpStripHtml({ aName: "x", bName: "y", aLines: ["Matt JENKINS", "Mike JENKINS"], bLines: ["Pat YOUNGS", "Jeff YOUNG"], margin: "" });
+check("twin initials in the header square read MaJ / MiJ too", /MaJ<br>MiJ/.test(twinStrip) && /PY<br>JY/.test(twinStrip), twinStrip.slice(0, 300));
+check("cards sit 12px from a phone's edge on the Cup and City Match Play (Kerry 10/9: half the old margin)",
+      /\.cmp-body \{ padding: 0\.75rem 4px; \}/.test(src) && /#section-lone-star-cup \.standings-section \{\s*padding-left: 4px !important;/.test(src));
 check("the margin reads on one line on a phone", /#lsc-board \.mp-strip-bar \{[^}]*white-space: nowrap/.test(src));
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");
 process.exit(fails ? 1 : 0);

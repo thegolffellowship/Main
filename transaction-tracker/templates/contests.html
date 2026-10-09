@@ -1641,7 +1641,10 @@
         #pr-table-container .enrollment-table.pr-compact th { font-size: 9px; padding: 8px 6px 6px; }
         #pr-table-container .enrollment-table.pr-compact td { padding: 8px 6px; font-size: 12.5px; }
         @media (max-width: 560px) {
-            .cmp-body { padding: 0.75rem 1rem; }
+            /* match cards sit 12px in from the screen edge on a phone, half
+               the old 24px (Kerry 10/9: "I want to go half that on margins
+               for both city match play and same on LSC") */
+            .cmp-body { padding: 0.75rem 4px; }
             .pool-card-body { grid-template-columns: 1fr; }
             .pool-members { border-right: none; border-bottom: 1px solid var(--border); }
             .cmp-controls { padding: 0.65rem 1rem; }
@@ -1991,8 +1994,8 @@
                name column; row padding tightens too. !important beats
                the section's inline desktop padding. */
             #section-lone-star-cup .standings-section {
-                padding-left: 0.4rem !important;
-                padding-right: 0.4rem !important;
+                padding-left: 4px !important;      /* 12px from the edge, as City (Kerry 10/9) */
+                padding-right: 4px !important;
             }
             .lsc-seat { padding: 8px 10px; gap: 8px; }
             .lsc-alt { padding: 6px 10px; }
@@ -5661,8 +5664,19 @@
         // A Cup PAIR stacks each partner's initials (Kerry 10/9, the City
         // Match Play card's initials square): "Pat Youngs & Jeff Young" is
         // PY over JY, never one made-up "PY" for the pair.
-        const monoOf = (nm, lines) => (lines && lines.length > 1)
-            ? lines.map(n => escapeHtml(mpMono(n))).join('<br>') : escapeHtml(mpMono(lines && lines[0] || nm));
+        const monoOf = (nm, lines) => {
+            if (!(lines && lines.length > 1)) return escapeHtml(mpMono(lines && lines[0] || nm));
+            const ms = lines.map(n => mpMono(n));
+            // the same initials twice (Matt and Mike JENKINS) read MaJ / MiJ,
+            // as on the opened card
+            const twin = new Set(ms).size < ms.length;
+            return lines.map((n, i) => {
+                const fl = mpFirstLast(String(n || ""));
+                return escapeHtml(twin && fl.first
+                    ? fl.first.slice(0, 1).toUpperCase() + fl.first.slice(1, 2).toLowerCase() + (fl.last[0] || "").toUpperCase()
+                    : ms[i]);
+            }).join('<br>');
+        };
         const two = (lines) => (lines && lines.length > 1) ? ' two' : '';
         const aMono = o.aName ? `<span class="mp-strip-mono slate${two(o.aLines)}">${monoOf(o.aName, o.aLines)}</span>` : '<span class="mp-strip-mono stone"></span>';
         const bMono = o.bName ? `<span class="mp-strip-mono clay${two(o.bLines)}">${monoOf(o.bName, o.bLines)}</span>` : '<span class="mp-strip-mono stone"></span>';

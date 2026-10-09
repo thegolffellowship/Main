@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.531.7";
+window.TGF_VERSION = "2.531.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.8",
+    date: "2026-10-09",
+    title: "Match cards on a phone: half the side margin, City Match Play and the Cup alike",
+    changes: [
+      "Kerry 10/9: \"the City Match Margins are too big. I want to go half that on margins for both city match play and same on LSC. Also, collapsed width should be same as expanded width.\" On a phone the City Match Play cards sat 24px in from the screen edge and the Cup's 14px; both now sit 12px in, collapsed or opened (one card, one width). The match-play body and the Cup section each give 4px inside the page's 8px.",
+      "The header square of a pair with the same initials (Matt and Mike JENKINS) reads MaJ / MiJ, as the opened card does. Guard: test_lsc_cup_card.js."
+    ]
+  },
   {
     version: "2.531.7",
     date: "2026-10-09",
