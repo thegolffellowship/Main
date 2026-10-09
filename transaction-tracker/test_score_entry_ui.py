@@ -222,36 +222,40 @@ with sync_playwright() as p:
     check("sign screen: other players' rows are not tappable",
           pg.locator("tr:not(.me) button.hole").count() == 0)
     pg.click("tr.me button.hole[data-h='3']")
-    pg.wait_for_selector("text=Is that wrong?")
-    check("tapping a hole asks first: 'Hole 3 shows … Is that wrong?'",
+    pg.wait_for_selector("text=What should it be?")
+    check("tapping a hole asks first: 'Hole 3 shows … What should it be?'",
           "Hole 3 shows" in pg.inner_text("body") and pg.locator("td.picked").count() == 1)
     check("the flag box says the maximum is triple bogey (Kerry: 'notify the player')",
           "Maximum allowed is triple bogey (6)" in pg.inner_text("body"))
     pg.click("[data-act=unflag]")
     pg.wait_for_timeout(200)
-    check("Cancel leaves the card unflagged", "Is that wrong?" not in pg.inner_text("body")
+    check("Cancel leaves the card unflagged", "What should it be?" not in pg.inner_text("body")
           and not se.get_group_card(gid9)["flags"])
     pg.click("[data-act=flag]")
     check("Something's wrong outlines your row's holes", pg.locator(".se-card.picking").count() == 1)
     pg.click("tr.me button.hole[data-h='2']")
+    # Kerry 10/9: "Flagged for fix but doesn't say what it should be fixed to"
+    check("the flag can't be sent until the right score is picked",
+          pg.locator("button[data-act=flaghole][data-h='2']").is_disabled())
+    pv = int(pg.locator("[data-act=flagval]").first.get_attribute("data-v"))
+    pg.locator("[data-act=flagval]").first.click()
     pg.click("button[data-act=flaghole][data-h='2']")
-    pg.wait_for_selector("text=flagged", timeout=5000)
+    pg.wait_for_selector("text=You asked for", timeout=5000)
     flags = se.get_group_card(gid9)["flags"]
-    check("Flag hole 2 reaches the server as an open flag on hole 2 for Kerry",
-          any(f["hole"] == 2 and f["customer_id"] == 101 for f in flags), flags)
+    check("Flag hole 2 reaches the server as an open flag on hole 2 for Kerry, with his number",
+          any(f["hole"] == 2 and f["customer_id"] == 101 and f["proposed"] == pv for f in flags), flags)
     check("after flagging, the row is no longer tappable",
           pg.locator("tr.me button.hole").count() == 0)
     check("your own row stands out", pg.locator(".se-card tr.me td").first.evaluate(
           "e => getComputedStyle(e).backgroundColor") == "rgb(253, 235, 221)")
-    check("the scorekeeper's finished card lists the flag with Fix it",
-          "Kerry flagged hole 2" in pg.inner_text("body") and pg.locator("[data-act=fixflag]").count() == 1)
-    pg.click("[data-act=fixflag]")
-    pg.wait_for_selector(".se-picker")
-    check("Fix it opens Check the card with that number's row open",
-          "Hole 2" in pg.inner_text(".se-picker") and "Kerry" in pg.inner_text(".se-picker"))
-    pg.click(".se-picker [data-act=cset][data-v='4']")
+    check("the scorekeeper's finished card asks to approve or deny, with the number",
+          f"Kerry says hole 2 should be {pv}" in pg.inner_text("body")
+          and pg.locator("[data-act=flagok]").count() == 1 and pg.locator("[data-act=flagno]").count() == 1)
+    pg.click("[data-act=flagok]")
     pg.wait_for_timeout(1200)
-    check("fixing the number resolves the flag", se.get_group_card(gid9)["flags"] == [])
+    crd = se.get_group_card(gid9)
+    check("Approve writes his number and settles the flag",
+          crd["flags"] == [] and crd["scores"]["c:101"]["2"] == pv, (crd["flags"], crd["scores"].get("c:101")))
 
     print("eighteen holes, start on 1 (the turn); the dial on: the scorekeeper signs for the group")
     se.set_keeper_signs(900, True)
@@ -339,8 +343,9 @@ with sync_playwright() as p:
     check("Mark sees Kerry signed for him, and can still tap his own row",
           mk.locator("tr.me button.hole").count() == 18)
     mk.click("tr.me button.hole[data-h='7']")
+    mk.locator("[data-act=flagval]").first.click()
     mk.click("button[data-act=flaghole][data-h='7']")
-    mk.wait_for_selector("text=flagged", timeout=5000)
+    mk.wait_for_selector("text=You asked for", timeout=5000)
     sig = {(x["customer_id"], x["kind"]) for x in se.get_group_card(gid18)["signoffs"]}
     check("Mark's flag voids the signature Kerry made for him", (102, "player") not in sig, sig)
     se.set_keeper_signs(900, False)

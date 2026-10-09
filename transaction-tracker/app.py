@@ -12076,9 +12076,29 @@ def api_se_flag():
         return err
     try:
         res = flag_hole(gid, str(b.get("device_id") or ""), int(b["customer_id"]),
-                        int(b["hole"]), note=b.get("note"))
+                        int(b["hole"]), note=b.get("note"),
+                        proposed=(b.get("proposed") if b.get("proposed") not in (None, "") else None))
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "customer_id and hole are required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/flag/decide", methods=["POST"])
+def api_se_flag_decide():
+    """The scorekeeper approves or denies a flagged hole from his phone
+    (Kerry 10/9). His device must hold the group; score_entry checks it."""
+    from email_parser.score_entry import decide_flag
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    try:
+        by = b.get("decided_by")
+        res = decide_flag(int(b["flag_id"]), bool(b.get("approve")),
+                          device_id=str(b.get("device_id") or ""), group_id=gid,
+                          decided_by=int(by) if by else None)
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "flag_id is required"}), 400
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
@@ -12144,6 +12164,19 @@ def api_se_flag_resolve(flag_id):
     b = request.get_json(silent=True) or {}
     res = resolve_flag(flag_id, (b.get("resolution") or "resolved by manager")[:200],
                        actor=_se_actor())
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/flags/<int:flag_id>/decide", methods=["POST"])
+@require_role("manager")
+def api_se_flag_decide_manager(flag_id):
+    """The manager approves or denies a flagged hole on Live Scoring."""
+    from email_parser.score_entry import decide_flag
+    gate = _se_event_gate("flag", flag_id)
+    if gate:
+        return gate
+    b = request.get_json(silent=True) or {}
+    res = decide_flag(flag_id, bool(b.get("approve")), as_manager=True, actor=_se_actor())
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 

@@ -422,6 +422,37 @@ check("fixing the hole resolves the flag", se.get_group_card(sg)["flags"] == [])
 check("then the card signs again", se.sign_card(sg, "p5", 105).get("signed"))
 check("a manager signature needs a note", "error" in se.sign_card(sg, "admin", 101, kind="manager"))
 
+print("flag with the right score, approve or deny (Kerry 10/9)")
+# "Flagged for fix but doesn't say what it should be fixed to. Seems like the
+# notification should come thru just for approval and do I approve or deny"
+check("a proposed score out of range is refused", "error" in se.flag_hole(sg, "p5", 105, 7, proposed=12))
+fa = se.flag_hole(sg, "p5", 105, 7, proposed=3)["flag_id"]
+cf = se.get_group_card(sg)["flags"]
+check("the flag carries the score the player says is right", cf and cf[0]["proposed"] == 3, cf)
+check("a phone that does not hold the card cannot decide",
+      "error" in se.decide_flag(fa, True, device_id="p5", group_id=sg, decided_by=105))
+r = se.decide_flag(fa, True, device_id="sk", group_id=sg, decided_by=101)
+crd = se.get_group_card(sg)
+check("the scorekeeper approves: the score is written and the flag settles",
+      r.get("approved") and crd["scores"]["c:105"]["7"] == 3 and crd["flags"] == [], (r, crd["flags"]))
+check("a settled flag cannot be decided twice", se.decide_flag(fa, False, as_manager=True).get("settled"))
+check("then his card signs", se.sign_card(sg, "p5", 105).get("signed"))
+fd = se.flag_hole(sg, "p5", 105, 8, proposed=3)["flag_id"]
+r = se.decide_flag(fd, False, as_manager=True, actor="admin")
+crd = se.get_group_card(sg)
+check("the manager denies: the card stays, the flag settles, the player is told",
+      r.get("approved") is False and crd["scores"]["c:105"]["8"] == 4 and crd["flags"] == []
+      and [x["hole"] for x in crd["flags_denied"] if x["customer_id"] == 105] == [8], (r, crd["flags_denied"]))
+check("he can sign again, and the denied note goes away once he does",
+      se.sign_card(sg, "p5", 105).get("signed") and not se.get_group_card(sg)["flags_denied"])
+fm = se.flag_hole(sg, "p5", 105, 2, proposed=5)["flag_id"]
+se.decide_flag(fm, True, as_manager=True, actor="admin")
+check("the manager approves from Live Scoring", se.get_group_card(sg)["scores"]["c:105"]["2"] == 5)
+fo = se.flag_hole(sg, "p5", 105, 2)["flag_id"]
+check("an old flag with no number can't be approved (Fix it path)", "error" in se.decide_flag(fo, True, as_manager=True))
+se.resolve_flag(fo, "test")
+se.sign_card(sg, "p5", 105)
+
 print("match play: pickup marks (Kerry 2026-09-25)")
 # sg's course is NINE; hole 1 is a par 4 -> triple is 7
 mk = lambda op_id, cid, hole, gross, **kw: {"op_id": op_id, "customer_id": cid, "hole": hole, "gross": gross, **kw}

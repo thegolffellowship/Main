@@ -142,7 +142,13 @@
               ${["pending", "confirmed", "witnessed"].includes(h.status) ? `<button class="btn" data-hio="${h.id}" data-ok="0">Reject</button>` : ""}
               ${h.status === "pending" || h.status === "confirmed" ? `<span class="muted">Waiting on the group to confirm first.</span>` : ""}</div>`).join("")
             : `<div class="mgr-row muted">No hole-in-one claims.</div>`;
-        const flags = m.flags.length ? m.flags.map((f) => `<div class="mgr-row">
+        // APPROVE OR DENY (Kerry 10/9: "do I approve or deny as the manager"):
+        // a flag carries the score the player says is right. An old flag
+        // with no number keeps Clear the flag.
+        const flags = m.flags.length ? m.flags.map((f) => f.proposed != null ? `<div class="mgr-row">
+              <span class="lbl"><b>${esc(f.name || "#" + f.customer_id)}</b> · hole ${f.hole} · Group ${f.group_num}<br><span class="muted">says <b>${f.proposed}</b>${f.card_shows != null ? ", card shows " + f.card_shows : ""}${f.note ? " · " + esc(f.note) : ""}</span></span>
+              <button class="btn go" data-flagdecide="${f.id}" data-ok="1">Approve ${f.proposed}</button>
+              <button class="btn" data-flagdecide="${f.id}" data-ok="0">Deny</button></div>` : `<div class="mgr-row">
               <span class="lbl"><b>${esc(f.name || "#" + f.customer_id)}</b> · hole ${f.hole} · Group ${f.group_num}<br><span class="muted">${esc(f.note || "flagged")}</span></span>
               <button class="btn" data-flag="${f.id}">Clear the flag</button></div>`).join("")
             : `<div class="mgr-row muted">No open flags.</div>`;
@@ -197,6 +203,11 @@
             if (confirm(ok ? "Verify this hole-in-one? Nothing is announced to members from here." : "Reject this hole-in-one claim?")) {
                 post(`/api/score-entry/hio/${hb.dataset.hio}/verify`, {approve: ok});
             }
+            return;
+        }
+        const fd = e.target.closest("[data-flagdecide]");
+        if (fd) {
+            post(`/api/score-entry/flags/${fd.dataset.flagdecide}/decide`, {approve: fd.dataset.ok === "1"});
             return;
         }
         const fb = e.target.closest("[data-flag]");

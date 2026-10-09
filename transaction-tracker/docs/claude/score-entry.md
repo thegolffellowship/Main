@@ -75,6 +75,25 @@ on the page — green means bought in.
   "So are you saying I can tap a hole on that summary scorecard to change
   it? Because that's not obvious." A player flags; only the scorekeeper
   changes a score (from Check the card, tap a number).
+- **The flag says what it should be; approve or deny (v2.531.0, Kerry
+  2026-10-09: "Flagged for fix but doesn't say what it should be fixed to.
+  Seems like the notification should come thru just for approval and do I
+  approve or deny as the manager").** Tapping a hole asks "Hole N shows X.
+  What should it be?" with the numbers allowed on that par; the flag is sent
+  only with one picked (`flag_hole(..., proposed=)`, table
+  `se_flag_proposals`, migration 0009). The scorekeeper's finished card shows
+  "Michael says hole 5 should be 3 (card shows 4)" with **Approve 3** /
+  **Deny, keep 4**; Live Scoring shows the same pair to the manager.
+  `decide_flag(flag_id, approve, device_id/group_id | as_manager)`: approve
+  writes the number as an edit does (that hole's signatures void, the flag
+  resolves, the pickup mark clears off a non-triple); deny keeps the card and
+  tells the player "Hole N stays X (you asked for Y)" until he signs. Only the
+  phone holding the card or a manager may decide; a settled flag can't be
+  decided twice; both write an `se_audit` `flag_decide` row and the flag's
+  `resolution` ("approved by scorekeeper: 4 -> 3"). A flag with no number (an
+  old phone) keeps **Fix it** / Clear the flag. Endpoints:
+  `POST /api/score-entry/flag/decide` (group link + device) and
+  `POST /api/score-entry/flags/<id>/decide` (manager).
 - **Closest to the pin / Longest Putt (CA #829, v2.511.1).** Asked ONLY on
   the holes the games matrix plays. `ctp_contests(conn, round_id)` reads the
   one ratified rule the proximity markers print from
@@ -565,6 +584,8 @@ se_signoffs        round/group, customer_id FK, kind player|scorekeeper|
 se_card_flags      round/group, customer_id FK, hole_number, note,
                    raised_by_customer_id, device_id, at, resolved_at,
                    resolved_by_customer_id, resolution
+se_flag_proposals  flag_id PK -> se_card_flags, proposed_gross (1-20): the score a
+                   flag asks for (v2.531.0, migration 0009)
 se_ctp_claims      round/group, hole_number, customer_id FK (NULL = no one
                    closer), kind claim|none|manager, claimed_by_customer_id
 se_hio_claims      round/group, customer_id FK, hole_number, eligible,

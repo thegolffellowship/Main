@@ -287,8 +287,12 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
                                             if cur else None)})
             flags = [dict(x) for x in conn.execute(
                 "SELECT f.id, f.group_id, g.group_num, f.customer_id, f.hole_number AS hole, "
-                "f.note, f.at FROM se_card_flags f JOIN se_groups g ON g.id = f.group_id "
+                "f.note, f.at, p.proposed_gross AS proposed FROM se_card_flags f "
+                "JOIN se_groups g ON g.id = f.group_id "
+                "LEFT JOIN se_flag_proposals p ON p.flag_id = f.id "
                 "WHERE g.round_id = ? AND f.resolved_at IS NULL ORDER BY f.id", (r["round_id"],))]
+            for f in flags:     # what the card shows now, beside the proposal
+                f["card_shows"] = _flag_subject(conn, f["group_id"], f["customer_id"], f["hole"])[2]
         for f in flags:
             f["name"] = names.get(f["customer_id"])
         hio = [dict(h, name=names.get(h["customer_id"])) for h in r["hio"]]
@@ -663,6 +667,12 @@ def _ensure_score_entry_tables(conn: sqlite3.Connection) -> None:
     -- CLOSEST TO THE PIN (Kerry #666 C): no distances. The latest claim on a
     -- hole is the current holder the next group sees; 'none' records a group
     -- that answered "No one closer". A manager ruling is a claim too.
+    -- The score a flag proposes (Kerry 10/9; migrations/0009 declares the
+    -- same table). Approve writes it, deny keeps the card.
+    CREATE TABLE IF NOT EXISTS se_flag_proposals (
+        flag_id         INTEGER PRIMARY KEY REFERENCES se_card_flags(id) ON DELETE CASCADE,
+        proposed_gross  INTEGER NOT NULL CHECK (proposed_gross BETWEEN 1 AND 20));
+
     CREATE TABLE IF NOT EXISTS se_ctp_claims (
         id                      INTEGER PRIMARY KEY AUTOINCREMENT,
         round_id                INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
@@ -2584,8 +2594,14 @@ def _group_scores(conn, group_id: int) -> dict:
 
 
 def flag_hole(group_id: int, device_id: str, customer_id: int, hole: int,
-              note: str | None = None, raised_by: int | None = None, db_path=None) -> dict:
-    """'Something's wrong': the flag reopens only this player's card."""
+              note: str | None = None, raised_by: int | None = None,
+              proposed: int | None = None, db_path=None) -> dict:
+    """'Something's wrong': the flag reopens only this player's card.
+
+    `proposed` is the score the player says is right (Kerry 10/9: "doesn't
+    say what it should be fixed to"); the scorekeeper or the manager then
+    approves or denies it (decide_flag). Optional so an old phone's queued
+    flag still lands."""
     with _closing(_conn(db_path)) as conn:
         g = _group_ctx(conn, group_id)
         if not g:
@@ -2593,6 +2609,16 @@ def flag_hole(group_id: int, device_id: str, customer_id: int, hole: int,
         if not conn.execute("SELECT 1 FROM se_players WHERE group_id = ? AND customer_id = ?",
                             (group_id, customer_id)).fetchone():
             return {"error": "that person is not in this group"}
+        if proposed is not None:
+            par = conn.execute("SELECT par FROM se_round_holes WHERE round_id = ? AND hole_number = ?",
+                               (g["round_id"], int(hole))).fetchone()
+            lo, hi = gross_bounds(par[0] if par else None)
+            try:
+                proposed = int(proposed)
+            except (TypeError, ValueError):
+                return {"error": "the proposed score is not a number"}
+            if not lo <= proposed <= hi:
+                return {"error": f"the proposed score must be {lo}-{hi}"}
         now = _now()
         cur = conn.execute(
             "INSERT INTO se_card_flags (round_id, group_id, customer_id, hole_number, note, "
@@ -2600,6 +2626,9 @@ def flag_hole(group_id: int, device_id: str, customer_id: int, hole: int,
             (g["round_id"], group_id, customer_id, int(hole), (note or "").strip() or None,
              raised_by if raised_by is not None else customer_id, device_id, now))
         flag_id = cur.fetchone()[0]
+        if proposed is not None:
+            conn.execute("INSERT INTO se_flag_proposals (flag_id, proposed_gross) VALUES (?, ?)",
+                         (flag_id, proposed))
         conn.execute(
             "UPDATE se_signoffs SET voided_at = ?, void_reason = ? WHERE group_id = ? "
             "AND customer_id = ? AND kind IN ('player', 'manager') AND voided_at IS NULL",
@@ -2626,6 +2655,103 @@ def resolve_flag(flag_id: int, resolution: str, resolved_by: int | None = None,
         _bump(conn, r["event_id"])
         conn.commit()
     return {"ok": True}
+
+
+def _flag_subject(conn, group_id: int, customer_id: int, hole: int):
+    """(subject_key, team_id, current gross) the flag is about: the player's
+    team ball when the team carries a score on that hole, else his own."""
+    keys = _subject_keys_for(conn, group_id, customer_id)
+    for k in sorted(keys, key=lambda k: 0 if k.startswith("t:") else 1):
+        r = conn.execute("SELECT round_id, gross FROM se_hole_scores WHERE group_id = ? "
+                         "AND subject_key = ? AND hole_number = ?", (group_id, k, hole)).fetchone()
+        if r and r["gross"] is not None:
+            return k, (int(k[2:]) if k.startswith("t:") else None), r["gross"]
+    return f"c:{customer_id}", None, None
+
+
+def decide_flag(flag_id: int, approve: bool, *, device_id: str | None = None,
+                group_id: int | None = None, decided_by: int | None = None,
+                as_manager: bool = False, actor: str | None = None, db_path=None) -> dict:
+    """APPROVE OR DENY a flagged hole (Kerry 10/9: "the notification should
+    come thru just for approval and do I approve or deny as the manager").
+
+    The scorekeeper decides from his phone (his device must hold the group)
+    or the manager from Live Scoring (`as_manager`). Approve writes the
+    proposed score as an edit would (signatures on that hole void, the flag
+    resolves); deny keeps the card, resolves the flag and reopens the
+    player's card for signing. Both are kept: the flag row's resolution and
+    an se_audit row."""
+    with _closing(_conn(db_path)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        f = conn.execute(
+            "SELECT f.id, f.group_id, f.customer_id, f.hole_number, f.resolved_at, "
+            "p.proposed_gross FROM se_card_flags f LEFT JOIN se_flag_proposals p ON p.flag_id = f.id "
+            "WHERE f.id = ?", (flag_id,)).fetchone()
+        if not f:
+            conn.rollback()
+            return {"error": "no such flag"}
+        if f["resolved_at"]:
+            conn.rollback()
+            return {"error": "that flag is already settled", "settled": True}
+        gid = f["group_id"]
+        g = _group_ctx(conn, gid)
+        if not as_manager:
+            lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
+                                (gid,)).fetchone()
+            if group_id != gid or not device_id or not lock or lock["device_id"] != device_id:
+                conn.rollback()
+                return {"error": "only the scorekeeper's phone or the manager can decide a flag"}
+        hole, cid, prop = f["hole_number"], f["customer_id"], f["proposed_gross"]
+        if approve and prop is None:
+            conn.rollback()
+            return {"error": "this flag has no proposed score; change the hole instead"}
+        subject, tid, was = _flag_subject(conn, gid, cid, hole)
+        now = _now()
+        who = "manager" if as_manager else "scorekeeper"
+        if approve:
+            ta, tb = (None, None)
+            if tid is not None:
+                t = conn.execute("SELECT customer_id_a, customer_id_b FROM se_teams WHERE id = ?",
+                                 (tid,)).fetchone()
+                ta, tb = (t[0], t[1]) if t else (None, None)
+            if was != prop:
+                _after_change(conn, g, gid, [cid] if tid is None else [ta, tb], hole, prop,
+                              decided_by, now, is_team=tid is not None)
+            op_id = f"flag-{flag_id}-approve"
+            conn.execute(
+                "INSERT INTO se_hole_scores (round_id, group_id, subject_key, customer_id, "
+                "team_id, team_customer_id_a, team_customer_id_b, hole_number, gross, "
+                "entered_by_customer_id, device_id, op_id, client_ts, server_ts) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(round_id, subject_key, hole_number) DO UPDATE SET "
+                "gross = excluded.gross, entered_by_customer_id = excluded.entered_by_customer_id, "
+                "device_id = excluded.device_id, op_id = excluded.op_id, "
+                "client_ts = excluded.client_ts, server_ts = excluded.server_ts",
+                (g["round_id"], gid, subject, cid if tid is None else None, tid, ta, tb, hole,
+                 prop, decided_by, device_id or "manager", op_id, None, now))
+            par = conn.execute("SELECT par FROM se_round_holes WHERE round_id = ? AND hole_number = ?",
+                               (g["round_id"], hole)).fetchone()
+            if prop != gross_bounds(par[0] if par else None)[1]:
+                conn.execute("DELETE FROM se_hole_marks WHERE round_id = ? AND subject_key = ? "
+                             "AND hole_number = ?", (g["round_id"], subject, hole))
+            resolution = f"approved by {who}: {was if was is not None else '-'} -> {prop}"
+        else:
+            resolution = f"denied by {who}: card stays {was if was is not None else '-'}"
+        conn.execute("UPDATE se_card_flags SET resolved_at = ?, resolved_by_customer_id = ?, "
+                     "resolution = ? WHERE id = ?", (now, decided_by, resolution, flag_id))
+        conn.execute(
+            "INSERT INTO se_audit (round_id, group_id, kind, customer_id, device_id, "
+            "op_id, result, detail, at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (g["round_id"], gid, "flag_decide", decided_by, device_id or "manager",
+             f"flag-{flag_id}-{'approve' if approve else 'deny'}", "ok",
+             json.dumps({"flag_id": flag_id, "hole": hole, "customer_id": cid,
+                         "proposed": prop, "was": was, "approve": bool(approve), "by": who}), now))
+        if as_manager:
+            _log_manager(conn, "flag", actor, g["round_id"], gid, cid,
+                         {"flag_id": flag_id, "hole": hole, "resolution": resolution})
+        _bump(conn, g["event_id"])
+        conn.commit()
+    return {"ok": True, "approved": bool(approve), "resolution": resolution}
 
 
 # CTP HOLES FROM THE MATRIX (CA #829 GO, for 10/13). The phone asks the CTP
@@ -3016,8 +3142,20 @@ def _card_extras(conn, g, group_id: int) -> dict:
         "SELECT customer_id, kind, signed_by_customer_id, at FROM se_signoffs "
         "WHERE group_id = ? AND voided_at IS NULL ORDER BY id", (group_id,))]
     flags = [dict(r) for r in conn.execute(
-        "SELECT id, customer_id, hole_number AS hole, note, at FROM se_card_flags "
-        "WHERE group_id = ? AND resolved_at IS NULL ORDER BY id", (group_id,))]
+        "SELECT f.id, f.customer_id, f.hole_number AS hole, f.note, f.at, p.proposed_gross AS proposed "
+        "FROM se_card_flags f LEFT JOIN se_flag_proposals p ON p.flag_id = f.id "
+        "WHERE f.group_id = ? AND f.resolved_at IS NULL ORDER BY f.id", (group_id,))]
+    # A DENIED flag tells its player why his card reopened unchanged, until he
+    # signs again (Kerry 10/9: approve or deny). The flag voided his signature,
+    # so any live one is newer than the denial.
+    denied = [dict(r) for r in conn.execute(
+        "SELECT f.id, f.customer_id, f.hole_number AS hole, p.proposed_gross AS proposed, "
+        "f.resolution, f.resolved_at FROM se_card_flags f "
+        "LEFT JOIN se_flag_proposals p ON p.flag_id = f.id "
+        "WHERE f.group_id = ? AND f.resolution LIKE 'denied%' AND NOT EXISTS ("
+        "SELECT 1 FROM se_signoffs s WHERE s.group_id = f.group_id AND s.customer_id = f.customer_id "
+        "AND s.kind IN ('player', 'manager') AND s.voided_at IS NULL) ORDER BY f.id",
+        (group_id,))]
     ctp = {}
     contests = ctp_contests(conn, g["round_id"])
     for hole, kind in contests["holes"].items():
@@ -3047,7 +3185,7 @@ def _card_extras(conn, g, group_id: int) -> dict:
         "SELECT id, scorekeeper_customer_id, print_scorer_customer_id, print_scorer_name, "
         "signed_for_group, photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
         "WHERE group_id = ? ORDER BY id DESC LIMIT 1", (group_id,))]
-    return {"signoffs": signoffs, "flags": flags, "ctp": ctp, "hio": hio,
+    return {"signoffs": signoffs, "flags": flags, "flags_denied": denied, "ctp": ctp, "hio": hio,
             "card_check": checks[0] if checks else None,
             "keeper_signs": keeper_signs(g["event_id"]),
             "tees": _tee_legend(conn, g["event_id"]),

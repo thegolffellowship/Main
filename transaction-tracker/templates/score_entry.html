@@ -601,7 +601,7 @@
         // last fresh card; cleared on every successful load, when the server's
         // own "answered" flag takes over again.
         const ctpAsked = new Set();
-        let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, busy = false;
+        let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, flagVal = null, busy = false;
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;
         // Match play pickup prompt + the max-triple notice (Kerry 2026-09-25).
@@ -1450,7 +1450,12 @@
             return fl.map((f) => {
                 const sub = subjects().find((x) => x.cids.includes(f.customer_id));
                 const v = sub ? value(sub.key, f.hole).v : null;
-                return `<div class="se-warn" style="justify-content:space-between">${ICON.warn}<span style="flex:1">${esc(first(byId(f.customer_id).display_name))} flagged hole ${f.hole}${v != null ? " (card shows " + v + ")" : ""}${f.note ? ": " + esc(f.note) : ""}</span>
+                const nm = esc(first(byId(f.customer_id).display_name));
+                // APPROVE OR DENY (Kerry 10/9): the flag says what it should
+                // be. An old flag with no number keeps the Fix it path.
+                if (f.proposed != null) return `<div class="se-warn" style="flex-wrap:wrap">${ICON.warn}<span style="flex:1">${nm} says hole ${f.hole} should be <strong>${f.proposed}</strong>${v != null ? " (card shows " + v + ")" : ""}${f.note ? ": " + esc(f.note) : ""}</span>
+                    <span style="display:flex;gap:8px;width:100%;margin-top:8px"><button type="button" class="se-pill dark" style="flex:1" data-act="flagok" data-id="${f.id}">Approve ${f.proposed}</button><button type="button" class="se-pill line" style="flex:1" data-act="flagno" data-id="${f.id}">Deny, keep ${v == null ? "it" : v}</button></span></div>`;
+                return `<div class="se-warn" style="justify-content:space-between">${ICON.warn}<span style="flex:1">${nm} flagged hole ${f.hole}${v != null ? " (card shows " + v + ")" : ""}${f.note ? ": " + esc(f.note) : ""}</span>
                     <button type="button" class="se-chip" data-act="fixflag" data-cid="${f.customer_id}" data-h="${f.hole}">Fix it</button></div>`;
             }).join("");
         }
@@ -1483,17 +1488,31 @@
                 actions = `<div class="se-status">${ICON.check}<span>Card submitted · ${ph}${cc.signed_for_group ? " · you signed for the group" : ""}</span></div>`;
             }
             if (done) {
+                (card.flags_denied || []).filter((f) => f.customer_id === who && !signedSelf(who)).forEach((f) => {
+                    const sub = subjects().find((x) => x.cids.includes(f.customer_id));
+                    const v = sub ? value(sub.key, f.hole).v : null;
+                    actions += `<div class="se-warn">${ICON.warn}<span>Hole ${f.hole} stays ${v == null ? "as entered" : v}${f.proposed != null ? " (you asked for " + f.proposed + ")" : ""}: the flag was denied. Sign, or flag it again.</span></div><div class="se-gap"></div>`;
+                });
                 if (flagPick != null && mine && !signedSelf(who) && !flagsMine.length) {
-                    const v = value(mine.key, flagPick).v;
-                    actions += `<div class="se-box" style="margin-bottom:10px"><div style="font-size:17px;font-weight:700;margin-bottom:6px">Hole ${flagPick} shows ${v == null ? "no score" : v}. Is that wrong?</div>
-                        <div class="se-copy" style="margin-bottom:10px">${esc(first(kept) || "The scorekeeper")} gets the flag to fix it, then you sign. ${maxText(flagPick)}${v != null && v === hiOf(flagPick) ? " Anything worse is still entered as " + v + "." : ""}</div>
-                        <button type="button" class="se-pill dark" data-act="flaghole" data-h="${flagPick}">Flag Hole ${flagPick}</button><div class="se-gap"></div>
+                    // SAY WHAT IT SHOULD BE (Kerry 10/9: "Flagged for fix but
+                    // doesn't say what it should be fixed to"): the player picks
+                    // the right number; the scorekeeper or manager approves it.
+                    const v = value(mine.key, flagPick).v, hp = info(flagPick);
+                    const lo = hp.par >= 5 ? 2 : 1, hi = hiOf(flagPick);
+                    const nb = [];
+                    for (let x = lo; x <= hi; x++) if (x !== v) nb.push(`<button type="button" class="${x === flagVal ? "on" : ""}" data-act="flagval" data-v="${x}">${x}</button>`);
+                    const keeper = esc(first(kept) || "The scorekeeper");
+                    actions += `<div class="se-box" style="margin-bottom:10px"><div style="font-size:17px;font-weight:700;margin-bottom:6px">Hole ${flagPick} shows ${v == null ? "no score" : v}. What should it be?</div>
+                        <div class="se-picker" style="margin:0 0 8px"><div class="row">${nb.join("")}</div><div class="se-note">${maxText(flagPick)}${v != null && v === hi ? " Anything worse is still entered as " + v + "." : ""}</div></div>
+                        <div class="se-copy" style="margin-bottom:10px">${keeper} approves or denies it, then you sign.</div>
+                        <button type="button" class="se-pill dark" data-act="flaghole" data-h="${flagPick}"${flagVal == null ? " disabled" : ""}>${flagVal == null ? "Pick the right score" : "Send Hole " + flagPick + " as " + flagVal}</button><div class="se-gap"></div>
                         <button type="button" class="se-pill line" data-act="unflag">Cancel, it's right</button></div>`;
                 } else if (flagging) {
                     actions += `<div class="se-copy" style="margin-bottom:10px"><strong>Tap the hole that's wrong on your row</strong> (outlined above).</div>
                         <button type="button" class="se-pill line" data-act="unflag">Cancel</button>`;
                 } else if (flagsMine.length) {
-                    actions += `<div class="se-warn">${ICON.warn}<span>Hole ${flagsMine.map((f) => f.hole).join(", ")} flagged. Your card reopens for signing once it's fixed.</span></div>`;
+                    const asked = flagsMine.map((f) => "Hole " + f.hole + (f.proposed != null ? " as " + f.proposed : "")).join(", ");
+                    actions += `<div class="se-warn">${ICON.warn}<span>You asked for ${asked}. Waiting for ${esc(first(kept) || "the scorekeeper")} or the manager to approve. Your card reopens for signing once it's settled.</span></div>`;
                 } else if (signedSelf(who)) {
                     actions += `<div class="se-status">${ICON.check}<span>You signed your card · ${total}</span></div>`;
                 } else if (signedFor(who)) {
@@ -1832,10 +1851,20 @@
             if (act === "back") { hole = "review"; store.set(K.hole, null); render(); return; }
             if (act === "attest") { post("/api/score-entry/sign", {customer_id: who, kind: "scorekeeper"}); return; }
             if (act === "sign") { post("/api/score-entry/sign", {customer_id: who}); return; }
-            if (act === "flag") { flagging = true; flagPick = null; render(); return; }
-            if (act === "unflag") { flagging = false; flagPick = null; render(); return; }
-            if (act === "pickhole") { flagPick = Number(b.dataset.h); render(); return; }
-            if (act === "flaghole") { flagging = false; flagPick = null; post("/api/score-entry/flag", {customer_id: who, hole: Number(b.dataset.h)}); return; }
+            if (act === "flag") { flagging = true; flagPick = null; flagVal = null; render(); return; }
+            if (act === "unflag") { flagging = false; flagPick = null; flagVal = null; render(); return; }
+            if (act === "pickhole") { flagPick = Number(b.dataset.h); flagVal = null; render(); return; }
+            if (act === "flagval") { flagVal = Number(b.dataset.v); render(); return; }
+            if (act === "flaghole") {
+                if (flagVal == null) return;
+                const pv = flagVal;
+                flagging = false; flagPick = null; flagVal = null;
+                post("/api/score-entry/flag", {customer_id: who, hole: Number(b.dataset.h), proposed: pv}); return;
+            }
+            if (act === "flagok" || act === "flagno") {
+                if (queue.length) flush();
+                post("/api/score-entry/flag/decide", {flag_id: Number(b.dataset.id), approve: act === "flagok", decided_by: who}); return;
+            }
             if (act === "hio") { post("/api/score-entry/hio/confirm", {hio_id: Number(b.dataset.id), customer_id: who}); return; }
         });
 

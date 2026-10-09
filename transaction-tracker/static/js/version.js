@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.530.7";
+window.TGF_VERSION = "2.531.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.0",
+    date: "2026-10-09",
+    title: "Live scoring: a flag says what the score should be, and gets Approve or Deny",
+    changes: [
+      "Kerry 10/9, on his practice card: \"Flagged for fix but doesn't say what it should be fixed to. Seems like the notification should come thru just for approval and do I approve or deny as the manager\". A player who taps a wrong number on his row now picks the right one (only the numbers allowed on that par) before the flag can be sent, and his card reads \"You asked for Hole 5 as 3. Waiting for the scorekeeper or the manager to approve.\"",
+      "The scorekeeper's finished card shows \"Michael says hole 5 should be 3 (card shows 4)\" with Approve 3 / Deny, keep 4. The manager's Live Scoring page shows the same pair beside each flag. Approve writes the number exactly as an edit does (that hole's signatures void, the flag settles); Deny keeps the card, settles the flag and tells the player \"Hole 5 stays 4 (you asked for 3)\" until he signs. Only the phone holding the card or a manager can decide; every decision is kept in the flag's resolution and the audit log.",
+      "New table se_flag_proposals (migration 0009, also declared in score_entry's own DDL). A flag raised without a number (an old phone) keeps the Fix it / Clear the flag path. Guards: test_score_entry.py and test_score_entry_ui.py."
+    ]
+  },
   {
     version: "2.530.7",
     date: "2026-10-09",
