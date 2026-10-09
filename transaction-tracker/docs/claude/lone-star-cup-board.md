@@ -949,3 +949,55 @@ On `/member/score/board?t=` for a Cup round (`window.SOLO_CUP`):
 - EVENT INFO has a SCORING tab that renders the same `SCORER_NOTES`.
 - Guard: `test_lsc_weekend_email.py`.
 
+## RECAP DRAFTS — Saturday and final, written from the board (Kerry 10/9) — v2.533.1
+
+Kerry: "Would be nice to auto-generate an end of day Saturday recap for what
+happened and where the cup stands after team sessions. Then a final recap"
+
+`email_parser/lsc_recap.py`, guard `test_lsc_recap.py`.
+- **`build_recap(kind)`**, kind `saturday` | `final`, reads `lsc_board_payload()`
+  (the frozen `lsc_results` snapshot once stored). Every number and name comes
+  from the board; nothing is invented. Output: `markup` (the recap markup
+  `recap_mail.py` renders: CAPS heads, `[[Name|customer_id]]` Spotlight links),
+  `text` (plain) and `html` (recap_mail's renderer through
+  `fetcher.normalize_email_html`).
+  - **saturday:** the lede, each Saturday session's score (Austin x – San
+    Antonio y), every match on one line in match order ("Match 1: ADAMS &
+    BROOKS (AUS) def. NASH & OWENS 3&2", "halved with"), THE STANDOUTS the
+    cards back (biggest close-out margin, comebacks from 2+ down, matches that
+    went all 18, a session sweep), WHERE THE CUP STANDS from `cup_status`
+    (points, points left, the champion's need to retain at half and the
+    challenger's to win at half + ½), UP NEXT from the Sunday session (date,
+    first tee time, match count), FELLOWSHIP as a highlighted blank, signature.
+  - **final:** the result (defends / takes / retains on a tie / wins), THE
+    FINAL SCORE by session + total, the Sunday singles one per line, Sunday's
+    standouts, PERFECT WEEKENDS (won every match, 3+ played) and unbeaten
+    records. **The clinching match** is named only when every match of the
+    session it falls in carries `decided_at` / `finished_at`; the board carries
+    no finish times today, so no clinch line is written (the cover says so).
+  - Names: the board's `lines` (members' LAST name in caps, Kerry's member
+    ruling); the match lines print the surname, or the full name when two
+    players share it (two WADEs, Jay JONES / Walt Jones).
+  - **No dollars, no skins.** An output with a `$` is refused at the boundary.
+- **The guard** (`guard(board, kind)`) refuses, with the reason, while a session
+  it covers has no matches, fewer than its `n_matches` (the board now carries
+  each session's `n_matches`), a match that is not final, or is not scored from
+  entered cards (`source` mock/none/preview, or a session missing from
+  `entry_sessions` unless every match is a recorded result). Saturday = the
+  sessions on the first session date.
+- **Delivery:** `send_recap(kind, send, force)` mails a DRAFT to Kerry only
+  (`lsc_recap_to`, default kerry@thegolffellowship.com; staff addresses only via
+  `recap_mail.staff_only`), once per kind, recorded in the app setting
+  **`lsc_recap_sent`** `{"3329": {"saturday": {status, at, to, subject,
+  attempts}}}`; `force` re-sends. A refused guard never sends, forced or not.
+  Logged to message_log (`lsc-recap-draft`) and agent_action_log.
+- **Auto-run:** scheduler job `lsc_recap_auto` (app.py), every 10 minutes
+  Central. It acts only from the first session date through the day after the
+  last (10/10-10/12, from the dial) and while app setting **`lsc_recap_auto`**
+  is on: ON by default (set `0`/`off` to stop; it only ever emails Kerry).
+  When the whole Cup is final it mails the final draft once; otherwise, when
+  Saturday is final, the Saturday draft once (a final that is already ready
+  supersedes the Saturday draft). A failed send retries at most 3 times.
+- **Bridge:** `scoring-lsc-recap:<saturday|final>[|send[|force]]` (dry run =
+  the plain text + the guard; html left out of the bridge reply).
+

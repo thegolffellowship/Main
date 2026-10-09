@@ -1865,6 +1865,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-lsc-preview[:seed[|apply]|:teardown]  the Cup STAFF PREVIEW demo rounds (own dial, PREVIEW rounds; /events/3329/cup-preview)
       scoring-lsc-check  read-only check of the lsc_matches pairings (per session matches, points total, problems) before a change goes live
       scoring-lsc-skins-payouts[:apply]  Cup DAILY skins winners -> PAYOUTS (Kerry 10/9): one tgf_payouts row per winner per final day (category skins, "LSC SAT Skins — ..."); dry run by default; apply creates / updates UNPAID / removes UNPAID rows, never a PAID one (Kerry ratifies before apply)
+      scoring-lsc-recap:<saturday|final>[|send[|force]]  Cup recap DRAFT from the board (Kerry 10/9): dry run = plain text + guard (refused until the sessions are final); send = DRAFT to Kerry only, once per kind (lsc_recap_sent); force re-runs. No dollars
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
@@ -3818,6 +3819,27 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _a and _a != ["apply"]:
                 return json.dumps({"error": "use '' (dry run) or 'apply'"})
             res = _lsp.lsc_skins_payouts(apply=_a == ["apply"])
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-lsc-recap":
+            # Lone Star Cup recap DRAFTS (Kerry 10/9: "Would be nice to
+            # auto-generate an end of day Saturday recap for what happened
+            # and where the cup stands after team sessions. Then a final
+            # recap"). scoring-lsc-recap:<saturday|final> = dry run (the
+            # plain text + the guard: refused with its reason until the
+            # sessions are final); |send mails the DRAFT to Kerry (staff
+            # only), once per kind; |send|force re-runs it. No member path.
+            from email_parser import lsc_recap as _lr
+            _a = [x.strip().lower() for x in (arg or "").split("|") if x.strip()]
+            if not _a or _a[0] not in _lr.KINDS or any(x not in ("send", "force") for x in _a[1:]) \
+                    or ("force" in _a and "send" not in _a):
+                return json.dumps({"error": "use saturday|final, optionally |send or |send|force"})
+            _send = "send" in _a[1:]
+            if _send:
+                db.log_agent_action("mcp-claude", "scoring-lsc-recap", arg)
+            res = _lr.send_recap(_a[0], send=_send, force="force" in _a[1:])
+            res.pop("html", None)
+            res["auto"] = {"enabled": _lr.auto_enabled(),
+                           "setting": _lr.AUTO_KEY}
             return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-oneoff-addon":
             # "<event_id>|<customer_id>|<key>|<on|off>" — toggle a

@@ -2077,6 +2077,33 @@ def start_scheduler():
         )
         logger.info("Tracker Health digest scheduled (dial health_digest_time, default 05:00 Central)")
 
+    # ── Lone Star Cup recap DRAFTS (Kerry 10/9: "Would be nice to
+    #    auto-generate an end of day Saturday recap for what happened and
+    #    where the cup stands after team sessions. Then a final recap").
+    #    Every 10 minutes; the job itself only acts during the Cup's dates
+    #    (first session day through the day after the last: 10/10-10/12)
+    #    and while app setting `lsc_recap_auto` is on (default ON; 0/off
+    #    stops it). Once Saturday's two sessions are final it mails the
+    #    Saturday DRAFT to Kerry, once the whole Cup is final the final
+    #    DRAFT, each once (`lsc_recap_sent`). Staff only, never members.
+    #    email_parser/lsc_recap.py; bridge scoring-lsc-recap.
+    def lsc_recap_auto_job():
+        from email_parser.lsc_recap import lsc_recap_auto_check
+        try:
+            res = lsc_recap_auto_check()
+            if res.get("status"):
+                logger.info("LSC recap auto: %s", res)
+        except Exception:
+            logger.exception("LSC recap auto failed (non-fatal)")
+    scheduler.add_job(
+        lsc_recap_auto_job,
+        "cron", minute="*/10",
+        timezone="US/Central",
+        id="lsc_recap_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.533.0";
+window.TGF_VERSION = "2.533.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.533.1",
+    date: "2026-10-09",
+    title: "Lone Star Cup recap drafts: end of Saturday, then the final",
+    changes: [
+      "Kerry 10/9: \"Would be nice to auto-generate an end of day Saturday recap for what happened and where the cup stands after team sessions. Then a final recap\". New email_parser/lsc_recap.py writes both from the Cup board alone: Saturday = each session's score, every match on one line in match order (\"Match 1: ADAMS & BROOKS (AUS) def. NASH & OWENS 3&2\"), the standouts the cards back (biggest margin, comebacks, matches that went all 18, a session sweep) and where the Cup stands (points, points left, what San Antonio needs to retain and Austin to win, from the real totals). Final = the result, the session scores, the Sunday singles, perfect and unbeaten weekends; the clinching match is named only when the matches carry their finish times, which the board does not record today. House style from event-recaps.md (TGF Results subject, CAPS heads, Spotlight links on every name, fellowship close with the line left for Kerry). No dollars anywhere.",
+      "It refuses, with the reason, until the sessions it covers are all final and scored from entered cards. It mails a DRAFT to Kerry only (staff addresses only), once per kind, recorded in the app setting lsc_recap_sent; force re-runs it. A scheduler job checks every 10 minutes on the Cup's dates (10/10-10/12) and sends each draft once when ready, behind the app setting lsc_recap_auto (on by default; 0 turns it off). Bridge scoring-lsc-recap:<saturday|final>[|send[|force]]."
+    ]
+  },
   {
     version: "2.533.0",
     date: "2026-10-09",
