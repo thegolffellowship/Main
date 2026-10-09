@@ -679,6 +679,18 @@ the Starter Sheet logo and Proxy logos too."
   `SOLO_LSC=group_is_cup(gid)`; `contests.html` adds `body.lsc-solo` (navy
   header, Cup logo, navy toggle and text). An event whose games are all
   "included" (the practice round) shows only Net and Gross, Net first.
+- **Less text on every EVENTS board (v2.529.3, Kerry 10/8: "WAAYYYYYYYY too
+  much text on those leaderboard views. Nobody is going to read all that"):**
+  `evlbLegendFor` returns colour chips only (Flight n, Pts MVP, bought in /
+  not in), and nothing when a tab has no winner or buyer to explain or the
+  event has no games; the footer is "Tap a player for their scorecard.";
+  the official line is "Unofficial · Golf Genius is the official scorer"
+  and the scorer's board hides it on a `live_entry` event; an event with no
+  games shows no money notices.
+- **Toggle size (v2.529.3):** the SCORING | LEADERBOARD buttons keep 40 px /
+  12 px on a tight card (only the strip around them thins), so both pages
+  match; the hole card closes up its rows instead (one-screen rule kept,
+  `test_score_entry_ui.py` at 390x660).
 - **Members' draw page (v2.528.5):** `/member/cup-draw` is public (member
   tier, no login). It renders `cup_draw.html` with `member_view=True`: no
   intro, tabs or controls; the SUMMARY once all three sessions are drawn,

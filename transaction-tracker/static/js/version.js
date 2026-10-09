@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.529.2";
+window.TGF_VERSION = "2.529.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.3",
+    date: "2026-10-08",
+    title: "Leaderboards say far less; the SCORING | LEADERBOARD toggle keeps one size",
+    changes: [
+      "Kerry 10/8: \"WAAYYYYYYYY too much text on those leaderboard views. Nobody is going to read all that.\" The paragraph legends under every EVENTS board are now just the colour chips (Flight 1, Flight 2, MVP, bought in / not in), shown only when a tab has a winner or buyer to explain; an event with no games (the practice round) shows none and no money notices. The footer is one line, \"Tap a player for their scorecard.\" The official line is shortened to \"Unofficial · Golf Genius is the official scorer\" and is dropped on the scorer's board for an event Golf Genius never scores.",
+      "Kerry 10/8: \"Scoring toggle (SCORING | LEADERBOARD) not rendering same as leaderboard needs to maintain size.\" On a tight card the toggle used to shrink to 28 px with smaller text; its buttons now stay 40 px / 12 px on both pages, and the hole card closes up its rows a little instead so it still fits one screen."
+    ]
+  },
   {
     version: "2.529.2",
     date: "2026-10-08",

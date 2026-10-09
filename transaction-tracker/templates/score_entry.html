@@ -315,14 +315,20 @@
         /* ONE SCREEN, NO SCROLLING (Kerry 2026-09-26) still holds with the toggle:
            when the card would overflow, the mark shrinks (above), the toggle and
            the bottom bar tighten, and the rows close up a little. */
+        /* The SCORING | LEADERBOARD toggle keeps one size on every screen,
+           tight or not, so it reads the same on both pages (Kerry 10/8:
+           "Scoring toggle ... not rendering same as leaderboard needs to
+           maintain size"). Only the white strip around it thins on a tight card. */
         body.se-tight .se-toggle { padding-top: 1px; padding-bottom: 2px; }
-        body.se-tight .se-toggle a { min-height: 28px; font-size: 11px; }
         body.se-tight .se-hole .se-bottom { padding-top: 4px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
         body.se-tight .se-hole .se-bottom .se-pill, body.se-tight .se-hole .se-bottom .se-nav button { height: 44px; }
         body.se-tight .se-hole .se-bottom .se-nav button { width: 44px; }
         body.se-tight.se-focus .se-hole { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
-        body.se-tight .se-hole .se-row { padding: 5px 10px; }
-        body.se-tight .se-hole .se-stack { gap: 4px; }
+        body.se-tight .se-hole .se-row { padding: 4px 10px; }
+        body.se-tight .se-hole .se-stack { gap: 3px; }
+        /* the toggle no longer gives up its height, so the card does */
+        body.se-tight.se-focus .se-wrap { padding-top: 2px; }
+        body.se-tight .se-hole .se-popkey { margin-top: 2px; }
         body.se-tight .se-hole .se-h1.big { font-size: 26px; }
         body.se-tight .se-hole .se-strip { margin-top: 4px !important; }
         .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }

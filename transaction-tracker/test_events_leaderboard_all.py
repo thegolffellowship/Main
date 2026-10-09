@@ -49,8 +49,12 @@ html = open("templates/contests.html", encoding="utf-8").read()
 check("the EVENTS tab: manager-only on the staff page, a plain tab on /member (v2.523.4, #1146-1), no BETA badge (Kerry 2026-10-08)",
       '{% if member_mode %}<button class="top-tab" data-top="events">' in html
       and '<button class="top-tab manager-only" data-top="events"' in html and 'class="evlb-beta">BETA' not in html)
-check("every board carries the Unofficial / GG-official line, money as computed",
-      'Golf Genius is the official scorer' in html and 'Money shown as computed, not as paid.' in html)
+check("every board carries the short Unofficial / GG-official line (Kerry 10/8: less text)",
+      'Unofficial &middot; Golf Genius is the official scorer' in html and 'Money shown as computed, not as paid.' not in html)
+check("legends are chips, not prose (Kerry 10/8: \"Nobody is going to read all that\")",
+      'Money winners color-code by FLIGHT' not in html and 'non-buyers are placed in the flight' not in html
+      and 'Tap a player for their scorecard.</p>' in html)
+check("the solo board drops the GG line on an event GG never scores", "off.hidden = !!ev.live_entry" in html)
 d = db.get_events_leaderboard(db_path=tmp)
 check("the list API carries gg_official_through (None until set)", "gg_official_through" in d and d["gg_official_through"] is None)
 db.set_app_setting("gg_official_through", "Oct 6", db_path=tmp)

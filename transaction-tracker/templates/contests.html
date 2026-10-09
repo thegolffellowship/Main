@@ -2302,7 +2302,7 @@
             {# While Golf Genius is the official scorer every board says so
                (Kerry 2026-10-02, CoS #1146-1). The date comes from the
                gg_official_through setting through the list API. #}
-            <p class="evlb-official" id="evlb-official">Unofficial &mdash; Golf Genius is the official scorer<span id="evlb-official-through"></span>. Money shown as computed, not as paid.</p>
+            <p class="evlb-official" id="evlb-official">Unofficial &middot; Golf Genius is the official scorer<span id="evlb-official-through"></span>.</p>
             <div id="evlb-list"><p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p></div>
         </div>
 
@@ -3416,6 +3416,10 @@
                 const mine = box.querySelector("details.evlb-ev");
                 const st = $("evlb-solo-st");
                 const ev = (d.events || []).find(e => (e.item_name || "").toLowerCase() === want);
+                // an event Golf Genius never scores (the practice round)
+                // has no official scorer to point at
+                const off = $("evlb-official");
+                if (off && ev) off.hidden = !!ev.live_entry;
                 if (st && ev) {
                     st.textContent = ev.money_visible === false ? "In play" : evlbDate(ev.event_date) + " · final";
                     st.classList.toggle("posted", ev.money_visible !== false);
@@ -4157,7 +4161,8 @@
                ["gross", "Gross"], ["skins", "Skins"],
                ["points", "MVP/Points"], ["prox", "Proxies"]];
         const first = tabs[0][0];
-        const offNotes = evlbMoneyNotice(d) + (d.games_off || []).map(g =>
+        // no games, no money: nothing to hold or explain
+        const offNotes = noGames ? "" : evlbMoneyNotice(d) + (d.games_off || []).map(g =>
             `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
         // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
         // hole-by-hole gross plus totals. Wins highlight by the ratified
@@ -4211,8 +4216,14 @@
         // "Only want results, winnings and colors per tab games except
         // for overall") so the colors and the Won column are never read
         // as meaning something they don't on that tab.
+        // LEGENDS ARE CHIPS, NOT PROSE (Kerry 10/8: "WAAYYYYYYYY too much
+        // text on those leaderboard views. Nobody is going to read all
+        // that."). A tab shows its flight colours (and, on a buy-in game,
+        // the bought-in / not-in chips) only when there is a winner or a
+        // buyer to explain; an event with no games shows none.
         const evlbLegendFor = (game) => {
-            let maxF = 1;
+            if (noGames) return "";
+            let maxF = 0;
             ovRows.forEach(r => {
                 if ((!game || game === "net") && r.win_net)
                     maxF = Math.max(maxF, r.net_flight || 1);
@@ -4221,38 +4232,16 @@
                 if ((!game || game === "skins") && r.win_skins)
                     maxF = Math.max(maxF, r.skins_flight || 1);
             });
-            const sw = [];
-            for (let f = 1; f <= maxF; f++)
-                sw.push(`<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`);
-            const swatches = `Money winners color-code by FLIGHT: ${sw.join(" ")} &mdash; `;
-            const tail = ` Tap a player for their scorecard; tap a column header to sort and re-rank.`;
-            if (!game)
-                return `<p class="evlb-legend">${swatches}` +
-                    `a tinted <b>N</b> (net) or <b>G</b> (gross) total won that game in that flight; a circled hole score is a skin won in that flight &middot; ` +
-                    `<span class="lg w-mvp">Pts</span> Event MVP &middot; ` +
-                    `<b>Won</b> = total collected for this event, all games (team &amp; proxies included).${tail}</p>`;
-            const what = {
-                net: `a tinted <b>N</b> total won Individual Net in that flight`,
-                gross: `a tinted <b>G</b> total won Individual Gross in that flight`,
-                skins: `a circled hole score is a skin won in that flight`,
-                points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole`,
-                team: `hole scores are each player's GROSS with their pops marked — gross less pops is the net the team played, and the green cell is the ball that counted; the TEAM NET row closes each band with the team's holes, total and whole purse`,
-            }[game] || "";
-            const money = {
-                net: "Individual Net", gross: "Individual Gross", skins: "Skins",
-                points: "MVP", team: "Team Net",
-            }[game] || "this game";
-            if (game === "team")
-                return `<p class="evlb-legend">${what} &middot; a player row's <b>Won</b> is that player's share; ` +
-                    `the TEAM NET row shows the whole purse &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
-            const head = (game === "points" || game === "team") ? "" : swatches;
-            // the bundle tabs also say who paid to be in this game
-            const buy = EVLB_BUYIN_GAMES.includes(game)
-                ? `<span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">bought in</span> ` +
-                  `<span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">not in</span> this game &middot; `
-                : "";
-            return `<p class="evlb-legend">${head}${buy}${what} &middot; ` +
-                `<b>Won</b> = ${money} money only &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
+            const chips = [];
+            if (game !== "points" && game !== "team")
+                for (let f = 1; f <= maxF; f++)
+                    chips.push(`<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`);
+            if ((!game || game === "points") && ovRows.some(r => r.win_mvp || r.mvp))
+                chips.push(`<span class="lg w-mvp">Pts</span> MVP`);
+            if (EVLB_BUYIN_GAMES.includes(game))
+                chips.push(`<span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">bought in</span>`,
+                           `<span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">not in</span>`);
+            return chips.length ? `<p class="evlb-legend">${chips.join(" ")}</p>` : "";
         };
         const ovLegend = evlbLegendFor(null);
 
@@ -4442,7 +4431,7 @@
             `</div></div>` +
             tabs.map(([k]) =>
                 `<div class="evlb-panel" data-panel="${k}"${k === first ? "" : " hidden"}>${panels[k]}</div>`).join("") +
-            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. On the Net, Gross, Skins and MVP/Points tabs a <b>green</b> row bought into that game and a <b>grey</b> row did not &mdash; non-buyers are placed in the flight their handicap would have flighted them. Dots in the corner of a hole are the strokes received there.</p>`;
+            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard.</p>`;
     }
     // Team net card in THE card standard's family: each member's NET
     // per hole, the ball(s) that COUNTED for the team score highlighted
