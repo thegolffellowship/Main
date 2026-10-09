@@ -411,6 +411,12 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
         # before a ball is struck (Chapman partners share the team's)
         "strokes": {str(c): {str(h): n for h, n in (strokes.get(c) or {}).items()}
                     for c in everyone},
+        # every player's own gross by hole (Kerry 10/9: the opened card follows
+        # the City Match Play standards, and a four-ball card shows both
+        # partners' balls, not only the side's best one). Gross is public on
+        # the events board already; no money here.
+        "scores": {str(c): {str(h): g for h, g in sorted(sc[c].items())} for c in everyone},
+        "picked_up": {str(c): sorted(picked[c]) for c in everyone if picked[c]},
         "holes": holes_out,
         "n_holes": n_holes,
         "hole_pars": {str(int(c["hole"])): c.get("par")

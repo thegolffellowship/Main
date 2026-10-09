@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.531.1";
+window.TGF_VERSION = "2.531.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.2",
+    date: "2026-10-09",
+    title: "Lone Star Cup: the opened match card is screen wide on a phone and follows the City Match Play standards",
+    changes: [
+      "Kerry 10/9: \"These scorecards on match expansion really need to be screen wide for mobile.\" An opened match card now runs edge to edge on a phone, its grid with only a hair of padding.",
+      "Kerry 10/9: \"are we following all of our standards we already worked thru on City MATCH PLAY displays?\" Not fully, and now yes. Before a ball was struck the Cup card used its own pops grid (no Tot, no Strokes off low, navy dots, a caption); once a four-ball started it switched to the 1-v-1 Match Play grid, which showed only each side's best ball. One card (lscCupGrid) now serves every state on the Match Play grid itself: Hole and Par rows with Tot, each side's winning ball circled in its colour, pop dots in the side's colour, holes after a close-out greyed, Strokes off low above, the live margin below, no caption, a lone nine centred, nines side by side on desktop. It keeps ONE ROW PER PLAYER, so both four-ball partners' scores show; Foursomes is one row per pair.",
+      "The board's match detail now carries each player's gross by hole (lsc_cup.compute_match_detail scores / picked_up). Guards: test_lsc_cup_card.js; test_lsc_skins_pane.js updated to the in-place Skins rules link."
+    ]
+  },
   {
     version: "2.531.1",
     date: "2026-10-09",

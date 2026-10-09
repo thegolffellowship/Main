@@ -1787,6 +1787,21 @@
            team colors (Austin burnt orange, SA slate, same as the
            roster cards above). One 560px breakpoint, per standard. */
         #lsc-board { --mp-slate: #BF5700; --mp-clay: #4B6274; margin-top: 1.1rem; }
+        /* the Cup's per-player card (lscCupGrid): a monochip carries two
+           initials, or both partners' in Foursomes */
+        #lsc-board .mp-sc-monochip { width: auto; min-width: 22px; padding: 0 4px; }
+        #lsc-board table.mp-sc .mp-sc-rowlabel { width: 2.6rem; }
+        /* SCREEN WIDE ON A PHONE (Kerry 10/9: "These scorecards on match
+           expansion really need to be screen wide for mobile"): an opened
+           card runs edge to edge, its grid with only a hair of padding. */
+        @media (max-width: 560px) {
+            #lsc-board .mp-match-card:has(> .mp-card-head.open) {
+                margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw);
+                border-radius: 0; border-left: 0; border-right: 0;
+            }
+            #lsc-board .mp-match-card:has(> .mp-card-head.open) .mp-scorecard { padding: 0.6rem 4px 0.7rem; }
+            #lsc-board .mp-match-card:has(> .mp-card-head.open) .mp-sc-strokebar { padding: 0 6px; }
+        }
         /* Kerry 10/8: "for the Lone Star Cup pages, make everything that is
            BLACK, LSC Navy" */
         #section-lone-star-cup { --text: var(--lsc-navy, #002855); color: var(--lsc-navy, #002855); }
@@ -1797,20 +1812,6 @@
         .mpv2 .mp-strip-name.lscn b { text-transform: none; font: 700 0.95rem/1.25 'Bitter', Georgia, serif; }
         @media (max-width: 560px) { #lsc-board .mp-strip-name.lscn b { font-size: calc(0.8rem * var(--k, 1)); } }
         .mpv2 .mp-strip-name.lscn { padding-top: 6px; padding-bottom: 6px; }
-        /* the pops grid (before a ball is struck) */
-        .lsc-pops-wrap { padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-        .lsc-pops { width: 100%; border-collapse: collapse; table-layout: fixed; font: 600 12px/1.2 'Barlow', 'Helvetica Neue', Arial, sans-serif; color: var(--lsc-navy, #002855); }
-        .lsc-pops th, .lsc-pops td { border: 1px solid #C9D1DD; text-align: center; padding: 3px 0; height: 22px; }
-        .lsc-pops th:first-child, .lsc-pops td.nm { width: 34%; text-align: left; padding: 3px 6px; font: 700 12px/1.2 'Bitter', Georgia, serif;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .lsc-pops tr.h th { background: var(--lsc-navy, #002855); color: #fff; font: 700 12px 'Bitter', Georgia, serif; }
-        .lsc-pops tr.par td { background: #ECEFF3; font-weight: 700; }
-        .lsc-pops tr.pl.s0 td.nm { box-shadow: inset 4px 0 0 #BF5700; padding-left: 9px; }
-        .lsc-pops tr.pl.s1 td.nm { box-shadow: inset 4px 0 0 #4B6274; padding-left: 9px; }
-        .lsc-pops .pd, .lsc-pops-key .pd { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--lsc-navy, #002855); margin: 0 1px; vertical-align: middle; }
-        .lsc-pops-key { font-size: 12px; color: #4A5F80; }
-        .lsc-pops-sum { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 12px 'Barlow', sans-serif; color: var(--lsc-navy, #002855); }
-        .lsc-pops-sum .pt.s0 b { color: #BF5700; } .lsc-pops-sum .pt.s1 b { color: #4B6274; }
         .lsc-bd-head { display: flex; align-items: stretch; border-radius: 12px;
             overflow: hidden; border: 1px solid var(--border); }
         .lsc-bd-head .t { flex: 1 1 0; display: flex; align-items: center;
@@ -3162,30 +3163,99 @@
     // where pops will be"): holes, par, and one row per player (one per pair
     // in Foursomes, one ball) with a dot on every hole he gets a stroke, from
     // the engine's own detail.strokes (allowance applied, off the lowest).
-    function lscPopsGrid(m) {
-        const holes = (m.holes || []).map(h => h.hole);
-        if (!holes.length) return '';
-        const par = m.hole_pars || {}, st = m.strokes || {};
-        const chap = m.format === 'chapman';
+    // THE CUP'S OPENED CARD, on the City Match Play standards (Kerry 10/9:
+    // "are we following all of our standards we already worked thru on City
+    // MATCH PLAY displays?"): the mp-sc grid itself — Hole / Par rows with a
+    // Tot column, a winner's ball circled in its side's colour, pop dots in
+    // the side's colour, holes after a close-out greyed, "Strokes off low"
+    // above, the live margin below, no caption — with ONE ROW PER PLAYER, so
+    // a four-ball card shows both partners' balls (the 1-v-1 grid could only
+    // show the side's best one). The same card before a ball is struck and
+    // during play. Foursomes is one ball: one row per pair.
+    function lscCupGrid(m, o) {
+        const holes = (m.holes || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+        if (!holes.length) return "";
+        const par = m.hole_pars || {}, st = m.strokes || {}, sc = m.scores || {};
+        const pu = {};
+        Object.entries(m.picked_up || {}).forEach(([c, hs]) => { pu[c] = new Set((hs || []).map(Number)); });
+        const chap = m.format === "chapman";
+        const closedAt = m.closed_at_order || null;
+        const SIDE = ["a", "b"];
         const rows = [];
         (m.players || []).forEach((p, si) => {
-            const ids = p.customer_ids || [], L = p.lines || [p.name];
-            if (chap) rows.push({ side: si, label: L.join(' & '), html: L.map(escapeHtml).join('<br>'), cid: ids[0] });
-            else ids.forEach((c, i) => rows.push({ side: si, label: L[i] || String(c), cid: c }));
+            const ids = (p.customer_ids || []).map(String), L = p.lines || [p.name];
+            const mono = (nm) => mpMono(String(nm || "").replace(/\s*\(.*\)$/, ""));
+            if (chap) rows.push({ side: si, cids: ids, mono: L.map(mono).join("·"),
+                                  last: L.map(n => mpFirstLast(n).last).join(" / ") });
+            else ids.forEach((c, i) => rows.push({ side: si, cids: [c], mono: mono(L[i]),
+                                                   last: mpFirstLast(L[i] || "").last }));
         });
-        const dots = (n) => n > 0 ? '<i class="pd"></i>'.repeat(Math.min(n, 3)) : '';
-        const nine = (hs) => {
-            const head = `<tr class="h"><th></th>${hs.map(h => `<th>${h}</th>`).join('')}</tr>`;
-            const parR = Object.keys(par).length ? `<tr class="par"><td class="nm">Par</td>${hs.map(h => `<td>${par[h] ?? par[String(h)] ?? ''}</td>`).join('')}</tr>` : '';
-            const pr = rows.map(r => `<tr class="pl s${r.side}"><td class="nm">${r.html || escapeHtml(r.label)}</td>${hs.map(h => `<td>${dots(((st[String(r.cid)] || {})[String(h)]) || 0)}</td>`).join('')}</tr>`).join('');
-            return `<table class="lsc-pops">${head}${parR}${pr}</table>`;
+        const grossOf = (r, h) => {
+            for (const c of r.cids) { const g = (sc[c] || {})[String(h)]; if (g != null) return { g, c }; }
+            return null;
         };
-        const total = (r) => Object.values(st[String(r.cid)] || {}).reduce((a, b) => a + (b || 0), 0);
-        const sums = rows.map(r => `<span class="pt s${r.side}">${escapeHtml(r.label)} <b>${total(r)}</b></span>`).join('');
-        return `<div class="lsc-pops-wrap">${nine(holes.slice(0, 9))}${holes.length > 9 ? nine(holes.slice(9)) : ''}
-            <div class="lsc-pops-key"><i class="pd"></i> a stroke (pop) on that hole, off the lowest in the match${chap ? ' · Foursomes: one ball, the team\'s strokes' : ''}</div>
-            <div class="lsc-pops-sum">${sums}</div></div>`;
+        const popsOf = (r, h) => ((st[r.cids[0]] || {})[String(h)]) || 0;
+        // which ball counted for the side that won the hole: its best NET,
+        // never a picked-up ball (the engine's _team_line rule)
+        const counting = (side, h) => {
+            let best = null;
+            rows.filter(r => r.side === side).forEach(r => {
+                const x = grossOf(r, h);
+                if (!x || (pu[x.c] && pu[x.c].has(h))) return;
+                const net = x.g - popsOf(r, h);
+                if (!best || net < best.net) best = { r, net };
+            });
+            return best && best.r;
+        };
+        const popDots = (n, side) => n > 0
+            ? `<span class="mp-sc-pops">${'<i class="mp-sc-pop ' + side + '"></i>'.repeat(Math.min(n, 3))}</span>` : "";
+        function block(hs) {
+            let parTot = 0, anyPar = false;
+            const head = hs.map(h => `<td>${h.hole}</td>`).join("");
+            const parCells = hs.map(h => {
+                const v = par[h.hole] ?? par[String(h.hole)];
+                if (v != null) { parTot += Number(v); anyPar = true; }
+                return `<td>${v ?? ""}</td>`;
+            }).join("");
+            const body = rows.map(r => {
+                let tot = 0;
+                const cells = hs.map(h => {
+                    const x = grossOf(r, h.hole);
+                    const dead = !o.live && closedAt != null && (h.order || 0) > closedAt;
+                    const dim = (x && !dead) ? "" : " dim";
+                    let v = "";
+                    if (x) {
+                        tot += x.g;
+                        const won = !dead && h.winner && (h.winner - 1) === r.side && counting(r.side, h.hole) === r;
+                        v = won ? `<span class="mp-sc-mk won-${SIDE[r.side]}">${x.g}</span>` : x.g;
+                    }
+                    return `<td class="strk${dim}">${v}${popDots(popsOf(r, h.hole), SIDE[r.side])}</td>`;
+                }).join("");
+                return `<tr class="mp-sc-strokes"><th class="mp-sc-rowlabel mp-mono-cell"><span class="mp-sc-monochip ${SIDE[r.side]}">${escapeHtml(r.mono)}</span></th>${cells}<th class="mp-sc-tot">${tot || ""}</th></tr>`;
+            }).join("");
+            return `<div class="mp-sc-block"><table class="mp-sc">
+                <tr class="mp-sc-hole"><th class="mp-sc-rowlabel">Hole</th>${head}<th class="mp-sc-tot">Tot</th></tr>
+                ${anyPar ? `<tr class="mp-sc-par"><th class="mp-sc-rowlabel">Par</th>${parCells}<th class="mp-sc-tot">${parTot}</th></tr>` : ""}
+                ${body}</table></div>`;
+        }
+        const nines = holes.length > 9
+            ? block(holes.slice(0, Math.ceil(holes.length / 2))) + block(holes.slice(Math.ceil(holes.length / 2)))
+            : block(holes);
+        const strokeBar = `<div class="mp-sc-strokebar"><span class="mp-sc-strokebar-t">Strokes off low</span>`
+            + rows.map(r => {
+                const n = holes.reduce((a, h) => a + popsOf(r, h.hole), 0);
+                return `<span class="mp-sc-sb-item"><i class="mp-sc-pop ${SIDE[r.side]}"></i>${escapeHtml(r.last)}&nbsp;<b>${n}</b></span>`;
+            }).join("") + `</div>`;
+        let result = "";
+        if (o.live && o.liveLead && o.liveLead.thru > 0) {
+            const L = o.liveLead;
+            const cls = L.side === "A" ? "a" : (L.side === "B" ? "b" : "tie");
+            const who = L.side === "A" ? "Austin" : (L.side === "B" ? "San Antonio" : "");
+            result = `<span class="mp-sc-result ${cls}">LIVE · ${who ? who + " " + escapeHtml(L.margin) : "All square"} · thru ${L.thru}</span>`;
+        }
+        return `${strokeBar}<div class="mp-sc-nines">${nines}</div><div class="mp-sc-resultwrap">${result}</div>`;
     }
+
     function lscBoardRender(box, d) {
         const A = (d.teams || {}).austin || {}, S = (d.teams || {}).sa || {};
         // Cup status (Kerry, CA #717): 1 a win, ½ a halve; level points
@@ -3263,7 +3333,7 @@
                     metaL: `Match ${(sessOff[si] || 0) + i + 1}${fmtLbl ? " · " + fmtLbl : ""}`,
                     status, live,
                     hasResult: m.state !== "upcoming",
-                    cardHtml: m.state === "upcoming" ? lscPopsGrid(m) : null,
+                    cardHtml: lscCupGrid(m, o),
                     // the match's dial id, so a scorer link's FOLLOW THE CUP
                     // (?match=<id>) can open this card (Kerry 2026-10-07, #1357-6)
                     dataAttrs: (m.match_id ?? m.id) ? ` data-lsc-match="${escapeHtml(String(m.match_id ?? m.id))}"` : "",
@@ -6021,7 +6091,9 @@
             return `<div class="mp-match-card"${da}><div class="mp-card-head">${meta}${strip}${opts.liveNote || ''}${opts.prov || ''}</div></div>`;
         }
         const dots = mpHoleDotsHtml(gen);
-        const grid = mpScorecardGridHtml(gen, o);
+        // the Cup supplies its own per-player card (lscCupGrid); the head
+        // keeps the shared hole dots either way
+        const grid = opts.cardHtml || mpScorecardGridHtml(gen, o);
         const note = gen.source === 'gg'
             ? (gen.startHole ? `Started on hole ${gen.startHole}.` : '')
             : 'Illustrative hole map — generated from the result; real scoring wires in from Golf Genius.';

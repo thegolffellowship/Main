@@ -816,3 +816,21 @@ feed payouts yet (task: Tracker-only payouts before the 10/13 closeouts).
   rostered player with no score is a player with every hole outstanding, on
   `get_event_leaderboard` and on the `get_events_leaderboard` list. Before
   this, one finished group made a live field look complete.
+
+## The opened match card — v2.531.2 (Kerry 10/9)
+
+Kerry: "These scorecards on match expansion really need to be screen wide for
+mobile. Also, are we following all of our standards we already worked thru on
+City MATCH PLAY displays?" `lscCupGrid(m, o)` (contests.html) is the Cup's ONE
+card body for every match state, passed to the shared `mpMatchCard` as
+`cardHtml` (the head keeps the shared hole dots). It renders the City Match
+Play `mp-sc` grid and its standards: Hole / Par rows with Tot, the winning
+side's counting ball (best net, never a picked-up ball) circled in the side's
+colour, pop dots in the side's colour, holes after a close-out dimmed,
+"Strokes off low" above, the live margin pill below, no caption, a lone nine
+centred, two nines side by side on desktop and stacked on a phone. The one
+departure from the 1-v-1 grid is ONE ROW PER PLAYER (monochip initials), so a
+four-ball card shows both partners; Foursomes is one row per pair. The server
+detail carries `scores` and `picked_up` per player for it. On a phone an opened
+card is full-bleed (`margin: calc(50% - 50vw)`). The old `lscPopsGrid` is gone.
+Guard `test_lsc_cup_card.js`.

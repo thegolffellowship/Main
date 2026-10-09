@@ -56,8 +56,9 @@ check("flight 2 count and range", hn.includes("Flight 2 · 12.0 and up") && hn.i
 check("holes text", holesTxt([12, 13, 14]) === "Holes 12–14" && holesTxt([1, 3]) === "Hole 1 · 3" && holesTxt([9]) === "Hole 9");
 check("no skins data -> nothing", pane({ skins: null }) === "");
 
-check("the board offers How skins work -> Event Info #skins",
-      // the staff preview board carries ?preview=1 into the link (Tracker Build)
-      /href="\/member\/lonestarcup\/info[^"]*#skins">How skins work/.test(src.replace(/' \+ \(new URLSearchParams[^)]*\)\.get\("preview"\) === "1" \? "\?preview=1" : ""\) \+ '/g, "")));
+// v2.529.0: it opens the Skins rules IN PLACE on the Cup tab's Event Info
+// (Kerry 10/8), the same body /member/lonestarcup/info shows
+check("the board offers How skins work -> Event Info, Skins, in place",
+      /href="\?info=skins" data-lscinfo="skins">How skins work/.test(src));
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");
 process.exit(fails ? 1 : 0);
