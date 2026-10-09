@@ -1495,6 +1495,7 @@ def cup_results_status(db_path=None) -> dict:
 
 LSC_NAVY = "#002855"          # the logo's own navy (#1467 §2), not #002868
 LSC_TEAM_COLORS = {"austin": "#BF5700", "sa": "#44596B"}   # as the cart signs (#1463)
+NAVY_QR = "#002855"
 
 
 def lsc_report_context(event_id: int, db_path=None) -> dict | None:
@@ -1694,7 +1695,14 @@ def practice_cart_signs(event_id: int, db_path=None) -> dict:
         slot = _re.sub(r"^HOLE\s+", "", g.get("slot_label") or "", flags=_re.I)
         tee_time = (pack["event"].get("start_clock") or "") if shotgun else slot
         hole = slot if shotgun else "1"
-        qr = (g.get("score_qr") or {}).get("svg")
+        # the navy QR, as the Cup's own signs (Kerry 10/8: "make the black
+        # text the LSC navy as well as the QR code")
+        _url = (g.get("score_qr") or {}).get("url")
+        try:
+            from email_parser.score_entry import qr_svg as _qr
+            qr = _qr(_url, dark=NAVY_QR) if _url else None
+        except Exception:
+            qr = (g.get("score_qr") or {}).get("svg")
         players = sorted(g["players"], key=lambda p: p.get("cart_pos") or 0)
         for lo, hi in ((1, 2), (3, 4)):
             riders = [p for p in players if lo <= (p.get("cart_pos") or 0) <= hi]

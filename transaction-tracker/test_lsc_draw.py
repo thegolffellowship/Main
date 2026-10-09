@@ -131,4 +131,7 @@ r = cl.post("/api/events/3329/cup-draw/land", json={"session": "fb", "pool": "lo
 check("POST land writes and returns the new state", r.status_code == 200 and r.get_json()["state"]["fb"]["low"] == [["AUS-P2", "SA-P2"]], r.get_json())
 r = cl.post("/api/events/3329/cup-draw/land", json={"session": "fb", "pool": "low", "a": "AUS-P2", "s": "SA-P1"})
 check("a refused draw is a 409 with the reason", r.status_code == 409 and r.get_json().get("error"))
+h = cl.get("/events/3329/cup-draw").get_data(as_text=True)
+check("the page opens on the Cup intro and waits for Start The Draw (Kerry 10/8)",
+      'id="intro"' in h and 'id="startDraw"' in h and "Start The Draw" in h and "lsc-logo-dark.png" in h)
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

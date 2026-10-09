@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.527.0";
+window.TGF_VERSION = "2.527.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.1",
+    date: "2026-10-08",
+    title: "THE DRAW opens on the Cup splash; Cup cart signs print in navy",
+    changes: [
+      "Kerry 10/8, for tonight's Zoom: \"I want the landing page to be that logo shimmer page, but I want it to stay there until I click a 'Start The Draw' button.\" /events/3329/cup-draw now opens on the Cup splash from the scoring links: the navy plate, the white-border Cup logo, 2026 · THE DRAW, and the full-screen sweep of light, repeating while it waits. It stays until Start The Draw is clicked, then fades to the draw board. Reduced motion turns the shimmer off. Guard: test_lsc_draw.py.",
+      "Kerry 10/8, on the cart signs: \"please make the black text the LSC navy as well as the QR code\". The Cup cart signs (design 3e) print the players' names in the Cup navy #002855. The practice round's scorer QR is navy too, as the Cup's already was."
+    ]
+  },
   {
     version: "2.527.0",
     date: "2026-10-08",

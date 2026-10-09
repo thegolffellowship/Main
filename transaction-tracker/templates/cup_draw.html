@@ -74,6 +74,37 @@ textarea#out{width:100%;min-height:200px;background:var(--panel);color:var(--fg)
 </style>
 </head>
 <body>
+<!-- THE INTRO for the Zoom (Kerry 10/8: "I want the landing page to be that
+     logo shimmer page, but I want it to stay there until I click a 'Start
+     The Draw' button"). The Cup splash from the scoring links (navy plate,
+     the white-border Cup logo, the full-screen sweep of light), held until
+     the button; the shimmer repeats while it waits. -->
+<div id="intro" role="dialog" aria-label="Lone Star Cup 2026 · The Draw">
+  <div class="in-logo"><img src="/static/lsc-logo-dark.png" alt="Lone Star Cup · The Hideout"></div>
+  <div class="in-k">2026 · THE DRAW</div>
+  <button type="button" class="in-go" id="startDraw">Start The Draw</button>
+</div>
+<style>
+#intro{position:fixed;inset:0;z-index:1000;background:var(--lsc-navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;overflow:hidden;transition:opacity .5s ease}
+#intro.out{opacity:0;pointer-events:none}
+#intro .in-logo{width:min(70vw,560px);aspect-ratio:2000/1651;position:relative;z-index:1}
+#intro .in-logo img{width:100%;height:100%;object-fit:contain;display:block}
+#intro .in-k{font:800 clamp(16px,2vw,22px)/1 var(--display);letter-spacing:8px;color:#9DB4D6;position:relative;z-index:1}
+#intro .in-go{position:relative;z-index:1;font:800 clamp(16px,1.8vw,20px)/1 var(--display);letter-spacing:3px;text-transform:uppercase;padding:18px 40px;border-radius:999px;border:0;background:#E87C3E;color:#fff;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#intro .in-go:hover{background:#D06B2E}
+#intro .in-go:focus-visible{outline:3px solid #FFD166;outline-offset:3px}
+#intro::after{content:"";position:absolute;top:-20%;bottom:-20%;left:-70%;width:55%;pointer-events:none;
+  background:linear-gradient(105deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.28) 50%,rgba(255,255,255,0) 100%);
+  transform:translateX(0) skewX(-12deg);animation:in-shimmer 4.5s ease-in-out .3s infinite}
+@keyframes in-shimmer{0%{transform:translateX(0) skewX(-12deg)}40%,100%{transform:translateX(360%) skewX(-12deg)}}
+@media (prefers-reduced-motion:reduce){ #intro::after{animation:none;display:none} #intro{transition:none} }
+</style>
+<script>
+document.getElementById("startDraw").addEventListener("click",function(){
+  var el=document.getElementById("intro");el.classList.add("out");
+  setTimeout(function(){el.hidden=true},550);
+});
+</script>
 <header class="hdr">
   <img src="/static/lsc-logo-dark.png" alt="Lone Star Cup 2026">
   <div>
