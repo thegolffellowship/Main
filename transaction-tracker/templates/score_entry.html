@@ -513,6 +513,17 @@
                           background: var(--lsc-navy, #002855); padding: 4px 10px; text-align: center; }
         .se-cupbar .mid .s { font: 700 10px/1.2 Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase; }
         .se-cupbar .mid .v { font: 800 13px/1.2 Bitter, Georgia, serif; }
+        /* FULL WIDTH ON A PHONE, as the member LEADERBOARD's Cup bar (Kerry 10/9:
+           "Make the team score up top full width for mobile similar to the
+           member LEADERBOARD view"): edge to edge, square, flush with the
+           bottom of the pinned bar, the points as big as the Cup tab's. */
+        @media (max-width: 560px) {
+            #se-cupbar { margin: 8px -16px -8px; flex-basis: calc(100% + 32px); }
+            .se-cupbar { max-width: none; border-radius: 0; }
+            .se-cupbar .t { padding: 8px 14px; }
+            .se-cupbar .p { font-size: 26px; }
+            .se-cupbar .mid { padding: 4px 12px; }
+        }
         /* THE TURN: each player's nine under his name, tap one to edit */
         .se-mini { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; margin-top: 6px; width: 100%; }
         .se-mini button { height: 32px; border-radius: 7px; border: 1px solid #E5E7EB; background: #FFFFFF; cursor: pointer;

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.4";
+window.TGF_VERSION = "2.532.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.5",
+    date: "2026-10-09",
+    title: "Cup scoring: the team score bar runs full width on a phone",
+    changes: [
+      "Kerry 10/9: \"Make the team score up top full width for mobile similar to the member LEADERBOARD view.\" On a phone the pinned Cup team score (AUSTIN | session | SAN ANTONIO) now runs edge to edge with square corners, flush with the bottom of the pinned SCORING | LEADERBOARD bar, with the points at the Cup tab's size. Desktop keeps the rounded bar."
+    ]
+  },
   {
     version: "2.532.4",
     date: "2026-10-09",
