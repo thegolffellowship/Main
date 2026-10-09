@@ -1502,8 +1502,11 @@
                 <div class="se-gap"></div>
                 ${done ? `<div class="se-copy" style="margin-bottom:14px">${mine && signedFor(who) && !flagsMine.length ? `${esc(first(kept) || "The scorekeeper")} checked this card against the paper card and signed it for the group. If a hole on your row is wrong, tap that number and ${esc(first(kept) || "the scorekeeper")} gets the flag.` : mine && !signedSelf(who) && !(flagsMine.length) ? `Check each hole on your row. Signing tells your manager it's right. If one is wrong, tap that number (or tap <strong>Something's wrong</strong>) and ${esc(first(kept) || "the scorekeeper")} gets the flag to fix it. Only your card reopens.` : "Signing tells your manager this card is right."}</div>` : `<div class="se-copy">Live. This card fills in as ${esc(first(kept) || "the scorekeeper")} enters each hole. You'll sign it at the end.</div>`}
                 ${actions}
-                <div class="se-foot">Signed ${nSigned} of ${card.players.length}${keeperSigned ? " · " + esc(first(byId(keeperSigned.customer_id).display_name)) + " signed as scorekeeper" : ""}</div>
-                <div class="se-note" style="text-align:center">The official results are still on the scorecard and Golf Genius.</div>`;
+                <div class="se-foot">Signed ${nSigned} of ${card.players.length}${keeperSigned ? " · " + esc(first(byId(keeperSigned.customer_id).display_name)) + " signed as scorekeeper" : ""}</div>`;
+            // (The "official results are still on the scorecard and Golf
+            // Genius" line is gone: Kerry 10/8, "there shouldn't be anymore
+            // Golf Genius connections for future events including this
+            // weekend." The signed card here is the record.)
         }
 
         // ── network ─────────────────────────────────────────────────────

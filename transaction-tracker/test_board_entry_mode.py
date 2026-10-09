@@ -207,6 +207,8 @@ check("the list leaves no temp tables behind (the record reads normally after)",
       lst().get(EV, {}).get("field") is not None)
 before3 = counts()
 check("listing wrote nothing to the record", before3 == counts())
+check("a Tracker-only event is not marked Golf Genius scored", L.get(EV3, {}).get("gg_scored") is False, L.get(EV3))
+check("an event with GG cards is", lst().get(EV, {}).get("gg_scored") is True, lst().get(EV))
 
 print(f"\n{'ALL PASS' if not FAILURES else str(len(FAILURES)) + ' FAILED: ' + str(FAILURES)}")
 sys.exit(1 if FAILURES else 0)

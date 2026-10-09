@@ -3432,7 +3432,7 @@
                 // an event Golf Genius never scores (the practice round)
                 // has no official scorer to point at
                 const off = $("evlb-official");
-                if (off && ev) off.hidden = !!ev.live_entry;
+                if (off && ev) off.hidden = !!ev.live_entry || ev.gg_scored === false;
                 if (st && ev) {
                     st.textContent = ev.money_visible === false ? "In play" : evlbDate(ev.event_date) + " · final";
                     st.classList.toggle("posted", ev.money_visible !== false);

@@ -14322,6 +14322,14 @@ def get_events_leaderboard(chapter: str | None = None,
                    WHERE LOWER(TRIM(te.code)) = ?""",
                 ((r["item_name"] or "").strip().lower(),)).fetchone()
             r["pot"] = pot["t"] if pot else 0
+            # Was this event scored by Golf Genius? (Kerry 10/8: GG is for
+            # past events only.) The "Golf Genius is the official scorer"
+            # line shows only for an event that has GG rows.
+            r["gg_scored"] = bool(conn.execute(
+                "SELECT 1 FROM main.scoring_rounds WHERE event_id = ? "
+                "AND COALESCE(source, 'gg') NOT IN ('entry') "
+                "AND COALESCE(source, 'gg') NOT LIKE 'gg_history%' LIMIT 1",
+                (r["id"],)).fetchone())
             # Same hold as the board (Kerry 2026-09-15): no dollar shows
             # until 10 minutes after the last score was posted.
             _lr = conn.execute(

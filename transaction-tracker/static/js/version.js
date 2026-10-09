@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.529.6";
+window.TGF_VERSION = "2.529.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.7",
+    date: "2026-10-08",
+    title: "No more \"Golf Genius is official\" on live events",
+    changes: [
+      "Kerry 10/8: \"there shouldn't be anymore Golf Genius connections for future events including this weekend. Only for past events... GG shouldn't be dictating anything.\" The scoring page's card footer no longer says \"The official results are still on the scorecard and Golf Genius\". The events list marks each event gg_scored (it has Golf Genius cards), and the scorer's leaderboard shows the \"Golf Genius is the official scorer\" line only for such an event. The Lone Star Cup is already in the Tracker's authoritative mode (no GG rows, date on/after the 10/10 cutover), so its signed cards are the record."
+    ]
+  },
   {
     version: "2.529.6",
     date: "2026-10-08",
