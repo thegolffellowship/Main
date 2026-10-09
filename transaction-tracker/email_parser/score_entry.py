@@ -3288,7 +3288,14 @@ def _card_extras(conn, g, group_id: int) -> dict:
         "SELECT id, scorekeeper_customer_id, print_scorer_customer_id, print_scorer_name, "
         "signed_for_group, photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
         "WHERE group_id = ? ORDER BY id DESC LIMIT 1", (group_id,))]
+    # When an admin last CLEARED this card (clear_group's se_audit row): the
+    # phone drops anything it queued before then, so a cleared card never
+    # takes back a stale hole (Kerry 10/9: "Make sure all scorecards are
+    # cleared and they all land on the starting holes").
+    clr = conn.execute("SELECT MAX(at) FROM se_audit WHERE group_id = ? AND kind = 'admin_clear'",
+                       (group_id,)).fetchone()
     return {"signoffs": signoffs, "flags": flags, "flags_denied": denied, "ctp": ctp, "hio": hio,
+            "cleared_at": clr[0] if clr else None,
             "card_check": checks[0] if checks else None,
             "keeper_signs": keeper_signs(g["event_id"]),
             "tees": _tee_legend(conn, g["event_id"]),

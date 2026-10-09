@@ -227,5 +227,11 @@ check("Cup player names carry the team colour (Austin orange, San Antonio slate)
 check("a pair on the scoring match strip stacks first initial + last, one partner per line",
       'class="se-mc-name pair' in sep and '(w[0][0] || "") + ". "' in sep)
 
+# Kerry 10/9: "Make sure all scorecards are cleared and they all land on the
+# starting holes"
+check("an empty card opens on its starting hole; a cleared card drops holes queued before the clear",
+      "const saved = empty ? null : store.get(K.hole, null);" in sep
+      and "Date.parse(o.client_ts) <= cut" in sep and "(card.cleared_at || null) !== prevClr" in sep)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

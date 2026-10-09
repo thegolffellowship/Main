@@ -105,6 +105,12 @@ on the page — green means bought in.
   - a slot with no par 3 left is a LONGEST PUTT on the last hole (the phone
     asks "Did anyone in your group hole a long putt?").
 
+**After a clear (v2.532.13, Kerry 10/9: "Make sure all scorecards are cleared and they all land on the starting holes").**
+- The card payload carries `cleared_at`, the newest `se_audit` `admin_clear` row for the group.
+- The phone drops any queued op whose `client_ts` is at or before `cleared_at`.
+- A card cleared while the page is open goes back to its start hole.
+- An EMPTY card (no saved scores, nothing queued) ignores the phone's remembered hole and opens on its starting hole.
+
   Answers come from the scorekeeper's phone: a player (claim), or "No one
   closer" / "No one longer", which never unseats a holder. The latest claim
   is the holder the next group sees. `rule_ctp` is the manager's ruling. No

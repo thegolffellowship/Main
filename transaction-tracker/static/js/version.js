@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.532.12";
+window.TGF_VERSION = "2.532.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.13",
+    date: "2026-10-09",
+    title: "Scoring: an empty card opens on its starting hole; a cleared card never takes back old holes",
+    changes: [
+      "Kerry 10/9: \"Make sure all scorecards are cleared and they all land on the starting holes.\" A phone remembered the last hole it showed, so a cleared card reopened on hole 12. Now a card with nothing on it always opens on its starting hole (hole 1, or the group's shotgun hole), and a card cleared while the page is open goes back to it too.",
+      "Each card now carries when an admin last cleared it (cleared_at). Any hole a phone queued before that clear is dropped instead of being sent, so test scores can't come back after a clear."
+    ]
+  },
   {
     version: "2.532.12",
     date: "2026-10-09",

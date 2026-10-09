@@ -57,6 +57,10 @@ with db._connect(tmp) as conn:
 print("── apply ──")
 a = se.clear_group(g, apply=True, db_path=tmp)
 check("cleared", a.get("cleared") is True, a)
+# Kerry 10/9: the card tells the phone when it was cleared, so stale queued
+# holes are dropped and the phone opens on the starting hole
+_c = se.get_group_card(g, db_path=tmp)
+check("the card carries cleared_at after a clear", bool((_c or {}).get("cleared_at")), (_c or {}).get("cleared_at"))
 with db._connect(tmp) as conn:
     check("no scores left on the card", conn.execute(
         "SELECT COUNT(*) FROM se_hole_scores WHERE group_id = ?", (g,)).fetchone()[0] == 0)

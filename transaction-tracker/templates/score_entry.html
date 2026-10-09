@@ -1080,7 +1080,11 @@
             if (hole == null && store.get(K.hole, null) === "photo") hole = "photo";
             if (hole === "photo") { if (allDone()) return photoScreen(); hole = null; }
             if (hole == null || order.indexOf(hole) < 0) {
-                const saved = store.get(K.hole, null);
+                // An EMPTY card opens on its starting hole, whatever hole this
+                // phone last showed (Kerry 10/9: "Make sure all scorecards are
+                // cleared and they all land on the starting holes").
+                const empty = !queue.length && !Object.values(card.scores || {}).some((h) => h && Object.keys(h).length);
+                const saved = empty ? null : store.get(K.hole, null);
                 // A fresh open of a finished card lands on the review, even if
                 // this phone remembers the last hole it showed.
                 hole = allDone() ? "review"
@@ -1767,7 +1771,18 @@
                     // ("not open for this event", app._se_event_gate).
                     closedGate = status === 404 && /not open (yet|for this event)/.test(j.error || "");
                     if (status !== 200) { errMsg = j.error || "This scoring link isn't working."; card = null; render(); return; }
+                    const prevClr = card ? card.cleared_at || null : undefined;
                     card = j; errMsg = ""; ctpAsked.clear();
+                    // cleared while this page was open: back to the start hole
+                    if (prevClr !== undefined && (card.cleared_at || null) !== prevClr) { hole = null; draft = {}; store.set(K.hole, null); }
+                    // A CLEARED card (admin clear, card.cleared_at): holes this
+                    // phone queued before the clear are stale and never go back
+                    // on it (Kerry 10/9).
+                    if (card.cleared_at && queue.length) {
+                        const cut = Date.parse(card.cleared_at);
+                        const keep = queue.filter((o) => !o.client_ts || !(Date.parse(o.client_ts) <= cut));
+                        if (keep.length !== queue.length) { queue = keep; store.set(K.q, queue); draft = {}; }
+                    }
                     if (who && !card.players.some((p) => p.customer_id === who)) who = null;
                     if (who && card.lock.state === "free" && !following) return claim(false);
                     render();
