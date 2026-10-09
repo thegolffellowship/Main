@@ -799,6 +799,14 @@
             .game-stat-badge { padding: 0.25rem 0.5rem; font-size: 0.65rem; }
             .event-game-stats { gap: 0.35rem; margin-bottom: 0.5rem; }
             .view-toggle-group { margin-right: 0.2rem; }
+            /* every event tab visible: rows of four, each the same width */
+            .view-toggle-group.ev-tabs { display: grid; grid-template-columns: repeat(4, 1fr);
+                background: #fff; width: 100%; margin-right: 0; border-radius: 14px; }
+            .view-toggle-group.ev-tabs .game-stat-badge { justify-content: center; padding: 0.45rem 0.2rem;
+                border: none !important; white-space: nowrap;
+                box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border); }
+            .view-toggle-group.ev-tabs .game-stat-badge.fin-badge-admin.active {
+                box-shadow: inset 0 0 0 2px rgba(255,255,255,0.45); }
             .orphan-banner-header { font-size: 0.82rem; }
             .orphan-subtitle { display: none; }
             .parse-warning-header { font-size: 0.82rem; }
@@ -3619,7 +3627,10 @@
 
                 // PLAYERS / GAMES toggle + filter badges
                 let badgesHtml = '<div class="event-game-stats" style="margin-bottom:0.5rem;">';
-                badgesHtml += '<span class="view-toggle-group">';
+                // ev-tabs: the event's own tabs wrap into rows on a phone so
+                // every one shows (Kerry 10/9: "Can't see all the toggles in
+                // mobile view")
+                badgesHtml += '<span class="view-toggle-group ev-tabs">';
                 const mobilePairingsView = pairingsOpenForEvent[ev.id];
                 const mobileFinancialView = financialOpenForEvent[ev.id];
                 const mobilePayoutsView = payoutsOpenForEvent[ev.id];

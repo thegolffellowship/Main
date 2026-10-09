@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.531.4";
+window.TGF_VERSION = "2.531.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.5",
+    date: "2026-10-09",
+    title: "Events on a phone: every event tab shows",
+    changes: [
+      "Kerry 10/9: \"Can't see all the toggles in mobile view\". An event's tabs (ROSTER, PAIRINGS, GAMES, FLIGHTS, REPORTS, SCORING, PAYOUTS, FINANCIAL) sat in one pill that ran off the right edge of a phone, so PAYOUTS and FINANCIAL were hidden. On a phone they now wrap into rows of four equal cells inside the same rounded pill; FINANCIAL keeps its orange. Desktop is unchanged. Guard: test_mobile_manager_parity.js."
+    ]
+  },
   {
     version: "2.531.4",
     date: "2026-10-09",

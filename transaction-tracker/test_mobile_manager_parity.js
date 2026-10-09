@@ -38,5 +38,10 @@ check("?view=reports opens the REPORTS tab", /params\.get\("view"\) === "reports
 const deep = s.slice(s.indexOf('const evParam = params.get("event");'), s.indexOf("// Plain refresh with a row open"));
 check("the ?view=pairings deep link loads the pairings it opens",
       /_wantPairings/.test(deep) && /loadPairings\(byId\.id\)/.test(deep) && /rerenderDetail\(c, ev2\)/.test(deep));
+// Kerry 10/9: "Can't see all the toggles in mobile view" -- the event's tabs
+// wrap into rows of four on a phone
+check("the phone's event tabs wrap into rows so every tab shows",
+      /'<span class="view-toggle-group ev-tabs">'/.test(s)
+      && /\.view-toggle-group\.ev-tabs \{ display: grid; grid-template-columns: repeat\(4, 1fr\)/.test(s));
 console.log(fail ? `\n${fail} failure(s)` : "\nALL PASS");
 process.exit(fail ? 1 : 0);
