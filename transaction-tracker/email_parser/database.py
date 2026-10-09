@@ -14557,8 +14557,8 @@ def get_event_leaderboard(event_name: str,
                     "tee_name": _tee_legend_display_name(label, ladies),
                     "band_label": TEE_LEGEND_WOMEN_WORD if ladies else None,
                     "color": col, "ladies": ladies,
-                    # An outline, always — the starter sheet's own mark
-                    # for the women's tee (Kerry 2026-09-15).
+                    # settled by ladies_tee_marks once the course's men's
+                    # colours are known (below)
                     "ring": ladies})
             # THE LABEL PAIRING IS MADE BEFORE THE SORT (v2.458.6, Kerry
             # 2026-09-16: "Mike is showing as that open circle and the
@@ -14599,15 +14599,26 @@ def get_event_leaderboard(event_name: str,
             # round yet, and the whole legend when nothing is imported.
             band_legend = event_tee_legend(conn, ev["id"],
                                            dict(_evc) if _evc else {})
+            # the played tees follow the same women's-tee rule, judged
+            # against every men's colour on the course's legend too
+            ladies_tee_marks(tee_legend, [t.get("color") for t in band_legend
+                                          if not t.get("ladies")])
             _by_band = {t["band"]: t for t in band_legend}
+            _by_band_lc = {str(b).lower(): t for b, t in _by_band.items()}
+            # a pairing with no tee takes the Cup's tee table, exactly as
+            # the Starter Sheet does (lsc_tee_bands; {} off the Cup)
+            _lsc_bands = lsc_tee_bands(ev["id"], db_path=db_path)
+            _used_bands: set = set()
             for _h, _groups in (get_event_pairings(ev["id"], db_path=db_path)
                                 or {}).items():
                 for _g in _groups:
                     for _pl in (_g.get("players") or []):
-                        _t = _by_band.get(_pl.get("tee_choice"))
+                        _band = ((_pl.get("tee_choice") or "").strip()
+                                 or _lsc_bands.get(str(_pl.get("customer_id") or "")) or "")
+                        _t = _by_band.get(_band) or _by_band_lc.get(_band.lower())
                         if not _t:
                             continue
-                        _rec = {"band": _pl.get("tee_choice"),
+                        _rec = {"band": _t.get("band") or _band,
                                 "tee_name": _t.get("tee_name"),
                                 "color": _t.get("color"),
                                 "ring": bool(_t.get("ring"))}
@@ -14619,8 +14630,20 @@ def get_event_leaderboard(event_name: str,
                             tee_by_player[_ck] = _rec
                         if _nk and _nk not in tee_by_player:
                             tee_by_player[_nk] = _rec
+                        _used_bands.add(_t.get("band"))
             if not tee_legend:
                 tee_legend = band_legend
+            else:
+                # a dot with no key is decoration: a tee nobody has posted
+                # on yet (the waiting rows) still gets its key line
+                _have = {(str(t.get("color") or "").lower(), bool(t.get("ring")))
+                         for t in tee_legend}
+                for t in band_legend:
+                    _k = (str(t.get("color") or "").lower(), bool(t.get("ring")))
+                    if t.get("band") in _used_bands and _k not in _have:
+                        tee_legend.append(t)
+                        _have.add(_k)
+                tee_legend.sort(key=lambda t: 1 if t.get("ladies") else 0)
         except Exception:
             logger.exception("Non-fatal: tee colours unavailable for event %s",
                              ev["id"])
@@ -63762,6 +63785,26 @@ def apply_tgf_tee_proposal(conn, course_id: int, dry_run: bool = True) -> dict:
             "proposal": prop["proposal"], "unplaced": prop["unplaced"], "writes": writes}
 
 
+def ladies_tee_marks(legend: list, men_colors=()) -> list:
+    """THE WOMEN'S TEE MARK, one rule for every surface (Kerry 2026-10-08:
+    "Mary Wade tee color should be solid by rule because women don't share
+    that tee with the 65+ men"; design-claude #1481 sec. 9, Kerry-approved;
+    the printed scorecards since 9/29: "it doesn't need to differentiate").
+    A women's tee is SOLID in its own colour; it is an OUTLINE only when a
+    men's tee on the same legend (or in `men_colors`) has that colour. The
+    old green teal #0f766e becomes #0E8A9A. Mutates and returns `legend`."""
+    men = {str(c or "").lower() for c in men_colors if c}
+    men |= {str(t.get("color") or "").lower() for t in legend if not t.get("ladies")}
+    for t in legend:
+        if not t.get("ladies"):
+            continue
+        col = str(t.get("color") or "")
+        if col.lower() == "#0f766e":
+            t["color"] = col = "#0E8A9A"
+        t["ring"] = bool(col) and col.lower() in men
+    return legend
+
+
 def event_tee_legend(conn, event_id: int, ev: dict) -> list:
     """[{band, band_label, tee_name, tee_key, color, ladies, ring, tee_id,
     source}] for the event's course.
@@ -63905,12 +63948,13 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
                     "tee_key": raw_label, "color": col,
                     "ladies": ladies, "tee_id": tee_id,
                     "source": "designated" if designated else "derived",
-                    # The ladies' tee is an OUTLINE, always.
+                    # outline only when a men's tee shares the colour
+                    # (ladies_tee_marks, below)
                     "ring": ladies})
     # The ladies' tee sorts LAST, always (Kerry).
     out.sort(key=lambda t: (1 if t["ladies"] else 0,
                             TEE_BANDS.index(t["band"])))
-    return out
+    return ladies_tee_marks(out)
 
 
 _NAME_SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"}
@@ -65080,6 +65124,30 @@ def set_group_codes(event_id: int, codes: dict, by: str = "manager", db_path=Non
     return {"ok": True, "saved": {f"{h}:{g}": c for (h, g), c in clean.items()}}
 
 
+def lsc_tee_bands(event_id: int, db_path=None) -> dict:
+    """{str(customer_id): band} from the Cup's tee table (`lsc_tees`) for the
+    Lone Star Cup and its practice round, {} for any other event.
+
+    THE CUP'S TEES (Kerry 2026-09-28: "Each player plays the tee of his
+    usual 2026 band"). A player whose pairing carries no tee (David Wetz,
+    DFW, has no usual band here) takes this band. ONE reader for every
+    surface: the Starter Sheet and cards (get_event_print_pack) and the
+    leaderboard's tee dots (Kerry 10/8: "David Wetz not showing his tee")."""
+    try:
+        from email_parser.lsc_cup import lsc_report_context as _lsc_ctx
+        _lc = _lsc_ctx(int(event_id), db_path=db_path)
+        if not _lc:
+            return {}
+        _lt = (json.loads(get_app_setting("lsc_tees", db_path=db_path) or "{}")
+               .get(str(_lc["cup_event_id"])) or {})
+        return {str(k): (v or {}).get("band")
+                for k, v in (_lt.get("players") or {}).items()
+                if (v or {}).get("band")}
+    except Exception:
+        logger.exception("Non-fatal: LSC tee table unavailable for %s", event_id)
+        return {}
+
+
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     """Assemble the data for the Starter Sheet + Cart Signs printables (B5).
 
@@ -65246,18 +65314,9 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     # round a player whose pairing carries no tee (David Wetz, DFW, has no
     # usual band here) takes the band the Cup's tee table gives him, so the
     # Starter Sheet and the cards print his PH instead of a gap.
-    _lsc_band: dict = {}
-    try:
-        from email_parser.lsc_cup import lsc_report_context as _lsc_ctx
-        _lc = _lsc_ctx(int(event_id), db_path=db_path)
-        if _lc:
-            _lt = (json.loads(get_app_setting("lsc_tees", db_path=db_path) or "{}")
-                   .get(str(_lc["cup_event_id"])) or {})
-            _lsc_band = {str(k): (v or {}).get("band") for k, v in (_lt.get("players") or {}).items()}
-            _bands_lower = {str(b).lower(): b for b in tee_rows}
-            _lsc_band = {k: _bands_lower.get(str(v or "").lower(), v) for k, v in _lsc_band.items() if v}
-    except Exception:
-        logger.exception("Non-fatal: LSC tee table unavailable for %s", event_id)
+    _bands_lower = {str(b).lower(): b for b in tee_rows}
+    _lsc_band = {k: _bands_lower.get(str(v).lower(), v)
+                 for k, v in lsc_tee_bands(event_id, db_path=db_path).items()}
     for g in groups:
         for p in g["players"]:
             cid = p.get("customer_id")

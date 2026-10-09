@@ -3004,7 +3004,7 @@ def _tee_legend(conn, event_id: int) -> dict:
                 except Exception:
                     col = None
             out[t["band"]] = {"color": col or t.get("color"),
-                              "ring": bool(t.get("ring") or t.get("ladies")),
+                              "ring": bool(t.get("ring")), "ladies": bool(t.get("ladies")),
                               "tee_name": t.get("tee_name"), "band_label": t.get("band_label")}
         return out
     except Exception:

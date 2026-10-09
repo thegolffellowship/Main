@@ -790,3 +790,19 @@ holes 5 and 7 (`by_manager` false), and the other groups answered. The money
 row (`auto: CTP Closest to Pin #5/#7`, recorded 10:13 PM) came from Golf
 Genius's game results, which named the same winner. Tracker CTP claims do not
 feed payouts yet (task: Tracker-only payouts before the 10/13 closeouts).
+
+## Tee dots on the leaderboard — v2.530.7 (Kerry 10/8)
+
+- **Blank tee on the Cup and its practice round.** `database.lsc_tee_bands(event_id)`
+  (the `lsc_tees` table, `{}` off the Cup) is the ONE fallback for a pairing
+  with no tee: `get_event_print_pack` (Starter Sheet, cards) and the event
+  leaderboard's `tee_by_player` both read it. Kerry: "David Wetz not showing
+  his tee".
+- **Women's tee mark.** `database.ladies_tee_marks(legend, men_colors)`, applied
+  inside `event_tee_legend` and to the leaderboard's played-tee legend: SOLID in
+  its own colour, an OUTLINE only when a men's tee shares the colour; old teal
+  `#0f766e` → `#0E8A9A`. Kerry: "Mary Wade tee color should be solid by rule
+  because women don't share that tee with the 65+ men". The scorer's phone
+  (`score_entry.html` teeOf) outlines a woman only when `t.ring`.
+- The leaderboard's tee key adds the band tees of players still waiting, so
+  every dot has a key.

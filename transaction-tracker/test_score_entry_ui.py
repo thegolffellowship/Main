@@ -75,7 +75,7 @@ def make(holes, start, label):
 
 
 db.set_app_setting("score_entry_live", "1")
-db.set_app_setting("score_entry_events", "[900, 905]")
+db.set_app_setting("score_entry_events", "[900, 905, 906]")
 PORT = 5093
 threading.Thread(target=lambda: appmod.app.run(port=PORT, use_reloader=False), daemon=True).start()
 time.sleep(2)
@@ -352,7 +352,7 @@ with sync_playwright() as p:
     play(pg, 9)
     pg.wait_for_timeout(1500)
     review_ok(pg, 9, "shotgun")
-    print("tee mark standard: men solid (white outlined), women outlined")
+    print("tee mark standard: men solid (white outlined), women solid unless a men's tee shares the colour")
     cz = sqlite3.connect(DB)
     if "gender" in [r[1] for r in cz.execute("PRAGMA table_info(customers)")]:
         cz.execute("INSERT INTO courses (course_id, name) VALUES (7790, 'Mark GC')")
@@ -377,8 +377,29 @@ with sync_playwright() as p:
         tp.wait_for_selector(".se-row .se-tee")
         cls = tp.locator(".se-row .se-tee").evaluate_all("els => els.map(e => e.className)")
         check("a man on the red tee is SOLID", "ring" not in cls[0], cls)
-        check("a woman on the red tee is OUTLINED", "ring" in cls[1], cls)
+        # Kerry 10/8: "Mary Wade tee color should be solid by rule because
+        # women don't share that tee with the 65+ men" — here 65+ men play White
+        check("a woman on a red tee of her own is SOLID (Kerry 10/8)", "ring" not in cls[1], cls)
         check("a man on white gets the dark outline (white is the exception)", "light" in cls[2], cls)
+        # ...and OUTLINED when the 65+ men's tee shares her colour
+        cz.execute("INSERT INTO courses (course_id, name) VALUES (7791, 'Shared GC')")
+        for tid, nm, gen, bands in [(77911, "Blue", "M", "<50"), (77912, "White", "M", "50-64"),
+                                    (77913, "Red", "M", "65+"), (77914, "Red (L)", "F", "Forward")]:
+            cz.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, gender, holes, rating, slope, "
+                       "yardage_total, tgf_bands) VALUES (?,?,?,?,18,70.1,125,6400,?)", (tid, 7791, nm, gen, bands))
+        cz.execute("INSERT INTO events (id, item_name, event_date, course_id) VALUES (906, 'Shared test', '2026-09-29', 7791)")
+        cz.commit()
+        rs = se.create_round(906, 9, course_holes=course(9))["round_id"]
+        gs = se.upsert_group(rs, 1, players=[
+            {"customer_id": 107, "display_name": "Gus Vasquez", "tee": "65+", "seat": 1},
+            {"customer_id": 108, "display_name": "Ann Lee", "tee": "Forward", "seat": 2}])["group_id"]
+        tp = b.new_context(viewport={"width": 390, "height": 844}).new_page()
+        tp.goto(f"http://127.0.0.1:{PORT}/member/score?t={se.make_group_token(gs)}")
+        tp.click("[data-act=gate-score]")
+        tp.click("text=Gus Vasquez")
+        tp.wait_for_selector(".se-row .se-tee")
+        cls = tp.locator(".se-row .se-tee").evaluate_all("els => els.map(e => e.className)")
+        check("a woman whose tee colour the 65+ men share is OUTLINED, the man solid", "ring" not in cls[0] and "ring" in cls[1], cls)
     cz.close()
 
     print("match play: no M tag (Kerry 2026-09-26), the max-triple notice, Ball in hole / Picked up")

@@ -116,3 +116,23 @@ def test_the_rename_keeps_the_old_name_as_an_alias(pdb):
             == "The Hideout Golf Club & Resort"
     assert db.report_heading({"id": 3330, "course_id": cid, "event_date": "2026-10-09"},
                              db_path=pdb)["course"] == "THE HIDEOUT GOLF CLUB & RESORT"
+
+
+# --- the leaderboard's tee dot reads the same table (Kerry 10/8: "David Wetz
+# not showing his tee") -----------------------------------------------------
+
+def test_lsc_tee_bands_is_the_cup_table_and_nothing_elsewhere(pdb):
+    assert db.lsc_tee_bands(3330, db_path=pdb) == {"672": "<50", "7": "<50"}
+    assert db.lsc_tee_bands(3304, db_path=pdb) == {}
+
+
+def test_the_board_dots_a_blank_tee_from_the_cup_table(pdb):
+    c = sqlite3.connect(pdb)    # tables production already has
+    db._ensure_gg_game_flights_tables(c); db._ensure_gg_game_results_tables(c)
+    c.commit(); c.close()
+    d = db.get_event_leaderboard("LSC PRACTICE ROUND | The Hideout", db_path=pdb) or {}
+    tb = d.get("tee_by_player") or {}
+    assert tb.get("c:672", {}).get("band") == "<50"
+    assert tb.get("c:7", {}).get("band") == "50-64"     # his own tee wins
+    d2 = db.get_event_leaderboard("s9.25 X", db_path=pdb) or {}
+    assert "c:672" not in (d2.get("tee_by_player") or {})

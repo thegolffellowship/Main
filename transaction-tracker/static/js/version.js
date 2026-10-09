@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.530.6";
+window.TGF_VERSION = "2.530.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.530.7",
+    date: "2026-10-09",
+    title: "Leaderboard tee dots: Wetz shows his tee; a women's tee of its own is solid everywhere",
+    changes: [
+      "Kerry 10/8: \"David Wetz not showing his tee\". His practice-round registration carries no tee. The Starter Sheet and cards already filled it from the Cup's tee table (lsc_tees, <50), but the leaderboard read the raw pairing and drew no dot. One reader now serves both (database.lsc_tee_bands), so his waiting row shows Blue like the sheet. His live-scoring card was already right (<50, PH 8).",
+      "Kerry 10/8: \"Mary Wade tee color should be solid by rule because women don't share that tee with the 65+ men\". The rule (design-claude #1481 sec. 9, and the printed scorecards since 9/29) lived only on the Starter Sheet and cards. It now lives in the shared tee legend (database.ladies_tee_marks): a women's tee is solid in its own colour and an outline only when a men's tee has the same colour; the old green teal prints #0E8A9A. The leaderboard and the scorer's phone follow it, superseding the 9/26 'a woman is always outlined' mark.",
+      "The leaderboard's tee key now also lists the tees of players who haven't posted yet (teal, red), so every dot on the board has a key line.",
+      "Guards: test_lsc_print_pack_tees.py (the board's dot for a blank tee), test_score_entry.py and test_score_entry_ui.py (solid on her own colour, outline when the 65+ men share it)."
+    ]
+  },
   {
     version: "2.530.6",
     date: "2026-10-09",

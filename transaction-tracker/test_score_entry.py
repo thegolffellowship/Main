@@ -796,7 +796,18 @@ _card_col = {b: (_row_colour(t_.get("tee_id"), _master(t_.get("tee_name") or "")
 check("the card carries the tee sheet's bands, each in the PRINTED scorecard's colour (Kerry 9/29)",
       set(tees) == set(legend) and all(tees[b]["color"] == _card_col[b] for b in legend)
       and tees["<50"]["color"] == "#2F5FA6", (tees, _card_col))
-check("the women's tee is marked as an outline, as on the sheet", tees.get("Forward", {}).get("ring") is True, tees)
+# Kerry 10/8: "Mary Wade tee color should be solid by rule because women
+# don't share that tee with the 65+ men". Red here is the women's own colour
+# (65+ men play White), so it is SOLID; ladies stays set for the phone's gender
+# fallback. An outline is only for a colour a men's tee shares.
+check("the women's tee is solid in a colour of its own (Kerry 10/8)",
+      tees.get("Forward", {}).get("ring") is False and tees.get("Forward", {}).get("ladies") is True, tees)
+_shared = db.ladies_tee_marks([{"band": "65+", "color": "#C0392B", "ladies": False},
+                               {"band": "Forward", "color": "#C0392B", "ladies": True}])
+_teal = db.ladies_tee_marks([{"band": "65+", "color": "#C0392B", "ladies": False},
+                             {"band": "Forward", "color": "#0f766e", "ladies": True}])
+check("an outline only when a men's tee shares the colour; old teal becomes #0E8A9A",
+      _shared[1]["ring"] is True and _teal[1]["ring"] is False and _teal[1]["color"] == "#0E8A9A", (_shared, _teal))
 check("a player with no tee has no colour here (the screen shows grey, never a guess)",
       not se.get_group_card(tg)["players"][3]["tee"])
 check("an event with no course card gives no colours, not an error", se.get_group_card(gid)["tees"] == {})
