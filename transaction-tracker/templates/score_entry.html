@@ -1493,11 +1493,41 @@
                 return `<td class="${dead(h) ? "dim" : ""}">${won ? `<span class="w ${k ? "b" : "a"}">${v}</span>` : v}${pops}</td>`;
             }).join("");
             const tot = (k, list) => list.reduce((a, h) => a + (h.g[k] != null && !h.pu[k] ? h.g[k] : h.g[k] || 0), 0) || "";
+            // FOURBALL: ONE LINE PER PLAYER (Kerry 10/10: "Why aren't pops showing
+            // in expanded match?"). Partners get different strokes, so a side line
+            // has no single pop count (the server sends none for four-ball); each
+            // player gets his own line with his gross from this card, his own
+            // match-stroke dots (m.strokes) and a circle on the ball that won the
+            // hole for his side -- the same card the LEADERBOARD opens.
+            const fb = m.format === "fourball" && (m.sides || []).length === 2;
+            const pRow = (k, cid, list) => list.map((h) => {
+                const key = "c:" + cid, v0 = value(key, h.hole).v;
+                const x = v0 != null && isX(key, h.hole, [cid]);
+                const pk = ((m.strokes || {})[String(cid)] || {})[String(h.hole)] || 0;
+                const nets = (m.sides[k] || []).map((c) => {
+                    const g = value("c:" + c, h.hole).v;
+                    return g == null || isX("c:" + c, h.hole, [c]) ? null
+                        : g - (((m.strokes || {})[String(c)] || {})[String(h.hole)] || 0);
+                }).filter((n_) => n_ != null);
+                const best = nets.length ? Math.min(...nets) : null;
+                const counts = h.w === k + 1 && v0 != null && !x && v0 - pk === best;
+                const v = v0 == null ? "" : x ? "X" : v0;
+                const pops = pk ? `<span class="pp">${"<i></i>".repeat(Math.min(pk, 3))}</span>` : "";
+                return `<td class="${dead(h) ? "dim" : ""}">${counts ? `<span class="w ${k ? "b" : "a"}">${v}</span>` : v}${pops}</td>`;
+            }).join("");
+            const pTot = (cid, list) => list.reduce((a, h) => a + (value("c:" + cid, h.hole).v || 0), 0) || "";
+            const pName = (k, i) => ((fn[k] || [])[i] || "");
+            const pChip = (k, i) => { const w = String(pName(k, i)).trim().split(/\s+/);
+                return (w[0] || "")[0] + (w.length > 1 ? (w[w.length - 1][0] || "") : ""); };
+            const sideRows = (list) => fb
+                ? [0, 1].map((k) => (m.sides[k] || []).map((cid, i) =>
+                    `<tr><th><span class="se-mc-chip ${k ? "b" : "a"}">${esc(pChip(k, i))}</span></th>${pRow(k, cid, list)}<th>${pTot(cid, list)}</th></tr>`).join("")).join("")
+                : `<tr><th><span class="se-mc-chip a">${esc(initials(fn[0]))}</span></th>${row(0, list)}<th>${tot(0, list)}</th></tr>
+                <tr><th><span class="se-mc-chip b">${esc(initials(fn[1]))}</span></th>${row(1, list)}<th>${tot(1, list)}</th></tr>`;
             return `<div class="se-mc-grid">${blocks.map((list) => `<table>
                 <tr class="h"><th></th>${list.map((h) => `<td>${h.hole}</td>`).join("")}<th>Tot</th></tr>
                 <tr class="p"><th>Par</th>${list.map((h) => `<td>${info(h.hole).par || ""}</td>`).join("")}<th>${list.reduce((a, h) => a + (info(h.hole).par || 0), 0) || ""}</th></tr>
-                <tr><th><span class="se-mc-chip a">${esc(initials(fn[0]))}</span></th>${row(0, list)}<th>${tot(0, list)}</th></tr>
-                <tr><th><span class="se-mc-chip b">${esc(initials(fn[1]))}</span></th>${row(1, list)}<th>${tot(1, list)}</th></tr>
+                ${sideRows(list)}
               </table>`).join("")}
               <div class="se-mc-note">Circled: won the hole · dots: match strokes · grey: after the match was decided${m.cup ? " (skins only)" : ""}</div></div>`;
         }

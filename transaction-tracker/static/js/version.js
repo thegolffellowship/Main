@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.535.6";
+window.TGF_VERSION = "2.535.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.7",
+    date: "2026-10-10",
+    title: "Cup scoring: the opened Fourball match card shows each player's pops",
+    changes: [
+      "Kerry 10/10: \"Why aren't pops showing in expanded match?\" The tap-open match card on SCORING drew one line per side, and a four-ball side has no single pop count (partners get different strokes; the server sends none), so no dots showed. A Fourball card now has one line per player: his gross from the card, his own match-stroke dots, and a circle on the ball that won the hole for his side -- the same card the LEADERBOARD opens. Foursomes and Singles keep one line per side. Verified in Chromium."
+    ]
+  },
   {
     version: "2.535.6",
     date: "2026-10-10",
