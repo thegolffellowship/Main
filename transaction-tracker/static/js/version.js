@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.535.8";
+window.TGF_VERSION = "2.535.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.9",
+    date: "2026-10-10",
+    title: "Cup scoring: the dots by the + buttons are the match strokes",
+    changes: [
+      "Kerry 10/10: \"Pops aren't showing correctly for singles by the + buttons. They do in match expansions but those look wrong. In singles at least one player won't have any pops. But Gus shows one while Kaleb has two on the scoring section.\" The hole screen drew each player's dots from his full playing handicap counted off zero (Kaleb 23 = two on SI 5, Gus 9 = one), while the opened match card drew the match's strokes off the low player (Kaleb 14, Gus 0). popsOf in score_entry.html now reads a Cup player's dots from his match's strokes (card.match_status[].strokes), the same numbers the match is scored with, so in Singles the low player has none and the + buttons agree with the match card. Fourball players read their own match strokes the same way; Chapman pairs and every non-Cup card are unchanged. Verified in Chromium on the Singles fixture with The Hideout's stroke index and the real handicaps (Kaleb-like 14 strokes on SI 1-14, opponent 0; Wade-like 6, Kerry-like 0); guard in test_cup_signs.py."
+    ]
+  },
   {
     version: "2.535.8",
     date: "2026-10-10",

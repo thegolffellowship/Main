@@ -790,6 +790,14 @@
         // Dots, not words: k PH pops (black) + t team pops (orange).
         function popsOf(cid, n) {
             const g = (m) => Math.max(0, Number(((m || {})[String(cid)] || {})[String(n)]) || 0);
+            // A CUP PLAYER'S DOTS ARE HIS MATCH STROKES (Kerry 10/10: "Pops aren't
+            // showing correctly for singles by the + buttons ... In singles at least
+            // one player won't have any pops"). card.strokes is the full handicap
+            // off zero; a Cup match plays its session allowance off the low player,
+            // so read the match engine's own strokes (the same the opened card uses).
+            const cm = (card.match_status || []).find((m) => m.cup && m.strokes
+                && (m.sides || []).flat().includes(Number(cid)));
+            if (cm) return {k: g(cm.strokes), t: 0, x: 0};
             return {k: g(card.strokes), t: g(card.team_strokes), x: g(card.team_par3_ghost)};
         }
         // A one-ball team (Chapman in the cup) gets its pops from the match

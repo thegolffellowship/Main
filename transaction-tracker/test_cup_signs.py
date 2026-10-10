@@ -244,5 +244,12 @@ check("the Cup's practice-round card heads PRACTICE ROUND (| date on the landing
       'const practiceEyebrow = () => document.body.classList.contains("lsc") && !cupSession() ? "Practice Round" : null;' in sep
       and 'cupEyebrow() || practiceEyebrow() ||' in sep and '"Practice Round" + (card.round_date ? " | " + dt(card.round_date) : "")' in sep)
 
+# Kerry 10/10: "Pops aren't showing correctly for singles by the + buttons...
+# In singles at least one player won't have any pops. But Gus shows one while
+# Kaleb has two on the scoring section"
+check("a Cup player's dots by the + buttons are his MATCH strokes (off the low), not his full PH",
+      "const cm = (card.match_status || []).find((m) => m.cup && m.strokes" in sep
+      and "if (cm) return {k: g(cm.strokes), t: 0, x: 0};" in sep)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)
