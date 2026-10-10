@@ -130,6 +130,9 @@ check("the phone page lands on the two buttons before Who are you?",
 check("FOLLOW opens the scorer's LEADERBOARD (the Cup with the match expanded), never the public Cup page",
       'const follow = "/member/score/board?t=" + encodeURIComponent(T)' in tpl
       and '"&match=" + encodeURIComponent(cupIds[0])' in tpl and '"/member/lonestarcup?"' not in tpl)
+check("+ reads X at the triple in a Cup match and rests on an X (Kerry 10/10: option 1)",
+      "const toX = cupOf(s.cids) && !xx && cur.v != null && cur.v === hiOf(hole);" in tpl
+      and 'class="se-plus tox"' in tpl and 'class="se-plus rest"' in tpl and ".se-plus.tox {" in tpl)
 check("the hole screen carries the HOW IT WORKS pill (#1398-C2) and NO Team score box (Kerry 10/10: "
       "\"I don't think that team score is necessary\")",
       "${teamScoreBox(hole)}" not in tpl and "pr-hiw-link" in tpl

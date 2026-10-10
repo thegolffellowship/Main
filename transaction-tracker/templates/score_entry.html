@@ -157,6 +157,8 @@
                               font-family: inherit; cursor: pointer; flex: none; }
         .se-minus { border: 1px solid var(--se-ink); background: #FFFFFF; color: var(--se-ink); }
         .se-plus { border: none; background: var(--se-ink); color: #FFFFFF; }
+        .se-plus.tox { background: #B91C1C; font-size: 22px; }   /* the next tap is X: picked up */
+        .se-plus.rest { opacity: .35; cursor: default; }
         .se-score { width: 52px; display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
         .se-score .v { font-family: Bitter, Georgia, serif; font-size: 32px; font-weight: 700; line-height: 1;
                        font-variant-numeric: tabular-nums; }
@@ -1198,7 +1200,16 @@
                     <div class="se-who"><div class="se-name"><span class="nm"${inkStyle(s.cids)}>${esc(s.name)}</span>${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
                     <div class="se-score" ${popLabel(s.cids, hole) ? `aria-label="${esc(popLabel(s.cids, hole))}"` : ""}>${popDots(s.cids, hole)}<div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${xx ? '<span class="se-x">X</span>' : shown}</div><div class="r">${rel}</div></div>
-                    <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>
+                    ${(() => {
+                        // + TURNS INTO X AT THE TRIPLE (Kerry 10/10: "how does someone
+                        // enter x for a player?" ... "I think 1 makes sense"). In a Cup
+                        // match the tap past triple bogey is the pick-up X; say so on
+                        // the button. On an X there is nothing above it: + rests.
+                        const toX = cupOf(s.cids) && !xx && cur.v != null && cur.v === hiOf(hole);
+                        if (toX) return `<button type="button" class="se-plus tox" data-act="step" data-d="1" aria-label="Picked up: X for ${esc(s.name)}"><span class="se-x">X</span></button>`;
+                        if (xx) return `<button type="button" class="se-plus rest" data-act="step" data-d="1" aria-label="${esc(s.name)} is X (picked up)" disabled>+</button>`;
+                        return `<button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>`;
+                    })()}
                   </div>`;
             }).map((html, i) => (rowsByKey[subjects()[i].key] = html)).join("");
             const cells = stripCells(order, hole);

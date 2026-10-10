@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.535.5";
+window.TGF_VERSION = "2.535.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.6",
+    date: "2026-10-10",
+    title: "Cup scoring: the + button reads X at triple bogey",
+    changes: [
+      "Kerry 10/10: \"So how does someone enter x for a player?\" ... \"I think 1 makes sense. Build it and deploy.\" In a Cup match the tap past triple bogey was already the pick-up X, but nothing said so. Now when a player sits on the triple, his + button turns red and reads X; one tap makes it X (stored as the triple marked picked up, so it can't win the hole), the + then rests greyed, and - takes it back to the triple. Verified in Chromium on the Fourball fixture."
+    ]
+  },
   {
     version: "2.535.5",
     date: "2026-10-10",
