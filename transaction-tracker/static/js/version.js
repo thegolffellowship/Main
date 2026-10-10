@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.535.9";
+window.TGF_VERSION = "2.535.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.10",
+    date: "2026-10-10",
+    title: "Player Spotlight: an open during the warmer's refresh no longer rebuilds the Cup piece itself",
+    changes: [
+      "Three Spotlight opens took about 10.9 s on 10/9 and 10/10 (digest #1567; the Fellowship Cup piece alone is ~8.3 s). Cause: every 90 s the warmer expires the shared entries and then spends ~10 s rebuilding them, and an open that landed inside that window rebuilt the same entries on its own thread. While the warmer is mid-rebuild, every other thread now serves the entry it just expired (at most about 2.5 minutes old) and builds nothing. Nothing is cached longer, no figure changes, and a restart still starts cold until the first warmer tick. Guard in test_perf.py (a page open during a held-open rebuild returns in under 2 s)."
+    ]
+  },
   {
     version: "2.535.9",
     date: "2026-10-10",

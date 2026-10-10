@@ -270,3 +270,7 @@ alert at confidence 45 — a `support@railway.app` "volume is N% full"
 mail should be urgency high, confidence 90, and named in the morning
 brief (COO lane).
 
+
+
+## Addendum 2026-10-10: Spotlight opens during the warmer's refresh
+`warm_spotlight` expires the shared entries (timestamp 0) and rebuilds them (~10 s, the Fellowship Cup piece ~8 s). Before v2.535.10 an open inside that window rebuilt them itself (10.9 s opens, digest #1567). `_SPOTLIGHT_REFRESHING` + the warmer thread's `_SPOTLIGHT_WARMER_TLS` make every other thread serve the just-expired entry while the warmer works. Held-open-rebuild guard in `test_perf.py`.

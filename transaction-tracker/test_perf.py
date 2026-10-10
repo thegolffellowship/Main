@@ -278,6 +278,27 @@ db._SPOTLIGHT_SHARED_CACHE.clear()
 res = db.warm_spotlight(tmp)
 check("after a restart the warmer reads the saved last-used and warms (no page pays the cold build)",
       res.get("warmed") is True and res.get("cid") in (301, 302), str(res))
+# 10/9-10/10 digest #1567: three member opens took ~10.9 s because they landed
+# while the warmer had expired the shared entries and was rebuilding them.
+import threading as _th, time as _tm
+db.get_player_spotlight(301, db_path=tmp); db._SPOTLIGHT_LAST_USED.update(at=_tm.time(), cid=301, db_path=str(tmp))
+_gate, _started = _th.Event(), _th.Event()
+_orig_build = db.get_fellowship_cup_projection
+def _slow_cup(*a, **k):
+    _started.set(); _gate.wait(10)
+    return _orig_build(*a, **k)
+db.get_fellowship_cup_projection = _slow_cup
+try:
+    _w = _th.Thread(target=lambda: db.warm_spotlight(tmp, force=True)); _w.start()
+    check("test setup: the warmer is mid-rebuild", _started.wait(10) and db._SPOTLIGHT_REFRESHING["on"] is True)
+    _t0 = _tm.time(); _page = db.get_player_spotlight(302, db_path=tmp, _touch=False); _page_s = _tm.time() - _t0
+    check("a page open DURING the warmer's rebuild serves the entry it just expired and never builds (was a 10.9 s cold open)",
+          _page_s < 2.0 and _page, f"{_page_s:.2f}s")
+    _gate.set(); _w.join(30)
+    check("...and the refreshing flag is cleared once the warmer finishes", db._SPOTLIGHT_REFRESHING["on"] is False and not getattr(db._SPOTLIGHT_WARMER_TLS, "active", False))
+finally:
+    db.get_fellowship_cup_projection = _orig_build; _gate.set()
+    db._SPOTLIGHT_REFRESHING["on"] = False
 check("the scheduler carries the spotlight_warm job", appmod.scheduler.get_job("spotlight_warm") is not None or os.getenv("EMAIL_ADDRESS") is None)
 for nm in ("spotlight_search", "contests_list", "points_race", "handicap_rounds", "payouts_list", "leads_list", "rsvps_list", "expense_queue", "ca_queue_list", "gg_history_overview", "action_items_list", "scoring_rounds", "matrix_get", "parse_warnings", "coo_action_items", "recon_unreconciled", "monthly_points"):
     pass
