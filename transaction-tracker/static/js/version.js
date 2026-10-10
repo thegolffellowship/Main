@@ -5,15 +5,8 @@ window.TGF_CHANGELOG = [
     date: "2026-10-10",
     title: "Lone Star Cup HOW IT WORKS: how each session is played",
     changes: [
+      "Withdrawn before release (Kerry 10/10: \"Cancel that about the double line and pops. Only showing one line per team for fourball is fine in scorers view ... Scorer view is a bit more compact view that way\"): the per-player Fourball lines on the SCORING page's opened match card. The scorer's card stays one line per team; the LEADERBOARD's opened card already shows every player's line with his pops.",
       "Kerry 10/10: \"Formats does not show detail on how each format is played. Add that. You're showing handicapping first then a Chapman relief rule but not just general format rules for each session.\" Event Info's FORMATS tab (and the HOW IT WORKS modal on SCORING) now opens with How each session is played: Sat AM Fourball (each plays his own ball; the team's better net ball is its score), Sat PM Foursomes/Chapman (both tee off, swap for the second shot, pick one ball and alternate; one score per team), Sun Singles (one on one), and match-play basics (holes won/halved, 3&2, an X can't win the hole, play out the holes for skins). The handicap table follows under Handicaps & points, then the Chapman relief rule. The Skins ties line now carries the 10/9 carryover ruling (a session with no skin passes its pot on; into Sunday split between the flights) instead of \"No carryover\"."
-    ]
-  },
-  {
-    version: "2.535.7",
-    date: "2026-10-10",
-    title: "Cup scoring: the opened Fourball match card shows each player's pops",
-    changes: [
-      "Kerry 10/10: \"Why aren't pops showing in expanded match?\" The tap-open match card on SCORING drew one line per side, and a four-ball side has no single pop count (partners get different strokes; the server sends none), so no dots showed. A Fourball card now has one line per player: his gross from the card, his own match-stroke dots, and a circle on the ball that won the hole for his side -- the same card the LEADERBOARD opens. Foursomes and Singles keep one line per side. Verified in Chromium."
     ]
   },
   {
