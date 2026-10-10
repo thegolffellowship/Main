@@ -72,4 +72,12 @@ check("no practice event, no count", "players</dd>" not in e)
 ct = cl.get("/member/lonestarcup").get_data(as_text=True)
 check("Cup tab: Event Info view + shared script", '"Event Info"' in ct and "/member/lonestarcup/info?embed=1" in ct
       and "/static/js/lsc-info.js" in ct and "?info=" in ct)
+# Kerry 10/10: "Formats does not show detail on how each format is played"
+fm = cl.get("/member/lonestarcup/info").get_data(as_text=True)
+check("Formats opens with how each session is played, before the handicaps",
+      fm.index("How each session is played") < fm.index("Handicaps &amp; points") < fm.index("Chapman relief rule")
+      and "better net ball" in fm and "alternates shots until it" in fm and "One against one" in fm
+      and "can't win the hole" in fm)
+check("Skins ties carry the 10/9 session carryover ruling", "passes its whole pot to the next session" in fm
+      and "No carryover" not in fm)
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

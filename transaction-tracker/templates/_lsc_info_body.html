@@ -35,6 +35,8 @@
                       text-transform: uppercase; margin-left: 6px; }
   .lsc-info p { font-size: 13.5px; line-height: 1.5; margin: 0; color: var(--ink); }
   .lsc-info p.note { color: #4B5563; font-size: 12.5px; }
+  .lsc-info .sched.how .d { flex-direction: column; gap: 3px; }
+  .lsc-info .sched.how dd { text-align: left; line-height: 1.45; }
   .lsc-info ol { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
   .lsc-info .teams { display: flex; gap: 12px; }
   .lsc-info .teams > div { flex: 1; min-width: 0; }
@@ -96,6 +98,17 @@
   </section>
 
   <section data-sec="formats"{{ ID('formats') }}>
+    {# HOW EACH SESSION IS PLAYED (Kerry 10/10: "Formats does not show detail on
+       how each format is played ... not just general format rules for each
+       session"), before the handicaps #}
+    <h4>How each session is played</h4>
+    <dl class="sched how">
+      <div class="d"><dt>Sat AM · Fourball</dt><dd>Two-player teams. Each player plays his own ball the whole hole. The team's score on a hole is its better net ball; the lower team score wins the hole.</dd></div>
+      <div class="d"><dt>Sat PM · Foursomes (Chapman)</dt><dd>Same partners. Both tee off, each hits his partner's ball for the second shot, then the team picks one ball and alternates shots until it's holed. One score per team per hole; the lower net score wins the hole. Relief rule below.</dd></div>
+      <div class="d"><dt>Sun · Singles</dt><dd>One against one, each playing his own ball. The lower net score wins the hole.</dd></div>
+      <div class="d"><dt>Match play</dt><dd>Every hole is won, lost or halved. A match is won when a side is up more holes than are left (3&amp;2 = 3 up with 2 to play). A picked-up ball (X) can't win the hole. Keep playing out the holes after a match is decided: they still count for skins.</dd></div>
+    </dl>
+    <h4>Handicaps &amp; points</h4>
     <dl class="sched">
       <div class="d" data-a="fourball"{{ ID('fourball') }}><dt>Fourball</dt><dd>90% · off the low player in the match</dd></div>
       <div class="d" data-a="foursomes"{{ ID('foursomes') }}><dt>Foursomes (Chapman)</dt><dd>60% low + 40% high · off the low team</dd></div>
@@ -118,7 +131,7 @@
     <dl class="sched">
       <div class="d"><dt>Sat AM &amp; PM</dt><dd>Team · net · one flight · partners share</dd></div>
       <div class="d"><dt>Sunday</dt><dd>Individual · gross · two flights at 12.0</dd></div>
-      <div class="d"><dt>Ties</dt><dd>No carryover · a tied low wins nothing</dd></div>
+      <div class="d"><dt>Ties</dt><dd>A tied low wins nothing · a session with no skin won passes its whole pot to the next session (into Sunday: split between the flights)</dd></div>
     </dl>
     <p class="note">Saturday net uses the full session allowance (90% Fourball; 60/40 Chapman), not off-lowest. A pair with one buyer: the buyer takes the whole skin. A pair with no buyer is out of the hole and cannot tie one out.</p>
   </section>

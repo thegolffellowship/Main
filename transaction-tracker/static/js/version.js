@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.535.7";
+window.TGF_VERSION = "2.535.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.8",
+    date: "2026-10-10",
+    title: "Lone Star Cup HOW IT WORKS: how each session is played",
+    changes: [
+      "Kerry 10/10: \"Formats does not show detail on how each format is played. Add that. You're showing handicapping first then a Chapman relief rule but not just general format rules for each session.\" Event Info's FORMATS tab (and the HOW IT WORKS modal on SCORING) now opens with How each session is played: Sat AM Fourball (each plays his own ball; the team's better net ball is its score), Sat PM Foursomes/Chapman (both tee off, swap for the second shot, pick one ball and alternate; one score per team), Sun Singles (one on one), and match-play basics (holes won/halved, 3&2, an X can't win the hole, play out the holes for skins). The handicap table follows under Handicaps & points, then the Chapman relief rule. The Skins ties line now carries the 10/9 carryover ruling (a session with no skin passes its pot on; into Sunday split between the flights) instead of \"No carryover\"."
+    ]
+  },
   {
     version: "2.535.7",
     date: "2026-10-10",
