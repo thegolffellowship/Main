@@ -1215,7 +1215,9 @@
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${teamWrap(rowsByKey)}</div>
-                ${teamScoreBox(hole)}
+                ${""/* TEAM SCORE box off the hole screen (Kerry 10/10: "I don't think
+                   that team score is necessary. I think they'll be able to see in the
+                   match display above just fine"); teamScoreBox stays for its test */}
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
                 ${hiwPill()}

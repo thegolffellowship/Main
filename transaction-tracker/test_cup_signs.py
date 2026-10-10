@@ -130,8 +130,9 @@ check("the phone page lands on the two buttons before Who are you?",
 check("FOLLOW opens the scorer's LEADERBOARD (the Cup with the match expanded), never the public Cup page",
       'const follow = "/member/score/board?t=" + encodeURIComponent(T)' in tpl
       and '"&match=" + encodeURIComponent(cupIds[0])' in tpl and '"/member/lonestarcup?"' not in tpl)
-check("the hole screen carries the Team score · hole box (label + two numbers) and the HOW IT WORKS pill (#1398-C1/C2)",
-      "function teamScoreBox(n)" in tpl and 'class="se-box se-tscore"' in tpl and "pr-hiw-link" in tpl
+check("the hole screen carries the HOW IT WORKS pill (#1398-C2) and NO Team score box (Kerry 10/10: "
+      "\"I don't think that team score is necessary\")",
+      "${teamScoreBox(hole)}" not in tpl and "pr-hiw-link" in tpl
       and 'data-act="hiw"' in tpl and "Team PH " in tpl)
 # Kerry 10/9: "For how it works buttons they should only pop up a modal that
 # can easily be closed" -- the scoring page's HOW IT WORKS is a popup with a

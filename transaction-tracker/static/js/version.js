@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.535.4";
+window.TGF_VERSION = "2.535.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.5",
+    date: "2026-10-10",
+    title: "Cup scoring: no Team score box on the hole screen",
+    changes: [
+      "Kerry 10/10: \"I don't think that team score is necessary. I think they'll be able to see in the match display above just fine.\" The TEAM SCORE · HOLE n box under the player rows on a Fourball / Foursomes hole screen is gone; the match strip above still shows the match, and the Group card moves up under the players. teamScoreBox stays in the page for its unit test (test_se_team_match.js); test_cup_signs.py now pins that the hole screen does not call it."
+    ]
+  },
   {
     version: "2.535.4",
     date: "2026-10-09",
