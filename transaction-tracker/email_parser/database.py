@@ -15791,6 +15791,8 @@ _SPOTLIGHT_PERSIST_EVERY_S = 600.0
 _SPOTLIGHT_PERSISTED_AT: dict = {"at": 0.0}
 _SPOTLIGHT_WARM_ACTIVE_S = 24 * 3600      # warm only if opened in the last day
 _SPOTLIGHT_WARM_AGE_S = 90.0              # rebuild entries older than this
+_SPOTLIGHT_REFRESHING: dict = {"on": False}   # True while the warmer rebuilds
+_SPOTLIGHT_WARMER_TLS = threading.local()      # set only on the warmer's own thread
 
 
 def _spotlight_shared(name: str, builder, db_path) -> object:
@@ -15798,6 +15800,14 @@ def _spotlight_shared(name: str, builder, db_path) -> object:
     ck = (name, str(db_path))
     hit = _SPOTLIGHT_SHARED_CACHE.get(ck)
     if hit and _t.time() - hit[0] < _SPOTLIGHT_SHARED_TTL:
+        return hit[1]
+    # The warmer expires the entries and then spends ~10 s rebuilding them
+    # (the Fellowship Cup piece alone is ~8 s). A member who opens the
+    # Spotlight inside that window used to rebuild the same entries
+    # himself: 10.9 s opens on 10/9 and 10/10 (digest #1567). While the
+    # warmer is mid-rebuild every other thread serves the entry it just
+    # expired (at most ~2.5 min old) and never builds.
+    if hit is not None and _SPOTLIGHT_REFRESHING["on"] and not getattr(_SPOTLIGHT_WARMER_TLS, "active", False):
         return hit[1]
     # A COLD build: lap it on the request's stopwatch under its own name
     # so the digest shows exactly which builder the open paid for.
@@ -15853,7 +15863,13 @@ def warm_spotlight(db_path=None, force: bool = False) -> dict:
     for k in [k for k in _SPOTLIGHT_SHARED_CACHE if k[1] == str(path)]:
         _SPOTLIGHT_SHARED_CACHE[k] = (0.0, _SPOTLIGHT_SHARED_CACHE[k][1])
     t0 = _t.perf_counter()
-    get_player_spotlight(cid, db_path=path, _touch=False)
+    _SPOTLIGHT_WARMER_TLS.active = True
+    _SPOTLIGHT_REFRESHING["on"] = True
+    try:
+        get_player_spotlight(cid, db_path=path, _touch=False)
+    finally:
+        _SPOTLIGHT_REFRESHING["on"] = False
+        _SPOTLIGHT_WARMER_TLS.active = False
     return {"warmed": True, "cid": cid, "ms": int((_t.perf_counter() - t0) * 1000),
             "entries": sum(1 for k in _SPOTLIGHT_SHARED_CACHE if k[1] == str(path))}
 
