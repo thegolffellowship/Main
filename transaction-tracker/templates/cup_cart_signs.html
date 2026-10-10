@@ -45,6 +45,20 @@
   .team .t { font-family: Bitter, Georgia, serif; font-weight: 800; font-size: 26px; letter-spacing: 4px; color: #FFFFFF; }
   .namesbox { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
               padding: 0 32px; min-width: 0; }
+  /* COMBINED SATURDAY SIGN (Kerry 10/9 "Combined"): AM over PM in the band,
+     each row with its own scoring QR */
+  .band.two { padding: 14px 30px; }
+  .logo.sm { margin-right: 24px; } .logo.sm img { height: 210px; margin: -10px -12px; }
+  .when2 { flex: 1; align-self: stretch; display: flex; flex-direction: column; justify-content: center; padding-left: 26px; }
+  .slot { display: flex; align-items: center; gap: 16px; }
+  .slot + .slot { border-top: 3px solid #E87C3E; margin-top: 8px; padding-top: 8px; }
+  .slot .txt { flex: 1; min-width: 0; }
+  .slot .lab { font-size: 13px; letter-spacing: 2.5px; }
+  .slot .tl { font-family: Bitter, Georgia, serif; font-weight: 800; font-size: 46px; line-height: 1.02; color: #FFFFFF; white-space: nowrap; }
+  .slot .tl .h { color: #E87C3E; font-size: 30px; letter-spacing: 1px; margin-left: 8px; }
+  .slot .tile { width: 92px; height: 92px; background: #FFFFFF; padding: 6px; box-sizing: border-box; border-radius: 7px; }
+  .slot .tile svg { width: 80px; height: 80px; display: block; }
+  .slot .cap { font-size: 8px; font-weight: 700; letter-spacing: 1px; color: #9DB4D6; text-align: center; margin-top: 3px; }
   .names { font-family: Bitter, Georgia, serif; font-size: 64px; line-height: 1.04; text-align: center; white-space: nowrap;
            max-width: 752px; }
   .names .f { font-weight: 600; }
@@ -70,6 +84,20 @@
     <div class="cut"></div>
     {% for s in page %}
     <div class="sign">
+      {% if s.slots %}
+      <div class="band two">
+        <div class="logo sm"><img src="/static/lsc-logo-dark.png" alt="Lone Star Cup · The Hideout"></div>
+        <div class="div"></div>
+        <div class="when2">
+          {% for sl in s.slots %}
+          <div class="slot">
+            <div class="txt"><div class="lab">{{ sl.lab }}</div><div class="tl">{{ sl.tee_time }}<span class="h">HOLE {{ sl.hole }}</span></div></div>
+            {% if sl.qr_svg %}<div><div class="tile">{{ sl.qr_svg|safe }}</div><div class="cap">{{ sl.cap }}</div></div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
       <div class="band">
         <div class="logo"><img src="/static/lsc-logo-dark.png" alt="Lone Star Cup · The Hideout"></div>
         <div class="div"></div>
@@ -87,6 +115,7 @@
         </div>
         {% endif %}
       </div>
+      {% endif %}
       <div class="team" style="background: {{ s.color }};">
         <span class="r"></span><span class="t">TEAM {{ s.team }}</span><span class="r"></span>
       </div>

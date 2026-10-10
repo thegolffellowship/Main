@@ -5799,7 +5799,7 @@ def _print_pack_render(template, **ctx):
 CUP_FILE_SESSIONS = (("sat-am", "SatAM-Fourball"), ("sat-pm", "SatPM-Foursomes"), ("sun", "Sun-Singles"))
 
 
-def build_cup_print_files(event_id: int, sessions=None) -> dict:
+def build_cup_print_files(event_id: int, sessions=None, combine_saturday: bool = True) -> dict:
     """THE CUP'S PRINT FILES, one PDF per report per session (Kerry 10/9:
     Saturday and Sunday "Yes send them", separate files for the course).
     Each session gets the Cup's own Starter Sheet (lsc_starter), its design
@@ -5817,6 +5817,7 @@ def build_cup_print_files(event_id: int, sessions=None) -> dict:
     stub = print_file_stub(ev) or f"event-{event_id}"
     want = [s for s in CUP_FILE_SESSIONS if not sessions or s[0] in sessions]
     htmls, names, problems = [], [], []
+    label_signs = None
     for sid, label in want:
         s = lsc_starter.build(int(event_id), session_id=sid)
         if s:
@@ -5824,15 +5825,26 @@ def build_cup_print_files(event_id: int, sessions=None) -> dict:
             names.append(f"{stub}-{label}-StarterSheet.pdf")
         else:
             problems.append(f"{sid}: no starter sheet")
-        cs = cup_cart_signs_data(int(event_id), session_id=sid)
-        if cs.get("error") or not cs.get("count"):
+        # Saturday: one combined AM/PM sign per cart, filed with the AM
+        # session; the PM session prints none (Kerry 10/9: "Combined")
+        if sid == "sat-pm" and combine_saturday and any(w[0] == "sat-am" for w in want):
+            cs = None
+        elif sid == "sat-am" and combine_saturday:
+            cs = cup_saturday_combined_signs_data(int(event_id))
+            label_signs = "Sat-AM-PM-CartSigns"
+        else:
+            cs = cup_cart_signs_data(int(event_id), session_id=sid)
+        if cs is None:
+            pass
+        elif cs.get("error") or not cs.get("count"):
             problems.append(f"{sid}: no cart signs ({cs.get('error') or 'none drawn'})")
         else:
             problems += [f"{sid} cart signs: {p}" for p in cs.get("problems") or []]
             if not cs.get("qr_on"):
                 problems.append(f"{sid} cart signs: QR off (score_entry_qr dial)")
             htmls.append((f"{sid}-signs", _print_pack_render("cup_cart_signs.html", d=cs)))
-            names.append(f"{stub}-{label}-CartSigns.pdf")
+            names.append(f"{stub}-{label_signs}.pdf" if (sid == "sat-am" and combine_saturday)
+                         else f"{stub}-{label}-CartSigns.pdf")
         sc = build_scorecards(int(event_id), "3up", "team", qr="on", session=sid)
         if not sc or sc.get("gaps"):
             problems.append(f"{sid}: scorecards not printed ({(sc or {}).get('gaps')})")
@@ -6084,7 +6096,8 @@ def cup_cart_signs_data(event_id: int, preview: bool = False, session_id: str | 
                 signs.append({"team": team[0].upper(), "color": team[1], "riders": rows,
                               "tee_time": g.get("tee_time") or "", "hole": str(g.get("start_hole") or 1),
                               "qr_svg": qr, "url": g.get("url"), "session": sid,
-                              "match": _CUP_SESSION_TITLE.get(sid, "")})
+                              "match": _CUP_SESSION_TITLE.get(sid, ""), "side": side,
+                              "cids": [int(p["customer_id"]) for p in riders if p.get("customer_id")]})
     if not signs and not preview:
         # Not seeded yet: the signs fill straight from THE DRAW (Kerry 10/8:
         # "autopopulate ... that then feeds into all the reports"). The
@@ -6097,6 +6110,53 @@ def cup_cart_signs_data(event_id: int, preview: bool = False, session_id: str | 
     return {"event": sheets["event"], "pages": pages, "count": len(signs), "preview": preview,
             "qr_on": qr_on, "problems": problems,
             "empty_note": "This round isn't drawn yet. Its cart signs fill in from THE DRAW."}
+
+
+def cup_saturday_combined_signs_data(event_id: int) -> dict:
+    """ONE SATURDAY CART SIGN PER CART (Kerry 10/9: "Don't need Sat PM Cart
+    signs because players will have the same cart" ... "Combined"). Each
+    pair keeps its cart all day, so its sign carries the AM Fourball row
+    (weekend match no., tee, hole, that group's scoring QR) over the PM
+    Foursomes row. Built from the two sessions' own signs, so every QR is
+    the live group link; a pair missing from either session is a problem,
+    never a half sign."""
+    from email_parser.score_entry import _json_setting
+    am = cup_cart_signs_data(event_id, session_id="sat-am")
+    pm = cup_cart_signs_data(event_id, session_id="sat-pm")
+    for d in (am, pm):
+        if d.get("error"):
+            return d
+    dial = _json_setting("lsc_matches")
+    match_no, n = {}, 0
+    for sess in dial.get("sessions") or []:
+        for m in sess.get("matches") or []:
+            n += 1
+            for side in ("austin", "sa"):
+                cids = frozenset(int(c) for c in m.get(side) or [])
+                if cids:
+                    match_no[(sess.get("id"), cids)] = n
+    flat = lambda d: [s for pg in d.get("pages") or [] for s in pg]  # noqa: E731
+    pm_by = {(s.get("side"), frozenset(s.get("cids") or [])): s for s in flat(pm)}
+    signs, problems = [], list(am.get("problems") or []) + list(pm.get("problems") or [])
+    for a in flat(am):
+        key = (a.get("side"), frozenset(a.get("cids") or []))
+        b = pm_by.pop(key, None)
+        if b is None:
+            problems.append("no Sat PM sign for " + " & ".join(r["last"] for r in a["riders"]))
+            continue
+        slots = []
+        for v, lab, cap in ((a, "SAT AM \u00b7 FOURBALL", "SCAN AM SCORE"),
+                            (b, "SAT PM \u00b7 FOURSOMES", "SCAN PM SCORE")):
+            no = match_no.get((v.get("session"), key[1]))
+            slots.append({"lab": lab + (f" \u00b7 MATCH {no}" if no else ""), "tee_time": v.get("tee_time"),
+                          "hole": v.get("hole"), "qr_svg": v.get("qr_svg"), "cap": cap})
+        signs.append({**a, "slots": slots, "session": "sat", "match": "Saturday"})
+    for b in pm_by.values():
+        problems.append("no Sat AM sign for " + " & ".join(r["last"] for r in b["riders"]))
+    pages = [signs[i:i + 2] for i in range(0, len(signs), 2)]
+    return {"event": am.get("event"), "pages": pages, "count": len(signs), "preview": False,
+            "qr_on": bool(am.get("qr_on") and pm.get("qr_on")), "problems": problems,
+            "empty_note": "Saturday isn't drawn yet."}
 
 
 @app.route("/events/<int:event_id>/cup-cart-signs")

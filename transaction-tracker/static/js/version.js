@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.535.3";
+window.TGF_VERSION = "2.535.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.4",
+    date: "2026-10-09",
+    title: "Lone Star Cup: one combined Saturday cart sign per cart in the print files",
+    changes: [
+      "Kerry 10/9: \"Don't need Sat PM Cart signs because players will have the same cart ... a combined cart sign for Saturday where everything is the same except both morning and afternoon times show\" / \"1. Combined\". The Cup print files (scoring-print-pack-pdf:<id>|cup-files) now carry ONE Saturday cart sign per cart pair (Sat-AM-PM-CartSigns.pdf): the AM Fourball row (weekend match no., tee, hole, that group's scoring QR) over the PM Foursomes row, built from the two sessions' own signs so every QR is the live group link. No separate Sat AM or Sat PM sign file prints; a pair missing from either session is listed as a problem, never printed half. app.cup_saturday_combined_signs_data; template cup_cart_signs.html (s.slots). Guard test_cup_sat_combined_signs.py."
+    ]
+  },
   {
     version: "2.535.3",
     date: "2026-10-09",

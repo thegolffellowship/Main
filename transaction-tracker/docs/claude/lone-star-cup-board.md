@@ -1206,3 +1206,13 @@ singles board has no Handicaps box and its Idx / PH stay hidden
 (`board.noHcp`, `data-nohcp`; the shared Handicaps handler skips such
 tables). As on every event board, Show All Players ranks the grey rows inside
 their band.
+
+## Combined Saturday cart sign (v2.535.4, Kerry 10/9)
+
+Kerry: "Don't need Sat PM Cart signs because players will have the same cart"
+... "Combined". `app.cup_saturday_combined_signs_data` pairs each cart's Sat AM
+and Sat PM signs (by side + customer ids) and prints one sign with both rows,
+each with its own group QR and weekend match number. `build_cup_print_files`
+(combine_saturday, default on) files it as `<stub>-Sat-AM-PM-CartSigns.pdf`
+and prints no separate Sat AM/PM signs. Guard `test_cup_sat_combined_signs.py`.
+
