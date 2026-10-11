@@ -1228,7 +1228,10 @@ checks JPEG bytes, a 600 KB cap and that every id is a customer. Reads:
 `/api/player-photos` (ids + version stamps, no names, member tier) and
 `/member/photo/h|t/<key>.jpg` (404 = keep the initials). Write: the bridge
 `scoring-player-photo:list | headshot|<cid>|<b64> | team|<a>,<b>|<b64> |
-remove|<kind>|<ids>`. Shown on: SCORING's match strip and the LEADERBOARD
+remove|<kind>|<ids>`. SEED: the first set (all 28 Cup players + the 14 Saturday pairs, Kerry
+10/10) ships in the repo at `data/player_photos/`; the index and the read take
+the seed first and the volume over it, so an upload replaces a seed photo.
+Shown on: SCORING's match strip and the LEADERBOARD
 strips (singles headshots only; pairs keep initials), the opened Cup card
 (singles face-off, pair duo shot), Spotlight's header. After the Cup: the
 photo table + upload page + per-player opt-out (#1577), photos in the recap

@@ -49,7 +49,9 @@ r = tc.get("/api/player-photos")
 check("the index is public (member tier) and carries no names", r.status_code == 200
       and "Barstow" not in r.get_data(as_text=True), r.status_code)
 check("a headshot serves as a JPEG", tc.get("/member/photo/h/62.jpg").mimetype == "image/jpeg")
-check("a missing photo is a 404 (the page keeps its initials)", tc.get("/member/photo/h/672.jpg").status_code == 404)
+check("a missing photo is a 404 (the page keeps its initials)", tc.get("/member/photo/h/999999.jpg").status_code == 404)
+check("the Cup seed set serves from the repo (David Wetz, the Wetz & Barstow pair)", tc.get("/member/photo/h/672.jpg").status_code == 200
+      and tc.get("/member/photo/t/672-62.jpg").status_code == 200 and "62-672" in pp.photo_index()["t"])
 
 import mcp_server as M                                            # noqa: E402
 b64 = base64.b64encode(JPEG).decode()

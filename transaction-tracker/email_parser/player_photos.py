@@ -14,6 +14,11 @@ library); this module only checks the bytes are a JPEG of sane size and
 that every customer_id is a real customer. The index (`photo_index`) is
 ids and a version stamp only, no names, so the public read is PII-free.
 The proper photos table and upload page come after the Cup (#1577).
+
+SEED: the first set (the Lone Star Cup 2026 players, Kerry 10/10) ships in
+the repo at data/player_photos/, same names, already cropped and graded,
+so it is on the site from the deploy without 42 uploads. A photo written
+to the volume replaces the seed one for that person or pair.
 """
 from __future__ import annotations
 
@@ -25,6 +30,9 @@ from pathlib import Path
 MAX_BYTES = 600 * 1024
 KINDS = ("headshot", "team")
 _NAME = re.compile(r"^(h-(\d+)|t-(\d+)-(\d+))\.jpg$")
+
+
+SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "player_photos"
 
 
 def photo_dir(db_path=None) -> Path:
@@ -100,18 +108,19 @@ def photo_index(db_path=None) -> dict:
     """{"h": {"<cid>": version}, "t": {"<a>-<b>": version}}: who has a
     photo, and a stamp that changes when it is replaced (cache busting)."""
     out = {"h": {}, "t": {}}
-    d = photo_dir(db_path)
-    if not d.is_dir():
-        return out
-    for p in d.iterdir():
-        m = _NAME.match(p.name)
-        if not m:
+    # the seed first, then the volume, so an upload replaces a seed photo
+    for d in (SEED_DIR, photo_dir(db_path)):
+        if not d.is_dir():
             continue
-        v = int(p.stat().st_mtime)
-        if m.group(2):
-            out["h"][m.group(2)] = v
-        else:
-            out["t"][f"{m.group(3)}-{m.group(4)}"] = v
+        for p in d.iterdir():
+            m = _NAME.match(p.name)
+            if not m:
+                continue
+            v = int(p.stat().st_mtime)
+            if m.group(2):
+                out["h"][m.group(2)] = v
+            else:
+                out["t"][f"{m.group(3)}-{m.group(4)}"] = v
     return out
 
 
@@ -124,5 +133,8 @@ def photo_file(kind: str, key: str, db_path=None) -> Path | None:
         name = f"t-{team_key(key.split('-'))}.jpg"
     else:
         return None
-    p = photo_dir(db_path) / name
-    return p if p.is_file() else None
+    for d in (photo_dir(db_path), SEED_DIR):      # an upload wins over the seed
+        p = d / name
+        if p.is_file():
+            return p
+    return None
