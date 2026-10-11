@@ -1221,6 +1221,16 @@ and prints no separate Sat AM/PM signs. Guard `test_cup_sat_combined_signs.py`.
 
 
 
+## Names: a suffix is not a surname (v2.536.2, Kerry 2026-10-10)
+
+"James Wilson Jr.s last name is Wilson not jr. that's a suffix." Every Cup
+surface that cuts a name to a surname or initials skips a trailing Jr / Sr /
+II / III / IV / V (names of three or more words only): contests.html
+`mpNameWords` under `mpFirstLast` / `mpMono` (strips, opened cards, face-off,
+duo captions, Strokes off low); score_entry.html `surnameAt` (match strip
+initials, the match-won banner's "First LAST"). The server's `lines` already
+read "James WILSON Jr". Guards: test_lsc_cup_card.js, test_se_name_suffix.js.
+
 ## Player photos (v2.536.0, Kerry 2026-10-10)
 
 Headshots and team duo shots on the Cup surfaces. Files, not a table:

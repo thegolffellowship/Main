@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.536.1";
+window.TGF_VERSION = "2.536.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.536.2",
+    date: "2026-10-10",
+    title: "Lone Star Cup: a name suffix is not a last name (WILSON, not JR)",
+    changes: [
+      "Kerry 10/10, on the opened Foursomes card: \"James Wilson Jr.s last name is Wilson not jr. that's a suffix. I approve you making those changes.\" The pages took the last word of a name as the surname, so James Wilson Jr read \"CALLAWAY & JR\" under the duo shot, \"CALLAWAY / Jr\" on the Strokes off low line and \"JJ\" in his initials chip. contests.html's mpFirstLast and mpMono now go through mpNameWords, which drops a trailing Jr / Sr / II / III / IV / V (with or without a period or comma) when the name has more than two words, so he reads WILSON and JW on the LEADERBOARD's match strips, opened cards and face-off. On SCORING (score_entry.html) the single-player initials and the match-won banner's \"First LAST\" skip the suffix the same way (\"James WILSON Jr\"). A two-word name is never cut. Tests: test_lsc_cup_card.js (3 checks), test_se_name_suffix.js (new)."
+    ]
+  },
   {
     version: "2.536.1",
     date: "2026-10-10",

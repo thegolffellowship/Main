@@ -5579,8 +5579,19 @@
         if (r.withdrawn) return true;
         return (r.wins||0)===0 && (r.losses||0)===0 && (r.draws||0)===0 && (r.played||0)===0;
     }
+    // A name suffix is not a surname (Kerry 10/10: "James Wilson Jr.s last
+    // name is Wilson not jr. that's a suffix"): "James Wilson Jr" -> last
+    // WILSON, monogram JW. The suffix rides along in `first` only so the full
+    // name still reads back; nothing shows it as the last name.
+    function mpNameWords(name) {
+        const MP_NAME_SUFFIX = /^(jr|sr|ii|iii|iv|v)\.?$/i;   // inside: callable before this line runs
+        const w = String(name || '').trim().split(/\s+/).filter(Boolean);
+        while (w.length > 2 && MP_NAME_SUFFIX.test(w[w.length - 1].replace(/,$/, ''))) w.pop();
+        if (w.length > 1) w[w.length - 1] = w[w.length - 1].replace(/,$/, '');
+        return w;
+    }
     function mpFirstLast(name) {
-        const parts = String(name||'').trim().split(/\s+/);
+        const parts = mpNameWords(name);
         if (parts.length <= 1) return { first: '', last: parts[0] || '—' };
         return { first: parts.slice(0,-1).join(' '), last: parts[parts.length-1] };
     }
@@ -7856,7 +7867,7 @@
     // Monogram from a display name — "Robert Straiton" → "RS" (Slate & Clay).
     function mpMono(name) {
         if (!name) return '';
-        const parts = String(name).trim().split(/\s+/);
+        const parts = mpNameWords(name);
         const a = parts[0] ? parts[0][0] : '';
         const b = parts.length > 1 ? parts[parts.length - 1][0] : '';
         return (a + b).toUpperCase();

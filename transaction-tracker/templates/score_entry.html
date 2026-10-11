@@ -745,6 +745,11 @@
         const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g,
             (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
         const first = (n) => String(n || "").split(" ")[0];
+        // A name suffix is not a surname (Kerry 10/10: "James Wilson Jr.s last
+        // name is Wilson not jr. that's a suffix"): the index of the surname
+        // word, skipping a trailing Jr / Sr / II / III / IV / V.
+        const SE_SUFFIX = /^(jr|sr|ii|iii|iv|v)\.?,?$/i;
+        const surnameAt = (w) => { let i = w.length - 1; while (i > 1 && SE_SUFFIX.test(w[i])) i--; return i; };
 
         // ── derived state ───────────────────────────────────────────────
         function byId(cid) { return card.players.find((p) => p.customer_id === cid) || {}; }
@@ -1459,7 +1464,7 @@
             const col = cup ? ["#BF5700", "#4B6274"] : ["#2F5D74", "#C1673F"];
             const fn = m.full_names || [[m.names[0]], [m.names[1]]];
             const mono = (side) => side.map((n) => (String(n).trim()[0] || "")).join("")
-                + (side.length === 1 ? (String(side[0]).trim().split(/\s+/).slice(-1)[0] || "")[0] || "" : "");
+                + (side.length === 1 ? ((w) => (w[surnameAt(w)] || "")[0] || "")(String(side[0]).trim().split(/\s+/)) : "");
             const nm = (side, right) => {
                 // A PAIR stacks one partner per line, first initial + LAST
                 // (Kerry 10/9: "For team matches on SCORING just show stacked
@@ -1908,7 +1913,9 @@
         const wonKey = (m) => "se_mwon_" + tk + "_" + m.match_id;
         const firstLAST = (n) => {
             const w = String(n || "").trim().split(/\s+/).filter(Boolean);
-            return w.length > 1 ? w.slice(0, -1).join(" ") + " " + w[w.length - 1].toUpperCase() : (w[0] || "").toUpperCase();
+            if (w.length < 2) return (w[0] || "").toUpperCase();
+            const i = surnameAt(w);   // "James Wilson Jr" -> "James WILSON Jr"
+            return [...w.slice(0, i), w[i].toUpperCase(), ...w.slice(i + 1)].join(" ");
         };
         // the words, pinned by test_lsc_match_won.py
         function wonWords(m) {

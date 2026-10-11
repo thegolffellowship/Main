@@ -13,7 +13,7 @@ const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
 // player photos (Kerry 10/10): the opened card heads with a singles
 // face-off or the pair's duo shot when there is one; none here by default
 let lscPhotos = { h: {}, t: {} };
-eval(grab("mpMono")); eval(grab("mpFirstLast")); eval(grab("lscPhotoOf")); eval(grab("lscPhotoHead")); eval(grab("lscCupGrid"));
+eval(grab("mpNameWords")); eval(grab("mpMono")); eval(grab("mpFirstLast")); eval(grab("lscPhotoOf")); eval(grab("lscPhotoHead")); eval(grab("lscCupGrid"));
 // four-ball: Austin 1 & 2 v SA 3 & 4. Hole 1 SA wins with 3's 4; hole 2
 // Austin wins with 2's net 3 (4 less a pop) while 1 picked up at 7.
 const m = { format: "fourball", closed_at_order: null,
@@ -77,6 +77,22 @@ const sm = { format: "singles", players: [{ customer_ids: [5], lines: ["Bill BAR
 const fo = lscCupGrid(sm, { live: true, liveLead: { side: "A", bar: "2 UP", margin: "2 UP", thru: 12 } });
 check("a singles card opens on the face-off: headshot one side, initials the other, the margin between",
       /lsc-face a"><img src="\/member\/photo\/h\/5\.jpg\?v=1"/.test(fo) && /lsc-face b">RC</.test(fo) && /lsc-fo-mid a">2 UP<small>THRU 12<\/small>/.test(fo), fo.slice(0, 400));
+
+// A suffix is not a surname (Kerry 10/10: "James Wilson Jr.s last name is
+// Wilson not jr. that's a suffix")
+check("Jr is a suffix: last name WILSON, monogram JW",
+      mpFirstLast("James WILSON Jr").last === "WILSON" && mpMono("James Wilson Jr") === "JW"
+      && mpFirstLast("Bob Smith III").last === "Smith" && mpMono("Al Jones, Jr.") === "AJ",
+      [mpFirstLast("James WILSON Jr"), mpMono("James Wilson Jr"), mpMono("Al Jones, Jr.")]);
+check("a two-word name is never cut (a surname that looks like a suffix stays)",
+      mpFirstLast("Chris V").last === "V" && mpMono("Rob Callaway") === "RC");
+const jr = { format: "chapman", players: [{ customer_ids: [7, 8], lines: ["Julius JENKINS", "Kaleb MCDONNELL"] },
+             { customer_ids: [35, 306], lines: ["Rob CALLAWAY", "James WILSON Jr"] }],
+  holes: [{ hole: 1, order: 1, winner: null }], hole_pars: { "1": 4 }, strokes: {}, scores: {}, picked_up: {} };
+lscPhotos = { h: {}, t: { "35-306": 1, "7-8": 1 } };
+const jh = lscCupGrid(jr, { live: false });
+check("the pair's duo caption and strokes line read CALLAWAY & WILSON, never JR",
+      /CALLAWAY &amp; WILSON/i.test(jh) && !/&amp; JR\b/i.test(jh) && !/\/ Jr\b/.test(jh), jh.slice(0, 900));
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");
 process.exit(fails ? 1 : 0);
