@@ -107,6 +107,10 @@ check("bad hole / range / outsider are invalid",
 clr = se.write_scores(gid, "phone-A", 101, [
     {"op_id": "A4", "customer_id": 102, "hole": 1, "gross": None}])
 check("a hole can be cleared", "1" not in se.get_group_card(gid)["scores"].get("c:102", {}))
+ht = se.hole_save_times(rid)
+check("hole save times: a saved hole carries its server time, a cleared one is left out",
+      ht["subjects"]["c:101"]["holes"].get("1") and "1" not in ht["subjects"].get("c:102", {}).get("holes", {})
+      and ht["groups"].get(gid) == "Hole 1", ht)
 
 print("max triple + no ace on a par 5 (Kerry 2026-09-25)")
 check("bounds: par 3 is 1-6, par 4 is 1-7, par 5 is 2-8",

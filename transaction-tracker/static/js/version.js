@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.536.2";
+window.TGF_VERSION = "2.536.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.536.3",
+    date: "2026-10-11",
+    title: "Score entry: when each hole was saved (read-only bridge)",
+    changes: [
+      "Kerry 10/11, closing out the Lone Star Cup: \"Give me a write up of the final email ... and who closed out the win for SA.\" The Cup board knows each match's closing hole but not the clock, so the recap could not name the clinching match. New read-only score_entry.hole_save_times(round_id) and bridge scoring-se-hole-times:<round_id> return, per player or team, the server time (UTC) each hole was saved; a blanked hole is left out. Nothing is written. Guard in test_score_entry.py."
+    ]
+  },
   {
     version: "2.536.2",
     date: "2026-10-10",

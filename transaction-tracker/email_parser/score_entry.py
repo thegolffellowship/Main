@@ -3392,6 +3392,25 @@ def open_rounds_on(day: str, db_path=None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def hole_save_times(round_id: int, db_path=None) -> dict:
+    """WHEN each hole was saved, read-only (Kerry 10/11: "who closed out the
+    win for SA"): the board knows each match's closing hole but not the
+    clock, so the recap could not name the clinching match. For one round:
+    {"round_id", "groups": {group_id: label}, "subjects": {subject_key:
+    {"group_id", "holes": {hole: server_ts}}}}, server_ts UTC as stored.
+    A blanked hole (gross NULL) is left out."""
+    with _closing(_conn(db_path)) as conn:
+        groups = {g["id"]: g["label"] for g in conn.execute(
+            "SELECT id, label FROM se_groups WHERE round_id = ?", (int(round_id),))}
+        subjects: dict = {}
+        for s in conn.execute(
+                "SELECT subject_key, group_id, hole_number, server_ts FROM se_hole_scores "
+                "WHERE round_id = ? AND gross IS NOT NULL", (int(round_id),)):
+            d = subjects.setdefault(s["subject_key"], {"group_id": s["group_id"], "holes": {}})
+            d["holes"][str(s["hole_number"])] = s["server_ts"]
+    return {"round_id": int(round_id), "groups": groups, "subjects": subjects}
+
+
 def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None) -> dict:
     with _closing(_conn(db_path)) as conn:
         vr = conn.execute("SELECT version, updated_at FROM se_event_versions "

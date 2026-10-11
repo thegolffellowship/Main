@@ -1811,6 +1811,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-se-cup-seed:<event_id>[|apply]  Lone Star Cup rounds from lsc_matches, tees from lsc_tees, PH off that tee (dry run by default)
       scoring-se-gate-check:<event_id>[|<chapter>]  read-only: status codes a manager / a player link get (per-event opt-in proof)
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
+      scoring-se-hole-times:<round_id>  read-only: when each hole was saved (UTC), per player/team
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
       scoring-se-clear-group:<group_id>[|apply][|checks]  start one group's card over (|checks: also a submitted TEST card's checks): scores, marks, CTP answers and the scorer lock go, signatures voided; the cleared scores stay in se_audit (dry run by default; open rounds only)
@@ -3521,6 +3522,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_se.round_status(int(arg.strip())), indent=2, default=str)
             except ValueError:
                 return json.dumps({"error": "usage: scoring-se-status:<event_id>"})
+        if cmd == "scoring-se-hole-times":
+            # scoring-se-hole-times:<round_id> — read-only: when each hole was
+            # saved (server time, UTC), per player/team. Kerry 10/11: who
+            # closed out the Cup win; the board has no finish times.
+            from email_parser import score_entry as _se
+            try:
+                return json.dumps(_se.hole_save_times(int(arg.strip())), indent=2)
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-hole-times:<round_id>"})
         if cmd == "scoring-se-links":
             # scoring-se-links:<round_id> — one link per group (Kerry hands them out).
             from email_parser import score_entry as _se

@@ -419,6 +419,10 @@ is Triple".
   preview's demo match (`scoring-se-preview:<event>|<cids>|apply|18|match`);
   it is also the place a non-cup match would bind. Read the state with
   `scoring-se-status:<event>`.
+- **When each hole was saved** (v2.536.3, read-only): `hole_save_times(round_id)` /
+  `scoring-se-hole-times:<round_id>`, the server time (UTC) of every saved hole per
+  player or team. The Cup board has no finish times; this is how the clinching match is
+  told (Kerry 10/11).
 - **Help and the paper card (v2.496.1, Kerry 2026-09-26).** Help is the How
   It Works pill (orange, white Bitter capitals, as `.pr-hiw-link`). "Who kept
   the paper card?" offers **Me**; picking it shows "Next time, please have
