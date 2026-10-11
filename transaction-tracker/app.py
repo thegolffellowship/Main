@@ -1981,6 +1981,18 @@ def start_scheduler():
                             res.get("pruned", 0))
             else:
                 logger.error("DB backup FAILED: %s", res.get("error"))
+            # The files behind the database (player photos, card photos):
+            # archived only when their content changed (CoS #1604).
+            try:
+                from email_parser.backups import run_files_backup
+                fb = run_files_backup()
+                if fb.get("ok"):
+                    logger.info("Files backup OK — %s", fb.get("skipped") or
+                                f"{fb.get('files')} files, {(fb.get('bytes_gz') or 0)/1024:.0f} KB gz")
+                else:
+                    logger.error("Files backup FAILED: %s", fb.get("error"))
+            except Exception:
+                logger.warning("Files backup failed (non-fatal)", exc_info=True)
             # Mirror the living docs into Kerry's OneDrive folders in the
             # same pass (Kerry 2026-09-03: "nothing can fall thru the
             # cracks"). The Claude M365 connector is read-only, so the
