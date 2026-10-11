@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.536.3";
+window.TGF_VERSION = "2.536.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.536.4",
+    date: "2026-10-11",
+    title: "Lone Star Cup: a direct link to each session's skins",
+    changes: [
+      "Kerry 10/11: \"the skins leaderboard link doesn't have a direct link and lands on the regular leaderboard. Add page links for the skins.\" The Cup board now reads ?view=skins (opens the Skins view instead of Matches) and ?session=<sat-am|sat-pm|sun> or the format name (fourball|foursomes|singles), which picks the session whose skins come first. So /member/lonestarcup?view=skins&session=sun lands on Sunday's skins. ?match= still wins for a scorer's FOLLOW THE CUP link, and ?info= still opens Event Info. Guard in test_lsc_skins_pane.js."
+    ]
+  },
   {
     version: "2.536.3",
     date: "2026-10-11",

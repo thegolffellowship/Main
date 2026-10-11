@@ -3375,10 +3375,19 @@
         // Track A #1357-6) opens on that match's session, card open.
         const FMT_TAB = { fourball: "Fourball", chapman: "Foursomes", foursomes: "Foursomes",
                           alternate_shot: "Foursomes", singles: "Singles" };
-        const wantM = new URLSearchParams(location.search).get("match");
+        const lscQs = new URLSearchParams(location.search);
+        const wantM = lscQs.get("match");
+        // A LINK STRAIGHT TO A SESSION'S SKINS (Kerry 10/11: "the skins
+        // leaderboard link doesn't have a direct link and lands on the regular
+        // leaderboard. Add page links for the skins"): ?view=skins opens the
+        // Skins view, ?session=<sat-am|sat-pm|sun or fourball|foursomes|
+        // singles> picks the session (its skins first). ?match= still wins.
+        const SESS_ALIAS = { fourball: "sat-am", foursomes: "sat-pm", chapman: "sat-pm", singles: "sun" };
+        const wantS = String(lscQs.get("session") || "").trim().toLowerCase();
         if (window.lscSel == null || !sessions.some(x => x.id === window.lscSel)) {
             const byM = wantM && sessions.find(x => x.matchIds.includes(wantM));
-            const pick = byM || sessions.find(x => x.live) || sessions.find(x => x.upcoming)
+            const byS = wantS && sessions.find(x => String(x.id).toLowerCase() === (SESS_ALIAS[wantS] || wantS));
+            const pick = byM || byS || sessions.find(x => x.live) || sessions.find(x => x.upcoming)
                          || sessions[sessions.length - 1];
             window.lscSel = pick ? pick.id : null;
         }
@@ -3386,8 +3395,9 @@
         // Lone Star cup Members page under the Lone Star cup"). A link opens
         // it with ?info=<schedule|teams|formats|fourball|...|skins>.
         if (!window.lscView) {
-            const wantInfo = new URLSearchParams(location.search).get("info");
-            window.lscView = wantInfo ? "info" : "matches";
+            const wantInfo = lscQs.get("info");
+            const wantV = String(lscQs.get("view") || "").trim().toLowerCase();
+            window.lscView = wantInfo ? "info" : (wantV === "skins" ? "skins" : "matches");
             if (wantInfo && wantInfo !== "1") { window.lscInfoKey = wantInfo; window.lscInfoScroll = true; }
         }
         const cur = sessions.find(x => x.id === window.lscSel) || sessions[0];

@@ -1221,6 +1221,13 @@ and prints no separate Sat AM/PM signs. Guard `test_cup_sat_combined_signs.py`.
 
 
 
+## Direct links (v2.536.4, Kerry 2026-10-11)
+
+`/member/lonestarcup?view=skins&session=sun` opens a session's skins: `view=skins`
+selects the Skins view, `session=` takes `sat-am|sat-pm|sun` or `fourball|foursomes|singles`
+(that session's skins first). `?match=<id>` still wins (scorer FOLLOW THE CUP);
+`?info=<section>` still opens Event Info.
+
 ## Names: a suffix is not a surname (v2.536.2, Kerry 2026-10-10)
 
 "James Wilson Jr.s last name is Wilson not jr. that's a suffix." Every Cup

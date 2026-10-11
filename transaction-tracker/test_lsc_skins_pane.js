@@ -192,5 +192,15 @@ check("an event body is wired through the same evlbWireBoards", /function evlbWi
 // (Kerry 10/8), the same body /member/lonestarcup/info shows
 check("the board offers How skins work -> Event Info, Skins, in place",
       /href="\?info=skins" data-lscinfo="skins">How skins work/.test(src));
+
+// DIRECT LINKS (Kerry 10/11: "Add page links for the skins"): the board reads
+// ?view=skins and ?session=<id or format name> to open a session's skins.
+{
+    const src2 = require("fs").readFileSync(require("path").join(__dirname, "templates/contests.html"), "utf8");
+    check("?view=skins opens the Skins view", /wantV === "skins" \? "skins"/.test(src2));
+    check("?session= picks the session, format names allowed",
+          /SESS_ALIAS = \{ fourball: "sat-am", foursomes: "sat-pm", chapman: "sat-pm", singles: "sun" \}/.test(src2)
+          && /const pick = byM \|\| byS \|\|/.test(src2));
+}
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");
 process.exit(fails ? 1 : 0);
