@@ -2973,13 +2973,13 @@
     // Handicaps toggles, sortable headers and PAR row. Each row is an
     // ENTRY: a team on Saturday (team NET: the ball that counted, its pops
     // marked), a player on Sunday (individual GROSS, one band per flight).
-    // MONEY: the event board shows members the Won column once every card
-    // is in; the Cup does not. Cup skins are staff-only money (CA #726,
-    // strip_money on the server), so members never get a Won column here,
-    // and staff get it only once the session's cards are all in.
+    // MONEY: like the event board, the Won column shows once every card is
+    // in, to members too (Kerry 10/10: "skins money winnings wasn't showing
+    // on SKINS leaderboard. Should be a column that shows now"). The server
+    // sends members each winner's payout only once the session is final;
+    // the pot and per-player splits stay staff only (strip_money).
     function lscSkinsEvlbData(sess) {
         const sk = sess.skins || {};
-        const staff = sk.pot_cents != null;
         const groups = sk.groups || [];
         const holeSet = new Set(), par = {};
         groups.forEach(g => {
@@ -3001,8 +3001,8 @@
                     overall_board: [], sections: [],
                     // a hole circled before every card is in says so
                     field_complete: complete,
-                    // members never; staff once the round is in
-                    _moneyHeld: !staff || !complete };
+                    // everyone, once the round is in
+                    _moneyHeld: !complete };
         groups.forEach(g => {
             const won = {}, pay = {};
             (g.holes || []).forEach(h => {
@@ -3021,7 +3021,7 @@
                     if (par[h[0]] == null) parOk = false; else parT += par[h[0]];
                 });
                 const meta = (g.entries || {})[t.key] || {};
-                const cents = staff ? (pay[t.key] || 0) : 0;
+                const cents = pay[t.key] || 0;
                 const r = { scoring_round_id: rid, player_name: t.label || "",
                     index: meta.index ?? null, hcp: meta.ph ?? "",
                     gross: hs.length ? gross : null, net: hs.length ? gross - pops : null,

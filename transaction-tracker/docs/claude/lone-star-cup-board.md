@@ -89,11 +89,14 @@ tap-open hole-by-hole scorecards.
   {hole: [gross, pops]}}, the counting ball), `par` and `entry_cids`;
   `compute_skins_payout` adds `cards`, `par` and `entries` ({key: {index,
   ph}}) per group. `strip_money` keeps holes/members/entrants/cards/par/
-  entries for members (scores, no money); pot, payouts, flags stay staff
-  only. **Money differs from the event leaderboard on purpose:** the event
-  board shows members its Won column once every card is in; the Cup never
-  shows members a dollar (CA #726), and staff get Won only once that
-  session's cards are all in (`_moneyHeld`). Guard `test_lsc_skins_pane.js`.
+  entries for members (scores), plus each group's `payouts` cut to
+  `{key, cents}` (null until the session is final); the pot, unpaid,
+  per-player splits and flags stay staff only. **Money, v2.536.1 (Kerry
+  10/10: "skins money winnings wasn't showing on SKINS leaderboard. Should
+  be a column that shows now"; this reverses CA #726 for the Won column):**
+  like the event board, the Won column shows everyone each winner's share
+  once every card in that session is in (`_moneyHeld = !complete`); members
+  never see the pot line. Guard `test_lsc_skins_pane.js`, `test_lsc_cup.py`.
   **WINNERS → PAYOUTS, PER SESSION (v2.532.15 per day; per SESSION since
   v2.534.0, Kerry 10/9: "Daily Winner Amounts should go to PAYOUTS so I can
   easily pay them per normal", then "Session pots standalone") — BUILT, NOT

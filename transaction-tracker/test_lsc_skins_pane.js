@@ -74,6 +74,15 @@ const hs = pane(staff);
 check("staff see the pot", hs.includes("pot $575.00"), hs);
 check("staff see each winner's amount in Won", hs.includes("$383.33") && hs.includes("$191.67") && !/evlb-ovr[^"]*no-won/.test(hs), hs);
 check("staff see flags", hs.includes("x flag"));
+// member, round complete (Kerry 10/10: "skins money winnings wasn't showing
+// on SKINS leaderboard. Should be a column that shows now"): the Won column
+// and each winner's amount, but no pot line and no flags
+const memDone = JSON.parse(JSON.stringify(staff));
+delete memDone.skins.pot_cents; delete memDone.skins.flags; delete memDone.skins.buyers_in_round;
+delete memDone.skins.groups[0].pot_cents;
+const hm = pane(memDone);
+check("member, final: Won column with each winner's amount", hm.includes("$383.33") && hm.includes("$191.67") && !/evlb-ovr[^"]*no-won/.test(hm), hm);
+check("member, final: no pot line, no flags", !hm.includes("pot $") && !hm.includes("x flag"), hm);
 // staff, cards still out: the money waits like the event board's
 const held = JSON.parse(JSON.stringify(staff));
 held.skins.groups[0].complete = false; held.skins.groups[0].payouts = null;

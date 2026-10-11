@@ -979,8 +979,9 @@ def _session_tags(sessions: list) -> list:
 
 
 def strip_money(board: dict) -> dict:
-    """The member view of a board: skins COUNTS stay, every dollar and
-    every staff flag goes (CA #726: the payout is staff only)."""
+    """The member view of a board: skins counts and, once a session is
+    final, each winner's skins money (Kerry 10/10, the Won column); the
+    pot, unpaid, per-player splits and every staff flag go (CA #726)."""
     import copy
     b = copy.deepcopy(board)
     b.pop("dial_warnings", None)
@@ -995,8 +996,9 @@ def strip_money(board: dict) -> dict:
             continue
         # The Skins pane (#1398) shows which hole each skin came from and
         # who is in each Sunday flight: hole results, entrants and flight
-        # members carry no money, so members get them; pot, payouts,
-        # unpaid, excluded/mixed and flags stay staff only.
+        # members carry no money, so members get them; pot, unpaid,
+        # per-player splits, excluded/mixed and flags stay staff only.
+        # Per-winner payouts go out once final (Kerry 10/10).
         sess["skins"] = {"kind": sk.get("kind"), "basis": sk.get("basis"),
                          # which sessions' pots carried in / where this
                          # one carries: session tags only, no money
@@ -1020,7 +1022,17 @@ def strip_money(board: dict) -> dict:
                                      # Idx/PH (Kerry 10/9): scores only
                                      "cards": g.get("cards"),
                                      "par": g.get("par"),
-                                     "entries": g.get("entries")}
+                                     "entries": g.get("entries"),
+                                     # the SKINS board's Won column (Kerry
+                                     # 10/10: "skins money winnings ...
+                                     # Should be a column that shows now"):
+                                     # each winning entry's share, only once
+                                     # the session is final (payouts is None
+                                     # until then). No pot, no unpaid, no
+                                     # per-player split, no flags.
+                                     "payouts": ([{"key": p.get("key"), "cents": p.get("cents")}
+                                                  for p in g.get("payouts")]
+                                                 if g.get("payouts") is not None else None)}
                                     for g in sk.get("groups") or []]}
     return b
 

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.536.0";
+window.TGF_VERSION = "2.536.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.536.1",
+    date: "2026-10-10",
+    title: "Lone Star Cup SKINS board: the Won column shows everyone once a session is final",
+    changes: [
+      "Kerry 10/10: \"Also skins money winnings wasn't showing on SKINS leaderboard. Should be a column that shows now.\" The Cup's Skins pane hid every dollar from members (CA #726) and showed staff the Won column only once all of a session's cards were in. Now it works like the event leaderboard: once a session is final, everyone sees each winning team's or player's skins money in the Won column. strip_money (lsc_cup.py) sends members each group's payouts as {key, cents} only, and only when final (null before); the pot line, unpaid money, the per-player split on a team and the staff flags stay staff only. Until a session is final the column stays hidden for everyone (\"Won shows once every card is in\"). Tests: test_lsc_cup.py (3 member-view checks), test_lsc_skins_pane.js (member, final: Won with amounts, no pot, no flags)."
+    ]
+  },
   {
     version: "2.536.0",
     date: "2026-10-10",

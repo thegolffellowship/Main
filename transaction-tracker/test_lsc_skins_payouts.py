@@ -28,6 +28,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 FAILURES = []
 
 
+def _no_pay(x):
+    """A member board with the Won column's payouts lifted out, so a test
+    can say no OTHER money is left (Kerry 10/10 Won column)."""
+    x = json.loads(json.dumps(x))
+    for se in x.get("sessions") or [x]:
+        for gg in (se.get("skins") or se).get("groups") or []:
+            gg.pop("payouts", None)
+    return x
+
+
 def check(label, cond, detail=""):
     print(("  PASS  " if cond else "  FAIL  ") + label
           + ("" if cond else "  " + str(detail)[:900]))
@@ -290,13 +300,16 @@ def main():
           and any("PAID per-day" in b for b in sess(res, "sat-am")["blockers"])
           and len(rows(p4)) == 1 and rows(p4)[0]["paid_at"] == "2026-10-10", res)
 
-    # ── members: no money anywhere on the board, hole scores kept
+    # ── members: hole scores kept; the only money is each winner's share
+    # once final, for the Won column (Kerry 10/10: "skins money winnings
+    # wasn't showing on SKINS leaderboard. Should be a column that shows now")
     m = strip_money(board())
     sk = m["sessions"][0]["skins"]
     g = sk["groups"][0]
-    check("member board: no pot, payouts or amounts",
-          "pot_cents" not in sk and "payouts" not in g and "pot_cents" not in g
-          and "$" not in json.dumps(m) and "cents" not in json.dumps(sk), sk)
+    check("member board: no pot or splits; payouts are {key, cents} only",
+          "pot_cents" not in sk and "pot_cents" not in g
+          and all(set(pp) == {"key", "cents"} for pp in g.get("payouts") or [])
+          and "$" not in json.dumps(m) and "cents" not in json.dumps(_no_pay(sk)), sk)
     check("member board keeps the Skins board's hole scores", g.get("cards") and g.get("par"), g)
     check("member board carries the partners' names for the stacked team cell",
           g["entries"]["A1:austin"]["names"] == ["Al Austin", "Bo Austin"], g.get("entries"))
@@ -357,7 +370,7 @@ def carryover_and_teams():
     msk = m["sessions"][1]["skins"]
     check("member board: PM names SAT AM as carried in, and no dollar anywhere",
           msk.get("carried_from") == ["SAT AM"] and m["sessions"][0]["skins"]["carries_to"] == "SAT PM"
-          and "$" not in json.dumps(m) and "cents" not in json.dumps(msk), msk)
+          and "$" not in json.dumps(m) and "cents" not in json.dumps(_no_pay(msk)), msk)
 
     # AM and PM no skin -> Sunday flights each + half of the carried pots
     b = board(sd=_tied_sd(am_tied=True, pm_tied=True))

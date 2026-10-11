@@ -536,7 +536,11 @@ def test_member_view_never_sees_who_is_paid_on_a_mixed_team():
                               buyers={1, 3, 4, 5, 6, 7, 8})
     msk = strip_money({"sessions": [{"id": "am", "skins": sk}]})["sessions"][0]["skins"]
     assert "mixed" not in msk and "pot_cents" not in msk
-    assert all("payouts" not in g for g in msk["groups"])
+    # the Won column (Kerry 10/10) gets each winner's share, never the
+    # per-player split that says who on the team was paid
+    for g in msk["groups"]:
+        for p in g["payouts"] or []:
+            assert set(p) == {"key", "cents"}
 
 
 # -- 14 v 13: the odd player (Kerry 2026-09-28) --------------------------
@@ -680,8 +684,13 @@ def test_member_view_strips_every_dollar():
                           skins_ctx={"buyers": set(range(1, 9))})
     assert board["sessions"][0]["skins"]["pot_cents"] == 20000
     member = strip_money(board)
-    blob = str(member["sessions"][0]["skins"])
+    msk = member["sessions"][0]["skins"]
+    # the only money left is each winner's share once final (Kerry 10/10)
+    blob = str({k: v for k, v in msk.items() if k != "groups"}) + str(
+        [{k: v for k, v in g.items() if k != "payouts"} for g in msk["groups"]])
     assert "cents" not in blob and "flags" not in blob
+    assert all(set(p) == {"key", "cents"}
+               for g in msk["groups"] for p in g["payouts"] or [])
     assert member["sessions"][0]["skins"]["groups"][0]["totals"]
     assert board["sessions"][0]["skins"]["pot_cents"] == 20000  # original intact
 
@@ -1000,9 +1009,26 @@ def test_member_view_keeps_holes_and_members_but_no_money():
     m = strip_money(board)["sessions"][0]["skins"]
     g = m["groups"][0]
     assert g["holes"][0]["status"] == "won" and g["members"][0]["name"] == "Ann"
+    # once final, each winner's money (Kerry 10/10: "Should be a column
+    # that shows now"); the pot, unpaid, splits and flags stay staff only
+    assert g["payouts"] == [{"key": sk["groups"][0]["payouts"][0]["key"],
+                             "cents": sk["groups"][0]["payouts"][0]["cents"]}]
+    assert g["payouts"][0]["cents"] > 0
     flat = repr(m)
-    for k in ("pot_cents", "payouts", "cents", "unpaid_cents", "flags", "excluded", "mixed"):
+    for k in ("pot_cents", "per_player", "unpaid_cents", "flags", "excluded", "mixed"):
         assert k not in flat, k
+
+
+def test_member_view_has_no_payouts_while_a_session_is_held():
+    from email_parser.lsc_cup import compute_skins_payout, strip_money
+    sess = {"id": "sun", "format": "singles", "n_holes": 2,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
+    course = [{"hole": 1, "par": 4, "stroke_index": 1}, {"hole": 2, "par": 4, "stroke_index": 2}]
+    sk = compute_skins_payout(sess, course, {}, {1: {1: 3}, 2: {1: 4}},
+                              names={1: "Ann", 2: "Bob"}, buyers={1, 2},
+                              index={1: 5.0, 2: 5.0})
+    m = strip_money({"sessions": [{"id": "sun", "skins": sk, "matches": []}]})
+    assert m["sessions"][0]["skins"]["groups"][0]["payouts"] is None
 
 
 def test_pair_labels_use_an_ampersand():
