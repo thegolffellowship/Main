@@ -1865,6 +1865,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-lsc-preview[:seed[|apply]|:teardown]  the Cup STAFF PREVIEW demo rounds (own dial, PREVIEW rounds; /events/3329/cup-preview)
       scoring-lsc-check  read-only check of the lsc_matches pairings (per session matches, points total, problems) before a change goes live
       scoring-lsc-skins-payouts[:apply]  Cup skins winners -> PAYOUTS, PER SESSION: one tgf_payouts row per winner per final session (category skins, "LSC SAT AM Skins — ...", "LSC SAT PM Skins — ...", "LSC SUN Skins — Flight 1 ..."). CARRYOVER (Kerry 10/9 ruling 5): a final session where no skin was won carries its whole pot to the next (sat-am -> sat-pm -> sun; into Sunday split evenly between the flights); a session whose predecessor is not final is held. AUTOMATIC (Kerry 10/9: "Ok to write payouts 15 minutes after all sessions are final"): scheduler job lsc_skins_payouts_auto every 5 min writes each session once final 15+ min, Cup dates only, setting lsc_skins_auto (default on, 0/off stops it). Dry run by default and reports the auto state (setting, final_seen, payable_at per session); apply creates / updates UNPAID / removes UNPAID rows (incl. any old per-day "LSC SAT Skins" row), never a PAID one
+      scoring-player-photo:list | headshot|<cid>|<b64 jpeg> | team|<a>,<b>|<b64 jpeg> | remove|<kind>|<ids>  player photos for the Cup surfaces (Kerry 10/10); finished JPEGs only, files beside the DB, no table
       scoring-lsc-recap:<saturday|final>[|send[|force]]  Cup recap DRAFT from the board (Kerry 10/9): dry run = plain text + guard (refused until the sessions are final); send = DRAFT to Kerry only, once per kind (lsc_recap_sent); force re-runs. No dollars
       scoring-se-round-si:<round_id>[|apply]  re-read a seeded round's par + stroke index from the course record's <50 tee (holes only; scores, groups, links untouched); dry run default
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
@@ -3847,6 +3848,33 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except Exception as _e:
                 res["auto"] = {"error": str(_e)}
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-player-photo":
+            # Player photos (Kerry 10/10: headshots and team duo shots on the
+            # Cup surfaces). scoring-player-photo:list = who has one;
+            # :headshot|<cid>|<base64 jpeg> and :team|<a>,<b>|<base64 jpeg>
+            # write a FINISHED photo (cropped before upload; the server has no
+            # image library); :remove|headshot|<cid> or :remove|team|<a>,<b>.
+            import base64 as _b64
+            from email_parser import player_photos as _pp
+            _a = (arg or "").split("|", 2)
+            _op = (_a[0] or "list").strip().lower()
+            if _op == "list":
+                return json.dumps(_pp.photo_index(), indent=2)
+            if _op == "remove" and len(_a) >= 3:
+                _cids = [c.strip() for c in _a[2].split(",") if c.strip()]
+                db.log_agent_action("mcp-claude", "scoring-player-photo", f"remove {_a[1]} {_cids}")
+                return json.dumps(_pp.remove_photo(_a[1].strip().lower(), _cids), indent=2)
+            if _op in ("headshot", "team") and len(_a) == 3:
+                _cids = [c.strip() for c in _a[1].split(",") if c.strip()]
+                try:
+                    _data = _b64.b64decode(_a[2].strip(), validate=True)
+                except Exception:
+                    return json.dumps({"error": "the photo is not valid base64"})
+                res = _pp.save_photo(_op, _cids, _data)
+                db.log_agent_action("mcp-claude", "scoring-player-photo",
+                                    f"{_op} {_cids} {len(_data)} bytes -> {res.get('saved') or res.get('error')}")
+                return json.dumps(res, indent=2)
+            return json.dumps({"error": "use list | headshot|<cid>|<b64> | team|<a>,<b>|<b64> | remove|<kind>|<ids>"})
         if cmd == "scoring-lsc-recap":
             # Lone Star Cup recap DRAFTS (Kerry 10/9: "Would be nice to
             # auto-generate an end of day Saturday recap for what happened

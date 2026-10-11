@@ -241,6 +241,10 @@
         .se-mc-mono { width: 36px; flex: none; display: flex; align-items: center; justify-content: center;
                       font: 700 13px/1 Bitter, Georgia, serif; color: #FFFFFF; }
         .se-mc-mono.a { background: var(--ma); } .se-mc-mono.b { background: var(--mb); }
+        .se-mc-mono.ph { width: 48px; position: relative; overflow: hidden; }
+        .se-mc-mono.ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+        .se-mc-mono.ph::after { content: ""; position: absolute; top: 0; bottom: 0; width: 4px; }
+        .se-mc-mono.a.ph::after { right: 0; background: var(--ma); } .se-mc-mono.b.ph::after { left: 0; background: var(--mb); }
         .se-mc-name { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 8px; }
         .se-mc-name.r { align-items: flex-end; text-align: right; }
         .se-mc-name.pair b { font-size: 13px; line-height: 1.2; }
@@ -667,6 +671,19 @@
         const K = {q: "se_queue_" + tk, who: "se_who_" + tk, hole: "se_hole_" + tk, follow: "se_follow_" + tk,
                    photo: "se_photo_" + tk, gate: "se_gate_" + tk, fin: "se_fin_" + tk};
         let card = null, queue = store.get(K.q, []), who = store.get(K.who, null);
+        // PLAYER PHOTOS (Kerry 10/10: "I'd like the singles matches to show
+        // them tomorrow"): who has a headshot / team shot, read once; the
+        // match strip swaps a side's initials square for the photo.
+        let PHOTOS = {h: {}, t: {}};
+        fetch("/api/player-photos").then((r) => r.ok ? r.json() : null)
+            .then((j) => { if (j && j.h) { PHOTOS = j; if (card) render(); } }).catch(() => {});
+        function photoOf(cids) {
+            const ids = (cids || []).map(Number);
+            if (ids.length === 1) { const v = PHOTOS.h[String(ids[0])]; return v ? `/member/photo/h/${ids[0]}.jpg?v=${v}` : null; }
+            if (ids.length === 2) { const k = ids.slice().sort((x, y) => x - y).join("-"), v = PHOTOS.t[k];
+                return v ? `/member/photo/t/${k}.jpg?v=${v}` : null; }
+            return null;
+        }
         let following = store.get(K.follow, false), hole = null, draft = {}, flushing = false;
         // THE CUP SPLASH, on a FRESH scan only (Kerry 2026-10-08; FD #1442):
         // no name picked and no gate choice on this phone for this link, and
@@ -1458,6 +1475,13 @@
                 const l = side.map((n) => String(n).trim().split(/\s+/).slice(1).join(" ")).join(" & ");
                 return `<span class="se-mc-name${right ? " r" : ""}"><em>${esc(f)}</em><b>${esc(l)}</b></span>`;
             };
+            // the photo sits over the initials; a photo that fails to load
+            // drops away and the initials show (Kerry 10/10)
+            const monoCell = (k, cls) => {
+                const sd = (m.sides || [])[k] || [], src = sd.length === 1 ? photoOf(sd) : null;   // headshots only; a duo shot is too small here
+                return src ? `<span class="se-mc-mono ${cls} ph">${esc(mono(fn[k]))}<img src="${src}" alt="" onerror="this.parentNode.classList.remove('ph');this.remove()"></span>`
+                    : `<span class="se-mc-mono ${cls}">${esc(mono(fn[k]))}</span>`;
+            };
             let bar, sub = "";
             if (!m.thru) { bar = "tie"; sub = "vs"; }
             else if (m.lead_side == null) { bar = "tie"; sub = m.final ? (m.tie_rule === "halve" ? "HALVED" : "AS") : "AS"; }
@@ -1481,9 +1505,9 @@
             return `<div class="se-mcard${won ? " won" : ""}${halved ? " halved" : ""}${m.cup && m.lead_team ? " lead-" + m.lead_team : ""}"${result ? ` data-result="${result}"` : ""} style="--ma:${col[0]};--mb:${col[1]}">
                 <button type="button" class="se-mc-head" data-act="mtoggle" data-m="${esc(m.match_id)}" aria-expanded="${open}" aria-label="${vs}: ${st}. Tap for the match card.">
                   <span class="se-mc-strip">
-                    <span class="se-mc-mono a">${esc(mono(fn[0]))}</span>${nm(fn[0], false)}
+                    ${monoCell(0, "a")}${nm(fn[0], false)}
                     <span class="se-mc-bar ${bar}">${esc(sub)}${thru}</span>
-                    ${nm(fn[1], true)}<span class="se-mc-mono b">${esc(mono(fn[1]))}</span>
+                    ${nm(fn[1], true)}${monoCell(1, "b")}
                   </span>
                   <span class="se-mc-dots">${dots}</span>
                 </button>

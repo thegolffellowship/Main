@@ -13393,6 +13393,31 @@ def member_spotlight():
 # Routes — Lone Star Cup live board (Track B, #654/#659)
 # ---------------------------------------------------------------------------
 
+@app.route("/api/player-photos")
+@require_role("member")
+def api_player_photos():
+    """Who has a player photo (Kerry 10/10, email_parser/player_photos.py):
+    customer_ids and version stamps only, no names, so the pinless member
+    tier may read it."""
+    from email_parser.player_photos import photo_index
+    resp = jsonify(photo_index())
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/member/photo/<kind>/<key>.jpg")
+def member_player_photo(kind, key):
+    """One player headshot (h/<customer_id>) or team shot (t/<a>-<b>).
+    Public like the Cup board it decorates; a missing photo is a 404 and
+    the page keeps its initials."""
+    from email_parser.player_photos import photo_file
+    p = photo_file(kind, key)
+    if not p:
+        return "", 404
+    resp = send_file(str(p), mimetype="image/jpeg", max_age=86400)
+    return resp
+
+
 @app.route("/api/lsc/board")
 @require_role("member")
 def api_lsc_board():

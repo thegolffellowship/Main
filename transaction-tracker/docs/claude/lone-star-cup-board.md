@@ -1216,3 +1216,20 @@ each with its own group QR and weekend match number. `build_cup_print_files`
 (combine_saturday, default on) files it as `<stub>-Sat-AM-PM-CartSigns.pdf`
 and prints no separate Sat AM/PM signs. Guard `test_cup_sat_combined_signs.py`.
 
+
+
+## Player photos (v2.536.0, Kerry 2026-10-10)
+
+Headshots and team duo shots on the Cup surfaces. Files, not a table:
+`player_photos/` beside the DB, `h-<customer_id>.jpg` and
+`t-<low id>-<high id>.jpg` (email_parser/player_photos.py). Cropped and
+touched up BEFORE upload (no image library on the server); the module only
+checks JPEG bytes, a 600 KB cap and that every id is a customer. Reads:
+`/api/player-photos` (ids + version stamps, no names, member tier) and
+`/member/photo/h|t/<key>.jpg` (404 = keep the initials). Write: the bridge
+`scoring-player-photo:list | headshot|<cid>|<b64> | team|<a>,<b>|<b64> |
+remove|<kind>|<ids>`. Shown on: SCORING's match strip and the LEADERBOARD
+strips (singles headshots only; pairs keep initials), the opened Cup card
+(singles face-off, pair duo shot), Spotlight's header. After the Cup: the
+photo table + upload page + per-player opt-out (#1577), photos in the recap
+builder.

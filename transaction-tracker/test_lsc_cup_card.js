@@ -10,7 +10,10 @@ const check = (name, ok, info) => { console.log(`  ${ok ? "PASS" : "FAIL"}  ${na
 const grab = (name) => { const i = src.indexOf(`function ${name}(`); let d = 0, j = src.indexOf("{", i);
     for (let k = j; k < src.length; k++) { if (src[k] === "{") d++; else if (src[k] === "}") { d--; if (!d) return src.slice(i, k + 1); } } };
 const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-eval(grab("mpMono")); eval(grab("mpFirstLast")); eval(grab("lscCupGrid"));
+// player photos (Kerry 10/10): the opened card heads with a singles
+// face-off or the pair's duo shot when there is one; none here by default
+let lscPhotos = { h: {}, t: {} };
+eval(grab("mpMono")); eval(grab("mpFirstLast")); eval(grab("lscPhotoOf")); eval(grab("lscPhotoHead")); eval(grab("lscCupGrid"));
 // four-ball: Austin 1 & 2 v SA 3 & 4. Hole 1 SA wins with 3's 4; hole 2
 // Austin wins with 2's net 3 (4 less a pop) while 1 picked up at 7.
 const m = { format: "fourball", closed_at_order: null,
@@ -63,5 +66,17 @@ check("twin initials in the header square read MaJ / MiJ too", /MaJ<br>MiJ/.test
 check("cards sit 12px from a phone's edge on the Cup and City Match Play (Kerry 10/9: half the old margin)",
       /\.cmp-body \{ padding: 0\.75rem 4px; \}/.test(src) && /#section-lone-star-cup \.standings-section \{\s*padding-left: 4px !important;/.test(src));
 check("the margin reads on one line on a phone", /#lsc-board \.mp-strip-bar \{[^}]*white-space: nowrap/.test(src));
+// photos: no photo = no head; a pair's duo shot heads its card; a singles
+// face-off shows the headshot and keeps initials for the other side
+check("no photo, no photo head", !/lsc-duo|lsc-faceoff/.test(html));
+lscPhotos = { h: { "5": 1 }, t: { "1-2": 7 } };
+const withDuo = lscCupGrid(m, { live: true, liveLead: { side: "A", margin: "1 UP", thru: 2 } });
+check("a pair's duo shot heads its team match", /class="lsc-duo a"><img src="\/member\/photo\/t\/1-2\.jpg\?v=7"/.test(withDuo) && !/lsc-duo b/.test(withDuo));
+const sm = { format: "singles", players: [{ customer_ids: [5], lines: ["Bill BARSTOW"] }, { customer_ids: [6], lines: ["Rob CALLAWAY"] }],
+  holes: [{ hole: 1, order: 1, winner: null }], hole_pars: { "1": 4 }, strokes: {}, scores: {}, picked_up: {} };
+const fo = lscCupGrid(sm, { live: true, liveLead: { side: "A", bar: "2 UP", margin: "2 UP", thru: 12 } });
+check("a singles card opens on the face-off: headshot one side, initials the other, the margin between",
+      /lsc-face a"><img src="\/member\/photo\/h\/5\.jpg\?v=1"/.test(fo) && /lsc-face b">RC</.test(fo) && /lsc-fo-mid a">2 UP<small>THRU 12<\/small>/.test(fo), fo.slice(0, 400));
+
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");
 process.exit(fails ? 1 : 0);

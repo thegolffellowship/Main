@@ -1,0 +1,128 @@
+"""PLAYER PHOTOS (Kerry 2026-10-10: "I'd like to start capturing player
+photos ... could we somehow start associating headshots with LSC results?
+Teams could be these duo shots." Mockups approved the same night: "I love
+all of those applications. Let's do them.")
+
+A photo is a finished JPEG file beside the database (`player_photos/`),
+named by customer_id, so there is no table and no migration:
+
+    h-<customer_id>.jpg        a square headshot
+    t-<low id>-<high id>.jpg   a two-person team shot (ids sorted)
+
+Cropping and touch-up happen before upload (the server has no image
+library); this module only checks the bytes are a JPEG of sane size and
+that every customer_id is a real customer. The index (`photo_index`) is
+ids and a version stamp only, no names, so the public read is PII-free.
+The proper photos table and upload page come after the Cup (#1577).
+"""
+from __future__ import annotations
+
+import os
+import re
+import tempfile
+from pathlib import Path
+
+MAX_BYTES = 600 * 1024
+KINDS = ("headshot", "team")
+_NAME = re.compile(r"^(h-(\d+)|t-(\d+)-(\d+))\.jpg$")
+
+
+def photo_dir(db_path=None) -> Path:
+    from email_parser.database import DB_PATH
+    return Path(str(db_path or DB_PATH)).parent / "player_photos"
+
+
+def team_key(cids) -> str:
+    ids = sorted(int(c) for c in cids)
+    return "-".join(str(c) for c in ids)
+
+
+def _file_name(kind: str, cids) -> str:
+    if kind == "headshot":
+        return f"h-{int(cids[0])}.jpg"
+    return f"t-{team_key(cids)}.jpg"
+
+
+def _check(kind: str, cids, db_path=None) -> str | None:
+    if kind not in KINDS:
+        return "kind must be headshot or team"
+    try:
+        ids = [int(c) for c in cids]
+    except (TypeError, ValueError):
+        return "customer ids must be numbers"
+    if kind == "headshot" and len(ids) != 1:
+        return "a headshot names one customer_id"
+    if kind == "team" and (len(ids) != 2 or ids[0] == ids[1]):
+        return "a team shot names two different customer_ids"
+    from email_parser.database import get_connection
+    conn = get_connection(db_path)
+    try:
+        found = {r[0] for r in conn.execute(
+            "SELECT customer_id FROM customers WHERE customer_id IN (%s)"
+            % ",".join("?" * len(ids)), ids)}
+    finally:
+        conn.close()
+    missing = [c for c in ids if c not in found]
+    return f"no customer {missing}" if missing else None
+
+
+def save_photo(kind: str, cids, data: bytes, db_path=None) -> dict:
+    """Write one finished JPEG. Replaces an earlier photo of the same
+    person or pair (written to a temp file first, then renamed)."""
+    err = _check(kind, cids, db_path)
+    if err:
+        return {"error": err}
+    if not data or data[:3] != b"\xff\xd8\xff":
+        return {"error": "not a JPEG"}
+    if len(data) > MAX_BYTES:
+        return {"error": f"photo is {len(data)} bytes; the limit is {MAX_BYTES}"}
+    d = photo_dir(db_path)
+    d.mkdir(parents=True, exist_ok=True)
+    name = _file_name(kind, cids)
+    fd, tmp = tempfile.mkstemp(dir=d, suffix=".part")
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.replace(tmp, d / name)
+    return {"saved": name, "bytes": len(data), "version": int((d / name).stat().st_mtime)}
+
+
+def remove_photo(kind: str, cids, db_path=None) -> dict:
+    if kind not in KINDS:
+        return {"error": "kind must be headshot or team"}
+    p = photo_dir(db_path) / _file_name(kind, cids)
+    if not p.exists():
+        return {"removed": False, "why": "no such photo"}
+    p.unlink()
+    return {"removed": p.name}
+
+
+def photo_index(db_path=None) -> dict:
+    """{"h": {"<cid>": version}, "t": {"<a>-<b>": version}}: who has a
+    photo, and a stamp that changes when it is replaced (cache busting)."""
+    out = {"h": {}, "t": {}}
+    d = photo_dir(db_path)
+    if not d.is_dir():
+        return out
+    for p in d.iterdir():
+        m = _NAME.match(p.name)
+        if not m:
+            continue
+        v = int(p.stat().st_mtime)
+        if m.group(2):
+            out["h"][m.group(2)] = v
+        else:
+            out["t"][f"{m.group(3)}-{m.group(4)}"] = v
+    return out
+
+
+def photo_file(kind: str, key: str, db_path=None) -> Path | None:
+    """The file for a public read, or None. `key` is a customer_id for a
+    headshot or "<a>-<b>" for a team; anything else is refused."""
+    if kind == "h" and re.fullmatch(r"\d+", key or ""):
+        name = f"h-{int(key)}.jpg"
+    elif kind == "t" and re.fullmatch(r"\d+-\d+", key or ""):
+        name = f"t-{team_key(key.split('-'))}.jpg"
+    else:
+        return None
+    p = photo_dir(db_path) / name
+    return p if p.is_file() else None

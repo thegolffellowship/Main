@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.535.9";
+window.TGF_VERSION = "2.536.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.536.0",
+    date: "2026-10-10",
+    title: "Player photos on the Lone Star Cup: headshots and team duo shots",
+    changes: [
+      "Kerry 10/10: \"I'd like to start capturing player photos ... could we somehow start associating headshots with LSC results? Teams could be these duo shots.\" After the mockups: \"I love all of those applications. Let's do them.\" Photos are finished JPEGs kept beside the database (player_photos/: h-<customer_id>.jpg, t-<low id>-<high id>.jpg), so there is no new table and no migration; email_parser/player_photos.py checks the bytes are a JPEG under 600 KB and every id is a real customer. Cropping happens before upload (the server has no image library). GET /api/player-photos (member tier) lists who has one, ids and version stamps only, no names; GET /member/photo/h/<id>.jpg and /member/photo/t/<a>-<b>.jpg serve them, a missing photo is a 404. The staff bridge scoring-player-photo (list | headshot | team | remove) writes them; no push is needed to add photos.",
+      "Where they show: (1) SCORING's match strip, where a singles player's headshot replaces his initials square with a team-colour edge; (2) the LEADERBOARD's Lone Star Cup match strips, the same; (3) the opened match card, where a singles match opens on a face-off (both headshots, the margin between) and (4) a Fourball or Foursomes match opens on the pair's duo shot; (5) the Spotlight player page, a headshot beside the name. A player without a photo keeps his initials everywhere, and a photo that fails to load falls back to the initials. Pairs keep initials on the strips (a duo shot is too small there). The leaderboard re-reads the photo list with each 20-second refresh, so a photo added during play shows without a reload. (6) Photos in the recap emails go in by hand for Sunday's final; the recap builder follows after the Cup, with the proper photo table and upload page (#1577). Tests: test_player_photos.py, test_lsc_cup_card.js."
+    ]
+  },
   {
     version: "2.535.9",
     date: "2026-10-10",

@@ -1821,6 +1821,32 @@
            team colors (Austin burnt orange, SA slate, same as the
            roster cards above). One 560px breakpoint, per standard. */
         #lsc-board { --mp-slate: #BF5700; --mp-clay: #4B6274; margin-top: 1.1rem; }
+        /* player photos (Kerry 10/10) */
+        #lsc-board .mp-strip-mono.ph { width: 46px; position: relative; overflow: hidden; padding: 0; }
+        #lsc-board .mp-strip-mono.ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+        #lsc-board .mp-strip-mono.ph::after { content: ""; position: absolute; top: 0; bottom: 0; width: 4px; }
+        #lsc-board .mp-strip-mono.slate.ph::after { right: 0; background: var(--mp-slate); }
+        #lsc-board .mp-strip-mono.clay.ph::after { left: 0; background: var(--mp-clay); }
+        #lsc-board .lsc-faceoff { display: flex; align-items: center; justify-content: space-between; padding: 12px 6px 10px; }
+        #lsc-board .lsc-fo-side { width: 38%; text-align: center; }
+        #lsc-board .lsc-face { position: relative; width: 84px; height: 84px; border-radius: 50%; margin: 0 auto 6px; overflow: hidden;
+            display: flex; align-items: center; justify-content: center; color: #fff; font: 800 26px Bitter, Georgia, serif; }
+        #lsc-board .lsc-face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+        #lsc-board .lsc-face.a { border: 4px solid var(--mp-slate); background: var(--mp-slate); }
+        #lsc-board .lsc-face.b { border: 4px solid var(--mp-clay); background: var(--mp-clay); }
+        #lsc-board .lsc-fo-side b { display: block; font: 800 14px Bitter, Georgia, serif; text-transform: uppercase; }
+        #lsc-board .lsc-fo-side em { font-style: normal; font-size: 11px; color: #6B7280; }
+        #lsc-board .lsc-fo-mid { text-align: center; font: 800 20px Bitter, Georgia, serif; color: #6B7280; }
+        #lsc-board .lsc-fo-mid.a { color: var(--mp-slate); } #lsc-board .lsc-fo-mid.b { color: var(--mp-clay); }
+        #lsc-board .lsc-fo-mid small { display: block; font: 600 10px 'Helvetica Neue', Arial, sans-serif; color: #6B7280; letter-spacing: .5px; }
+        #lsc-board .lsc-duos { display: grid; gap: 8px; padding: 10px 6px 6px; }
+        #lsc-board .lsc-duos.two { grid-template-columns: 1fr 1fr; }
+        #lsc-board .lsc-duo { margin: 0; border-radius: 10px; overflow: hidden; border: 1px solid #E5E7EB; background: #fff; }
+        #lsc-board .lsc-duo img { width: 100%; aspect-ratio: 5 / 4; object-fit: cover; display: block; }
+        #lsc-board .lsc-duo figcaption { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 6px 10px; color: #fff; }
+        #lsc-board .lsc-duo.a figcaption { background: var(--mp-slate); } #lsc-board .lsc-duo.b figcaption { background: var(--mp-clay); }
+        #lsc-board .lsc-duo figcaption b { font: 800 13px Bitter, Georgia, serif; text-transform: uppercase; }
+        #lsc-board .lsc-duo figcaption span { font: 600 11px 'Helvetica Neue', Arial, sans-serif; white-space: nowrap; }
         /* the Cup's per-player card (lscCupGrid): a monochip carries two
            initials, or both partners' in Foursomes */
         #lsc-board .mp-sc-monochip { width: auto; min-width: 22px; padding: 0 4px; }
@@ -2835,6 +2861,61 @@
         if (!w && half) return "½";
         return `${w}${half ? "½" : ""}`;
     };
+    // PLAYER PHOTOS (Kerry 10/10: "I love all of those applications.
+    // Let's do them."): headshots and team duo shots by customer_id, read
+    // once per page; anyone without one keeps his initials.
+    let lscPhotos = null;
+    // re-read with every board load (the 20s live poll), so a photo added
+    // during play shows on the next refresh; a failed read keeps the last
+    async function lscPhotosLoad() {
+        try {
+            const r = await fetch("/api/player-photos");
+            const j = r.ok ? await r.json() : null;
+            if (j && j.h) lscPhotos = j;
+        } catch (e) { /* keep the last index */ }
+        if (!lscPhotos) lscPhotos = { h: {}, t: {} };
+        return lscPhotos;
+    }
+    function lscPhotoOf(cids) {
+        const P = lscPhotos || { h: {}, t: {} }, ids = (cids || []).map(Number);
+        if (ids.length === 1) { const v = P.h[String(ids[0])]; return v ? `/member/photo/h/${ids[0]}.jpg?v=${v}` : null; }
+        if (ids.length === 2) { const k = ids.slice().sort((x, y) => x - y).join("-"), v = P.t[k];
+            return v ? `/member/photo/t/${k}.jpg?v=${v}` : null; }
+        return null;
+    }
+    // the opened card's head (Kerry's mockups 3 and 4): singles face off
+    // with both headshots; a pair's duo shot heads its team match
+    function lscPhotoHead(m, o) {
+        const P = m.players || [];
+        const TEAM = ["Austin", "San Antonio"], SIDE = ["a", "b"];
+        const ini = (L) => (L || []).map(n => mpMono(n)).join("");
+        let mid = "vs", sub = o.teeTime ? `${o.teeTime} TEE TIME` : "";
+        if (o.live && o.liveLead && o.liveLead.thru > 0) { mid = o.liveLead.bar; sub = `THRU ${o.liveLead.thru}`; }
+        else if (o.tie) { mid = "HALVED"; sub = "FINAL"; }
+        else if (o.aWin || o.bWin) { mid = o.margin || "WON"; sub = "FINAL"; }
+        const lead = (o.live && o.liveLead) ? o.liveLead.side : (o.aWin ? "A" : (o.bWin ? "B" : null));
+        const midCls = lead === "A" ? " a" : (lead === "B" ? " b" : "");
+        if (m.format === "singles") {
+            const ph = [0, 1].map(k => lscPhotoOf((P[k] || {}).customer_ids));
+            if (!ph[0] && !ph[1]) return "";
+            const side = (k) => {
+                const p = P[k] || {}, L = p.lines || [p.name || ""];
+                const fl = mpFirstLast(L[0] || "");
+                const face = ph[k]
+                    ? `<span class="lsc-face ${SIDE[k]}"><img src="${ph[k]}" alt="" onerror="this.remove()">${escapeHtml(ini(L))}</span>`
+                    : `<span class="lsc-face ${SIDE[k]}">${escapeHtml(ini(L))}</span>`;
+                return `<div class="lsc-fo-side">${face}<b>${escapeHtml(fl.last || L[0] || "")}</b><em>${TEAM[k]}</em></div>`;
+            };
+            return `<div class="lsc-faceoff">${side(0)}<div class="lsc-fo-mid${midCls}">${escapeHtml(mid)}<small>${escapeHtml(sub)}</small></div>${side(1)}</div>`;
+        }
+        const duos = [0, 1].map(k => {
+            const p = P[k] || {}, src = lscPhotoOf(p.customer_ids);
+            if (!src) return "";
+            const names = (p.lines || [p.name || ""]).map(n => mpFirstLast(n).last || n).join(" &amp; ");
+            return `<figure class="lsc-duo ${SIDE[k]}"><img src="${src}" alt="" onerror="this.parentNode.remove()"><figcaption><b>${names}</b><span>${TEAM[k]}</span></figcaption></figure>`;
+        }).filter(Boolean);
+        return duos.length ? `<div class="lsc-duos${duos.length > 1 ? " two" : ""}">${duos.join("")}</div>` : "";
+    }
     async function lscBoardLoad() {
         const box = $("lsc-board");
         if (!box) return;
@@ -2843,7 +2924,7 @@
             // ?preview=1 (staff only, server-gated): the Cup STAFF PREVIEW's
             // demo board (CoS #1398-B); a member gets the live board.
             const pv = new URLSearchParams(location.search).get("preview") === "1";
-            const res = await fetch(pv ? "/api/lsc/board?preview=1" : "/api/lsc/board");
+            const [res] = await Promise.all([fetch(pv ? "/api/lsc/board?preview=1" : "/api/lsc/board"), lscPhotosLoad()]);
             d = await res.json();
         } catch (e) { return; }                    // quiet: board is optional
         const evBanner = document.querySelector("#section-lone-star-cup .lsc-event");
@@ -3076,7 +3157,8 @@
     // during play. Foursomes is one ball: one row per pair.
     function lscCupGrid(m, o) {
         const holes = (m.holes || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-        if (!holes.length) return "";
+        const photoHead = lscPhotoHead(m, o);
+        if (!holes.length) return photoHead;
         const par = m.hole_pars || {}, st = m.strokes || {}, sc = m.scores || {};
         const pu = {};
         Object.entries(m.picked_up || {}).forEach(([c, hs]) => { pu[c] = new Set((hs || []).map(Number)); });
@@ -3172,7 +3254,7 @@
             const who = L.side === "A" ? "Austin" : (L.side === "B" ? "San Antonio" : "");
             result = `<span class="mp-sc-result ${cls}">LIVE · ${who ? who + " " + escapeHtml(L.margin) : "All square"} · thru ${L.thru}</span>`;
         }
-        return `${strokeBar}<div class="mp-sc-nines">${nines}</div><div class="mp-sc-resultwrap">${result}</div>`;
+        return `${photoHead}${strokeBar}<div class="mp-sc-nines">${nines}</div><div class="mp-sc-resultwrap">${result}</div>`;
     }
 
     // On the scorer's Cup LEADERBOARD the team score rides in the pinned
@@ -3243,6 +3325,10 @@
                 const o = {
                     aName, bName, live,
                     aLines: (P[0] || {}).lines || null, bLines: (P[1] || {}).lines || null,
+                    // headshots only on the strip; a pair's duo shot is too small
+                    // there and heads the opened card instead
+                    aPhoto: ((P[0] || {}).customer_ids || []).length === 1 ? lscPhotoOf(P[0].customer_ids) : null,
+                    bPhoto: ((P[1] || {}).customer_ids || []).length === 1 ? lscPhotoOf(P[1].customer_ids) : null,
                     tie: m.state === "final" && !m.gg_winner_idx,
                     aWin: m.state === "final" && m.gg_winner_idx === 1,
                     bWin: m.state === "final" && m.gg_winner_idx === 2,
@@ -5697,8 +5783,11 @@
             }).join('<br>');
         };
         const two = (lines) => (lines && lines.length > 1) ? ' two' : '';
-        const aMono = o.aName ? `<span class="mp-strip-mono slate${two(o.aLines)}">${monoOf(o.aName, o.aLines)}</span>` : '<span class="mp-strip-mono stone"></span>';
-        const bMono = o.bName ? `<span class="mp-strip-mono clay${two(o.bLines)}">${monoOf(o.bName, o.bLines)}</span>` : '<span class="mp-strip-mono stone"></span>';
+        // a player photo sits over the initials (Kerry 10/10); one that
+        // fails to load drops away and the initials show
+        const ph = (src) => src ? `<img src="${src}" alt="" onerror="this.parentNode.classList.remove('ph');this.remove()">` : "";
+        const aMono = o.aName ? `<span class="mp-strip-mono slate${two(o.aLines)}${o.aPhoto ? " ph" : ""}">${monoOf(o.aName, o.aLines)}${ph(o.aPhoto)}</span>` : '<span class="mp-strip-mono stone"></span>';
+        const bMono = o.bName ? `<span class="mp-strip-mono clay${two(o.bLines)}${o.bPhoto ? " ph" : ""}">${monoOf(o.bName, o.bLines)}${ph(o.bPhoto)}</span>` : '<span class="mp-strip-mono stone"></span>';
         let barCls, barTxt;
         if (o.live) {
             // Live, not-yet-decided match: colour the bar for the CURRENT leader

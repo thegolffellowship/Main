@@ -67,6 +67,9 @@
 
         .spt-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px; }
         .spt-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+        .spt-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .spt-photo { width: 72px; height: 72px; flex: none; border-radius: 50%; object-fit: cover; object-position: center 30%;
+            border: 3px solid var(--primary, #E87C3E); }
         .spt-name { margin: 0; font: 700 23px/1.05 'Bitter', serif; color: #1B1B1B; min-width: 0; }
         .spt-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
         .spt-idx { text-align: right; flex: none; }
@@ -523,6 +526,21 @@
                 `<div class="spt-panel">${bar}${rows}</div></div>`;
         }
 
+        // PLAYER PHOTOS (Kerry 10/10, mockup 5): a headshot beside the name
+        // when the player has one; the index is ids only, read once.
+        let SPT_PHOTOS = null;
+        fetch("/api/player-photos").then(r => r.ok ? r.json() : null)
+            .then(j => {
+                SPT_PHOTOS = (j && j.h) ? j : { h: {}, t: {} };
+                // a player already on screen gets his photo without a re-render
+                const w = SPT_DATA && document.querySelector(".spt-who");
+                if (w && !w.querySelector(".spt-photo")) w.insertAdjacentHTML("afterbegin", sptHeadshot(SPT_DATA.customer_id));
+            })
+            .catch(() => {});
+        function sptHeadshot(cid) {
+            const v = SPT_PHOTOS && cid != null ? SPT_PHOTOS.h[String(cid)] : null;
+            return v ? `<img class="spt-photo" src="/member/photo/h/${Number(cid)}.jpg?v=${v}" alt="" onerror="this.remove()">` : "";
+        }
         function render(d) {
             SPT_DATA = d;
             const _wbgYears = (d.winnings_by_game && d.winnings_by_game.years) || [];
@@ -535,10 +553,10 @@
             const hcp = d.handicap_index_18;
             const hero =
                 `<div class="spt-card"><div class="spt-hero-row">` +
-                `<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
+                `<div class="spt-who">${sptHeadshot(d.customer_id)}<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
                 `<div class="spt-badges">${chapterChip(d.chapter)}` +
                 statusChips(d) +
-                `</div></div>` +
+                `</div></div></div>` +
                 (d.handicap_player_name
                     ? `<a class="spt-idx" style="text-decoration:none;" title="Full handicap detail — every posted round" href="${window.MEMBER_MODE ? "/member/handicaps" : "/handicaps"}?player=${encodeURIComponent(d.handicap_player_name)}">`
                     : `<div class="spt-idx">`) +
