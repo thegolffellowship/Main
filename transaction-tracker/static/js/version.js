@@ -1,5 +1,28 @@
-window.TGF_VERSION = "2.550.0";
+window.TGF_VERSION = "2.551.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.551.1",
+    date: "2026-10-12",
+    title: "Bridge to regenerate an event's pairings from a lane",
+    changes: [
+      "Kerry 10/12: \"Deploy and then re-generate yourself and review it against our rules.\" New bridge scoring-pairings-generate:<event_id>[|apply] does the PAIRINGS tab's Generate and Save: random mode, partner requests protected, every rule. It is a dry run by default, and with |apply it saves and returns the read-only audit of the result. It refuses an event that has started or is in the past, so a sheet in players' hands is never reshuffled."
+    ]
+  },
+  {
+    version: "2.551.0",
+    date: "2026-10-12",
+    title: "Pairings: first year players never alone, guests with an Ambassador, a reseat that frees a group re-deals",
+    changes: [
+      "Kerry 10/12: \"I don't want any first year players riding on their own in initial pairings unless it can't be avoided.\" A 1Y member or a 1st Timer is kept out of the solo seat of a threesome, both when the groups are formed and when the carts are seated. Only when no other sheet keeps the requests, matches and locks does one ride alone, with a note on the PAIRINGS tab.",
+      "Kerry 10/12: \"I would like all guests to always be placed with an ambassador, unless they are the guest of one of our members, or requests someone specificially.\" This is read at the cart, as in his Hector Hinojosa case: the group had an Ambassador, but he rode with his requested partner. A request for someone not playing exempts nobody.",
+      "Kerry 10/12: removing a player and re-seating now re-deals the short groups when the field fits fewer groups (20 players = 5 groups, not 6). Nothing moves once the event has started, and nothing is re-dealt while the roster and the sheet disagree.",
+      "Found on the way: a full seeded group used to consume one generated group, and those players disappeared from the sheet. Full seeds now take nobody.",
+      "Kerry 10/12: \"1st Timer and First Year member rules do need to supercede count rules, only if there's a conflict.\" Sheets are now compared on those misses first and repeat counts second. In the cart seater, the 1st Timer Ambassador cart (40) and First Year never alone (50) now sit above the count terms. The third-solo-in-a-row rule drops from 500 to 30 and cart history stays at 0.4. Requests and Match Play are unchanged.",
+      "Kerry 10/12: \"When a reseat happens, only locked groups and partner requests should persist.\" The reseat re-deals the whole set under every rule and keeps the partner requests. Locked groups are not saved on the server today, so none are kept yet.",
+      "Kerry 10/12: the Ambassador for a 1st Timer, New Member or Guest is a LOCAL one, from the event chapter's Ambassador list. A chapter with no list falls back to the customer chip, with a note.",
+      "The read-only pairings audit flags both new rules. Guard: test_pairings_rules_1012.py, on the 10/13 Quarry field."
+    ]
+  },
   {
     version: "2.550.0",
     date: "2026-10-12",

@@ -2192,3 +2192,80 @@ PAIRINGS tab drew only the 18-hole set, so the groups looked deleted.
   the Nth slot. Every reader agrees, and the next Save persists it.
 - **PAIRINGS tab:** a non-empty set always renders, whatever the format.
 - Guard: `test_sheet_follows_event.py`.
+
+## Rules 16-18: first year players, the reseat that drops a group, guests with an Ambassador (v2.551.0, Kerry 2026-10-12)
+
+Kerry, verbatim (via the Front Desk, mailbox #1633): "New rule for pairings. I don't want any first year players riding on their own in initial pairings unless it can't be avoided. For instance. Michele McCormick is shown on her own. I don't want that. Also, I just removed and re-seated after removing Chris Espinosa triggered that. However, that reduced us to 20 players. So the reseat should trigger a reduction in groups from 6 to 5 groups, reseating according to pairings rules/standards. Another thing I observe is that 2nd time guest, Hector Hinojosa is being placed with Michelle DelCarmen who is not an ambassador. I would like all guests to always be placed with an ambassador, unless they are the guest of one of our members, or requests someone specificially."
+
+The case was s9.27 The Quarry (event 3307, Tue 10/13). After Chris Espinosa came off, the saved sheet had 20 players in six groups (4, 4, 3, 3, 3, 3), with four solo carts. Two of those solo riders were 1Y: McCormick and Reggie Johnson. Hector Hinojosa rode with DelCarmen; the group's Ambassador, Larry Anthis, rode with his requested partner Palacios.
+
+### 16 — a first year player never rides alone
+
+- **Who counts as first year.** The code's own two definitions: the 1Y tag (`is_new`, rule 13: joined as a NEW member this year and no handicap round before it), plus a 1st Timer (`is_first_timer`, rule 14). Rule 14 already puts a 1st Timer in an Ambassador's cart, so riding alone breaks it either way.
+- **Composition.** `_group_seat_misses` tries every seating of an odd-sized group that keeps requested partners in one cart. The group is a miss when every such seating leaves a first year player in the solo seat.
+- **Seating.** `_arrange_group_seats(no_solo=)` adds a cost of 50 to a first year player in seat 3 of a threesome. That is below a request (100) and the third-solo-in-a-row rule (500), and above the Ambassador cart (10).
+- **"Unless it can't be avoided".** The generator only accepts a sheet with a miss when no other sheet keeps the requests, matches and locks. When it does, the PAIRINGS tab gets a note.
+
+### 16a — 1st Timer rules, then First Year rules, above the count rules (Kerry 2026-10-12)
+
+Kerry, verbatim: "1st Timers have additional rules to First Year members. You graduate from 1st Timer rules into First Year rules. In other words, some of the rules, like riding/playing with an Ambassador drop. 1st Timer and First Year member rules do need to supercede count rules, only if there's a conflict."
+
+- **Two tiers.**
+  - A 1st Timer gets the First Year rules plus their own, such as riding and playing with an Ambassador (rule 14).
+  - After their first event they graduate to First Year: the Ambassador rule drops, and "never alone" (rule 16) stays.
+  - The code already worked this way: `is_first_timer` drives rule 14, and `is_new` or `is_first_timer` drives rule 16.
+- **Above the count rules.** Count rules are the repeat counts (rule 3 / "repeats in sequence"), R-G cart history and R-C solo streaks.
+  - **Composition:** each restart is scored with the 1st Timer and First Year misses first (rule-14 and rule-16 terms), then everything else. Repeat counts only break ties between sheets that miss those rules equally.
+  - **Seating:** a First Year player alone costs 50 and a 1st Timer without an Ambassador cart-mate costs 40. The count terms sit below them: R-C third solo in a row is 30 (it was 500), R-C last-time solo is 2, and R-G is 0.4.
+- **Unchanged until Kerry rules otherwise.**
+  - A partner request (100) and Match Play (1000) still outrank both tiers.
+  - The guest rule (18) shares the 40 seat weight with rule 14, but in composition it sits with the other rules, not above the counts.
+
+### 17 — a reseat that frees a group re-deals the short groups
+
+- **Where.** `remove_player_from_pairings` calls `_regroup_after_removal` when it re-seats (before the start only; rule 15b is unchanged) and the field now fits fewer groups: ceil(n / 4), or n / 5 on a fivesome event. For example, 20 players need 5 groups, not 6.
+- **What moves (Kerry 2026-10-12: "When a reseat happens, only locked groups and partner requests should persist").**
+  - The whole holes set is dealt again by the generator under every rule.
+  - Partner requests persist, along with the units the generator already binds: a host with the guests they paid for, and confirmed Match Play.
+  - Locked groups are the PAIRINGS tab's seeds. They live only in the page while a manager generates, so nothing on the server records them and a reseat has none to keep. Saving them is proposed separately (a schema item).
+- **When it refuses.** If the generator's field and the sheet differ (a late signup not yet seated, or a seated player off the roster), it does not re-deal. It only closes up the group, and says why.
+- **Dry run.** A dry run reports the proposal in `regrouped` and writes nothing.
+- **Generator fix found on the way.** A FULL seeded group (from the PAIRINGS tab's seeds) used to consume one free group, and those players disappeared from the sheet. Full seeds now take nobody.
+
+### 18 — every guest rides with an Ambassador
+
+- **Who is a guest.** Not a member by status (`_ls_is_member`, the test the request rules already use).
+- **Exempt:**
+  - the guest of a member who is on this sheet (`_host_of_map`: the "Purchased by" note or the shared order);
+  - a guest whose request resolves to a player on this sheet.
+- **Not exempt.** A request for someone who is not playing exempts nobody. Hinojosa asked for Dan South, who is not on the 10/13 roster.
+- **Read at the CART, as in Kerry's case.** The group had an Ambassador, but he rode with his requested partner.
+  - Composition: `_group_seat_misses` is a miss when no request-respecting seating gives each such guest an Ambassador cart-mate.
+  - Seating: the guest joins the rule-14 Ambassador-cart term (weight 10).
+- **LOCAL Ambassadors only (Kerry 2026-10-12):** "If you're talking about only local chapter ambassadors being paired with 1st Timer/New Member/Guest rules, then yes, I want them paired with local ones."
+  - The generator's Ambassador set is now the event chapter's list (`customer_ambassadors`, through `ambassadors.chapter_ambassadors`). That set feeds rules 7, 14 and 18, the same list the audit reads.
+  - An event with no chapter, or a chapter with no list yet, falls back to the customer chip and says so in a PAIRINGS note.
+
+### Shared mechanics, audit and guard
+
+- **Fixer.** `_fix_rule_misses_by_swap` runs after the rule 12 / 7 / 14 fixes. It swaps two unlocked players only when the sheet's total rule misses fall, so one rule is never traded for another. The restart score and the post-fix swap guard both count the two new terms.
+- **Audit.** `pairings_audit.py` flags "first year player alone" and "guest + Ambassador cart" as hard flags.
+- **Guard.** `test_pairings_rules_1012.py`:
+  - the 10/13 field: five foursomes, nobody alone, Hinojosa with an Ambassador (a LOCAL one when the chapter has its list);
+  - four 19-player variants (threesomes) with no 1Y alone;
+  - a resolved guest request;
+  - the 21-to-20 reseat: five groups, the partner request kept in one cart, the same sheet as a fresh deal;
+  - no regroup once started, on a past date, or when roster and sheet differ;
+  - the audit's flags on the sheet Kerry saw.
+
+### Regenerate from a lane (v2.551.1)
+
+Kerry 2026-10-12: "Deploy and then re-generate yourself and review it against our rules."
+
+- **Bridge:** `scoring-pairings-generate:<event_id>[|apply]`, the PAIRINGS tab's Generate and Save.
+  - Random mode, with partner requests protected.
+  - No seeds and no Match Play confirms.
+- **Default:** a dry run.
+- **`|apply`:** saves the sheet, writes an action-log row, and returns `event_pairing_audit` on the saved result.
+- **Refused:** an event that has started (`_event_started`) or that is dated before today (Central).
+- **Guard:** the bridge checks in `test_pairings_rules_1012.py`.
