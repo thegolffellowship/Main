@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.540.5";
+window.TGF_VERSION = "2.540.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.540.6",
+    date: "2026-10-12",
+    title: "Robert Straiton's 2024 Players Cup photo staged",
+    changes: [
+      "Kerry 10/12 sent \"Robert STRAITON and The Players Cup in 2024 at The Bandit and 2024 TGF Championship\", which matches the 2024 Players Cup title already recorded for Robert (customer 31). Staged in data/champion_photos/players-cup-2024.jpg (1200x1600, EXIF removed) with the other past-champion photos; not registered in CHAMPION_PHOTOS, so nothing serves or shows it until Kerry chooses where past-champion photos appear. Guard: test_player_photos.py."
+    ]
+  },
   {
     version: "2.540.5",
     date: "2026-10-12",
