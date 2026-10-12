@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.539.2";
+window.TGF_VERSION = "2.540.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.540.0",
+    date: "2026-10-12",
+    title: "Spotlight: Lone Star Cup record and matches; the whole season stays in WHERE X STANDS",
+    changes: [
+      "Kerry 10/12: \"Show Record where Seat is. Also, reveal all 2026 season contest results in WHERE X STANDS rather than just Currently active. Then any PAST CONTESTS would apply to previous seasons.\" Once the cup board is the FINAL snapshot, the Lone Star Cup row shows the player's record (e.g. 2\u20131, with a halve as 2\u20131\u20131) in the seat's place, the team result under the name (\"Team San Antonio retained the Cup, 17\u00bd\u201310\u00bd\"), and one line per match: W/L/H, the session's official title (FOURBALL, FOURSOMES, SINGLES), the margin, the partner and the opponents, each linking to that match's card on the Lone Star Cup board (?match=<id>). Before the board is final the seat view is unchanged. Read-only off the frozen board (email_parser/lsc_record.py, cached with the other Spotlight builders); nothing is scored or recomputed.",
+      "\"Gus clinched the 2026 Lone Star Cup for San Antonio\" (Kerry's wording) shows under his result. It is a stated fact checked against the scorers' hole-save times: San Antonio stood at 9.5 after Saturday, needed more than 14, and Gus's 5&3 singles win (closing hole saved 18:21:54 UTC) took them from 13.5 to 14.5, eleven minutes before the next San Antonio point. The board has no finish times, so the clincher is recorded in LSC_CLINCH rather than derived at read time.",
+      "WHERE X STANDS now opens with every contest of the current season under a \"2026 Season\" band (live first, then completed races with their COMPLETED badge, then the monthly results); PAST CONTESTS holds earlier seasons only and does not appear until there is one. Guard: test_lsc_record.py."
+    ]
+  },
   {
     version: "2.539.2",
     date: "2026-10-12",

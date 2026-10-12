@@ -1271,3 +1271,7 @@ Titles share one line (v2.539.1, Kerry 2026-10-12): a player with both cups read
 
 Phone rule (v2.539.2, Kerry 2026-10-12): when the two titles do not fit one line, The Players Cup takes the second line and the bar is dropped (`sptFitChamps`, class `stacked`, re-run on resize). Only Jay Horton holds both cups to date.
 
+### Spotlight: Lone Star Cup record, and the whole season in WHERE X STANDS (v2.540.0, Kerry 2026-10-12)
+
+Once the cup board is the FINAL (frozen) snapshot, the Spotlight's Lone Star Cup row shows the player's record in the seat's place and one linked line per match (`/member/lonestarcup?match=<id>`): `email_parser/lsc_record.py` `player_record`, read off the frozen board, cached via `_spotlight_shared("lsc_board")`, attached by `get_player_spotlight` as `lone_star_cup.record`. Side 0 of a match is Austin and side 1 San Antonio (TEAM_KEYS order). Session titles are the official ones (FOURBALL, FOURSOMES, SINGLES; the Saturday-afternoon one-ball format is FOURSOMES, not "Chapman"). `LSC_CLINCH` records who delivered the clinching point (2026: SUN-8, Gus Vasquez, from the scorers' hole-save times via `scoring-se-hole-times:20`; the board has no finish times, so it is not derived at read time). WHERE X STANDS lists this season's contests under "<year> Season" (live, then completed with their COMPLETED badge, then monthly results); PAST CONTESTS is earlier seasons only. Skins won per player and weekend photos are not on the row yet. Guard test_lsc_record.py.
+

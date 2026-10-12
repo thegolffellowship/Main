@@ -15858,6 +15858,16 @@ def warm_spotlight(db_path=None, force: bool = False) -> dict:
             "entries": sum(1 for k in _SPOTLIGHT_SHARED_CACHE if k[1] == str(path))}
 
 
+def _spotlight_lsc_record(customer_id: int, db_path) -> dict | None:
+    """The player's Lone Star Cup record off the FROZEN cup board (None until it is
+    final, or for a player who played no match). See email_parser/lsc_record.py."""
+    from . import lsc_cup, lsc_record
+    from .timezone_utils import today_central
+    board = _spotlight_shared("lsc_board", lambda: lsc_cup.lsc_board_payload(db_path),
+                              db_path)
+    return lsc_record.player_record(board, customer_id, today_central().year)
+
+
 def _spotlight_cup_titles(customer_id: int, gross_d: dict | None,
                           cup_d: dict | None) -> list:
     """Spotlight header titles (Kerry 2026-10-12): the cups' declared
@@ -16429,6 +16439,16 @@ def get_player_spotlight(customer_id: int,
             lsc = None
     except Exception as e:
         errors.append(f"lone star cup: {e}")
+
+    # Lone Star Cup RECORD (Kerry 2026-10-12): once the cup board is FINAL, the row
+    # shows the player's record and matches in place of the seat. Cached with the
+    # other shared builders; before the final board the seat view is unchanged.
+    try:
+        _rec = _spotlight_lsc_record(customer_id, db_path)
+        if _rec:
+            lsc = {**(lsc or {"mode": "played"}), "record": _rec}
+    except Exception:
+        logger.warning("spotlight lsc record failed", exc_info=True)
 
     # ── winnings ──
     # recent_events groups the rows per EVENT (Kerry 2026-08-03: "recent

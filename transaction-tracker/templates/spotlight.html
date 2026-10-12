@@ -88,6 +88,22 @@
                       margin-top: 4px; text-transform: uppercase; }
         /* LONE STAR CUP row — Texas-flag navy, distinct from every race
            row (Kerry 2026-08-03) */
+        /* LONE STAR CUP record row (Kerry 2026-10-12): record in the seat's place, the cup's
+           result and the clinch note under the name, one linked line per match. */
+        .spt-lsc-wrap { background: #F5F7FC; border-left: 3px solid var(--lsc-navy, #002855); border-top: 1px solid #F0EEE9; }
+        .spt-lsc-wrap > .spt-stand { border-top: none; border-left: none; }
+        .spt-lsc-clinch { font: 700 12px/1.3 'Bitter', serif; color: #7A5C0B; margin-top: 4px; }
+        .spt-lsc-matches { padding: 0 0 4px; }
+        .spt-lsc-m { display: flex; align-items: flex-start; gap: 9px; padding: 8px 14px 8px 17px; border-top: 1px solid #E6EAF3;
+                     text-decoration: none; color: inherit; }
+        .spt-lsc-m:hover { background: #FDF0E6; }
+        .spt-lsc-m .res { flex: none; width: 21px; height: 21px; border-radius: 5px; font: 700 11px/21px 'Bitter', serif; text-align: center; }
+        .spt-lsc-m .res.W { color: #1B6B45; background: #C9EBD5; }
+        .spt-lsc-m .res.L { color: #4B5563; background: #E5E7EB; }
+        .spt-lsc-m .res.H { color: #92400E; background: #FEF3C7; }
+        .spt-lsc-m .mm { flex: 1; min-width: 0; font: 500 12.5px/1.3 'Helvetica Neue', Arial, sans-serif; color: #1B1B1B; }
+        .spt-lsc-m .mm b { font: 700 11px/1.3 'Bitter', serif; letter-spacing: 0.4px; color: var(--lsc-navy, #002855); }
+        .spt-lsc-m .who { display: block; font-size: 11.5px; color: #6B7280; margin-top: 1px; }
         .spt-stand-lsc { border-left: 3px solid var(--lsc-navy, #002855); background: #F5F7FC; }
         .spt-stand-lsc .race { color: var(--lsc-navy, #002855) !important; }
         .spt-stand-lsc .rk .r { color: var(--lsc-navy, #002855) !important; }
@@ -673,8 +689,16 @@
             // and historical backfills get their own year bands.
             const rows = [];
             const pastByYear = {};
+            // THIS SEASON stays in full (Kerry 2026-10-12: "reveal all 2026 season contest
+            // results ... PAST CONTESTS would apply to previous seasons"): a completed contest
+            // of the current season goes in seasonDone, shown under the live ones; only an
+            // earlier season folds into PAST CONTESTS.
+            const curYear = String((d.winnings_by_game && d.winnings_by_game.current_year) || new Date().getFullYear());
+            const seasonDone = [];
+            const yearOf = label => (String(label || "").match(/20\d\d/) || [curYear])[0];
             const pastPush = (label, html) => {
-                const y = (String(label || "").match(/20\d\d/) || [String(new Date().getFullYear())])[0];
+                const y = yearOf(label);
+                if (y === curYear) { seasonDone.push(html); return; }
                 (pastByYear[y] = pastByYear[y] || []).push(html);
             };
             // display order (Kerry 2026-07-12): Fellowship Cup above Players Cup
@@ -718,8 +742,10 @@
                     null,
                     // No badge inside PAST CONTESTS (Kerry 2026-09-01:
                     // "Badges for COMPLETED can go away once it's in
-                    // PAST") — the section says it already.
-                    r.final ? "" : statusBadge(r)));
+                    // PAST") — the section says it already. A completed contest
+                    // of THIS season sits among the live ones, so it keeps its
+                    // COMPLETED badge.
+                    (r.final && yearOf(r.label) !== curYear) ? "" : statusBadge(r)));
             });
             // MONTHLY POINTS — current month's standing (Kerry 2026-09-01:
             // "Should also show Monthly Points Races"). No buy-in: every
@@ -788,11 +814,38 @@
                     meta = `Would project via ${l.path} — buy in to make it count`;
                     pill = pillOut;
                 }
+                if (l.record) {
+                    // The cup is FINAL: the record takes the seat's place (Kerry 2026-10-12),
+                    // the team result and the clinch note sit under the name, and every
+                    // match links to its card on the cup board.
+                    const rc = l.record, first = esc((d.name || "").split(" ")[0] || "They");
+                    const cupHref = "/member/lonestarcup";
+                    const RES = { W: "Won", L: "Lost", H: "Halved" };
+                    const matchHtml = rc.matches.map(m => {
+                        const who = (m.partners.length ? `with ${m.partners.map(esc).join(" &amp; ")} ` : "") +
+                                    `vs ${m.opponents.map(esc).join(" &amp; ")}`;
+                        return `<a class="spt-lsc-m" href="${cupHref}?match=${encodeURIComponent(m.match_id)}">` +
+                            `<span class="res ${m.result}">${m.result}</span>` +
+                            `<span class="mm"><b>${esc(m.format)}</b> &middot; ${RES[m.result]}${m.margin ? " " + esc(m.margin) : ""}` +
+                            `<span class="who">${who}</span></span><span class="spt-go">&rsaquo;</span></a>`;
+                    }).join("");
+                    const note = rc.clinched
+                        ? `<div class="spt-lsc-clinch">${first} clinched the ${esc(String(rc.year))} Lone Star Cup for ${esc(rc.clinch_team || rc.team_name || "")}</div>` : "";
+                    rows.push(
+                        `<div class="spt-lsc-wrap">` +
+                        `<a href="${cupHref}" class="spt-stand spt-stand-lsc">` +
+                        `<div class="rk"><div class="r">${esc(rc.text)}</div><div class="f">cup record</div></div>` +
+                        `<div class="mid"><div class="race"><span class="tgf-troph star gold"></span> LONE STAR CUP</div>` +
+                        `<div class="meta">${esc(rc.cup_line || (rc.team_name ? "Team " + rc.team_name : ""))}</div>${note}</div>` +
+                        pill + `<span class="spt-go">&rsaquo;</span></a>` +
+                        `<div class="spt-lsc-matches">${matchHtml}</div></div>`);
+                } else {
                 rows.push(
                     `<a href="${contestsBase}#tab=lsc" class="spt-stand spt-stand-lsc">` +
                     `<div class="rk"><div class="r">${esc(String(rk))}</div><div class="f">${fld}</div></div>` +
                     `<div class="mid"><div class="race"><span class="tgf-troph star gold"></span> LONE STAR CUP</div><div class="meta">${esc(meta)}</div></div>` +
                     pill + `<span class="spt-go">&rsaquo;</span></a>`);
+                }
             }
             // Fall buy-in placeholder LAST — only for a buy-in with no
             // fall board row yet (the races are LIVE as of 2026-09-01, so
@@ -811,6 +864,7 @@
             // below all the majors, latest month to earliest (Kerry
             // 2026-09-01). Server sends monthly_past sorted newest-first.
             const pastMoByYear = {};
+            const seasonMo = [];
             (d.monthly_past || []).forEach(m => {
                 const y = String(m.key || "").slice(0, 4) || String(new Date().getFullYear());
                 const meta = [`${m.points ?? 0} pts`,
@@ -821,7 +875,7 @@
                 // (Kerry 2026-09-01: "when they've placed first at the
                 // end, I want the trophy icon to show there in that left
                 // column where you're showing their ranking").
-                (pastMoByYear[y] = pastMoByYear[y] || []).push(standRow(
+                (y === curYear ? seasonMo : (pastMoByYear[y] = pastMoByYear[y] || [])).push(standRow(
                     m.won ? '<span class="tgf-troph" title="Month won"></span>'
                           : esc(String(m.rank ?? "—")),
                     "#1B1B1B", `of ${m.n_players}`,
@@ -842,10 +896,11 @@
                       (pastByYear[y] || []).join("") + (pastMoByYear[y] || []).join("")).join("") +
                   `</details>`
                 : "";
-            const stands = (rows.length || nPast)
+            const seasonRows = [...rows, ...seasonDone, ...seasonMo];
+            const stands = (seasonRows.length || nPast)
                 ? `<div><div class="spt-sec-head"><span class="t">Where ${esc((d.name || "").split(" ")[0] || "They")} Stands</span>` +
                   `<span class="s" style="color:var(--primary, #E87C3E);font-style:italic;">(Click for Standings)</span></div>` +
-                  `<div class="spt-panel">${rows.length ? `<div class="spt-stand-band">Current</div>` : ""}${rows.join("")}${pastHtml}</div></div>`
+                  `<div class="spt-panel">${seasonRows.length ? `<div class="spt-stand-band">${esc(curYear)} Season</div>` : ""}${seasonRows.join("")}${pastHtml}</div></div>`
                 : `<p class="spt-empty">No race appearances yet &mdash; standings show up after their first event.</p>`;
 
             // One row per EVENT with the total; expand for the games

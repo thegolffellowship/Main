@@ -16,9 +16,12 @@ from __future__ import annotations
 # cup -> season -> customer_ids. Kerry, 2026-10-12, verbatim: "Robert 2024"
 # (Players Cup, Robert Straiton); "Jay Horton was 2025 winner for both cups";
 # "Mark Freund was 2024 Fellowship Cup". "We'll get into the rest later."
+# Kerry, same day: "Jay Horton was also 2023 champion of The Players Cup which was
+# the first year we awarded that trophy. The Fellowship Cup has been around for all
+# 20 years" (so Fellowship Cup history is long and still to come from Kerry).
 CUP_CHAMPION_HISTORY = {
     "fellowship_cup": {2024: [299], 2025: [289]},   # Mark Freund; Jay Horton
-    "players_cup": {2024: [31], 2025: [289]},       # Robert Straiton; Jay Horton
+    "players_cup": {2023: [289], 2024: [31], 2025: [289]},   # Jay Horton; Robert Straiton; Jay Horton
 }
 
 CUP_NAMES = {"fellowship_cup": "The Fellowship Cup",
