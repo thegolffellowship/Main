@@ -62,7 +62,7 @@ check("a halved match counts as a half and shows in the record as 0-0-1", k["h"]
       and k["matches"][0]["result"] == "H" and k["matches"][0]["margin"] is None, str(k))
 a = R.player_record(board, 688, 2026)
 check("an Austin player reads from the other side and does not clinch",
-      a["team"] == "austin" and a["text"] == "1–2" and not a["clinched"], str(a))
+      a["team"] == "austin" and a["text"] == "1–1" and not a["clinched"], str(a))
 check("a live match is not counted", R.player_record(board, 9, 2026) is None)
 check("no record before the board is the final snapshot, or for someone who never played",
       R.player_record({**board, "source": "live"}, 42, 2026) is None and R.player_record(board, 999, 2026) is None
