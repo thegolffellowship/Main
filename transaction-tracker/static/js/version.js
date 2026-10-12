@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.545.5";
+window.TGF_VERSION = "2.545.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.545.6",
+    date: "2026-10-12",
+    title: "Spotlight profile photo: thinner frame",
+    changes: [
+      "Kerry 10/12: \"Less padding around the photo.\" The chapter-colour frame around the Spotlight profile photo is 2px (was 4px) and the photo grows to 80px inside it (was 76px), so the whole badge keeps its size and the picture gets the room."
+    ]
+  },
   {
     version: "2.545.5",
     date: "2026-10-12",

@@ -70,10 +70,10 @@
         .spt-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
         /* PROFILE PHOTO (Kerry 2026-10-12): a rounded SQUARE in a frame of the player's CHAPTER colour (Austin burnt
            orange, San Antonio blue-grey, anyone else neutral), a little padding between photo and frame. */
-        .spt-photo-frame { flex: none; padding: 4px; border-radius: 16px; background: #E5E7EB; line-height: 0; }
+        .spt-photo-frame { flex: none; padding: 2px; border-radius: 14px; background: #E5E7EB; line-height: 0; }
         .spt-photo-frame.ch-austin { background: var(--chapter-austin, #BF5700); }
         .spt-photo-frame.ch-sa { background: var(--chapter-sa-alt, #8FA8B8); }
-        .spt-photo { cursor: zoom-in; width: 76px; height: 76px; border-radius: 12px; object-fit: cover; object-position: center 28%;
+        .spt-photo { cursor: zoom-in; width: 80px; height: 80px; border-radius: 12px; object-fit: cover; object-position: center 28%;
             border: 0; display: block; }
         /* CUP CHAMPION titles, the card's last row (Kerry 2026-10-12): one line per cup,
            "The Fellowship Cup - 2026 Champion". Nothing renders for a non-champion. */
@@ -626,7 +626,7 @@
         function sptHeadshot(cid, chapter) {
             const v = SPT_PHOTOS && cid != null ? SPT_PHOTOS.h[String(cid)] : null;
             const ch = /austin/i.test(chapter || "") ? "ch-austin" : /san antonio/i.test(chapter || "") ? "ch-sa" : "ch-other";
-            return v ? `<span class="spt-photo-frame ${ch}"><img class="spt-photo" data-full="/member/photo/h/${Number(cid)}.jpg?v=${v}" src="/member/photo/hs/${Number(cid)}.jpg?v=${v}" alt="" width="76" height="76" role="button" tabindex="0" title="Tap to enlarge" onerror="this.parentNode.remove()"></span>` : "";
+            return v ? `<span class="spt-photo-frame ${ch}"><img class="spt-photo" data-full="/member/photo/h/${Number(cid)}.jpg?v=${v}" src="/member/photo/hs/${Number(cid)}.jpg?v=${v}" alt="" width="80" height="80" role="button" tabindex="0" title="Tap to enlarge" onerror="this.parentNode.remove()"></span>` : "";
         }
         // CHAMPION TITLES on a phone (Kerry 2026-10-12): all of a player's titles share one line;
         // when they don't fit, the second cup (The Players Cup) drops to its own line and the

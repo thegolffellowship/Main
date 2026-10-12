@@ -162,7 +162,7 @@ check("anything a narrow row hid (handicap, money, badges) is listed under the n
 sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()
 check("the Spotlight profile photo is a rounded square in a frame of the player's chapter colour",
       ".spt-photo-frame.ch-austin { background: var(--chapter-austin" in sp and ".spt-photo-frame.ch-sa" in sp
-      and "border-radius: 12px" in sp and 'sptHeadshot(d.customer_id, d.chapter)' in sp)
+      and "border-radius: 12px" in sp and "padding: 2px; border-radius: 14px" in sp and 'sptHeadshot(d.customer_id, d.chapter)' in sp)
 check("the Spotlight headshot enlarges like the trophy photos (full 400px photo in the lightbox, small one on the card)",
       'data-full="/member/photo/h/' in sp and 'src="/member/photo/hs/' in sp and "function sptLightbox" in sp
       and ".spt-photo[data-full]" in sp)
