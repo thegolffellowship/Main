@@ -82,6 +82,10 @@ check("Robert's cropped headshot is in the seed set, a square JPEG under the siz
 check("Jay Horton's cropped headshot (289) is in the seed set, a JPEG under the size cap",
       "289" in pp.photo_index()["h"] and tc.get("/member/photo/h/289.jpg").status_code == 200
       and len(tc.get("/member/photo/h/289.jpg").data) < pp.MAX_BYTES)
+check("Mark Freund's cropped headshot (299) is in the seed set, and the staged past-champion photos are NOT served until a registry entry names them",
+      "299" in pp.photo_index()["h"] and tc.get("/member/photo/h/299.jpg").status_code == 200
+      and tc.get("/member/photo/c/fellowship_cup-2024.jpg").status_code == 404
+      and tc.get("/member/photo/c/fellowship_cup-2025.jpg").status_code == 404)
 check("each cup plaque carries its race and champion ids, and one function applies the photo to whichever is on screen",
       'data-race="players_cup" data-cids=' in src and 'document.querySelector(\'.tgf-champ-plaque[data-race]\')' in src
       and 'fcPhotoIdx[race + "-2026"]' in src)

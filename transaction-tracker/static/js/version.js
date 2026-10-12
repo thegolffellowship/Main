@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.540.2";
+window.TGF_VERSION = "2.540.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.540.3",
+    date: "2026-10-12",
+    title: "Mark Freund's headshot; past-champion photos staged",
+    changes: [
+      "Kerry 10/12 (Mark Freund with The Fellowship Cup, 2024): data/player_photos/h-299.jpg is a 400x400 head-and-shoulders crop of that photo (about 35 KB), added to the repo seed set like the other headshots, so Mark's face shows on the Cup strips and in his Spotlight header instead of initials.",
+      "The two past-champion trophy photos Kerry has sent (Mark Freund 2024, Jay Horton 2025) are staged in data/champion_photos/ (fellowship-cup-2024.jpg, fellowship-cup-2025.jpg, EXIF removed, about 240 and 280 KB) so they are kept in git, but NOT registered in CHAMPION_PHOTOS, so nothing serves or shows them yet. Where past-champion photos appear (a Past Champions strip on the cup boards, the player's own Spotlight) is Kerry's call. No upload path, no schema. Guard: test_player_photos.py."
+    ]
+  },
   {
     version: "2.540.2",
     date: "2026-10-12",
