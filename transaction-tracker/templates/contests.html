@@ -65,9 +65,13 @@
            popup (its "This board" block); only the title and the button stay on the board. */
         #pr-preamble, #pr-preamble-toggle, #pr-phase-chip { display: none !important; }
         #pr-hiw-btn { margin-left: auto; }
-        .pr-hiw-glance { margin: 0 0 14px; padding: 10px 12px; background: #F8F8F8; border: 1px solid var(--border);
-            border-radius: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; color: var(--text-muted); }
-        .pr-hiw-glance-h { font: 700 10.5px/1 'Bitter', serif; letter-spacing: 1px; color: #6B7280; text-transform: uppercase; }
+        .pr-hiw-glance { margin: 0 0 16px; padding: 12px 14px; background: #F8F8F8; border: 1px solid var(--border); border-radius: 10px; }
+        .pr-hiw-glance-tiles { display: flex; gap: 28px; }
+        .pr-hiw-glance .l { font: 700 9px/1 'Bitter', serif; letter-spacing: 1px; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
+        .pr-hiw-tile .v { font: 700 22px/1.1 'Bitter', serif; color: #1B1B1B; font-variant-numeric: tabular-nums; }
+        .pr-hiw-tile .v span { font-size: 13px; font-weight: 600; color: #6B7280; }
+        .pr-hiw-tile .s { font: 600 11px/1.2 'Helvetica Neue', Arial, sans-serif; color: #6B7280; margin-top: 2px; }
+        .pr-hiw-glance-pl { margin-top: 10px; padding-top: 10px; border-top: 1px solid #E5E7EB; }
         .pr-hiw-pay { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
         /* Mobile preamble fold (Kerry 2026-08-01): the summary/pot/structure
            block collapses behind one chip so the leaderboard sits one thumb
@@ -5519,17 +5523,23 @@
         // "This board": what used to sit between the title and the table (Kerry 2026-10-12), read from the live header
         // nodes at the moment the popup opens, so it is always the board on screen.
         function prHiwGlance() {
-            const chip = $("pr-phase-chip"), sum = $("pr-summary"), pay = $("pr-payouts"), note = $("pr-structure-note");
-            const phase = chip && chip.style.display && chip.style.display !== "none"
-                ? chip.textContent.replace(/\s+/g, " ").trim() : "";
-            const has = n => n && n.innerHTML.trim();
-            const html = (phase ? `<div>${escapeHtml(phase)}</div>` : "")
-                + (has(sum) ? `<div>${sum.innerHTML}</div>` : "")
-                + (has(pay) ? `<div class="pr-hiw-pay">${pay.innerHTML}</div>` : "")
-                + (has(note) ? `<div>${note.innerHTML}</div>` : "");
+            const sum = $("pr-summary"), pay = $("pr-payouts");
+            const potEl = pay && pay.querySelector(".pr-pot");
+            const potTxt = potEl ? potEl.textContent.replace(/\s+/g, " ").trim() : "";
+            const potM = potTxt.match(/\$[\d,]+(?:\.\d+)?/);
+            const inM = sum && sum.textContent.match(/(\d+)\s+of\s+(\d+)/);
+            const places = pay ? [...pay.querySelectorAll(".pr-place")].map(e => e.outerHTML).join("") : "";
+            const tile = (label, value, sub) => `<div class="pr-hiw-tile"><div class="l">${label}</div><div class="v">${value}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
+            const tiles = (inM ? tile("Bought in", `${inM[1]}<span> of ${inM[2]}</span>`, "") : "")
+                + (potM ? tile("Pot", escapeHtml(potM[0]), /final/i.test(potTxt) ? "Final &middot; paid out" : "Projected") : "");
+            // The phase pill and the structure note are not repeated here: the chips and sections below already say it.
+            if (!tiles && !places) return;
+            const html = `<div class="pr-hiw-glance"><div class="pr-hiw-glance-tiles">${tiles}</div>`
+                + (places ? `<div class="pr-hiw-glance-pl"><div class="l">Places paid</div><div class="pr-hiw-pay">${places}</div></div>` : "")
+                + `</div>`;
             // first thing inside the sections block, so it shares the popup's own side padding
             const anchor = content.querySelector(".pr-hiw-secs");
-            if (html && anchor) anchor.insertAdjacentHTML("afterbegin", `<div class="pr-hiw-glance"><div class="pr-hiw-glance-h">This board</div>${html}</div>`);
+            if (anchor) anchor.insertAdjacentHTML("afterbegin", html);
         }
         btn.addEventListener("click", e => {
             e.stopPropagation();

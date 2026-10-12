@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.546.0";
+window.TGF_VERSION = "2.546.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.546.1",
+    date: "2026-10-12",
+    title: "How It Works: the \"This board\" block, tidied",
+    changes: [
+      "Kerry 10/12: \"That could be formatted better and be less redundant with the Best 10 + mention.\" The block at the top of How It Works drops the phase line and the structure note (the chips and sections directly below already say \"best 10 + City Championship\") and becomes a small stat panel: BOUGHT IN 9 of 53 and POT $360 (with Final / Projected under it) side by side, then a PLACES PAID row of the 1st / 2nd / 3rd chips."
+    ]
+  },
   {
     version: "2.546.0",
     date: "2026-10-12",

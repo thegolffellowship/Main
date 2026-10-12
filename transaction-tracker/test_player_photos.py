@@ -159,6 +159,7 @@ check("anyone who won money in a contest gets their headshot, not only the top 3
 check("the board header is just the title and a right-aligned HOW IT WORKS; the pot, places, bought-in count and phase move into the popup",
       "#pr-preamble, #pr-preamble-toggle, #pr-phase-chip { display: none !important; }" in src and "#pr-hiw-btn { margin-left: auto; }" in src
       and "function prHiwGlance" in src and 'class="pr-hiw-glance"' in src and "prHiwGlance();" in src
+      and 'tile("Bought in"' in src and 'tile("Pot"' in src and "Places paid" in src
       and "pre.insertBefore(hiw, pre.firstChild)" not in src)
 check("a player with no headshot gets no placeholder: the slot is removed and the name sits at the left like a non-winner's",
       ".pr-av:empty { display: none; }" in src and "if (fcHeadIdx) el.remove(); return; }" in src)
