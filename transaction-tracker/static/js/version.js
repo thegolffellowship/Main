@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.540.4";
+window.TGF_VERSION = "2.540.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.540.5",
+    date: "2026-10-12",
+    title: "Jay Horton's 2023 Players Cup photo staged",
+    changes: [
+      "Kerry 10/12 sent \"Jay Horton and The Players Cup in 2023\", which matches the 2023 Players Cup title already recorded for Jay (customer 289). The photo is staged in data/champion_photos/players-cup-2023.jpg (1200x1200, EXIF removed, about 270 KB) with the other past-champion photos; it is not registered in CHAMPION_PHOTOS, so nothing serves or shows it until Kerry chooses where past-champion photos appear. Jay's headshot stays the one cropped from the 2025 Fellowship Cup photo. Guard: test_player_photos.py."
+    ]
+  },
   {
     version: "2.540.4",
     date: "2026-10-12",
