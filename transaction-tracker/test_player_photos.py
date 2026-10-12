@@ -62,7 +62,7 @@ check("the champion photo is in the index with ids, cup name and caption", c.get
 r = tc.get("/member/photo/c/fellowship_cup-2026.jpg")
 check("the champion photo serves as a JPEG from the repo", r.status_code == 200 and r.mimetype == "image/jpeg"
       and r.data[:3] == b"\xff\xd8\xff" and len(r.data) < 400 * 1024, r.status_code)
-check("an unknown champion key or a path trick is a 404", tc.get("/member/photo/c/players_cup-2026.jpg").status_code == 404
+check("an unknown champion key or a path trick is a 404", tc.get("/member/photo/c/city_net-2026.jpg").status_code == 404
       and pp.photo_file("c", "../h-42") is None and pp.photo_file("c", "") is None)
 check("the public index still carries no names beyond the champion caption", "Barstow" not in tc.get("/api/player-photos").get_data(as_text=True))
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "contests.html")).read()
@@ -70,6 +70,18 @@ check("the plaque carries its champion ids and the photo is matched against them
       'data-race="fellowship_cup" data-cids=' in src and "fcApplyChampPhoto" in src and "norm((el.dataset.cids" in src)
 check("a failed or missing photo keeps the trophy glyph", 'onerror="this.remove()"' in src.split("function fcApplyChampPhoto")[1][:1500]
       or "if (!el || !p || el.dataset.photoDone) return;" in src)
+
+pc = pp.photo_index()["c"].get("players_cup-2026") or {}
+check("the Players Cup champion photo is indexed for Robert Straiton (31) with the cup name and caption",
+      pc.get("ids") == [31] and pc.get("cup") == "The Players Cup" and "Robert Straiton" in pc.get("caption", ""), str(pc))
+check("the Players Cup photo serves as a JPEG from the repo", tc.get("/member/photo/c/players_cup-2026.jpg").status_code == 200
+      and tc.get("/member/photo/c/players_cup-2026.jpg").mimetype == "image/jpeg")
+check("Robert's cropped headshot is in the seed set, a square JPEG under the size cap",
+      "31" in pp.photo_index()["h"] and tc.get("/member/photo/h/31.jpg").status_code == 200
+      and len(tc.get("/member/photo/h/31.jpg").data) < pp.MAX_BYTES)
+check("each cup plaque carries its race and champion ids, and one function applies the photo to whichever is on screen",
+      'data-race="players_cup" data-cids=' in src and 'document.querySelector(\'.tgf-champ-plaque[data-race]\')' in src
+      and 'fcPhotoIdx[race + "-2026"]' in src)
 
 import mcp_server as M                                            # noqa: E402
 b64 = base64.b64encode(JPEG).decode()

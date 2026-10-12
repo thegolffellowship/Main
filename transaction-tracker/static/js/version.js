@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.538.0";
+window.TGF_VERSION = "2.539.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.539.0",
+    date: "2026-10-12",
+    title: "THE PLAYERS CUP: the champion's photo on the plaque; Robert Straiton's headshot",
+    changes: [
+      "Kerry 10/12 (Robert Straiton with the 2026 Players Cup): the same plaque treatment as the Fellowship Cup. The Players Cup champion plaque shows the photo in the trophy slot, tap for the full photo with its caption, glyph kept when there is no photo or the champion is anyone else. One function now applies a champion photo to whichever cup plaque is on screen, keyed by race ('players_cup' / 'fellowship_cup'); the city champion plaques are unchanged. CHAMPION_PHOTOS gains players_cup-2026 (customer 31, data/champion_photos/players-cup-2026.jpg, 1200x1600, about 350 KB, EXIF removed).",
+      "Kerry: \"You can also crop this photo for his standard headshot for profile.\" data/player_photos/h-31.jpg is a 400x400 head-and-shoulders crop of the same photo (about 35 KB), added to the repo seed set like the other 42 headshots, so Robert's face now shows on the Cup strips and in his Spotlight header where only initials showed. No upload path, no schema; guard test_player_photos.py."
+    ]
+  },
   {
     version: "2.538.0",
     date: "2026-10-12",

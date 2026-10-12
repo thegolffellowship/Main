@@ -48,6 +48,12 @@ CHAMPION_PHOTOS = {
         "cup": "The Bruce Friesenhahn Fellowship Cup",
         "caption": "Gus Vasquez with The Bruce Friesenhahn Fellowship Cup, 2026",
     },
+    "players_cup-2026": {
+        "file": "players-cup-2026.jpg",
+        "customer_ids": [31],
+        "cup": "The Players Cup",
+        "caption": "Robert Straiton with The Players Cup, 2026",
+    },
 }
 
 

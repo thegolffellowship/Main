@@ -9526,7 +9526,7 @@
         // as the race is declared final and has a champion.
         const champStrip = champs.length
             ? (cupChampRace
-                ? `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
+                ? `<div class="tgf-champ-plaque" data-race="players_cup" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
                 : `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div></div>`)
             : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
@@ -9586,6 +9586,7 @@
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
+        fcChampPhotoLoad();
         $("pr-table-container").dataset.live = liveMode ? "1" : "0";
         // Round list for the expansion's Round 1 / Round 2 card toggle
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupMode ? cupBoards : []);
@@ -9708,14 +9709,15 @@
         fcPhotoReq.then(fcApplyChampPhoto);
     }
     function fcApplyChampPhoto() {
-        const el = document.querySelector('.tgf-champ-plaque[data-race="fellowship_cup"]');
-        const p = fcPhotoIdx && fcPhotoIdx["fellowship_cup-2026"];
+        const el = document.querySelector('.tgf-champ-plaque[data-race]');
+        const race = el && el.dataset.race;
+        const p = fcPhotoIdx && race && fcPhotoIdx[race + "-2026"];
         if (!el || !p || el.dataset.photoDone) return;
         const norm = a => a.map(Number).filter(Boolean).sort((x, y) => x - y).join(",");
         if (norm((el.dataset.cids || "").split(",")) !== norm(p.ids || [])) return;
         const glyph = el.querySelector(".tgf-champ-trophy");
         if (!glyph) return;
-        const src = `/member/photo/c/fellowship_cup-2026.jpg?v=${p.v}`;
+        const src = `/member/photo/c/${race}-2026.jpg?v=${p.v}`;
         glyph.outerHTML = `<img class="champ-photo" src="${src}" alt="${escapeHtml(p.caption)}" role="button" tabindex="0" onerror="this.remove()">`;
         const img = el.querySelector(".champ-photo");
         const open = () => fcChampLightbox(src, p.caption);
