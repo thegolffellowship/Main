@@ -9,6 +9,7 @@ window.TGF_CHANGELOG = [
       "Kerry 10/12: \"I would like all guests to always be placed with an ambassador, unless they are the guest of one of our members, or requests someone specificially.\" This is read at the cart, as in his Hector Hinojosa case: the group had an Ambassador, but he rode with his requested partner. A request for someone not playing exempts nobody.",
       "Kerry 10/12: removing a player and re-seating now re-deals the short groups when the field fits fewer groups (20 players = 5 groups, not 6). Full foursomes stay seat for seat unless their seats break the two new rules. Nothing moves once the event has started, and nothing is re-dealt while the roster and the sheet disagree.",
       "Found on the way: a full seeded group used to consume one generated group, and those players disappeared from the sheet. Full seeds now take nobody.",
+      "Kerry 10/12: \"1st Timer and First Year member rules do need to supercede count rules, only if there's a conflict.\" Sheets are now compared on those misses first and repeat counts second. In the cart seater, the 1st Timer Ambassador cart (40) and First Year never alone (50) now sit above the count terms. The third-solo-in-a-row rule drops from 500 to 30 and cart history stays at 0.4. Requests and Match Play are unchanged.",
       "The read-only pairings audit flags both new rules. Guard: test_pairings_rules_1012.py, on the 10/13 Quarry field."
     ]
   },

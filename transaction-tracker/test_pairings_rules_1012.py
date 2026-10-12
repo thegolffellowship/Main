@@ -59,6 +59,25 @@ seat = db._arrange_group_seats(["Cap C", "Mem M", "New N"], set(), set(),
                                captains={"Cap C"}, no_solo={"New N"})
 check("1Y is not in seat 3 of a threesome", seat[2] != "New N", seat)
 
+print("units: 1st Timer / First Year rules outrank count rules (Kerry 10/12)")
+seat2 = db._arrange_group_seats(["Str S", "New N", "New M"], set(), set(),
+                                {"Str S": "<50", "New N": "<50", "New M": "<50"},
+                                no_solo={"New N", "New M"}, solo_streak={K("Str S"): 2})
+check("a 3rd solo cart in a row (count rule) yields to a First Year player riding alone",
+      seat2[2] == "Str S", seat2)
+seat3 = db._arrange_group_seats(["Ft F", "Amb A", "Str S"], set(), set(),
+                                {"Ft F": "<50", "Amb A": "<50", "Str S": "<50"},
+                                ambassadors={"Amb A"}, first_timers={"Ft F"},
+                                solo_streak={K("Str S"): 2})
+check("a 1st Timer rides with the Ambassador even when that leaves a 3rd solo in a row",
+      sorted(seat3[:2]) == ["Amb A", "Ft F"], seat3)
+seat4 = db._arrange_group_seats(["Req A", "Req B", "New N"], set(),
+                                {frozenset((K("Req A"), K("Req B")))},
+                                {"Req A": "<50", "Req B": "<50", "New N": "<50"},
+                                no_solo={"New N"})
+check("a request still outranks the First Year rule (unchanged until Kerry says)",
+      sorted(seat4[:2]) == ["Req A", "Req B"], seat4)
+
 # ── the 10/13 field ───────────────────────────────────────────────────
 P = [  # name, tee, captain, ambassador, solo_back_ok, new_1y, guest, request
  ("Gus Vasquez", "50-64", 1, 1, 0, 0, 0, None), ("Michael Murphy", "65+", 0, 0, 0, 0, 0, None),
@@ -181,6 +200,45 @@ for drop in ("Michael Murphy", "Dan Stich", "Brian Thompson", "Jeff Rideout"):
     h = next(c for g in g2 for c in carts(g) if "Hector Hinojosa" in c)
     check(f"without {drop}: Hector rides with an Ambassador",
           any(ambs(n) for n in h if n != "Hector Hinojosa"), h)
+
+print("composition: a First Year player is not left alone to save repeat counts")
+# Seven players -> a foursome and a threesome. Ann + Bob requested each other.
+# Nina (1Y) has played Cal, Dee, Eli and Fay twice each. The cheapest sheet by
+# counts alone is Ann/Bob/Nina with Nina riding alone; the rule outranks that.
+ev9 = 4700
+build(ev9)
+SEV = [("Ann Ames", "Bob Bell"), ("Bob Bell", "Ann Ames"), ("Nina New", None), ("Cal Cole", None),
+       ("Dee Dunn", None), ("Eli Eads", None), ("Fay Fox", None)]
+with db._connect(DB) as c:
+    for i, (n, rq) in enumerate(SEV):
+        cid = 1900 + i
+        fn, ln = n.split(" ", 1)
+        c.execute("INSERT INTO customers (customer_id,first_name,last_name,current_player_status,ambassador) "
+                  "VALUES (?,?,?,'active_member',1)", (cid, fn, ln))
+        c.execute("INSERT INTO items (customer,customer_id,item_name,holes,tee_choice,transaction_status,"
+                  "order_date,order_id,email_uid,merchant,user_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                  (n, cid, "s9.1 Earlier", "9", "50-64", "active", "2026-03-01", f"E{cid}", f"manual-e{cid}",
+                   "GoDaddy", "MEMBER"))
+        c.execute("INSERT INTO customer_memberships (customer_id,started_at,expires_at,source) "
+                  "VALUES (?,?,?,'manual')", (cid, "2026-02-01" if n == "Nina New" else "2019-02-01", "2027-02-01"))
+        c.execute("INSERT INTO items (customer,customer_id,item_name,event_id,holes,tee_choice,"
+                  "transaction_status,order_date,order_id,email_uid,merchant,user_status,partner_request) "
+                  "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (n, cid, f"s9.27 The Quarry {ev9}", ev9, "9", "50-64", "active", "2026-10-10",
+                   f"R{ev9}{cid}", f"manual-{ev9}-{cid}", "GoDaddy", "MEMBER", rq))
+    k = 0
+    for other in ("Cal Cole", "Dee Dunn", "Eli Eads", "Fay Fox"):
+        for _ in range(2):
+            k += 1
+            c.execute("INSERT INTO pairing_history (player_a,player_b,event_id,event_date,rode,source) "
+                      "VALUES (?,?,?,?,0,'gg_teesheet')", ("Nina New", other, 60000 + k, "2026-06-01"))
+    c.commit()
+g9, _n = gen(ev9)
+solo9 = [c[0] for g in g9 for c in carts(g) if len(c) == 1]
+check("Nina (1Y) does not ride alone, though it costs repeat counts", "Nina New" not in solo9,
+      [[p["name"] for p in g["players"]] for g in g9])
+c9 = next(c for g in g9 for c in carts(g) if "Ann Ames" in c)
+check("Ann + Bob still ride together", "Bob Bell" in c9, c9)
 
 print("guest exemptions")
 ev3 = 4100

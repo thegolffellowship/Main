@@ -12,6 +12,18 @@ Kerry gave these three rules on 2026-10-12, 5:35 PM CDT (Front Desk, mailbox #16
   - **or 1st Timer**: their first event.
 - **Hard** in the audit.
 
+## R-H2: rule tiers (Kerry 2026-10-12, second message)
+
+Kerry, verbatim: "1st Timers have additional rules to First Year members. You graduate from 1st Timer rules into First Year rules. In other words, some of the rules, like riding/playing with an Ambassador drop. 1st Timer and First Year member rules do need to supercede count rules, only if there's a conflict."
+
+- **1st Timer** = the First Year rules + the Ambassador rule (R-A).
+- **First Year** = never alone (R-H).
+- Both outrank every count rule when they conflict:
+  - repeat counts and repeats in sequence;
+  - cart history (R-G);
+  - solo streaks (R-C).
+- Requests and Match Play are not count rules, so they are unchanged.
+
 ## R-I: a reseat that frees a group re-deals
 
 - **When:** a player is removed before the event starts, and the field now fits fewer groups (ceil of players / 4).

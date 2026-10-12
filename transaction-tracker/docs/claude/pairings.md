@@ -2206,6 +2206,21 @@ The case was s9.27 The Quarry (event 3307, Tue 10/13). After Chris Espinosa came
 - **Seating.** `_arrange_group_seats(no_solo=)` adds a cost of 50 to a first year player in seat 3 of a threesome. That is below a request (100) and the third-solo-in-a-row rule (500), and above the Ambassador cart (10).
 - **"Unless it can't be avoided".** The generator only accepts a sheet with a miss when no other sheet keeps the requests, matches and locks. When it does, the PAIRINGS tab gets a note.
 
+### 16a — 1st Timer rules, then First Year rules, above the count rules (Kerry 2026-10-12)
+
+Kerry, verbatim: "1st Timers have additional rules to First Year members. You graduate from 1st Timer rules into First Year rules. In other words, some of the rules, like riding/playing with an Ambassador drop. 1st Timer and First Year member rules do need to supercede count rules, only if there's a conflict."
+
+- **Two tiers.**
+  - A 1st Timer gets the First Year rules plus their own, such as riding and playing with an Ambassador (rule 14).
+  - After their first event they graduate to First Year: the Ambassador rule drops, and "never alone" (rule 16) stays.
+  - The code already worked this way: `is_first_timer` drives rule 14, and `is_new` or `is_first_timer` drives rule 16.
+- **Above the count rules.** Count rules are the repeat counts (rule 3 / "repeats in sequence"), R-G cart history and R-C solo streaks.
+  - **Composition:** each restart is scored with the 1st Timer and First Year misses first (rule-14 and rule-16 terms), then everything else. Repeat counts only break ties between sheets that miss those rules equally.
+  - **Seating:** a First Year player alone costs 50 and a 1st Timer without an Ambassador cart-mate costs 40. The count terms sit below them: R-C third solo in a row is 30 (it was 500), R-C last-time solo is 2, and R-G is 0.4.
+- **Unchanged until Kerry rules otherwise.**
+  - A partner request (100) and Match Play (1000) still outrank both tiers.
+  - The guest rule (18) shares the 40 seat weight with rule 14, but in composition it sits with the other rules, not above the counts.
+
 ### 17 — a reseat that frees a group re-deals the short groups
 
 - **Where.** `remove_player_from_pairings` calls `_regroup_after_removal` when it re-seats (before the start only; rule 15b is unchanged) and the field now fits fewer groups: ceil(n / 4), or n / 5 on a fivesome event. For example, 20 players need 5 groups, not 6.

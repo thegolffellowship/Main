@@ -69825,11 +69825,17 @@ def generate_event_pairings(
                 )
                 cand = _swap_improve(cand, pair_counts, locked_names)
                 cand, cand_notes = _rules_fix(cand, improve=True)
-                score = (sum(sum(_rule_misses(g)) for g in cand) * _repeat_cost(1)
+                # Kerry 2026-10-12: "1st Timer and First Year member rules do
+                # need to supercede count rules, only if there's a conflict."
+                # So their misses (terms 2 and 3) compare FIRST; repeat
+                # counts only break ties among sheets that miss them equally.
+                _m = [_rule_misses(g) for g in cand]
+                score = (sum(m[2] + m[3] for m in _m),
+                         sum(m[0] + m[1] + m[4] for m in _m) * _repeat_cost(1)
                          + sum(_group_score(g, pair_counts) for g in cand))
                 if best_score is None or score < best_score:
                     best_groups, best_score, best_notes = cand, score, cand_notes
-                if best_score == 0:
+                if best_score == (0, 0):
                     break
             groups_players = best_groups or []
             mp_notes.extend(best_notes)
@@ -70458,14 +70464,19 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
 
     - R-C solo carts (Kerry 2026-10-06, Olympia Hills, event 3308): in a
       threesome seat 3 rides alone. Nobody takes it a third time in a row
-      (weight 500: above a request, below Match Play); someone who rode
-      alone last time is avoided when another choice exists (weight 2).
+      (weight 30); someone who rode alone last time is avoided when
+      another choice exists (weight 2). R-C is a COUNT rule, so since
+      2026-10-12 it sits below the 1st Timer and First Year rules (it was
+      500, above a request).
 
-    - First year players never alone (Kerry 2026-10-12): a `no_solo`
-      player (1Y member or 1st Timer) in the solo seat costs 50: below a
-      request (100), above the 1st Timer / guest Ambassador cart (10).
-      The composition half (`_group_seat_misses`) keeps such a group from
-      forming in the first place whenever another sheet exists.
+    - 1st Timer and First Year rules (Kerry 2026-10-12): "You graduate from
+      1st Timer rules into First Year rules ... 1st Timer and First Year
+      member rules do need to supercede count rules, only if there's a
+      conflict." A `no_solo` player (1Y member or 1st Timer) in the solo
+      seat costs 50; a 1st Timer (or unattached guest) without an
+      Ambassador cart-mate costs 40. Both sit above every count term (R-C
+      30, R-G 0.4) and below a request (100). The composition half
+      (`_group_seat_misses`) keeps such a group from forming at all.
 
     Groups are ≤ 4 players (24 permutations), so brute force is exact.
     """
@@ -70514,7 +70525,7 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
         if len(perm) == 3:
             streak = solo_streak.get(keys[perm[2]], 0)
             if streak >= 2:
-                cost += 500
+                cost += 30
             elif streak == 1:
                 cost += 2
             if keys[perm[2]] in no_solo:
@@ -70528,14 +70539,15 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                 # tees ride together; captain-with-newest breaks ties).
                 cost += 0.5
         # Rule 14 seating half: a first-timer shares a cart with an
-        # ambassador when the group has one (weight 10; the tee term
-        # below prefers a same-tee ambassador among equals).
+        # ambassador when the group has one (weight 40 since 2026-10-12,
+        # above the count terms; the tee term prefers a same-tee
+        # ambassador among equals).
         for i in range(len(perm)):
             if keys[perm[i]] in first_timers and keys[perm[i]] not in ambassadors:
                 if any(keys[perm[k]] in ambassadors for k in range(len(perm)) if k != i) and \
                    not any(_cart(k) == _cart(i) and keys[perm[k]] in ambassadors
                            for k in range(len(perm)) if k != i):
-                    cost += 10
+                    cost += 40
         if best_cost is None or cost < best_cost:
             best, best_cost = list(perm), cost
         if best_cost == 0:
