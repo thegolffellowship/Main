@@ -112,7 +112,14 @@
            row"): the headshot makes the name block taller, so rank, points, reset, rounds and buy-in were riding high */
         #pr-table-container tbody tr[data-pname] > td, #pr-table-container tbody tr[data-city-rank] > td,
         #pr-table-container tbody tr[data-cid]:not(.pr-mo-detail) > td { vertical-align: middle; }
-        @media (max-width: 560px) { .pr-pay { font-size: 14px; } .pr-nm { gap: 6px; } .pr-nm-l { white-space: normal; line-height: 1.35; } }
+        .pr-nm-t, .pr-nm-n, .pr-nm-b { display: inline; }
+        @media (max-width: 560px) {
+            .pr-pay { font-size: 14px; } .pr-nm { gap: 6px; }
+            .pr-nm-l { white-space: normal; line-height: 1.35; display: flex; align-items: center; }
+            .pr-nm-t { display: block; min-width: 0; }
+            .pr-nm-n, .pr-nm-b { display: block; }
+            .pr-nm-b { margin-top: 2px; }
+        }
 
         /* How-it-works link + popup (Kerry, 2026-07-10) */
         .pr-hiw-link {
@@ -2115,7 +2122,7 @@
         /* STANDINGS HEADSHOTS, concept B (Kerry 2026-10-12): a larger round headshot on the top 3 only; every other
            row keeps a blank slot of the same width so the names stay aligned (not on a phone, where width is tight). */
         .pr-av { display: inline-block; width: 40px; height: 40px; margin-right: 10px; vertical-align: middle; border-radius: 50%; flex: none; }
-        .pr-av.sm { width: 30px; height: 30px; margin-right: 7px; }
+        .pr-av.tight { margin-right: 8px; }
         .pr-av img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: center 30%;
             border: 2px solid #fff; box-shadow: 0 0 0 1px #d1d5db; display: block; }
         tr[data-champion] .pr-av img { border-color: #D4A017; box-shadow: 0 0 0 1px #D4A017; }
@@ -9532,11 +9539,11 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}${chevron}</div>${compact && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSub}</td>
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}${chevron}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSub}</td>
                 <td style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -9776,7 +9783,7 @@
         const n = parseInt(String(r.rank == null ? "" : r.rank).replace(/\D/g, ""), 10);
         const top = n >= 1 && n <= 3;
         if (!top && compact) return "";
-        return `<span class="pr-av${compact ? " sm" : ""}"${top ? ` data-av="${r.customer_id}"` : ""}></span>`;
+        return `<span class="pr-av${compact ? " tight" : ""}"${top ? ` data-av="${r.customer_id}"` : ""}></span>`;
     }
     function fcApplyAvatars() {
         document.querySelectorAll(".pr-av[data-av]:not([data-done])").forEach(el => {
@@ -9994,11 +10001,11 @@
                 : '';
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}${nameCell}${r.customer_id && fcChampIds.has(r.customer_id)
+                <td${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-n">${nameCell}</span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
-                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}</div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSubF}</td>
+                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
@@ -10178,7 +10185,7 @@
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</div></div></td>
+                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-n">${name}</span><span class="pr-nm-b">${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</span></span></div></div></td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>

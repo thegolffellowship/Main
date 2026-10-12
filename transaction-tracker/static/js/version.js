@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.544.0";
+window.TGF_VERSION = "2.544.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.544.1",
+    date: "2026-10-12",
+    title: "Standings on a phone: badges under the name, headshot stays full size",
+    changes: [
+      "Kerry 10/12: \"Maybe badges right under name on mobile so image can stay larger.\" On a phone the standings headshot is back to 40px (it had shrunk to 30px) and the badges (champion, AUSTIN/SAN ANTONIO captain, status, the row chevron) sit on a line right under the name; on desktop they stay inline after the name as before. Same on THE FELLOWSHIP CUP and Monthly."
+    ]
+  },
   {
     version: "2.544.0",
     date: "2026-10-12",
