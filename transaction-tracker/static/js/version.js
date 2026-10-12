@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.549.0";
+window.TGF_VERSION = "2.549.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.549.1",
+    date: "2026-10-12",
+    title: "Jay Horton's 2025 badge: back to the full-head crop",
+    changes: [
+      "Kerry 10/12: \"Let's go with original crop for Jay Horton. I don't like cropping his head on that.\" The square badge for Jay Horton's 2025 Fellowship Cup photo is the top-anchored crop again (whole head and hat, the cup up to the base of the plaque); the full photo still opens on tap."
+    ]
+  },
   {
     version: "2.549.0",
     date: "2026-10-12",

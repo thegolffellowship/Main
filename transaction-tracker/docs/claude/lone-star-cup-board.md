@@ -1297,3 +1297,5 @@ Small copies keep pages light: `data/champion_photos/sm/` (300x400) and `data/pl
 
 Every champion photo has three files: the full original (`data/champion_photos/<file>`, shown only in the lightbox), a small copy (`sm/`, 300x400) and a SQUARE badge crop (`sq/`, 400x400, top-anchored: head, torso, trophy) served by `/member/photo/cq/<key>.jpg` for the plaque (140px), the Past Champions strip (92px) and the Spotlight thumbnails (76px). A new photo needs its `sq` (and `sm`) copy; `test_player_photos.py` fails without them.
 
+Crop offsets (v2.549.0/.1): the `sq` badge crop is top-anchored for most photos; per-photo vertical offsets (px into the 1200x1600 original) are Gus 2026 40, Robert Players Cup 2024 100 and 2026 120, so the whole trophy shows. Jay Horton 2025 is top-anchored (offset 0, whole head, Kerry's call: "I don't like cropping his head").
+
