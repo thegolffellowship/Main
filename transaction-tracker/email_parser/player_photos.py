@@ -54,6 +54,39 @@ CHAMPION_PHOTOS = {
         "cup": "The Players Cup",
         "caption": "Robert Straiton with The Players Cup, 2026",
     },
+    # PAST CHAMPIONS (Kerry 2026-10-12, captioning each photo): same rule, an older
+    # year. Shown on the Past Champions strip of the cup boards and under the
+    # champion titles on that player's Spotlight.
+    "fellowship_cup-2023": {
+        "file": "fellowship-cup-2023.jpg",
+        "customer_ids": [497],
+        "cup": "The Fellowship Cup",
+        "caption": "Paul Day with The Fellowship Cup, 2023",
+    },
+    "fellowship_cup-2024": {
+        "file": "fellowship-cup-2024.jpg",
+        "customer_ids": [299],
+        "cup": "The Fellowship Cup",
+        "caption": "Mark Freund with The Fellowship Cup, 2024",
+    },
+    "fellowship_cup-2025": {
+        "file": "fellowship-cup-2025.jpg",
+        "customer_ids": [289],
+        "cup": "The Fellowship Cup",
+        "caption": "Jay Horton with The Fellowship Cup, 2025",
+    },
+    "players_cup-2023": {
+        "file": "players-cup-2023.jpg",
+        "customer_ids": [289],
+        "cup": "The Players Cup",
+        "caption": "Jay Horton with The Players Cup, 2023, the first year it was awarded",
+    },
+    "players_cup-2024": {
+        "file": "players-cup-2024.jpg",
+        "customer_ids": [31],
+        "cup": "The Players Cup",
+        "caption": "Robert Straiton with The Players Cup, 2024 TGF Championship at The Bandit",
+    },
 }
 
 

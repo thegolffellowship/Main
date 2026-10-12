@@ -55,5 +55,49 @@ def cup_titles(customer_id: int, season: int, current: dict | None = None) -> li
             years.add(season)
         if years:
             ys = sorted(years)
-            out.append({"cup": cup, "years": ys, "line": title_line(cup, ys)})
+            out.append({"cup": cup, "years": ys, "line": title_line(cup, ys),
+                        "photos": _title_photos(customer_id, cup, ys)})
+    return out
+
+
+def _title_photos(customer_id: int, cup: str, years: list) -> list:
+    """The registered champion photos for these title years that show this
+    player (Kerry 2026-10-12: past-champion photos on the Spotlight). Only a
+    photo whose tagged people include the player is returned, in year order;
+    a year with no photo simply has none."""
+    try:
+        from .player_photos import CHAMPION_DIR, CHAMPION_PHOTOS
+    except Exception:
+        return []
+    out = []
+    for y in years:
+        key = f"{cup}-{y}"
+        c = CHAMPION_PHOTOS.get(key)
+        f = CHAMPION_DIR / c["file"] if c else None
+        if c and customer_id in c["customer_ids"] and f.is_file():
+            out.append({"key": key, "year": y, "caption": c["caption"],
+                        "v": int(f.stat().st_mtime)})
+    return out
+
+
+def past_champions(names: dict) -> dict:
+    """The Past Champions strip for the cup boards: per cup, newest year first,
+    the champion(s)' names (`names` maps customer_id to a display name) and the
+    registered photo for that year when it shows exactly those people."""
+    try:
+        from .player_photos import CHAMPION_DIR, CHAMPION_PHOTOS
+    except Exception:
+        CHAMPION_DIR, CHAMPION_PHOTOS = None, {}
+    out = {}
+    for cup in CUP_ORDER:
+        rows = []
+        for y, ids in sorted(CUP_CHAMPION_HISTORY.get(cup, {}).items(), reverse=True):
+            row = {"year": y, "customer_ids": list(ids),
+                   "names": [names[i] for i in ids if names.get(i)], "photo": None}
+            c = CHAMPION_PHOTOS.get(f"{cup}-{y}")
+            if c and sorted(c["customer_ids"]) == sorted(ids) and (CHAMPION_DIR / c["file"]).is_file():
+                row["photo"] = {"key": f"{cup}-{y}", "caption": c["caption"],
+                                "v": int((CHAMPION_DIR / c["file"]).stat().st_mtime)}
+            rows.append(row)
+        out[cup] = rows
     return out

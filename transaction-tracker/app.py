@@ -13405,6 +13405,29 @@ def api_player_photos():
     return resp
 
 
+@app.route("/api/cup-champions")
+@require_role("member")
+def api_cup_champions():
+    """PAST CHAMPIONS for the two cup boards (Kerry 2026-10-12): the years Kerry
+    has stated (email_parser/cup_titles.py CUP_CHAMPION_HISTORY), the
+    champion's display name, and the registered photo when there is one.
+    Names of past champions only; no contact data."""
+    from email_parser.cup_titles import CUP_CHAMPION_HISTORY, past_champions
+    ids = {i for h in CUP_CHAMPION_HISTORY.values() for v in h.values() for i in v}
+    names = {}
+    conn = get_connection()
+    try:
+        q = ",".join("?" * len(ids))
+        for r in conn.execute(f"SELECT customer_id, first_name, last_name FROM customers WHERE customer_id IN ({q})",
+                              sorted(ids)):
+            names[r[0]] = f"{r[1] or ''} {r[2] or ''}".strip()
+    finally:
+        conn.close()
+    resp = jsonify(past_champions(names))
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 @app.route("/member/photo/<kind>/<key>.jpg")
 def member_player_photo(kind, key):
     """One player headshot (h/<customer_id>) or team shot (t/<a>-<b>).

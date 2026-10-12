@@ -25,7 +25,8 @@ def check(l, c, d=""):
 
 
 with db._connect(tmp) as conn:
-    for cid, fn, ln in ((62, "Bill", "Barstow"), (672, "David", "Wetz")):
+    for cid, fn, ln in ((62, "Bill", "Barstow"), (672, "David", "Wetz"),
+                       (497, "Paul", "Day"), (299, "Mark", "Freund"), (289, "Jay", "Horton"), (31, "Robert", "Straiton")):
         conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (?,?,?)", (cid, fn, ln))
     conn.commit()
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 200 + b"\xff\xd9"
@@ -82,17 +83,27 @@ check("Robert's cropped headshot is in the seed set, a square JPEG under the siz
 check("Jay Horton's cropped headshot (289) is in the seed set, a JPEG under the size cap",
       "289" in pp.photo_index()["h"] and tc.get("/member/photo/h/289.jpg").status_code == 200
       and len(tc.get("/member/photo/h/289.jpg").data) < pp.MAX_BYTES)
-check("Mark Freund's cropped headshot (299) is in the seed set, and the staged past-champion photos are NOT served until a registry entry names them",
-      "299" in pp.photo_index()["h"] and tc.get("/member/photo/h/299.jpg").status_code == 200
-      and tc.get("/member/photo/c/fellowship_cup-2024.jpg").status_code == 404
-      and tc.get("/member/photo/c/fellowship_cup-2025.jpg").status_code == 404)
-check("Paul Day's cropped headshot (497) is in the seed set; his staged 2023 trophy photo is not served",
-      "497" in pp.photo_index()["h"] and tc.get("/member/photo/h/497.jpg").status_code == 200
-      and tc.get("/member/photo/c/fellowship_cup-2023.jpg").status_code == 404)
-check("the staged 2023 Players Cup photo (Jay Horton) is kept but not served", tc.get("/member/photo/c/players_cup-2023.jpg").status_code == 404
-      and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "champion_photos", "players-cup-2023.jpg")))
-check("the staged 2024 Players Cup photo (Robert Straiton) is kept but not served", tc.get("/member/photo/c/players_cup-2024.jpg").status_code == 404
-      and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "champion_photos", "players-cup-2024.jpg")))
+check("Mark Freund's (299) and Paul Day's (497) cropped headshots are in the seed set",
+      all(i in pp.photo_index()["h"] and tc.get(f"/member/photo/h/{i}.jpg").status_code == 200 for i in ("299", "497")))
+PAST = {"fellowship_cup-2023": [497], "fellowship_cup-2024": [299], "fellowship_cup-2025": [289],
+        "players_cup-2023": [289], "players_cup-2024": [31]}
+c = pp.photo_index()["c"]
+check("the five past-champion photos are registered, tagged with exactly their champion, and served as JPEGs",
+      all(k in c and c[k]["ids"] == ids and tc.get(f"/member/photo/c/{k}.jpg").status_code == 200
+          and tc.get(f"/member/photo/c/{k}.jpg").mimetype == "image/jpeg" for k, ids in PAST.items()))
+check("a past year with no photo (Players Cup 2025) is not served", tc.get("/member/photo/c/players_cup-2025.jpg").status_code == 404)
+r = tc.get("/api/cup-champions")
+j = r.get_json() if r.status_code == 200 else {}
+fc = {x["year"]: x for x in j.get("fellowship_cup", [])}
+pcx = {x["year"]: x for x in j.get("players_cup", [])}
+check("/api/cup-champions lists each cup newest year first, with the photo only where one is registered",
+      r.status_code == 200 and [x["year"] for x in j["fellowship_cup"]] == [2025, 2024, 2023]
+      and [x["year"] for x in j["players_cup"]] == [2025, 2024, 2023]
+      and fc[2024]["photo"]["key"] == "fellowship_cup-2024" and pcx[2025]["photo"] is None
+      and pcx[2023]["customer_ids"] == [289]
+      and fc[2023]["names"] == ["Paul Day"] and pcx[2024]["names"] == ["Robert Straiton"])
+check("the strip carries names and photo tags only, no contact data",
+      all(k in ("year", "customer_ids", "names", "photo") for x in j["fellowship_cup"] for k in x))
 check("each cup plaque carries its race and champion ids, and one function applies the photo to whichever is on screen",
       'data-race="players_cup" data-cids=' in src and 'document.querySelector(\'.tgf-champ-plaque[data-race]\')' in src
       and 'fcPhotoIdx[race + "-2026"]' in src)

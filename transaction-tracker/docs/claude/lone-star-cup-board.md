@@ -1277,3 +1277,7 @@ Once the cup board is the FINAL (frozen) snapshot, the Spotlight's Lone Star Cup
 
 Collapsed months and Champion label (v2.540.1, Kerry 2026-10-12): the Spotlight's current-season monthly results fold into one "Monthly Results" line (`moFold`, class `spt-mo`); a decided Fellowship Cup row says "Champion" for the overall winner (and the Players Cup row likewise) instead of the old reset-points gap "N from 1st", which is shown only while the cup is undecided.
 
+### Past Champions and the standard photo look (v2.541.0, Kerry 2026-10-12)
+
+`CHAMPION_PHOTOS` now carries the past champions too (`fellowship_cup-2023/24/25`, `players_cup-2023/24`); a photo is shown only for the people tagged in it. The cup boards get a collapsed "Past Champions" strip under the plaque (contests.html `fcPastChampsLoad`, `<details class="past-champs" data-race=...>`) filled from `GET /api/cup-champions` (`cup_titles.past_champions`, names from `customers`, years from Kerry's `CUP_CHAMPION_HISTORY`, never inferred). `cup_titles()` entries carry `photos`, which the Spotlight draws as tagged thumbnails under the title line (`sptChampPhotos`, tap = lightbox). With a photo the plaque takes class `has-photo` (small padding, portrait 102x136). The 2026 plaque photos are the Adobe "B" look (face-masked shadows/darks lift + background separation, face brightness unchanged). Headshot standard: square, head about 55% of the frame, 9% headroom, centred; shadow touch-ups lift shadows and darks only.
+

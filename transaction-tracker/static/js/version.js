@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.540.6";
+window.TGF_VERSION = "2.541.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.541.0",
+    date: "2026-10-12",
+    title: "Past Champions on the cup boards and the Spotlight; the standard portrait look; headshot touch-ups",
+    changes: [
+      "PAST CHAMPIONS (Kerry 10/12: \"Both on the 1 Past Champions and 2 Spotlight\"). The Fellowship Cup and Players Cup boards each get a collapsed \"Past Champions\" strip under the plaque, newest year first, year + champion name, with the champion's photo where we have one (tap opens it full size). It reads GET /api/cup-champions, built from Kerry's own list (CUP_CHAMPION_HISTORY) and the registered photos; a year with no photo shows the name only (Players Cup 2025). On the Spotlight, each cup title with a photo shows a small tagged thumbnail under the title line (Jay Horton: Fellowship Cup 2025, Players Cup 2023); tap opens it. Registered in CHAMPION_PHOTOS: Fellowship Cup 2023 Paul Day, 2024 Mark Freund, 2025 Jay Horton; Players Cup 2023 Jay Horton, 2024 Robert Straiton. A photo only attaches to someone tagged in it.",
+      "STANDARD PHOTO LOOK (Kerry 10/12, Adobe \"B\": face-first lighting with background separation). The 2026 Gus Vasquez and Robert Straiton plaque photos are replaced with the B versions (1200x1600). With a photo, the plaque's padding now shrinks to just clear its gold rule and the portrait grows (102x136), so it sits close to the border (Kerry: \"way too much padding\").",
+      "HEADSHOTS. Robert Straiton, Jay Horton, Mark Freund and Paul Day use the consistent-zoom crop (head about 55% of the square, 9% headroom, centred; approved by Kerry). Strong-shadow headshots lifted on shadows and darks only, never overall face brightness (Adobe masks of face, neck and ears): Neal Cloer, Luke Youngs, Chris Cannon and John Wade at the stronger setting, Chuck Fehlis and Julius Jenkins at the medium one. Mary Wade, Walter Hogue and Jay Hogue were measured and left as they were (their shadows do not respond; more lift only brightens).",
+      "Guards: test_player_photos.py (five past photos registered and served, /api/cup-champions names and photo tags, no contact data), test_cup_titles.py (photos attach only to people in them, past_champions, both templates)."
+    ]
+  },
   {
     version: "2.540.6",
     date: "2026-10-12",

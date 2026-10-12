@@ -50,5 +50,22 @@ check("the Spotlight header renders the server's lines as the card's last row",
 con = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "contests.html")).read()
 check("the plaque's third line (the cup's name) is gone, the photo tag carries it", "tgf-champ-sub" in con and
       'sub.textContent = p.cup' not in con)
+jp = {t["cup"]: [x["key"] for x in t["photos"]] for t in ct.cup_titles(JAY, 2026, cur)}
+check("Jay's titles carry his registered photos in year order (Fellowship 2025; Players 2023, no 2025 photo)",
+      jp == {"fellowship_cup": ["fellowship_cup-2025"], "players_cup": ["players_cup-2023"]}, str(jp))
+rp = {t["cup"]: [x["key"] for x in t["photos"]] for t in ct.cup_titles(ROBERT, 2026, cur)}
+check("Robert's 2026 plaque photo and his 2024 photo are both on his Players Cup title",
+      rp == {"players_cup": ["players_cup-2024", "players_cup-2026"]}, str(rp))
+check("a photo that does not show the player is never attached (Gus gets only his own)",
+      [x["key"] for t in ct.cup_titles(GUS, 2026, cur) for x in t["photos"]] == ["fellowship_cup-2026"])
+pc = ct.past_champions({497: "Paul Day", 299: "Mark Freund", 289: "Jay Horton", 31: "Robert Straiton"})
+check("past_champions: newest first, names from the map, photo only when it shows exactly the champion(s)",
+      [r["year"] for r in pc["players_cup"]] == [2025, 2024, 2023] and pc["players_cup"][0]["photo"] is None
+      and pc["players_cup"][1]["names"] == ["Robert Straiton"] and pc["fellowship_cup"][2]["names"] == ["Paul Day"])
+check("the Spotlight draws the photos under the titles and opens them in a lightbox",
+      "sptChampPhotos(d.cup_titles)" in src and "spt-champ-ph" in src and "spt-champ-lb" in src)
+check("both cup boards get a collapsed Past Champions strip filled from /api/cup-champions",
+      "fcPastChampsLoad" in con and 'data-race="fellowship_cup" hidden' in con and 'data-race="players_cup" hidden' in con
+      and "/api/cup-champions" in con and "Past Champions" in con)
 print("ALL PASS" if not F else f"FAILED: {F}")
 sys.exit(1 if F else 0)

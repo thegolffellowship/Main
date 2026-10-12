@@ -2088,10 +2088,23 @@
            3:4 portrait in the trophy's slot; tap opens it full size. */
         .champ-photo { flex: 0 0 auto; width: 84px; height: 112px; border-radius: 8px; object-fit: cover;
             border: 2px solid #D4A017; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: zoom-in; display: block; }
+        /* Kerry 2026-10-12: "extend the photo much closer to the border. Way too much padding." With a photo the
+           plaque's padding shrinks to just clear its inset gold rule, and the portrait grows to fill the height. */
+        .tgf-champ-plaque.has-photo { padding: 7px 1rem 7px 7px; }
+        .tgf-champ-plaque.has-photo .champ-photo { width: 102px; height: 136px; border-radius: 7px; }
         .champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex;
             flex-direction: column; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
         .champ-lb img { max-width: 100%; max-height: 82vh; border-radius: 10px; border: 2px solid #D4A017; }
         .champ-lb-cap { margin-top: 10px; color: #F7E7A0; font: 600 0.85rem/1.4 'Bitter', Georgia, serif; text-align: center; }
+        /* PAST CHAMPIONS strip under the plaque (Kerry 2026-10-12): collapsed, year + name, photo when we have one. */
+        .past-champs { margin: 0 0 0.7rem; border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; }
+        .past-champs > summary { cursor: pointer; padding: 0.55rem 0.8rem; font: 700 0.82rem/1.2 'Bitter', Georgia, serif; color: #7A5C0B; }
+        .past-champs-list { display: flex; flex-wrap: wrap; gap: 14px; padding: 0.2rem 0.8rem 0.8rem; }
+        .past-champ { display: flex; flex-direction: column; align-items: center; width: 92px; text-align: center; }
+        .past-champ img, .past-champ .pc-ph { width: 84px; height: 112px; border-radius: 8px; object-fit: cover; border: 2px solid #D4A017; cursor: zoom-in; display: block; background: #F7F1DC; }
+        .past-champ .pc-ph { cursor: default; }
+        .past-champ .pc-y { margin-top: 5px; font: 700 0.85rem/1.1 'Bitter', Georgia, serif; color: #7A5C0B; }
+        .past-champ .pc-n { font-size: 0.78rem; line-height: 1.25; color: #1B1B1B; }
         @keyframes tgfChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
     </style>
 </head>
@@ -9529,6 +9542,7 @@
                 ? `<div class="tgf-champ-plaque" data-race="players_cup" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
                 : `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div></div>`)
             : "";
+        const pcHolder = cupChampRace ? `<details class="past-champs" data-race="players_cup" hidden></details>` : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
         // TEST PHASE while we look at all of this. In case members go
         // there in the meantime") — driven by the gg_champ_test_phase
@@ -9579,14 +9593,14 @@
                 ${showBuy ? `<col style="width:110px">` : ""}
             </colgroup>`
             : "";
-        $("pr-table-container").innerHTML = testStrip + champStrip + `
+        $("pr-table-container").innerHTML = testStrip + champStrip + pcHolder + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 ${colgroupCup}
                 <thead>${theadHtml}</thead>
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
-        fcChampPhotoLoad();
+        fcChampPhotoLoad(); fcPastChampsLoad();
         $("pr-table-container").dataset.live = liveMode ? "1" : "0";
         // Round list for the expansion's Round 1 / Round 2 card toggle
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupMode ? cupBoards : []);
@@ -9723,7 +9737,39 @@
         const open = () => fcChampLightbox(src, p.caption);
         img.addEventListener("click", open);
         img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+        el.classList.add("has-photo");
         el.dataset.photoDone = "1";
+    }
+    // PAST CHAMPIONS (Kerry 2026-10-12): a collapsed strip under the plaque. Years come
+    // from /api/cup-champions (Kerry's list, never inferred); a year with no photo shows
+    // the name only. Filled after the board paints; a failed read leaves nothing behind.
+    let pcData = null, pcReq = null;
+    function fcPastChampsLoad() {
+        if (pcData) { fcPastChampsApply(); return; }
+        if (!pcReq) pcReq = fetch("/api/cup-champions").then(r => r.ok ? r.json() : null)
+            .then(j => { pcData = j || {}; }).catch(() => { pcData = {}; });
+        pcReq.then(fcPastChampsApply);
+    }
+    function fcPastChampsApply() {
+        document.querySelectorAll(".past-champs[data-race]:not([data-done])").forEach(box => {
+            const rows = (pcData && pcData[box.dataset.race]) || [];
+            if (!rows.length) return;
+            const cards = rows.map(r => {
+                const nm = (r.names || []).map(n => escapeHtml(prFirstLast(n))).join(" &amp; ");
+                const ph = r.photo
+                    ? `<img src="/member/photo/c/${r.photo.key}.jpg?v=${r.photo.v}" alt="${escapeHtml(r.photo.caption)}" data-cap="${escapeHtml(r.photo.caption)}" loading="lazy" role="button" tabindex="0" onerror="this.outerHTML='<div class=&quot;pc-ph&quot;></div>'">`
+                    : `<div class="pc-ph"></div>`;
+                return `<div class="past-champ">${ph}<div class="pc-y">${r.year}</div><div class="pc-n">${nm}</div></div>`;
+            }).join("");
+            box.innerHTML = `<summary>Past Champions &middot; ${rows.length}</summary><div class="past-champs-list">${cards}</div>`;
+            box.hidden = false;
+            box.dataset.done = "1";
+            box.querySelectorAll("img[data-cap]").forEach(img => {
+                const open = () => fcChampLightbox(img.src, img.dataset.cap);
+                img.addEventListener("click", open);
+                img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+            });
+        });
     }
     function fcChampLightbox(src, caption) {
         const lb = document.createElement("div");
@@ -9907,7 +9953,7 @@
         const fcStrip = fcChamps.length
             ? `<div class="tgf-champ-plaque" data-race="fellowship_cup" data-cids="${fcChamps.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
             : "";
-        $("pr-table-container").innerHTML = testStripF + fcStrip + `
+        $("pr-table-container").innerHTML = testStripF + fcStrip + `<details class="past-champs" data-race="fellowship_cup" hidden></details>` + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 ${colgroupF}
                 <thead>${theadF}</thead>
@@ -9916,7 +9962,7 @@
         // Champ rows expand to the round scorecards (Kerry 2026-08-13:
         // "exactly like City Championship specs"), with the Round 1 /
         // Round 2 toggle handled inside prToggleDetail.
-        fcChampPhotoLoad();
+        fcChampPhotoLoad(); fcPastChampsLoad();
         $("pr-table-container").dataset.live = cupChamp ? "1" : "0";
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupFetchedF);
         if (cupChamp) {
