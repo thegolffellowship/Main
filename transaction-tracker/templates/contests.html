@@ -2084,6 +2084,14 @@
             width: 36%; left: -60%; transform: skewX(-20deg); pointer-events: none;
             background: linear-gradient(75deg, transparent, rgba(255,255,255,.16), transparent);
             animation: tgfChampShine 3.4s ease-in-out infinite; }
+        /* champion photo in the plaque (Kerry 2026-10-12, Option A): a framed
+           3:4 portrait in the trophy's slot; tap opens it full size. */
+        .champ-photo { flex: 0 0 auto; width: 84px; height: 112px; border-radius: 8px; object-fit: cover;
+            border: 2px solid #D4A017; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: zoom-in; display: block; }
+        .champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex;
+            flex-direction: column; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
+        .champ-lb img { max-width: 100%; max-height: 82vh; border-radius: 10px; border: 2px solid #D4A017; }
+        .champ-lb-cap { margin-top: 10px; color: #F7E7A0; font: 600 0.85rem/1.4 'Bitter', Georgia, serif; text-align: center; }
         @keyframes tgfChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
     </style>
 </head>
@@ -9687,6 +9695,51 @@
         }
     }
 
+    // CHAMPION PHOTO (Kerry 2026-10-12, Option A): the champion's photo takes the
+    // trophy glyph's slot on the Fellowship Cup plaque. The index is ids only; the
+    // photo shows only while the champion(s) on the plaque are exactly the people
+    // tagged in it, so a changed standing can never put someone in Gus's picture.
+    // No photo, no match, or a load failure: the glyph stays.
+    let fcPhotoIdx = null, fcPhotoReq = null;
+    function fcChampPhotoLoad() {
+        if (fcPhotoIdx) { fcApplyChampPhoto(); return; }
+        if (!fcPhotoReq) fcPhotoReq = fetch("/api/player-photos").then(r => r.ok ? r.json() : null)
+            .then(j => { fcPhotoIdx = (j && j.c) || {}; }).catch(() => { fcPhotoIdx = {}; });
+        fcPhotoReq.then(fcApplyChampPhoto);
+    }
+    function fcApplyChampPhoto() {
+        const el = document.querySelector('.tgf-champ-plaque[data-race="fellowship_cup"]');
+        const p = fcPhotoIdx && fcPhotoIdx["fellowship_cup-2026"];
+        if (!el || !p || el.dataset.photoDone) return;
+        const norm = a => a.map(Number).filter(Boolean).sort((x, y) => x - y).join(",");
+        if (norm((el.dataset.cids || "").split(",")) !== norm(p.ids || [])) return;
+        const glyph = el.querySelector(".tgf-champ-trophy");
+        if (!glyph) return;
+        const src = `/member/photo/c/fellowship_cup-2026.jpg?v=${p.v}`;
+        glyph.outerHTML = `<img class="champ-photo" src="${src}" alt="${escapeHtml(p.caption)}" role="button" tabindex="0" onerror="this.remove()">`;
+        const sub = document.createElement("div");
+        sub.className = "tgf-champ-sub";
+        sub.textContent = p.cup;
+        el.querySelector(".tgf-champ-text").appendChild(sub);
+        const img = el.querySelector(".champ-photo");
+        const open = () => fcChampLightbox(src, p.caption);
+        img.addEventListener("click", open);
+        img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+        el.dataset.photoDone = "1";
+    }
+    function fcChampLightbox(src, caption) {
+        const lb = document.createElement("div");
+        lb.className = "champ-lb";
+        lb.setAttribute("role", "dialog");
+        lb.setAttribute("aria-label", caption);
+        lb.innerHTML = `<img src="${src}" alt="${escapeHtml(caption)}"><div class="champ-lb-cap">${escapeHtml(caption)}</div>`;
+        const close = () => { lb.remove(); document.removeEventListener("keydown", onKey); };
+        const onKey = ev => { if (ev.key === "Escape") close(); };
+        lb.addEventListener("click", close);
+        document.addEventListener("keydown", onKey);
+        document.body.appendChild(lb);
+    }
+
     function renderFellowshipCup(d) {
         // The Cup is decided at the TGF Championship — once the admin
         // declares it FINAL (gg_points_race_final['fellowship_cup']) the
@@ -9854,7 +9907,7 @@
             </colgroup>`
             : "";
         const fcStrip = fcChamps.length
-            ? `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
+            ? `<div class="tgf-champ-plaque" data-race="fellowship_cup" data-cids="${fcChamps.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
             : "";
         $("pr-table-container").innerHTML = testStripF + fcStrip + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
@@ -9865,6 +9918,7 @@
         // Champ rows expand to the round scorecards (Kerry 2026-08-13:
         // "exactly like City Championship specs"), with the Round 1 /
         // Round 2 toggle handled inside prToggleDetail.
+        fcChampPhotoLoad();
         $("pr-table-container").dataset.live = cupChamp ? "1" : "0";
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupFetchedF);
         if (cupChamp) {

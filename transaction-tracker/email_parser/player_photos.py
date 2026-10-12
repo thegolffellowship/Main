@@ -34,6 +34,22 @@ _NAME = re.compile(r"^(h-(\d+)|t-(\d+)-(\d+))\.jpg$")
 
 SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "player_photos"
 
+# CHAMPION PHOTOS (Kerry 2026-10-12: "something definitely on the leaderboard
+# results" for Gus Vasquez with the Bruce Friesenhahn Fellowship Cup). A
+# finished JPEG that ships in the repo (data/champion_photos/), keyed
+# "<race>-<season>", so it is read-only at runtime: no upload path, no table,
+# and git is its backup. `customer_ids` is who is in it: the board shows it
+# only while the champion(s) on the plaque are exactly those people.
+CHAMPION_DIR = Path(__file__).resolve().parent.parent / "data" / "champion_photos"
+CHAMPION_PHOTOS = {
+    "fellowship_cup-2026": {
+        "file": "fellowship-cup-2026.jpg",
+        "customer_ids": [42],
+        "cup": "The Bruce Friesenhahn Fellowship Cup",
+        "caption": "Gus Vasquez with The Bruce Friesenhahn Fellowship Cup, 2026",
+    },
+}
+
 
 def photo_dir(db_path=None) -> Path:
     from email_parser.database import DB_PATH
@@ -105,9 +121,11 @@ def remove_photo(kind: str, cids, db_path=None) -> dict:
 
 
 def photo_index(db_path=None) -> dict:
-    """{"h": {"<cid>": version}, "t": {"<a>-<b>": version}}: who has a
-    photo, and a stamp that changes when it is replaced (cache busting)."""
-    out = {"h": {}, "t": {}}
+    """{"h": {"<cid>": version}, "t": {"<a>-<b>": version}, "c": {"<race>-<season>":
+    {v, ids, cup, caption}}}: who has a photo, and a stamp that changes when it
+    is replaced (cache busting). "c" is the champion photos: the people are
+    ids, and the caption is the public champion's name already on the board."""
+    out = {"h": {}, "t": {}, "c": {}}
     # the seed first, then the volume, so an upload replaces a seed photo
     for d in (SEED_DIR, photo_dir(db_path)):
         if not d.is_dir():
@@ -121,6 +139,11 @@ def photo_index(db_path=None) -> dict:
                 out["h"][m.group(2)] = v
             else:
                 out["t"][f"{m.group(3)}-{m.group(4)}"] = v
+    for key, c in CHAMPION_PHOTOS.items():
+        f = CHAMPION_DIR / c["file"]
+        if f.is_file():
+            out["c"][key] = {"v": int(f.stat().st_mtime), "ids": list(c["customer_ids"]),
+                             "cup": c["cup"], "caption": c["caption"]}
     return out
 
 
@@ -131,6 +154,10 @@ def photo_file(kind: str, key: str, db_path=None) -> Path | None:
         name = f"h-{int(key)}.jpg"
     elif kind == "t" and re.fullmatch(r"\d+-\d+", key or ""):
         name = f"t-{team_key(key.split('-'))}.jpg"
+    elif kind == "c":
+        c = CHAMPION_PHOTOS.get(key or "")
+        p = CHAMPION_DIR / c["file"] if c else None
+        return p if p and p.is_file() else None
     else:
         return None
     for d in (photo_dir(db_path), SEED_DIR):      # an upload wins over the seed

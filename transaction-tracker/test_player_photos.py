@@ -37,7 +37,7 @@ check("not a JPEG is refused", pp.save_photo("headshot", [62], b"GIF89a....").ge
 check("an oversize photo is refused", "limit" in pp.save_photo("headshot", [62], JPEG + b"\x00" * pp.MAX_BYTES).get("error", ""))
 check("a team needs two different people", "two different" in pp.save_photo("team", [62, 62], JPEG).get("error", ""))
 idx = pp.photo_index()
-check("the index is ids and stamps only", set(idx) == {"h", "t"} and "62" in idx["h"] and "62-672" in idx["t"]
+check("the index is ids and stamps only", set(idx) == {"h", "t", "c"} and "62" in idx["h"] and "62-672" in idx["t"]
       and all(isinstance(v, int) for v in list(idx["h"].values()) + list(idx["t"].values())), str(idx))
 check("path tricks never resolve to a file", pp.photo_file("h", "../t") is None and pp.photo_file("x", "62") is None
       and pp.photo_file("t", "62-672/../../x") is None)
@@ -52,6 +52,24 @@ check("a headshot serves as a JPEG", tc.get("/member/photo/h/62.jpg").mimetype =
 check("a missing photo is a 404 (the page keeps its initials)", tc.get("/member/photo/h/999999.jpg").status_code == 404)
 check("the Cup seed set serves from the repo (David Wetz, the Wetz & Barstow pair)", tc.get("/member/photo/h/672.jpg").status_code == 200
       and tc.get("/member/photo/t/672-62.jpg").status_code == 200 and "62-672" in pp.photo_index()["t"])
+
+# CHAMPION PHOTOS (Kerry 2026-10-12): the Fellowship Cup plaque photo ships in the
+# repo, is read-only at runtime, and shows only for the people tagged in it.
+c = pp.photo_index()["c"].get("fellowship_cup-2026") or {}
+check("the champion photo is in the index with ids, cup name and caption", c.get("ids") == [42]
+      and c.get("cup") == "The Bruce Friesenhahn Fellowship Cup" and "Gus Vasquez" in c.get("caption", "")
+      and isinstance(c.get("v"), int), str(c))
+r = tc.get("/member/photo/c/fellowship_cup-2026.jpg")
+check("the champion photo serves as a JPEG from the repo", r.status_code == 200 and r.mimetype == "image/jpeg"
+      and r.data[:3] == b"\xff\xd8\xff" and len(r.data) < 400 * 1024, r.status_code)
+check("an unknown champion key or a path trick is a 404", tc.get("/member/photo/c/players_cup-2026.jpg").status_code == 404
+      and pp.photo_file("c", "../h-42") is None and pp.photo_file("c", "") is None)
+check("the public index still carries no names beyond the champion caption", "Barstow" not in tc.get("/api/player-photos").get_data(as_text=True))
+src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "contests.html")).read()
+check("the plaque carries its champion ids and the photo is matched against them",
+      'data-race="fellowship_cup" data-cids=' in src and "fcApplyChampPhoto" in src and "norm((el.dataset.cids" in src)
+check("a failed or missing photo keeps the trophy glyph", 'onerror="this.remove()"' in src.split("function fcApplyChampPhoto")[1][:1500]
+      or "if (!el || !p || el.dataset.photoDone) return;" in src)
 
 import mcp_server as M                                            # noqa: E402
 b64 = base64.b64encode(JPEG).decode()

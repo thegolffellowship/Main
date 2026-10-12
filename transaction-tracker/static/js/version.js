@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.536.4";
+window.TGF_VERSION = "2.537.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.537.0",
+    date: "2026-10-12",
+    title: "THE FELLOWSHIP CUP: the champion's photo on the plaque",
+    changes: [
+      "Kerry 10/12 (Gus Vasquez with The Bruce Friesenhahn Fellowship Cup): \"something definitely on the leaderboard results for that.\" Option A ratified: the champion plaque on the THE FELLOWSHIP CUP board shows the photo in the trophy glyph's slot, a framed 3:4 portrait with the cup's name under the champion's name; a tap opens the photo full size with its caption (tap, Escape or Enter closes). The glyph stays when there is no photo, the photo fails to load, or the champion(s) on the plaque are not exactly the people tagged in it, so a changed standing can never put someone in Gus's picture.",
+      "No upload path and no schema: the finished JPEG ships in the repo (data/champion_photos/fellowship-cup-2026.jpg, 1200x1600, about 270 KB, EXIF removed) and is read-only at runtime, so git is its backup and the photo-files backup hold (#1604) does not apply. email_parser/player_photos.py gains CHAMPION_PHOTOS (key race-season, customer_ids, cup name, caption); /api/player-photos carries a \"c\" block (version stamp, ids, cup, caption; the champion's name is already on the board) and /member/photo/c/<race-season>.jpg serves it. When migration 0011 ships the registry backfills into photos + photo_tags. Players Cup and city plaques are unchanged until they have photos. Guards: test_player_photos.py (18 plus the existing checks)."
+    ]
+  },
   {
     version: "2.536.4",
     date: "2026-10-11",

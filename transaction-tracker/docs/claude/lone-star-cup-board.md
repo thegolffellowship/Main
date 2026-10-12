@@ -1256,3 +1256,7 @@ strips (singles headshots only; pairs keep initials), the opened Cup card
 (singles face-off, pair duo shot), Spotlight's header. After the Cup: the
 photo table + upload page + per-player opt-out (#1577), photos in the recap
 builder.
+
+### Champion photos (v2.537.0, Kerry 2026-10-12)
+
+Gus Vasquez with The Bruce Friesenhahn Fellowship Cup sits in the trophy slot of the THE FELLOWSHIP CUP champion plaque (contests.html `fcApplyChampPhoto`, CSS `.champ-photo`, tap = `fcChampLightbox`). The JPEG is a repo file (`data/champion_photos/`, 1200x1600, EXIF stripped); `CHAMPION_PHOTOS` in email_parser/player_photos.py maps `<race>-<season>` to file, `customer_ids`, cup name and caption. Read-only at runtime: no upload path, no table, git is the backup. The plaque carries `data-cids`; the photo applies only when they equal the tagged ids, else the glyph stays. Index: `/api/player-photos` "c" block; file: `/member/photo/c/<race>-<season>.jpg`. To add a champion photo: crop and strip EXIF first (no image library on the server), add the file, add the registry entry, bump. When 0011 ships this becomes a `photos` row tagged to the champion and the registry is backfilled. Players Cup and city plaques do not read it yet.
