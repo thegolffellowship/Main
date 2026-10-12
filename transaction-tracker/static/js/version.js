@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.552.0";
+window.TGF_VERSION = "2.553.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.553.0",
+    date: "2026-10-12",
+    title: "Tee sheet email: design A2, with a group card and a games card",
+    changes: [
+      "Kerry 10/12 picked design A for the personal tee sheet email (\"A looks the best to me. It would also be nice to show a current games breakdown on a card like the Group Card. The more graphic (as long as it works on all browsers) the better.\") and approved draft A2: \"Perfect for now\".",
+      "Each player's email has a dark masthead (chapter, then 'Tuesday at The Quarry'). Below it come an orange YOUR START card (the start as the Starter Sheet states it, shotgun or tee time, date and course), the group with an initials circle and cart for each player, and the player's tees and the format.",
+      "The new GAMES card is read from the event's own GAMES tab (page_probe), never recomputed. It shows the total in play, the player / Net / Gross counts, a bar splitting the pot by section, and one block per section with each game's pot. Each block carries a YOU'RE IN or NOT BOUGHT pill for that player, and the card ends with the Hole-in-One pot. If the tab can't be read, the card is left out for everyone and the preview says why; the start still goes out.",
+      "The subject reads 'Tuesday at The Quarry: Hole 3A, 4:30 PM shotgun'. The internal event code never reaches a player. The scoring link is a button when the event is in Live Scoring.",
+      "Email-safe on purpose: tables, bgcolor and inline styles only, with no images, SVG, flexbox or style blocks. The structure is code (event_day_email.py); the words around it stay the editable system template. A template still written with the v1 variables keeps rendering the v1 way.",
+      "The new wording changes the template hash, so the v1 approval stamp no longer matches. Before any member send, Kerry previews A2 on REPORTS > Email Players, and his Approve & email click approves it. Every send still waits on his OK."
+    ]
+  },
   {
     version: "2.552.0",
     date: "2026-10-12",

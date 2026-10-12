@@ -58,7 +58,14 @@ PREVIEW_SAMPLES = 3
 
 # Blocks that may be legitimately absent: each renders as a whole
 # paragraph or nothing, so its absence leaves no dangling words.
-OPTIONAL_VARS = {"cart_block", "games_block", "scoring_block"}
+OPTIONAL_VARS = {"cart_block", "games_block", "scoring_block",
+                 "games_card", "scoring_button"}
+
+# The games tab reader (the Events page's own GAMES tab, run headless).
+# A module attribute so a test can hand in a fixture instead of Chromium.
+def _read_games_tab(event_id: int) -> dict:
+    from email_parser.page_probe import event_games_tab
+    return event_games_tab(int(event_id))
 
 _TAG_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _BLANK_RE = re.compile(r"\[[A-Z][A-Z0-9 _/\-]*\]")
@@ -150,10 +157,12 @@ def html_to_text(h: str) -> str:
     t = re.sub(r"(?i)<br\s*/?>", "\n", h or "")
     t = re.sub(r"(?i)</p\s*>", "\n\n", t)
     t = re.sub(r"(?i)<li[^>]*>", "- ", t)
-    t = re.sub(r"(?i)</(li|ul|ol)\s*>", "\n", t)
+    t = re.sub(r"(?i)</(li|ul|ol|tr|div|table)\s*>", "\n", t)
+    t = re.sub(r"(?i)</td\s*>", " ", t)
     t = re.sub(r"<[^>]+>", "", t)
     t = _html.unescape(t)
-    t = re.sub(r"[ \t]+\n", "\n", t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r" *\n *", "\n", t)
     return re.sub(r"\n{3,}", "\n\n", t).strip()
 
 
@@ -245,14 +254,292 @@ def _seat_index(groups: list) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# The A2 cards (Kerry 2026-10-12: "A looks the best to me. It would also be
+# nice to show a current games breakdown on a card like the Group Card. The
+# more graphic (as long as it works on all browsers) the better." then
+# "Perfect for now"). Email-safe on purpose: tables, bgcolor and inline
+# styles only. No images, SVG, flexbox or <style> blocks, so Gmail,
+# Outlook, Apple Mail and phone clients all draw it (Outlook desktop just
+# squares the corners). The STRUCTURE is code; the WORDS around it are the
+# template, so Kerry can still edit the greeting and sign-off in the UI.
+# ---------------------------------------------------------------------------
+
+INK, MUTED, LINE, ORANGE = "#1B1B1B", "#6B7280", "#E5E7EB", "#E87C3E"
+GREEN_BG, GREEN_INK = "#bbf7d0", "#15803D"     # the bought-in token
+SECTION_COLORS = {"INCLUDED": INK, "NET": ORANGE, "GROSS": "#8FA8B8"}
+_EYEBROW = "font:bold 11px Arial,sans-serif;letter-spacing:2px;"
+_CODE_RE = re.compile(r"^[a-z]+\d+(\.\d+)?\s+", re.I)
+_MONEY_RE = re.compile(r"\$[\d,]+(?:\.\d\d)?")
+_T = 'role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"'
+
+
+def event_short_name(item_name: str | None, course: str | None = None) -> str:
+    """"s9.27 The Quarry" -> "The Quarry". The internal code never reaches
+    a member; the course is the fallback."""
+    n = _CODE_RE.sub("", (item_name or "").split("|")[0]).strip()
+    return n or (course or "").strip()
+
+
+def _weekday(d: str | None) -> str:
+    try:
+        return datetime.strptime((d or "")[:10], "%Y-%m-%d").strftime("%A")
+    except ValueError:
+        return ""
+
+
+def _is_shotgun(ev: dict, holes) -> bool:
+    key = "start_type_18" if str(holes or "") == "18" else "start_type"
+    return (ev.get(key) or ev.get("start_type") or "") == "Shotgun"
+
+
+def _initials(name: str) -> str:
+    parts = [w for w in re.split(r"\s+", (name or "").strip()) if w]
+    return ((parts[0][0] if parts else "") + (parts[-1][0] if len(parts) > 1 else "")).upper()
+
+
+def _pill(text: str, bg: str, ink: str) -> str:
+    return (f'<span style="background:{bg};color:{ink};font:bold 11px Arial,sans-serif;'
+            f'letter-spacing:1px;padding:3px 8px;border-radius:10px;white-space:nowrap;">{_e(text)}</span>')
+
+
+def _cart_of(p: dict) -> str:
+    pos = p.get("cart_pos") or 0
+    return "A" if pos in (1, 2) else ("B" if pos in (3, 4) else "")
+
+
+def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
+              tee: dict | None, format_line: str) -> str:
+    """The orange START header, the group with initials and carts, then
+    tees and format. Blinds are not people and are never listed."""
+    my_cart = _cart_of(me)
+    rows = []
+    for p in sorted(g.get("players") or [], key=lambda x: x.get("cart_pos") or 0):
+        nm = (p.get("name") or "").strip()
+        if not nm:
+            continue
+        mine = p is me
+        cart = _cart_of(p)
+        if mine:
+            note = "you" + (f" &middot; Cart {cart}" if cart else "")
+        elif cart and cart == my_cart:
+            note = f"your cart &middot; Cart {cart}"
+        else:
+            note = f"Cart {cart}" if cart else ""
+        bg, ink = (INK, "#ffffff") if mine else ("#D3DDE4", INK)
+        rows.append(
+            f'<tr><td width="40" style="padding:0 10px 10px 0;vertical-align:middle;">'
+            f'<div style="width:36px;height:36px;border-radius:18px;background:{bg};color:{ink};'
+            f'text-align:center;font:bold 13px Arial,sans-serif;line-height:36px;">{_e(_initials(nm))}</div></td>'
+            f'<td style="padding:0 0 10px;vertical-align:middle;">'
+            + (f"<b>{_e(nm)}</b>" if mine else _e(nm))
+            + (f' <span style="font-size:13px;color:{MUTED};">{note}</span>' if note else "")
+            + "</td></tr>")
+    foot = []
+    if tee and tee.get("name"):
+        sw = (tee.get("color") or "").strip()
+        dot = ""
+        if sw:
+            white = sw.lower() in ("#ffffff", "#fff")
+            dot = (f'<span style="display:inline-block;width:12px;height:12px;border-radius:6px;'
+                   f'background:{"#ffffff" if white or tee.get("ring") else sw};'
+                   f'border:2px solid {"#9CA3AF" if white else sw};vertical-align:middle;"></span> ')
+        foot.append(f'<td width="50%" style="font-size:14px;vertical-align:top;">'
+                    f'<span style="{_EYEBROW}color:{MUTED};">TEES</span><br>{dot}<b>{_e(tee["name"])}</b></td>')
+    if format_line:
+        foot.append(f'<td style="font-size:14px;vertical-align:top;">'
+                    f'<span style="{_EYEBROW}color:{MUTED};">FORMAT</span><br><b>{_e(format_line)}</b></td>')
+    return (
+        f'<table {_T} style="border:1px solid {LINE};border-radius:8px;margin:0 0 18px;">'
+        f'<tr><td bgcolor="{ORANGE}" style="background:{ORANGE};border-radius:8px 8px 0 0;padding:14px 16px;color:#ffffff;">'
+        f'<div style="{_EYEBROW}">YOUR START</div>'
+        f'<div style="font:bold 28px/1.15 Georgia,serif;">{_e(start_headline)}</div>'
+        f'<div style="font-size:14px;">{_e(start_sub)}</div></td></tr>'
+        f'<tr><td style="padding:12px 16px 4px;">'
+        f'<div style="{_EYEBROW}color:{MUTED};padding-bottom:8px;">YOUR GROUP</div>'
+        f'<table {_T}>{"".join(rows)}</table></td></tr>'
+        + (f'<tr><td style="border-top:1px solid {LINE};padding:10px 16px;"><table {_T}><tr>'
+           f'{"".join(foot)}</tr></table></td></tr>' if foot else "")
+        + "</table>")
+
+
+def _money(s) -> float:
+    m = _MONEY_RE.search(str(s or ""))
+    return float(m.group(0)[1:].replace(",", "")) if m else 0.0
+
+
+def _game_label(name: str) -> str:
+    n = re.sub(r"[^\w\s#.&'/+-]", "", name or "").strip()
+    n = re.sub(r"^CTP\b", "Closest to the Pin", n)
+    n = re.sub(r"^Skins Gross$", "Skins", n)
+    n = re.sub(r"^(TEAM|CART)\b", lambda m: m.group(1).title(), n)
+    return re.sub(r"^Ind\.\s*", "Individual ", n)
+
+
+def games_view(tab: dict | None) -> dict:
+    """The GAMES tab (page_probe) shaped for the card, once per event.
+    {'ok': False, 'why': ...} when it cannot be shown faithfully."""
+    if not tab or tab.get("error"):
+        return {"ok": False, "why": "games tab unreadable: " + str((tab or {}).get("error") or "no data")}
+    if tab.get("buckets") or tab.get("empty"):
+        return {"ok": False, "why": "bucket / empty games tab"}
+    linked = ", ".join(
+        f"{l.get('chapter')} at {event_short_name(l.get('event_name'), l.get('course'))}"
+        for l in ((tab.get("mvp_link") or {}).get("linked") or []) if l.get("chapter"))
+    sections = []
+    for sec in tab.get("sections") or []:
+        title = re.sub(r"\s*\(.*\)\s*$", "", sec.get("section") or "").strip().upper()
+        key = title.split()[0] if title else ""
+        if key == "INCLUDED":
+            title = "INCLUDED"
+        rows, subs = [], []
+        for r in sec.get("rows") or []:
+            if r.get("disabled"):
+                continue
+            if r.get("sub"):
+                subs.append(r)
+                if rows and (r.get("game") or "").startswith("Per skin:"):
+                    pays = {k: "$" + v for k, v in re.findall(r"(\d+)=\$(\d+(?:\.\d+)?)", r["game"])}
+                    if pays.get("1"):
+                        rows[-1]["note"] = (f"one skin pays {pays['1']}"
+                                            + (f", two pay {pays['2']} each" if pays.get("2") else ""))
+                continue
+            if not r.get("pot"):
+                continue
+            note = ""
+            fl = str(r.get("flights") or "").strip()
+            if fl.isdigit() and int(fl) > 1:
+                note = f"{fl} flights"
+            if "MVP" in (r.get("game") or "").upper() and "TGF" in (r.get("game") or "").upper() and linked:
+                note = f"with {linked}"
+            rows.append({"game": _game_label(r.get("game")), "pot": r.get("pot"), "note": note})
+        # A flighted game paying only 1st in every flight: say what a winner takes.
+        for row in rows:
+            if row["note"].endswith("flights"):
+                firsts = {s.get("1st") for s in subs if s.get("1st") and s.get("1st") != "—"}
+                seconds = [s for s in subs if s.get("2nd") and s.get("2nd") != "—"]
+                if len(firsts) == 1 and not seconds:
+                    row["note"] += f", {next(iter(firsts))} to each flight winner"
+        pot = (sec.get("subtotal") or {}).get("pot") or (rows[0]["pot"] if len(rows) == 1 else "")
+        if rows:
+            sections.append({"key": key, "title": title, "pot": pot,
+                             "count": re.search(r"\((\d+)", sec.get("section") or "").group(1)
+                             if re.search(r"\((\d+)", sec.get("section") or "") else "",
+                             "rows": rows})
+    total = (tab.get("total") or {}).get("pot") or ""
+    if not sections or _money(total) <= 0:
+        return {"ok": False, "why": "no games with a pot on this event"}
+    hio = ""
+    for line in tab.get("hole_in_one") or []:
+        m = re.search(r"Pot:\s*(\$[\d,.]+)", line or "")
+        if m:
+            hio = m.group(1)
+    buyers = tab.get("buyers") or {}
+    ids = {k: {int(w["customer_id"]) for w in (buyers.get(k) or []) if w.get("customer_id")}
+           for k in ("players", "net", "gross")}
+    c = tab.get("counts") or {}
+    return {"ok": True, "total": total, "counts": c, "sections": sections, "hio": hio,
+            "ids": ids, "team_type": tab.get("team_type") or ""}
+
+
+def games_card(view: dict, cid: int | None, rsvp_only: bool, as_of: str, day: str) -> str:
+    """The Games card: total in play, counts, a split bar, one block per
+    section with this player's YOU'RE IN / NOT BOUGHT pill, the HIO pot."""
+    if not view.get("ok"):
+        return ""
+    c = view["counts"]
+    chips = [(c.get("players"), "PLAYERS", "#F3F4F6", INK),
+             (c.get("net"), "IN NET", "#FEF0E7", "#D06B2E"),
+             (c.get("gross"), "IN GROSS", "#E8EEF2", "#4B6B80")]
+    chips = [x for x in chips if x[0]]
+    chip_html = "".join(
+        f'<td width="{100 // len(chips)}%" align="center" style="padding:0 3px;">'
+        f'<div style="background:{bg};border-radius:8px;padding:8px 4px;">'
+        f'<div style="font:bold 22px Georgia,serif;color:{ink};">{_e(n)}</div>'
+        f'<div style="font:bold 10px Arial,sans-serif;letter-spacing:1px;color:{MUTED};">{lab}</div></div></td>'
+        for n, lab, bg, ink in chips)
+    pots = [(s, _money(s["pot"])) for s in view["sections"]]
+    tot = sum(v for _, v in pots) or 1.0
+    widths = [max(1, round(100 * v / tot)) for _, v in pots]
+    widths[-1] = max(1, 100 - sum(widths[:-1]))
+    bar = "".join(
+        f'<td width="{w}%" height="12" bgcolor="{SECTION_COLORS.get(s["key"], MUTED)}" '
+        f'style="background:{SECTION_COLORS.get(s["key"], MUTED)};font-size:0;line-height:0;">&nbsp;</td>'
+        for (s, _), w in zip(pots, widths))
+    legend = "".join(
+        f'<td width="{w}%" style="padding-top:4px;">{_e(s["title"].replace(" GAMES", "").title())} {_e(s["pot"])}</td>'
+        for (s, _), w in zip(pots, widths))
+    blocks = []
+    for s in view["sections"]:
+        col = SECTION_COLORS.get(s["key"], MUTED)
+        who = "everyone" if s["key"] == "INCLUDED" else (f'{s["count"]} players' if s["count"] else "")
+        pill = ""
+        if cid and not rsvp_only:
+            if s["key"] == "INCLUDED":
+                pill = _pill("YOU'RE IN", GREEN_BG, GREEN_INK) if cid in view["ids"]["players"] else ""
+            elif s["key"] in ("NET", "GROSS"):
+                inn = cid in view["ids"][s["key"].lower()]
+                pill = (_pill("YOU'RE IN", GREEN_BG, GREEN_INK) if inn
+                        else _pill("NOT BOUGHT", "#F3F4F6", MUTED))
+        lines = "".join(
+            f'<tr><td style="padding:3px 0;">{_e(r["game"])}'
+            + (f' <span style="color:{MUTED};font-size:13px;">{_e(r["note"])}</span>' if r["note"] else "")
+            + f'</td><td align="right" style="padding:3px 0;white-space:nowrap;"><b>{_e(r["pot"])}</b></td></tr>'
+            for r in s["rows"])
+        blocks.append(
+            f'<tr><td style="padding:12px 16px 0;"><table {_T} style="border-left:4px solid {col};">'
+            f'<tr><td style="padding:2px 0 6px 10px;"><b style="font:bold 13px Arial,sans-serif;letter-spacing:1px;">'
+            f'{_e(s["title"])}</b> <span style="font-size:13px;color:{MUTED};">'
+            + " &middot; ".join(x for x in (_e(who), _e(s["pot"])) if x)
+            + f'</span></td><td align="right" style="padding:2px 0 6px;">{pill}</td></tr>'
+            f'<tr><td colspan="2" style="padding:0 0 4px 10px;"><table {_T} style="font-size:14px;">{lines}</table>'
+            f'</td></tr></table></td></tr>')
+    hio = (f'<tr><td style="padding:14px 16px 16px;"><table {_T}><tr><td bgcolor="#FFF7ED" '
+           f'style="background:#FFF7ED;border:1px dashed {ORANGE};border-radius:8px;padding:10px 12px;font-size:14px;">'
+           f'&#9971; <b>Hole-in-One Pot: {_e(view["hio"])}</b> <span style="color:{MUTED};">'
+           f'and growing until someone cashes it</span></td></tr></table></td></tr>'
+           if view.get("hio") else '<tr><td style="padding:0 0 12px;"></td></tr>')
+    return (
+        f'<table {_T} style="border:1px solid {LINE};border-radius:8px;margin:0 0 18px;">'
+        f'<tr><td bgcolor="{INK}" style="background:{INK};border-radius:8px 8px 0 0;padding:14px 16px;color:#ffffff;">'
+        f'<div style="{_EYEBROW}color:{ORANGE};">{_e(day.upper())}\'S GAMES</div>'
+        f'<div style="font:bold 28px/1.15 Georgia,serif;">{_e(view["total"])} in play</div>'
+        f'<div style="font-size:13px;color:#D1D5DB;">As of {_e(as_of)}. Pots move as players add games.</div></td></tr>'
+        f'<tr><td style="padding:14px 13px 6px;"><table {_T}><tr>{chip_html}</tr></table></td></tr>'
+        f'<tr><td style="padding:8px 16px 4px;"><table {_T}><tr>{bar}</tr></table>'
+        f'<table {_T} style="font-size:12px;color:{MUTED};"><tr>{legend}</tr></table></td></tr>'
+        + "".join(blocks) + hio + "</table>")
+
+
+def scoring_button(url: str) -> str:
+    return (f'<table {_T} style="margin:0 0 16px;"><tr><td align="center" bgcolor="{ORANGE}" '
+            f'style="background:{ORANGE};border-radius:999px;padding:12px;">'
+            f'<a href="{_e(url)}" style="color:#ffffff;text-decoration:none;font:bold 15px Arial,sans-serif;'
+            f'display:block;">Keep score on your phone</a></td></tr></table>')
+
+
+def frame(inner: str, chapter_label: str, title: str) -> str:
+    """The page around the message: grey ground, dark masthead, white panel."""
+    return (
+        f'<div style="background:#F8F8F8;padding:16px 8px;font-family:\'Helvetica Neue\',Helvetica,'
+        f'Arial,sans-serif;color:{INK};"><table {_T} style="max-width:560px;margin:0 auto;">'
+        f'<tr><td bgcolor="{INK}" style="background:{INK};border-radius:10px 10px 0 0;padding:16px 18px;">'
+        f'<div style="font:bold 12px Georgia,serif;letter-spacing:2px;color:{ORANGE};">{_e(chapter_label)}</div>'
+        f'<div style="font:bold 22px Georgia,serif;color:#ffffff;padding-top:4px;">{_e(title)}</div></td></tr>'
+        f'<tr><td bgcolor="#ffffff" style="background:#ffffff;border:1px solid {LINE};border-top:0;'
+        f'border-radius:0 0 10px 10px;padding:18px;font-size:16px;line-height:1.5;">{inner}</td></tr>'
+        f'</table></div>')
+
+
+# ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 
-def build_event_day_emails(event_id: int, db_path=None) -> dict:
+def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None = None) -> dict:
     """Render every roster player's message (nothing is sent).
 
     Returns {event, template_hash, approved, counts, messages, held,
-    games_note}. `messages` are sendable; `held` carries a reason each."""
+    games_note}. `messages` are sendable; `held` carries a reason each.
+    `games_tab` (tests) stands in for the headless GAMES tab read."""
     from email_parser import database as db
     from email_parser.fetcher import render_msg_template, normalize_email_html
 
@@ -284,6 +571,42 @@ def build_event_day_emails(event_id: int, db_path=None) -> dict:
                                (int(event_id),)).fetchone())
         roster = db._event_roster_rows(conn, int(event_id))
         gctx = _games_context(conn, ev, db_path)
+        tpl_text = (tpl or {}).get("subject", "") + (tpl or {}).get("html_body", "")
+        # The A2 Games card reads the GAMES tab once for the whole event.
+        # Unreadable -> the card is left out for everyone and the preview
+        # says why; it never blocks the start time from going out.
+        gview = {"ok": False, "why": "template has no games card"}
+        if "{games_card}" in tpl_text:
+            if db.event_games_off(ev):
+                gview = {"ok": False, "why": "no games at this event"}
+            elif not gctx.get("ok") and gctx.get("why") in ("day-games (championship) event", "package event"):
+                gview = {"ok": False, "why": gctx["why"]}
+            else:
+                try:
+                    gview = games_view(games_tab if games_tab is not None
+                                       else _read_games_tab(int(event_id)))
+                except Exception as exc:
+                    logger.exception("event-day email: games tab read failed (non-fatal)")
+                    gview = {"ok": False, "why": f"games tab unreadable: {exc}"}
+        tees = {str(t.get("band")): {"name": t.get("tee_name"), "color": t.get("color"),
+                                     "ring": bool(t.get("ring") or t.get("ladies"))}
+                for t in pack.get("tee_legend") or [] if t.get("band") is not None}
+        try:
+            from email_parser.timezone_utils import now_central
+            as_of = now_central().strftime("%A %-I:%M %p")
+        except Exception:
+            as_of = datetime.now().strftime("%A %-I:%M %p")
+        short = event_short_name(ev_info.get("item_name"), ev_info.get("course"))
+        day = _weekday(ev_info.get("event_date"))
+        title = f"{day} at {short}" if day and short else short
+        chap = (ev_info.get("chapter") or "").strip()
+        chapter_label = ("THE GOLF FELLOWSHIP" + (f" \u00b7 {chap.upper()}"
+                         if chap and chap.upper() != "TGF" else ""))
+        try:
+            date_short = datetime.strptime((ev_info.get("event_date") or "")[:10],
+                                           "%Y-%m-%d").strftime("%A, %B %-d")
+        except ValueError:
+            date_short = ""
 
         # One person, one message: dedupe the roster by customer_id, then
         # by name for a row with none.
@@ -336,13 +659,29 @@ def build_event_day_emails(event_id: int, db_path=None) -> dict:
                     cart_block = (f"<p><strong>Your cart partner:</strong> "
                                   f"{_e(partner[0]['name'])}</p>")
             games_block, _gwhy = _games_block(gctx, r)
+            from email_parser.score_entry import short_score_url
             url = (links.get(str(g.get("holes") or "")) or {}).get(g.get("group_num"))
             scoring_block = ""
             if url:
-                from email_parser.score_entry import short_score_url
                 scoring_block = (f'<p><strong>Keep score on your phone:</strong> '
                                  f'<a href="{_e(short_score_url(url))}">open your group\'s scorecard</a> '
                                  f'(or scan the QR code on your cart sign).</p>')
+            # A2 cards (only rendered when the template asks for them).
+            holes = str(g.get("holes") or pack.get("holes_key") or "")
+            shot = _is_shotgun(ev, holes)
+            sl = (g.get("start_line") or "").strip()
+            start_headline = sl.replace(" | ", " \u00b7 ")
+            start_subject = (f"{sl.replace(' | ', ', ')} shotgun" if shot
+                             else f"{sl.split(' | ')[0]} tee time") if sl else ""
+            start_sub = " \u00b7 ".join(x for x in (
+                "Shotgun" if shot else "Tee time", date_short, ev_info.get("course") or "") if x)
+            team = (gview.get("team_type") or "").replace("TEAM", "Team").replace("CART", "Cart")
+            format_line = " \u00b7 ".join(x for x in (f"{holes} holes" if holes else "", team) if x)
+            tee = tees.get(str(me.get("tee_choice"))) if me.get("tee_choice") else None
+            spot = spot_card(g, me, start_headline=start_headline, start_sub=start_sub,
+                             tee=tee, format_line=format_line) if sl else ""
+            gcard = games_card(gview, cid, bool(r.get("rsvp_only")), as_of, day) if gview.get("ok") else ""
+            sbutton = scoring_button(short_score_url(url)) if url else ""
             first = nm.get("first_name") or (full.split()[0] if full else "")
             vals_html = {
                 "first_name": _e(first), "player_name": _e(full),
@@ -355,14 +694,19 @@ def build_event_day_emails(event_id: int, db_path=None) -> dict:
                 "games_block": games_block, "scoring_block": scoring_block,
                 "manager_name": _e(manager.get("name")),
                 "manager_phone": _e(manager.get("phone")),
+                "event_title": _e(title), "start_subject": _e(start_subject),
+                "spot_card": spot, "games_card": gcard, "scoring_button": sbutton,
             }
             subject = html_to_text(render_msg_template(tpl["subject"], vals_html))
             body = normalize_email_html(render_msg_template(tpl["html_body"], vals_html))
             text = html_to_text(body)
+            if "{spot_card}" in tpl["html_body"]:
+                body = frame(body, chapter_label, title)
             why = _guard(subject, body, text, used, vals_html)
             msg = {**base, "subject": subject, "html": body, "text": text,
                    "start_line": g.get("start_line"), "group": g.get("slot_label"),
-                   "games_shown": bool(games_block), "scoring_link": bool(scoring_block)}
+                   "games_shown": bool(gcard or games_block),
+                   "scoring_link": bool(scoring_block or sbutton)}
             if why:
                 held.append({**base, "reason": "; ".join(why)})
                 continue
@@ -378,8 +722,10 @@ def build_event_day_emails(event_id: int, db_path=None) -> dict:
         "template_hash": appr["template_hash"],
         "approved": appr["approved"],
         "pairings_saved": bool(groups),
-        "games_note": (None if gctx.get("ok") else
-                       f"games block omitted for every player: {gctx.get('why')}"),
+        "games_note": (
+            (None if gview.get("ok") else f"games card omitted for every player: {gview.get('why')}")
+            if "{games_card}" in tpl_text else
+            (None if gctx.get("ok") else f"games block omitted for every player: {gctx.get('why')}")),
         "counts": {"roster": len(people), "ready": len(messages), "held": len(held)},
         "messages": messages,
         "held": held,

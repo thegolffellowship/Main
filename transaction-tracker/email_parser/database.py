@@ -4586,21 +4586,20 @@ def init_db(db_path: str | Path | None = None) -> None:
                 # hash of the wording he approved. The Message Players
                 # composer refuses it (its {…_block} tags are outside
                 # KNOWN_VARS) — this template only sends from that module.
+                # v2.553.0, Kerry 2026-10-12 picked design A2 ("A looks the
+                # best to me ... show a current games breakdown on a card
+                # like the Group Card", then "Perfect for now"): the cards
+                # are built in event_day_email.py; the words are here.
                 "Event Day — Your Pairing", "email",
-                "{event_name} — your group and start",
+                "{event_title}: {start_subject}",
                 "<p>Hi {first_name},</p>"
-                "<p>Here is your pairing for <strong>{event_name}</strong> at "
-                "<strong>{course}</strong> on <strong>{event_date}</strong>.</p>"
-                "<p><strong>Your start:</strong> {start_line}</p>"
-                "<p><strong>Your group:</strong></p>"
-                "{group_block}"
-                "{cart_block}"
-                "{scoring_block}"
-                "{games_block}"
-                "<p>If your plans have changed and you cannot play, reply to this "
-                "email or text {manager_name} at {manager_phone} as soon as you "
-                "can so we can adjust the groups.</p>"
-                "<p>See you out there,<br>{manager_name}<br>"
+                "<p>You're set for {event_title}. Here's your spot.</p>"
+                "{spot_card}"
+                "{games_card}"
+                "{scoring_button}"
+                "<p>Running late or can't make it? Text {manager_name} at "
+                "{manager_phone}. The sooner we know, the better the groups.</p>"
+                "<p>See you on the first tee,<br>{manager_name}<br>"
                 "The Golf Fellowship</p>",
                 None,
             ),
@@ -46635,6 +46634,25 @@ _PRIOR_SYSTEM_TEMPLATE_BODIES = {
         "<p><strong>Your group:</strong></p>"
         "{group_block}"
         "{cart_block}"
+        "{games_block}"
+        "<p>If your plans have changed and you cannot play, reply to this "
+        "email or text {manager_name} at {manager_phone} as soon as you "
+        "can so we can adjust the groups.</p>"
+        "<p>See you out there,<br>{manager_name}<br>"
+        "The Golf Fellowship</p>",
+        # v2.528.8 -> v2.553.0: the A2 cards. This body was approved for
+        # members (event_day_email_approved = f76bf53aa8d5ee65, the LSC
+        # practice round) and verified as production's stored row by that
+        # same hash on 10/12, so an untouched row takes the new wording
+        # and the old stamp no longer matches: Kerry re-approves A2.
+        "<p>Hi {first_name},</p>"
+        "<p>Here is your pairing for <strong>{event_name}</strong> at "
+        "<strong>{course}</strong> on <strong>{event_date}</strong>.</p>"
+        "<p><strong>Your start:</strong> {start_line}</p>"
+        "<p><strong>Your group:</strong></p>"
+        "{group_block}"
+        "{cart_block}"
+        "{scoring_block}"
         "{games_block}"
         "<p>If your plans have changed and you cannot play, reply to this "
         "email or text {manager_name} at {manager_phone} as soon as you "
