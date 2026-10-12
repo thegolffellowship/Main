@@ -131,6 +131,10 @@
             .pr-nm-b { display: block; margin: 2px 0 0; white-space: nowrap; overflow: hidden; }
             .pr-nm-b:empty { display: none; }
             .pr-nm-1.no-hcp .pr-hcp, .pr-nm-1.no-hcp .pr-opt { display: none; }
+            .pr-nm.no-pay .pr-pay { display: none; }
+            .pr-nm-1.wrap { display: block; white-space: normal; }
+            .pr-nm-1.wrap .pr-nm-n, .pr-nm-1.wrap .pr-nm-chev { display: inline; }
+            .pr-nm-t.no-badge .pr-nm-b { display: none; }
         }
                 /* How-it-works link + popup (Kerry, 2026-07-10) */
         .pr-hiw-link {
@@ -9814,17 +9818,33 @@
     function prFitNames() {
         if (!window.matchMedia("(max-width: 560px)").matches) return;
         const lines = [...document.querySelectorAll(".pr-nm-1")];
-        lines.forEach(l => { l.classList.remove("no-hcp"); const n = l.querySelector(".pr-nm-n"); if (n) n.style.fontSize = ""; });
+        const reset = l => {
+            l.classList.remove("no-hcp", "wrap");
+            const n = l.querySelector(".pr-nm-n"); if (n) n.style.fontSize = "";
+            const row = l.closest(".pr-nm"); if (row) row.classList.remove("no-pay");
+            const t = l.closest(".pr-nm-t"); if (t) t.classList.remove("no-badge");
+        };
+        lines.forEach(reset);
         document.querySelectorAll(".pr-nm-b").forEach(b => { b.style.zoom = ""; });
         const need = l => [...l.children].reduce((a, c) => a + c.offsetWidth, 0) + 6;
-        // a few passes: shrinking one row can change the column width every other row is measured against
+        const fits = l => need(l) <= l.clientWidth + 1;
+        // THE ORDER OF GIVING WAY on a narrow window (Kerry 2026-10-12): 1) the handicap, 2) the money,
+        // 3) the name shrinks (floor 11px); 4) only if it still cannot sit on one line it wraps, the badges
+        // go, and the chevron stays right after the name. A row is never more than two lines.
+        // A few passes: shrinking one row can change the column width every other row is measured against.
         for (let pass = 0; pass < 3; pass++) {
             lines.forEach(l => {
                 const n = l.querySelector(".pr-nm-n");
-                if (!n || need(l) <= l.clientWidth + 1) return;
+                if (!n || fits(l)) return;
                 l.classList.add("no-hcp");
+                if (fits(l)) return;
+                const row = l.closest(".pr-nm"); if (row) row.classList.add("no-pay");
+                if (fits(l)) return;
                 let size = parseFloat(getComputedStyle(n).fontSize) || 14;
-                while (need(l) > l.clientWidth + 1 && size > 9) { size -= 0.5; n.style.fontSize = size + "px"; }
+                while (!fits(l) && size > 11) { size -= 0.5; n.style.fontSize = size + "px"; }
+                if (fits(l)) return;
+                l.classList.add("wrap");
+                const t = l.closest(".pr-nm-t"); if (t) t.classList.add("no-badge");
             });
         }
         // the badge line keeps to one line too: shrink it rather than let it wrap or clip

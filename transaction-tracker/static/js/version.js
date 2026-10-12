@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.545.0";
+window.TGF_VERSION = "2.545.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.545.1",
+    date: "2026-10-12",
+    title: "Standings on a narrow window: the order things give way",
+    changes: [
+      "Kerry 10/12: \"Handicap should hide before chevron on narrowing. Order of hiding. Handicap, Money. If name has to wrap, then hide badge and keep chevron after name.\" On a phone-width window a standings row now gives way in this order: 1) the handicap (and chapter chip), 2) the money won, 3) the name shrinks (floor 11px, was 9), 4) only if it still cannot fit on one line, the name wraps onto a second line, the badges are hidden, and the chevron stays right after the name. A row is never more than two lines (prFitNames)."
+    ]
+  },
   {
     version: "2.545.0",
     date: "2026-10-12",

@@ -150,7 +150,8 @@ check("standings: money is larger, Bitter and right-aligned on the name row; nam
       ".pr-nm { display: flex; align-items: center; justify-content: space-between" in src
       and ".pr-nm-l { min-width: 0; font-family: 'Bitter'" in src and "font: 700 17px/1 'Bitter'" in src
       and src.count('<div class="pr-nm"><div class="pr-nm-l">') >= 3 and 'class="pr-pay-l"' in src
-      and src.count('<span class="pr-nm-b">') >= 3 and ".pr-nm-1.no-hcp .pr-hcp" in src and "function prFitNames" in src and src.count('<span class="pr-nm-chev">') >= 3 and src.count('class="pr-nm-1"') >= 3 and 'RK</th>' in src)
+      and src.count('<span class="pr-nm-b">') >= 3 and ".pr-nm-1.no-hcp .pr-hcp" in src and "function prFitNames" in src and '.pr-nm.no-pay .pr-pay { display: none; }' in src
+      and ".pr-nm-t.no-badge .pr-nm-b { display: none; }" in src and 'classList.add("no-hcp")' in src and src.count('<span class="pr-nm-chev">') >= 3 and src.count('class="pr-nm-1"') >= 3 and 'RK</th>' in src)
 check("every cell of a standings row is vertically centred on the row (rank, points and buy-in no longer ride high beside the headshot)",
       "tr[data-pname] > td" in src and "vertical-align: middle; }" in src)
 sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()
