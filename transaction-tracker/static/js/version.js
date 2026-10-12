@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.545.1";
+window.TGF_VERSION = "2.545.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.545.2",
+    date: "2026-10-12",
+    title: "Standings: what a narrow row hid shows when the row is expanded",
+    changes: [
+      "Kerry 10/12: \"Anything hidden can show when player row is expanded.\" When a standings row is opened, whatever it gave up to fit (the handicap, the money won or projected, the badges such as CHAMPION or the team's LSC CAPTAIN) is listed under the name for as long as the row is open (prSyncHidden), and removed when it closes. Rows carry data-hcp / data-pay so even what was never drawn on a phone (money before a race is final) can be shown. The headshot is capped at row height so an expanded row does not stretch it."
+    ]
+  },
   {
     version: "2.545.1",
     date: "2026-10-12",

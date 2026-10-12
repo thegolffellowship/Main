@@ -2138,14 +2138,19 @@
            a row without an image has no slot at all, so its name sits at the left. Rank and points read Bitter, centred. */
         td.pr-name-td { position: relative; padding-left: 8px !important; }
         td.pr-name-td.has-av { padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 68px !important; height: 58px; }
-        .pr-av { position: absolute; left: 0; top: 0; bottom: 0; width: 58px; display: block; background: #E5E7EB; }
+        .pr-av { position: absolute; left: 0; top: 0; bottom: 0; width: 58px; max-height: 58px; display: block; background: #E5E7EB; }
         .pr-av img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; border: 0; border-radius: 0; box-shadow: none; }
         #pr-table-container .enrollment-table thead tr:first-child th:first-child { text-align: center; padding-left: 4px; padding-right: 4px; }
+        /* what a narrow row hid (handicap, money, badges) reappears under the name once the row is expanded */
+        .pr-hid-line { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 4px; white-space: normal;
+            font: 600 12px/1.3 'Bitter', Georgia, serif; color: #4B5563; }
+        .pr-hid-line b { font: 700 8.5px/1 'Bitter', Georgia, serif; letter-spacing: .6px; color: #6B7280; text-transform: uppercase; margin-right: 4px; }
+        .pr-hid-line .hp-pay { color: #15803d; font-size: 15px; font-weight: 700; }
         td.pr-rk { font-family: 'Bitter', Georgia, serif; font-weight: 700; text-align: center; padding-left: 4px; padding-right: 4px; }
         td.pr-pts { font-family: 'Bitter', Georgia, serif; }
         @media (max-width: 560px) {
             td.pr-name-td.has-av { padding-left: 60px !important; height: 54px; }
-            .pr-av { width: 52px; }
+            .pr-av { width: 52px; max-height: 54px; }
         }
         .champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex;
             flex-direction: column; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
@@ -9557,7 +9562,7 @@
                 ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
             const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
-            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
+            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
                 <td class="pr-rk" style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
                 <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? `<span class="pr-opt">${prChapterBadge(r.player_chapter)}</span>` : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
@@ -9858,6 +9863,39 @@
             document.fonts.ready.then(() => { prFitNames._again = false; requestAnimationFrame(prFitNames); });
         }
     }
+    // ANYTHING HIDDEN SHOWS WHEN THE ROW IS EXPANDED (Kerry 2026-10-12): the handicap, the money and the badges a
+    // narrow row gave up are listed under the name while its drill-down is open, and removed when it closes.
+    function prSyncHidden() {
+        document.querySelectorAll("#pr-table-container tbody tr[data-cid]").forEach(tr => {
+            const td = tr.querySelector("td.pr-name-td");
+            if (!td) return;
+            const chev = tr.querySelector(".pr-chevron");
+            const open = !!chev && chev.textContent.indexOf("\u25BC") > -1;
+            let line = td.querySelector(".pr-hid-line");
+            if (!open) { if (line) line.remove(); return; }
+            if (line) return;
+            const vis = el => !!el && el.offsetParent !== null;
+            const items = [];
+            const hc = tr.querySelector(".pr-hcp");
+            const hv = hc ? hc.textContent.replace(/[()]/g, "").trim() : (tr.dataset.hcp || "");
+            if (hv && !vis(hc)) items.push(`<span><b>Handicap</b>${escapeHtml(hv)}</span>`);
+            const pay = tr.querySelector(".pr-pay");
+            if (tr.dataset.pay && !vis(pay)) items.push(`<span class="hp-pay"><b>${escapeHtml(tr.dataset.payl || "WON")}</b>${escapeHtml(tr.dataset.pay)}</span>`);
+            const bd = tr.querySelector(".pr-nm-b");
+            if (bd && !vis(bd)) {
+                const labels = [...bd.querySelectorAll("[title]")].map(e => e.getAttribute("title")).filter(Boolean);
+                const txt = bd.textContent.replace(/\s+/g, " ").trim();
+                if (labels.length || txt) items.push(`<span>${escapeHtml(labels.length ? labels.join(" · ") : txt)}</span>`);
+            }
+            const op = tr.querySelector(".pr-opt");
+            if (op && !vis(op) && op.textContent.trim()) items.push(`<span>${escapeHtml(op.textContent.trim())}</span>`);
+            if (!items.length) return;
+            td.insertAdjacentHTML("beforeend", `<div class="pr-hid-line">${items.join("")}</div>`);
+        });
+    }
+    document.addEventListener("click", ev => {
+        if (ev.target.closest && ev.target.closest("#pr-table-container tbody tr[data-cid]")) setTimeout(prSyncHidden, 30);
+    });
     let prFitTimer = null;
     window.addEventListener("resize", () => { clearTimeout(prFitTimer); prFitTimer = setTimeout(prFitNames, 120); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(prFitNames);
@@ -10068,7 +10106,7 @@
             const chevF = expandableF
                 ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;</span>'
                 : '';
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td class="pr-rk" style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td class="pr-name-td"${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}</span><span class="pr-nm-chev">${chevF}</span></span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF

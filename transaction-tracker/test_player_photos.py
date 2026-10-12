@@ -154,6 +154,8 @@ check("standings: money is larger, Bitter and right-aligned on the name row; nam
       and ".pr-nm-t.no-badge .pr-nm-b { display: none; }" in src and 'classList.add("no-hcp")' in src and src.count('<span class="pr-nm-chev">') >= 3 and src.count('class="pr-nm-1"') >= 3 and 'RK</th>' in src)
 check("every cell of a standings row is vertically centred on the row (rank, points and buy-in no longer ride high beside the headshot)",
       "tr[data-pname] > td" in src and "vertical-align: middle; }" in src)
+check("anything a narrow row hid (handicap, money, badges) is listed under the name while the row is expanded",
+      "function prSyncHidden" in src and 'class="pr-hid-line"' in src and "data-hcp=" in src and "data-payl=" in src)
 sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()
 check("the Spotlight headshot enlarges like the trophy photos (full 400px photo in the lightbox, small one on the card)",
       'data-full="/member/photo/h/' in sp and 'src="/member/photo/hs/' in sp and "function sptLightbox" in sp
