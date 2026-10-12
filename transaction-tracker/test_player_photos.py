@@ -175,6 +175,9 @@ check("bought in is plain white and NOT bought in a soft grey row with a BUY IN 
       and "function prBuyOpenFor" in src and "/fall_net/.test(raceKey || \"\")" in src and "const showBuy = !compact && prBuyOpenNow;" in src
       and "window.TGF_MEMBER_ID" in src and "tr.pr-buyin-row > td" in src and "@keyframes prBuyMid" in src and "Not in</span>" not in src.split("const badge = r.enrolled")[1].split("const nameCell")[0] and src.count('class="${nobuy ? "pr-nobuy" : ""}') + src.count('class="${nobuyF ? "pr-nobuy" : ""}"') == 2
       and "var(--buyin-green,#bbf7d0);\"\n                     : (r.customer_id" not in src and "prBuyLegend(d.standings)" in src and '${showBuy ? "" : buyHtml}' in src)
+check("the Bought in / Not bought in legend boxes are real filters that hide those rows and survive a re-render",
+      'data-buyfilter="in"' in src and 'data-buyfilter="out"' in src and "function prApplyBuyFilter" in src
+      and "prBuyFilter[cb.dataset.buyfilter] = cb.checked;" in src and src.count("prApplyBuyFilter();") >= 3)
 check("anything a narrow row hid (handicap, money, badges) is listed under the name while the row is expanded",
       "function prSyncHidden" in src and 'class="pr-hid-line"' in src and "data-hcp=" in src and "data-payl=" in src
       and "new MutationObserver(put)" in src and ".pr-detail-row, .pr-mo-detail" in src)

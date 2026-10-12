@@ -82,7 +82,9 @@
         .pr-buy-legend { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 6px 10px;
             background: #F8F8F8; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: #4B5563; }
         .pr-buy-legend b { color: var(--primary, #E87C3E); font-family: 'Bitter', serif; }
-        .pr-buy-legend .sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 1px solid #D1D5DB; margin-left: 6px; }
+        .pr-buyf { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+        .pr-buyf input { accent-color: var(--primary, #E87C3E); width: 15px; height: 15px; margin: 0; cursor: pointer; }
+        .pr-buy-legend .sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 1px solid #D1D5DB; }
         .pr-buy-legend .sw.in { background: #fff; } .pr-buy-legend .sw.out { background: #EEEEEC; }
         .pr-hiw-glance { margin: 0 0 16px; padding: 12px 14px; background: #F8F8F8; border: 1px solid var(--border); border-radius: 10px; }
         .pr-hiw-glance-tiles { display: flex; gap: 28px; }
@@ -9273,11 +9275,32 @@
         return (r && r.customer_id && !r.enrolled && prBuyOpen())
             ? `<a class="pr-buyin" href="${PR_BUYIN_URL}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buy in to this contest">BUY IN</a>` : "";
     }
+    // The legend doubles as a FILTER (Kerry 2026-10-12: "The Bought in and Not Bought in checkboxes don't work"):
+    // untick a box to hide those rows. The choice survives the board's re-renders.
+    const prBuyFilter = { in: true, out: true };
     function prBuyLegend(rows) {
         if (!(rows || []).some(r => r.customer_id && !r.enrolled)) return "";
-        return `<div class="pr-buy-legend"><span class="sw in"></span>Bought in <span class="sw out"></span>Not bought in`
-            + (prBuyOpen() ? ` &middot; tap <b>BUY IN</b> to join` : "") + `</div>`;
+        return `<div class="pr-buy-legend">`
+            + `<label class="pr-buyf"><input type="checkbox" data-buyfilter="in"${prBuyFilter.in ? " checked" : ""}><span class="sw in"></span>Bought in</label>`
+            + `<label class="pr-buyf"><input type="checkbox" data-buyfilter="out"${prBuyFilter.out ? " checked" : ""}><span class="sw out"></span>Not bought in</label>`
+            + (prBuyOpen() ? `<span>&middot; tap <b>BUY IN</b> to join</span>` : "") + `</div>`;
     }
+    function prApplyBuyFilter() {
+        const cont = $("pr-table-container");
+        if (!cont) return;
+        cont.querySelectorAll("tbody tr[data-cid]").forEach(tr => {
+            const show = tr.classList.contains("pr-nobuy") ? prBuyFilter.out : prBuyFilter.in;
+            tr.style.display = show ? "" : "none";
+            const nx = tr.nextElementSibling;
+            if (nx && nx.matches(".pr-detail-row, .pr-mo-detail")) nx.style.display = show ? "" : "none";
+        });
+    }
+    document.addEventListener("change", ev => {
+        const cb = ev.target && ev.target.matches && ev.target.matches("input[data-buyfilter]") ? ev.target : null;
+        if (!cb) return;
+        prBuyFilter[cb.dataset.buyfilter] = cb.checked;
+        prApplyBuyFilter();
+    });
     function prPayBadge(r) {
         return r._pay
             ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}"><span class="pr-pay-l">${prRaceFinal ? "WON" : "PROJECTED"}</span>${prFmtMoney(r._pay)}</span>`
@@ -9762,7 +9785,7 @@
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
-        fcChampPhotoLoad(); fcPastChampsLoad();
+        fcChampPhotoLoad(); fcPastChampsLoad(); prApplyBuyFilter();
         $("pr-table-container").dataset.live = liveMode ? "1" : "0";
         // Round list for the expansion's Round 1 / Round 2 card toggle
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupMode ? cupBoards : []);
@@ -10260,7 +10283,7 @@
         // Champ rows expand to the round scorecards (Kerry 2026-08-13:
         // "exactly like City Championship specs"), with the Round 1 /
         // Round 2 toggle handled inside prToggleDetail.
-        fcChampPhotoLoad(); fcPastChampsLoad();
+        fcChampPhotoLoad(); fcPastChampsLoad(); prApplyBuyFilter();
         $("pr-table-container").dataset.live = cupChamp ? "1" : "0";
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupFetchedF);
         if (cupChamp) {

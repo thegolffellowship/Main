@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.549.1";
+window.TGF_VERSION = "2.549.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.549.2",
+    date: "2026-10-12",
+    title: "The Bought in / Not bought in boxes are real filters",
+    changes: [
+      "Kerry 10/12: \"The Bought in and Not Bought in checkboxes don't work.\" The two boxes in the legend above the standings were only colour swatches that looked like checkboxes. They are now real, ticked-by-default checkboxes: untick Not bought in to see only the people who are in, untick Bought in to see only the people who are not (a row's open drill-down hides with it). The choice stays when the board refreshes or you switch boards. Guard: test_player_photos.py."
+    ]
+  },
   {
     version: "2.549.1",
     date: "2026-10-12",
