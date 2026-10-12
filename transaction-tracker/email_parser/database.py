@@ -15858,6 +15858,27 @@ def warm_spotlight(db_path=None, force: bool = False) -> dict:
             "entries": sum(1 for k in _SPOTLIGHT_SHARED_CACHE if k[1] == str(path))}
 
 
+def _spotlight_cup_titles(customer_id: int, gross_d: dict | None,
+                          cup_d: dict | None) -> list:
+    """Spotlight header titles (Kerry 2026-10-12): the cups' declared
+    champion(s) for this season plus the Kerry-stated past years. Never raises:
+    a failed lookup shows no title rather than breaking the profile."""
+    try:
+        from .cup_titles import cup_titles
+        from .timezone_utils import today_central
+
+        def ids(d):
+            return [c.get("customer_id") for c in ((d or {}).get("champions") or [])
+                    if c.get("customer_id") is not None]
+
+        return cup_titles(customer_id, today_central().year,
+                          {"players_cup": ids(gross_d),
+                           "fellowship_cup": ids(cup_d)})
+    except Exception:
+        logger.warning("spotlight cup titles failed", exc_info=True)
+        return []
+
+
 def get_player_spotlight(customer_id: int,
                          db_path: str | Path = DB_PATH, _touch: bool = True) -> dict:
     """PLAYER SPOTLIGHT payload (v1, admin preview — Kerry directed
@@ -16568,6 +16589,7 @@ def get_player_spotlight(customer_id: int,
         "winnings_by_game": winnings_by_game,
         "scoring": scoring,
         "races": races,
+        "cup_titles": _spotlight_cup_titles(customer_id, gross_d, cup_d),
         "race_pots": race_pots,
         "fall_buyins": fall,
         "match_play": match_play,

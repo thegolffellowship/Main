@@ -70,6 +70,12 @@
         .spt-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
         .spt-photo { width: 72px; height: 72px; flex: none; border-radius: 50%; object-fit: cover; object-position: center 30%;
             border: 3px solid var(--primary, #E87C3E); }
+        /* CUP CHAMPION titles, the card's last row (Kerry 2026-10-12): one line per cup,
+           "The Fellowship Cup - 2026 Champion". Nothing renders for a non-champion. */
+        .spt-champs { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--border); display: flex;
+            flex-direction: column; gap: 5px; }
+        .spt-champ { display: flex; align-items: center; gap: 7px; font: 700 13px/1.25 'Bitter', serif; color: #7A5C0B; }
+        .spt-champ svg { flex: none; width: 17px; height: 17px; }
         .spt-name { margin: 0; font: 700 23px/1.05 'Bitter', serif; color: #1B1B1B; min-width: 0; }
         .spt-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
         .spt-idx { text-align: right; flex: none; }
@@ -551,6 +557,12 @@
             // row (Kerry 2026-08-03) — the hero line is retired.
             const lscLine = "";
             const hcp = d.handicap_index_18;
+            // CUP CHAMPION titles (Kerry 2026-10-12): server-built lines, copy of record.
+            const TROPHY = `<svg viewBox="0 0 24 24" fill="none" stroke="#C9A227" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/><polygon points="12 3.4 13.0 5.42 15.23 5.75 13.62 7.33 14.0 9.55 12 8.5 10.0 9.55 10.38 7.33 8.77 5.75 11.0 5.42" fill="#C9A227" stroke="none"/></svg>`;
+            const champLines = (d.cup_titles && d.cup_titles.length)
+                ? `<div class="spt-champs">` + d.cup_titles.map(t =>
+                    `<div class="spt-champ">${TROPHY}<span>${esc(t.line)}</span></div>`).join("") + `</div>`
+                : "";
             const hero =
                 `<div class="spt-card"><div class="spt-hero-row">` +
                 `<div class="spt-who">${sptHeadshot(d.customer_id)}<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
@@ -563,7 +575,7 @@
                 `<div class="n">${hcp != null ? esc(hcp.toFixed(1)) : "&mdash;"}</div>` +
                 `<div class="l">Index${d.handicap_index_9 != null ? `<br>9-hole ${esc(d.handicap_index_9.toFixed(1))}` : ""}${d.handicap_player_name ? `<br><span style="color:var(--primary,#E87C3E);">Full detail &rsaquo;</span>` : ""}</div>` +
                 (d.handicap_player_name ? `</a>` : `</div>`) +
-                `</div>${lscLine}</div>`;
+                `</div>${lscLine}${champLines}</div>`;
 
             const st = scopeStats(d);
             const strip =

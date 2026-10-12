@@ -9717,10 +9717,6 @@
         if (!glyph) return;
         const src = `/member/photo/c/fellowship_cup-2026.jpg?v=${p.v}`;
         glyph.outerHTML = `<img class="champ-photo" src="${src}" alt="${escapeHtml(p.caption)}" role="button" tabindex="0" onerror="this.remove()">`;
-        const sub = document.createElement("div");
-        sub.className = "tgf-champ-sub";
-        sub.textContent = p.cup;
-        el.querySelector(".tgf-champ-text").appendChild(sub);
         const img = el.querySelector(".champ-photo");
         const open = () => fcChampLightbox(src, p.caption);
         img.addEventListener("click", open);

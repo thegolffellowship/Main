@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.537.0";
+window.TGF_VERSION = "2.538.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.538.0",
+    date: "2026-10-12",
+    title: "Spotlight: cup champion titles under the photo; the plaque drops its third line",
+    changes: [
+      "Kerry 10/12: \"if someone was either The Fellowship Cup or The Players Cup Champion, they need that listed in the header under their photo on the bottom of that card. 'The Fellowship Cup - 2026 Champion' for Gus Vasquez. For Robert Straiton 'The Players Cup - 2024 & 2026 Champion'\" and \"Only the overall winners of the Players cup and Fellowship cup get this treatment.\" The Spotlight header card now ends with one gold-trophy line per cup the player won, Fellowship Cup above Players Cup, copy exactly as Kerry typed it (a hyphen; years ascending, '2024 & 2026', and '2022, 2024 & 2026' for three or more).",
+      "Source: the current season is DERIVED from each cup's declared champion(s) (the same `champions` the plaque and the money use: final, enrolled, best rank), so a player who tops the standings without being bought in (Gus on the Players Cup) gets no line. Past seasons are not in the Spotlight data, so they come from a short list Kerry states, never inferred (email_parser/cup_titles.py CUP_CHAMPION_HISTORY): Robert Straiton 2024 Players Cup; Mark Freund 2024 Fellowship Cup; Jay Horton 2025 both cups. More years are added only on Kerry's word. get_player_spotlight carries `cup_titles`; no schema. Guard: test_cup_titles.py.",
+      "The Fellowship Cup plaque loses its third line (\"The Bruce Friesenhahn Fellowship Cup\"); the champion title and name are all it shows, and the cup's name is in the photo's tag (Kerry: \"that's perfect\")."
+    ]
+  },
   {
     version: "2.537.0",
     date: "2026-10-12",
