@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.547.0";
+window.TGF_VERSION = "2.548.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.548.0",
+    date: "2026-10-12",
+    title: "Champion photos: square badge crops, larger; full photo on tap",
+    changes: [
+      "Kerry 10/12: \"for these champ photos crop them square for the badge so torso and trophy shows only. Full enlargement when clicked can include the full image. I want this so it can show larger.\" The champion badge on THE FELLOWSHIP CUP and THE PLAYERS CUP plaques is now a SQUARE crop (head, torso and trophy) at 140px (was a 102x136 portrait); the Past Champions strip thumbnails are 92px squares (were 84x112) and the Spotlight title thumbnails 76px squares (were 62x83). Tap still opens the FULL photo. Served by /member/photo/cq/<key> from pre-cropped 400x400 files (data/champion_photos/sq, about 31-45KB each), so pages stay light. A new champion photo needs its sq crop (test_player_photos.py fails without it)."
+    ]
+  },
   {
     version: "2.547.0",
     date: "2026-10-12",

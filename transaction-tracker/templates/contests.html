@@ -2145,7 +2145,7 @@
         /* Kerry 2026-10-12: "extend the photo much closer to the border. Way too much padding." With a photo the
            plaque's padding shrinks to just clear its inset gold rule, and the portrait grows to fill the height. */
         .tgf-champ-plaque.has-photo { padding: 7px 1rem 7px 7px; }
-        .tgf-champ-plaque.has-photo .champ-photo { width: 102px; height: 136px; border-radius: 7px; }
+        .tgf-champ-plaque.has-photo .champ-photo { width: 140px; height: 140px; border-radius: 7px; object-position: center top; }
         /* NAV FLUSH under the header (Kerry 2026-10-12: "Nav bar isn't pinning under header. There's space. Same with
            Sub Nav."): no gap above the tab bar or between it and the race-chip row. */
         body main, html.tgf-wide body main { padding-top: 0; }
@@ -2184,8 +2184,8 @@
         .past-champs { margin: 0 0 0.7rem; border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; }
         .past-champs > summary { cursor: pointer; padding: 0.55rem 0.8rem; font: 700 0.82rem/1.2 'Bitter', Georgia, serif; color: #7A5C0B; }
         .past-champs-list { display: flex; flex-wrap: wrap; gap: 14px; padding: 0.2rem 0.8rem 0.8rem; }
-        .past-champ { display: flex; flex-direction: column; align-items: center; width: 92px; text-align: center; }
-        .past-champ img, .past-champ .pc-ph { width: 84px; height: 112px; border-radius: 8px; object-fit: cover; border: 2px solid #D4A017; cursor: zoom-in; display: block; background: #F7F1DC; }
+        .past-champ { display: flex; flex-direction: column; align-items: center; width: 100px; text-align: center; }
+        .past-champ img, .past-champ .pc-ph { width: 92px; height: 92px; border-radius: 8px; object-fit: cover; border: 2px solid #D4A017; cursor: zoom-in; display: block; background: #F7F1DC; }
         .past-champ .pc-ph { cursor: default; }
         .past-champ .pc-y { margin-top: 5px; font: 700 0.85rem/1.1 'Bitter', Georgia, serif; color: #7A5C0B; }
         .past-champ .pc-n { font-size: 0.78rem; line-height: 1.25; color: #1B1B1B; }
@@ -10007,9 +10007,9 @@
         if (norm((el.dataset.cids || "").split(",")) !== norm(p.ids || [])) return;
         const glyph = el.querySelector(".tgf-champ-trophy");
         if (!glyph) return;
-        const src = `/member/photo/cs/${race}-2026.jpg?v=${p.v}`;      // small for the plaque
+        const src = `/member/photo/cq/${race}-2026.jpg?v=${p.v}`;      // square badge crop for the plaque
         const fullSrc = `/member/photo/c/${race}-2026.jpg?v=${p.v}`;  // full size only on tap
-        glyph.outerHTML = `<img class="champ-photo" width="102" height="136" src="${src}" alt="${escapeHtml(p.caption)}" role="button" tabindex="0" onerror="this.remove()">`;
+        glyph.outerHTML = `<img class="champ-photo" width="140" height="140" src="${src}" alt="${escapeHtml(p.caption)}" role="button" tabindex="0" onerror="this.remove()">`;
         const img = el.querySelector(".champ-photo");
         const open = () => fcChampLightbox(fullSrc, p.caption);
         img.addEventListener("click", open);
@@ -10034,7 +10034,7 @@
             const cards = rows.map(r => {
                 const nm = (r.names || []).map(n => escapeHtml(prFirstLast(n))).join(" &amp; ");
                 const ph = r.photo
-                    ? `<img width="84" height="112" src="/member/photo/cs/${r.photo.key}.jpg?v=${r.photo.v}" alt="${escapeHtml(r.photo.caption)}" data-cap="${escapeHtml(r.photo.caption)}" loading="lazy" role="button" tabindex="0" onerror="this.outerHTML='<div class=&quot;pc-ph&quot;></div>'">`
+                    ? `<img width="92" height="92" src="/member/photo/cq/${r.photo.key}.jpg?v=${r.photo.v}" alt="${escapeHtml(r.photo.caption)}" data-cap="${escapeHtml(r.photo.caption)}" loading="lazy" role="button" tabindex="0" onerror="this.outerHTML='<div class=&quot;pc-ph&quot;></div>'">`
                     : `<div class="pc-ph"></div>`;
                 return `<div class="past-champ">${ph}<div class="pc-y">${r.year}</div><div class="pc-n">${nm}</div></div>`;
             }).join("");
@@ -10042,7 +10042,7 @@
             box.hidden = false;
             box.dataset.done = "1";
             box.querySelectorAll("img[data-cap]").forEach(img => {
-                const open = () => fcChampLightbox(img.src.replace("/photo/cs/", "/photo/c/"), img.dataset.cap);
+                const open = () => fcChampLightbox(img.src.replace("/photo/cq/", "/photo/c/"), img.dataset.cap);
                 img.addEventListener("click", open);
                 img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
             });

@@ -1293,3 +1293,7 @@ Top-3 standings rows carry a headshot slot (`prAvatarSlot`, filled by `fcApplyAv
 
 Small copies keep pages light: `data/champion_photos/sm/` (300x400) and `data/player_photos/sm/` (160x160, `h-<id>.jpg`), served by `/member/photo/cs/<key>.jpg` and `/member/photo/hs/<id>.jpg` (full photo as fallback; an uploaded headshot wins over the seed). Every on-page small display uses them; only the lightbox asks for the full photo. A NEW seed headshot or champion photo needs its small copy (resize with PIL, quality ~82; `test_player_photos.py` fails without it). Standings: money sits on the name row, right-aligned (`.pr-nm`, `.pr-pay`), names and money Bitter. The Spotlight headshot opens full size (`sptLightbox`).
 
+### Champion badge crops (v2.548.0, Kerry 2026-10-12)
+
+Every champion photo has three files: the full original (`data/champion_photos/<file>`, shown only in the lightbox), a small copy (`sm/`, 300x400) and a SQUARE badge crop (`sq/`, 400x400, top-anchored: head, torso, trophy) served by `/member/photo/cq/<key>.jpg` for the plaque (140px), the Past Champions strip (92px) and the Spotlight thumbnails (76px). A new photo needs its `sq` (and `sm`) copy; `test_player_photos.py` fails without them.
+

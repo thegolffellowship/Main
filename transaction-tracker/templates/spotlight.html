@@ -86,8 +86,8 @@
         /* PAST CHAMPION PHOTOS under the titles (Kerry 2026-10-12): one thumbnail per title year with a photo. */
         .spt-champ-photos { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
         .spt-champ-ph { background: none; border: 0; padding: 0; cursor: zoom-in; text-align: center; font: 700 10.5px/1.3 'Bitter', serif; color: #7A5C0B; }
-        .spt-champ-ph img { display: block; width: 62px; height: 83px; object-fit: cover; border-radius: 7px; border: 2px solid #D4A017; }
-        .spt-champ-ph span { display: block; margin-top: 3px; max-width: 66px; }
+        .spt-champ-ph img { display: block; width: 76px; height: 76px; object-fit: cover; border-radius: 7px; border: 2px solid #D4A017; }
+        .spt-champ-ph span { display: block; margin-top: 3px; max-width: 80px; }
         .spt-champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex; flex-direction: column;
             align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
         .spt-champ-lb img { max-width: 100%; max-height: 82vh; border-radius: 10px; border: 2px solid #D4A017; }
@@ -658,7 +658,7 @@
                 const short = c => c === "players_cup" ? "Players Cup" : "Fellowship Cup";
                 return `<div class="spt-champ-photos">` + ph.map(x =>
                     `<button type="button" class="spt-champ-ph" data-key="${esc(x.p.key)}" data-v="${esc(String(x.p.v))}" data-cap="${esc(x.p.caption)}" aria-label="${esc(x.p.caption)}">` +
-                    `<img width="62" height="83" src="/member/photo/cs/${esc(x.p.key)}.jpg?v=${esc(String(x.p.v))}" alt="${esc(x.p.caption)}" loading="lazy" onerror="this.closest('button').remove()">` +
+                    `<img width="76" height="76" src="/member/photo/cq/${esc(x.p.key)}.jpg?v=${esc(String(x.p.v))}" alt="${esc(x.p.caption)}" loading="lazy" onerror="this.closest('button').remove()">` +
                     `<span>${esc(short(x.cup))} ${esc(String(x.p.year))}</span></button>`).join("") + `</div>`;
             }
             // CUP CHAMPION titles (Kerry 2026-10-12): server-built lines, copy of record.

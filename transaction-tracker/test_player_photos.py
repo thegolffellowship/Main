@@ -142,10 +142,16 @@ check("the small champion and headshot routes serve JPEGs far lighter than the f
       small.status_code == 200 and small.mimetype == "image/jpeg" and len(small.data) < len(full.data) / 3
       and hsmall.status_code == 200 and len(hsmall.data) < len(hfull.data) / 2
       and tc.get("/member/photo/cs/nope.jpg").status_code == 404 and tc.get("/member/photo/hs/999999.jpg").status_code == 404)
+sq = tc.get("/member/photo/cq/fellowship_cup-2026.jpg")
+check("champion badge photos are SQUARE crops (400x400, head, torso and trophy) far lighter than the full photo; the full one is for the lightbox",
+      sq.status_code == 200 and sq.mimetype == "image/jpeg" and len(sq.data) < 80 * 1024
+      and all(os.path.isfile(os.path.join(HERE, "data", "champion_photos", "sq", f)) for f in champs)
+      and tc.get("/member/photo/cq/nope.jpg").status_code == 404
+      and 'width="140" height="140"' in src and "fcChampLightbox(fullSrc, p.caption)" in src)
 check("photos cache for a week (the URL carries ?v=mtime) and the index for a minute",
       "604800" in small.headers.get("Cache-Control", "") and "max-age=60" in tc.get("/api/player-photos").headers.get("Cache-Control", ""))
 check("every small display uses the small route and only the lightbox asks for the full photo",
-      src.count("/member/photo/cs/") >= 2 and src.count("/member/photo/hs/") >= 3 and 'replace("/photo/hs/", "/photo/h/")' in src)
+      src.count("/member/photo/cq/") >= 2 and src.count("/member/photo/hs/") >= 3 and 'replace("/photo/hs/", "/photo/h/")' in src)
 check("standings: money is larger, Bitter and right-aligned on the name row; names are Bitter (Kerry 10/12)",
       ".pr-nm { display: flex; align-items: center; justify-content: space-between" in src
       and ".pr-nm-l { min-width: 0; font-family: 'Bitter'" in src and "font: 700 17px/1 'Bitter'" in src

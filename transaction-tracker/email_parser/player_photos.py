@@ -207,6 +207,16 @@ def photo_file(kind: str, key: str, db_path=None) -> Path | None:
             if p.is_file():
                 return p
         return None
+    elif kind == "cq":
+        # SQUARE champion badge crop (400x400, head, torso and trophy) for the plaque, the Past Champions strip and the
+        # Spotlight thumbnails (Kerry 10/12); the full photo opens on tap. Falls back to the small, then the full one.
+        c = CHAMPION_PHOTOS.get(key or "")
+        if not c:
+            return None
+        for p in (CHAMPION_DIR / "sq" / c["file"], CHAMPION_DIR / "sm" / c["file"], CHAMPION_DIR / c["file"]):
+            if p.is_file():
+                return p
+        return None
     elif kind == "hs" and re.fullmatch(r"\d+", key or ""):
         # SMALL headshot (160x160, ~7KB) for avatars, plaques and the Spotlight; an uploaded headshot
         # (already 400px) wins over the seed, else the seed's small file, else the seed's full one
