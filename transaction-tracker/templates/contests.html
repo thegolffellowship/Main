@@ -9269,11 +9269,12 @@
     function prBuyBtn(r) {
         // PERSONAL LOGIN HOOK (Kerry 2026-10-12): once members have their own sign-in the page sets
         // window.TGF_MEMBER_ID to the signed-in customer_id. A SIGNED-IN member sees BUY IN on their own row only (with the
-        // shimmering border, prRowShimmer). Signed out, or before sign-in exists (undefined / null), every not-bought-in row
-        // simply shows grey with a BUY IN button and no border (Kerry: "For now, and logged out state, just show grey and
-        // BUY IN button").
+        // shimmering border, prRowShimmer). SIGNED-OUT visitors see NO BUY IN, only the grey row (Kerry 2026-10-12: "Signed
+        // Out visitors will NOT see BUY IN buttons...only the grey"); until sign-in exists everyone is signed out, so no
+        // BUY IN is drawn yet.
         const me = window.TGF_MEMBER_ID;
-        if (typeof me === "number" && r && r.customer_id !== me) return "";
+        if (typeof me !== "number") return "";
+        if (r && r.customer_id !== me) return "";
         return (r && r.customer_id && !r.enrolled && prBuyOpen())
             ? `<a class="pr-buyin" href="${PR_BUYIN_URL}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buy in to this contest">BUY IN</a>` : "";
     }
@@ -9285,7 +9286,7 @@
         return `<div class="pr-buy-legend">`
             + `<label class="pr-buyf"><input type="checkbox" data-buyfilter="in"${prBuyFilter.in ? " checked" : ""}><span class="sw in"></span>Bought in</label>`
             + `<label class="pr-buyf"><input type="checkbox" data-buyfilter="out"${prBuyFilter.out ? " checked" : ""}><span class="sw out"></span>Not bought in</label>`
-            + (prBuyOpen() ? `<span>&middot; tap <b>BUY IN</b> to join</span>` : "") + `</div>`;
+            + (prBuyOpen() && typeof window.TGF_MEMBER_ID === "number" ? `<span>&middot; tap <b>BUY IN</b> on your row to join</span>` : "") + `</div>`;
     }
     function prApplyBuyFilter() {
         const cont = $("pr-table-container");

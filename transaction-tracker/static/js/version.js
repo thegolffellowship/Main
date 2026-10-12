@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.549.4";
+window.TGF_VERSION = "2.549.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.549.5",
+    date: "2026-10-12",
+    title: "Signed-out visitors see the grey rows, no BUY IN button",
+    changes: [
+      "Kerry 10/12: \"Signed Out visitors will NOT see BUY IN buttons...only the grey.\" The BUY IN pill is drawn only for a signed-in member, on their own row (window.TGF_MEMBER_ID is their customer_id), and that row alone gets the shimmering border. Anyone signed out sees not-bought-in players as grey rows with nothing to click, and the legend drops the 'tap BUY IN' line. Because member sign-in is not built yet, nobody sees a BUY IN button today. This replaces the previous release's 'signed out shows grey and BUY IN'."
+    ]
+  },
   {
     version: "2.549.4",
     date: "2026-10-12",
