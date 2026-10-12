@@ -157,6 +157,9 @@ check("every cell of a standings row is vertically centred on the row (rank, poi
 check("anything a narrow row hid (handicap, money, badges) is listed under the name while the row is expanded",
       "function prSyncHidden" in src and 'class="pr-hid-line"' in src and "data-hcp=" in src and "data-payl=" in src)
 sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()
+check("the Spotlight profile photo is a rounded square in a frame of the player's chapter colour",
+      ".spt-photo-frame.ch-austin { background: var(--chapter-austin" in sp and ".spt-photo-frame.ch-sa" in sp
+      and "border-radius: 12px" in sp and 'sptHeadshot(d.customer_id, d.chapter)' in sp)
 check("the Spotlight headshot enlarges like the trophy photos (full 400px photo in the lightbox, small one on the card)",
       'data-full="/member/photo/h/' in sp and 'src="/member/photo/hs/' in sp and "function sptLightbox" in sp
       and ".spt-photo[data-full]" in sp)
@@ -182,7 +185,7 @@ check("LEADERBOARD: the opened card heads with the singles face-off or the pair'
       "function lscPhotoHead(m, o)" in ct and "const photoHead = lscPhotoHead(m, o);" in ct
       and "return `${photoHead}${strokeBar}" in ct and 'class="lsc-duo' in ct)
 check("SPOTLIGHT: the headshot beside the name, slotted in without a re-render",
-      "sptHeadshot(d.customer_id)" in sp and 'w.insertAdjacentHTML("afterbegin", sptHeadshot(SPT_DATA.customer_id))' in sp)
+      "sptHeadshot(d.customer_id, d.chapter)" in sp and 'w.insertAdjacentHTML("afterbegin", sptHeadshot(SPT_DATA.customer_id, SPT_DATA.chapter))' in sp)
 
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

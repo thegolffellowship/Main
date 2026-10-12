@@ -68,8 +68,13 @@
         .spt-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px; }
         .spt-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
         .spt-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
-        .spt-photo { cursor: zoom-in; width: 72px; height: 72px; flex: none; border-radius: 50%; object-fit: cover; object-position: center 30%;
-            border: 3px solid var(--primary, #E87C3E); }
+        /* PROFILE PHOTO (Kerry 2026-10-12): a rounded SQUARE in a frame of the player's CHAPTER colour (Austin burnt
+           orange, San Antonio blue-grey, anyone else neutral), a little padding between photo and frame. */
+        .spt-photo-frame { flex: none; padding: 4px; border-radius: 16px; background: #E5E7EB; line-height: 0; }
+        .spt-photo-frame.ch-austin { background: var(--chapter-austin, #BF5700); }
+        .spt-photo-frame.ch-sa { background: var(--chapter-sa-alt, #8FA8B8); }
+        .spt-photo { cursor: zoom-in; width: 76px; height: 76px; border-radius: 12px; object-fit: cover; object-position: center 28%;
+            border: 0; display: block; }
         /* CUP CHAMPION titles, the card's last row (Kerry 2026-10-12): one line per cup,
            "The Fellowship Cup - 2026 Champion". Nothing renders for a non-champion. */
         .spt-champs { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--border); display: flex;
@@ -615,12 +620,13 @@
                 SPT_PHOTOS = (j && j.h) ? j : { h: {}, t: {} };
                 // a player already on screen gets his photo without a re-render
                 const w = SPT_DATA && document.querySelector(".spt-who");
-                if (w && !w.querySelector(".spt-photo")) w.insertAdjacentHTML("afterbegin", sptHeadshot(SPT_DATA.customer_id));
+                if (w && !w.querySelector(".spt-photo")) w.insertAdjacentHTML("afterbegin", sptHeadshot(SPT_DATA.customer_id, SPT_DATA.chapter));
             })
             .catch(() => {});
-        function sptHeadshot(cid) {
+        function sptHeadshot(cid, chapter) {
             const v = SPT_PHOTOS && cid != null ? SPT_PHOTOS.h[String(cid)] : null;
-            return v ? `<img class="spt-photo" data-full="/member/photo/h/${Number(cid)}.jpg?v=${v}" src="/member/photo/hs/${Number(cid)}.jpg?v=${v}" alt="" width="72" height="72" role="button" tabindex="0" title="Tap to enlarge" onerror="this.remove()">` : "";
+            const ch = /austin/i.test(chapter || "") ? "ch-austin" : /san antonio/i.test(chapter || "") ? "ch-sa" : "ch-other";
+            return v ? `<span class="spt-photo-frame ${ch}"><img class="spt-photo" data-full="/member/photo/h/${Number(cid)}.jpg?v=${v}" src="/member/photo/hs/${Number(cid)}.jpg?v=${v}" alt="" width="76" height="76" role="button" tabindex="0" title="Tap to enlarge" onerror="this.parentNode.remove()"></span>` : "";
         }
         // CHAMPION TITLES on a phone (Kerry 2026-10-12): all of a player's titles share one line;
         // when they don't fit, the second cup (The Players Cup) drops to its own line and the
@@ -667,7 +673,7 @@
                 : "";
             const hero =
                 `<div class="spt-card"><div class="spt-hero-row">` +
-                `<div class="spt-who">${sptHeadshot(d.customer_id)}<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
+                `<div class="spt-who">${sptHeadshot(d.customer_id, d.chapter)}<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
                 `<div class="spt-badges">${chapterChip(d.chapter)}` +
                 statusChips(d) +
                 `</div></div></div>` +

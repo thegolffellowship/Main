@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.545.2";
+window.TGF_VERSION = "2.545.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.545.3",
+    date: "2026-10-12",
+    title: "Spotlight profile photo: rounded square in a chapter-colour frame",
+    changes: [
+      "Kerry 10/12: \"Let's do squares for the profile pages too. They can have a little padding still. But the color around the photo should be the chapter color. Also apply rounded corners.\" The Spotlight header photo is now a rounded square (76px, 12px corners) inside a 4px frame in the player's CHAPTER colour: Austin burnt orange, San Antonio blue-grey, anyone else neutral grey. Tap still opens the full photo. (Also, per Kerry: an expanded standings row keeps its headshot square and the same size, no stretch; that cap shipped in 2.545.2.)"
+    ]
+  },
   {
     version: "2.545.2",
     date: "2026-10-12",
