@@ -197,6 +197,24 @@ def photo_file(kind: str, key: str, db_path=None) -> Path | None:
         c = CHAMPION_PHOTOS.get(key or "")
         p = CHAMPION_DIR / c["file"] if c else None
         return p if p and p.is_file() else None
+    elif kind == "cs":
+        # SMALL champion photo (300x400) for every on-page spot; the full 1200x1600 loads only
+        # when someone taps to enlarge (Kerry 10/12: load times must not climb with the photos)
+        c = CHAMPION_PHOTOS.get(key or "")
+        if not c:
+            return None
+        for p in (CHAMPION_DIR / "sm" / c["file"], CHAMPION_DIR / c["file"]):
+            if p.is_file():
+                return p
+        return None
+    elif kind == "hs" and re.fullmatch(r"\d+", key or ""):
+        # SMALL headshot (160x160, ~7KB) for avatars, plaques and the Spotlight; an uploaded headshot
+        # (already 400px) wins over the seed, else the seed's small file, else the seed's full one
+        name = f"h-{int(key)}.jpg"
+        for p in (photo_dir(db_path) / name, SEED_DIR / "sm" / name, SEED_DIR / name):
+            if p.is_file():
+                return p
+        return None
     else:
         return None
     for d in (photo_dir(db_path), SEED_DIR):      # an upload wins over the seed

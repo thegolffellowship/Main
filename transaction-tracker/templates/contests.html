@@ -98,11 +98,21 @@
         }
         #pr-structure-note:empty { display: none; }
         #pr-structure-note b { color: #1B1B1B; }
-        .pr-pay {
-            display: block; margin-top: 2px; color: #15803d;
-            font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
-            font-variant-numeric: tabular-nums; white-space: nowrap;
-        }
+        /* MONEY on the name row (Kerry 2026-10-12): larger, Bitter, right-aligned on the same line as the name.
+           Names in every standings are Bitter too (Kerry: "All names in any standings in the Tracker should be Bitters.
+           Money should be Bitters as well"). Supersedes the 2026-07-09 sans-for-dense-data rule for these two. */
+        .pr-nm { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .pr-nm-l { min-width: 0; font-family: 'Bitter', Georgia, serif; font-weight: 600; }
+        .pr-nm-l .cell-link, .pr-nm-l a { font-family: inherit; font-weight: inherit; }
+        .pr-pay { margin-left: auto; flex: none; text-align: right; color: #15803d; white-space: nowrap;
+            font: 700 17px/1 'Bitter', Georgia, serif; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+        .pr-pay .pr-pay-l { display: block; font: 700 8.5px/1 'Bitter', Georgia, serif; letter-spacing: 0.8px; color: #166534; opacity: .8; margin-bottom: 3px; }
+        .lsc-player, .mp-name, .evlb-nm-stack > span { font-family: 'Bitter', Georgia, serif; }
+        /* every cell of a standings row sits on the row's middle line (Kerry 2026-10-12: "Text needs aligning on each
+           row"): the headshot makes the name block taller, so rank, points, reset, rounds and buy-in were riding high */
+        #pr-table-container tbody tr[data-pname] > td, #pr-table-container tbody tr[data-city-rank] > td,
+        #pr-table-container tbody tr[data-cid]:not(.pr-mo-detail) > td { vertical-align: middle; }
+        @media (max-width: 560px) { .pr-pay { font-size: 14px; } .pr-nm { gap: 6px; } .pr-nm-l { white-space: normal; line-height: 1.35; } }
 
         /* How-it-works link + popup (Kerry, 2026-07-10) */
         .pr-hiw-link {
@@ -2924,7 +2934,7 @@
     }
     function lscPhotoOf(cids) {
         const P = lscPhotos || { h: {}, t: {} }, ids = (cids || []).map(Number);
-        if (ids.length === 1) { const v = P.h[String(ids[0])]; return v ? `/member/photo/h/${ids[0]}.jpg?v=${v}` : null; }
+        if (ids.length === 1) { const v = P.h[String(ids[0])]; return v ? `/member/photo/hs/${ids[0]}.jpg?v=${v}` : null; }
         if (ids.length === 2) { const k = ids.slice().sort((x, y) => x - y).join("-"), v = P.t[k];
             return v ? `/member/photo/t/${k}.jpg?v=${v}` : null; }
         return null;
@@ -9156,7 +9166,7 @@
 
     function prPayBadge(r) {
         return r._pay
-            ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}">${prRaceFinal ? "WON" : "PROJECTED"}: ${prFmtMoney(r._pay)}</span>`
+            ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}"><span class="pr-pay-l">${prRaceFinal ? "WON" : "PROJECTED"}</span>${prFmtMoney(r._pay)}</span>`
             : "";
     }
 
@@ -9522,11 +9532,11 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td${cupSlim ? ' style="white-space:normal;"' : ''}>${prAvatarSlot(r, compact)}${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}${thruSub}</td>
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}${chevron}</div>${compact && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSub}</td>
                 <td style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -9772,7 +9782,7 @@
         document.querySelectorAll(".pr-av[data-av]:not([data-done])").forEach(el => {
             const id = el.dataset.av;
             if (!fcHeadIdx || fcHeadIdx[id] == null) return;
-            el.innerHTML = `<img src="/member/photo/h/${id}.jpg?v=${fcHeadIdx[id]}" alt="" loading="lazy" onerror="this.remove()">`;
+            el.innerHTML = `<img src="/member/photo/hs/${id}.jpg?v=${fcHeadIdx[id]}" alt="" width="40" height="40" loading="lazy" onerror="this.remove()">`;
             el.dataset.done = "1";
         });
     }
@@ -9788,9 +9798,9 @@
             ids.forEach(id => {
                 const img = document.createElement("img");
                 img.className = "champ-head"; img.alt = nm; img.setAttribute("role", "button"); img.tabIndex = 0;
-                img.src = `/member/photo/h/${id}.jpg?v=${fcHeadIdx[id]}`;
+                img.src = `/member/photo/hs/${id}.jpg?v=${fcHeadIdx[id]}`;
                 img.onerror = () => img.remove();
-                const open = () => fcChampLightbox(img.src, nm);
+                const open = () => fcChampLightbox(img.src.replace("/photo/hs/", "/photo/h/"), nm);
                 img.addEventListener("click", open);
                 img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
                 wrap.appendChild(img);
@@ -9810,10 +9820,11 @@
         if (norm((el.dataset.cids || "").split(",")) !== norm(p.ids || [])) return;
         const glyph = el.querySelector(".tgf-champ-trophy");
         if (!glyph) return;
-        const src = `/member/photo/c/${race}-2026.jpg?v=${p.v}`;
-        glyph.outerHTML = `<img class="champ-photo" src="${src}" alt="${escapeHtml(p.caption)}" role="button" tabindex="0" onerror="this.remove()">`;
+        const src = `/member/photo/cs/${race}-2026.jpg?v=${p.v}`;      // small for the plaque
+        const fullSrc = `/member/photo/c/${race}-2026.jpg?v=${p.v}`;  // full size only on tap
+        glyph.outerHTML = `<img class="champ-photo" width="102" height="136" src="${src}" alt="${escapeHtml(p.caption)}" role="button" tabindex="0" onerror="this.remove()">`;
         const img = el.querySelector(".champ-photo");
-        const open = () => fcChampLightbox(src, p.caption);
+        const open = () => fcChampLightbox(fullSrc, p.caption);
         img.addEventListener("click", open);
         img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
         el.classList.add("has-photo");
@@ -9836,7 +9847,7 @@
             const cards = rows.map(r => {
                 const nm = (r.names || []).map(n => escapeHtml(prFirstLast(n))).join(" &amp; ");
                 const ph = r.photo
-                    ? `<img src="/member/photo/c/${r.photo.key}.jpg?v=${r.photo.v}" alt="${escapeHtml(r.photo.caption)}" data-cap="${escapeHtml(r.photo.caption)}" loading="lazy" role="button" tabindex="0" onerror="this.outerHTML='<div class=&quot;pc-ph&quot;></div>'">`
+                    ? `<img width="84" height="112" src="/member/photo/cs/${r.photo.key}.jpg?v=${r.photo.v}" alt="${escapeHtml(r.photo.caption)}" data-cap="${escapeHtml(r.photo.caption)}" loading="lazy" role="button" tabindex="0" onerror="this.outerHTML='<div class=&quot;pc-ph&quot;></div>'">`
                     : `<div class="pc-ph"></div>`;
                 return `<div class="past-champ">${ph}<div class="pc-y">${r.year}</div><div class="pc-n">${nm}</div></div>`;
             }).join("");
@@ -9844,7 +9855,7 @@
             box.hidden = false;
             box.dataset.done = "1";
             box.querySelectorAll("img[data-cap]").forEach(img => {
-                const open = () => fcChampLightbox(img.src, img.dataset.cap);
+                const open = () => fcChampLightbox(img.src.replace("/photo/cs/", "/photo/c/"), img.dataset.cap);
                 img.addEventListener("click", open);
                 img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
             });
@@ -9983,11 +9994,11 @@
                 : '';
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${prAvatarSlot(r, compact)}${nameCell}${r.customer_id && fcChampIds.has(r.customer_id)
+                <td${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}${nameCell}${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
-                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${thruSubF}</td>
+                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}</div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
@@ -10167,7 +10178,7 @@
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${prAvatarSlot(r, compact)}${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</td>
+                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</div></div></td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>

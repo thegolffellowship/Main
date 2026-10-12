@@ -5,7 +5,7 @@ initials.
 
 Run: python3 test_player_photos.py
 """
-import base64, contextlib, io, json, logging, os, sys, tempfile
+import re, base64, contextlib, io, json, logging, os, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 tmp = os.path.join(tempfile.mkdtemp(prefix="tgf-photos-"), "t.db")
 os.environ["DATABASE_PATH"] = tmp
@@ -127,6 +127,34 @@ check("the LSC captain comes from the Cup roster, not the champion: server sends
       and LSC_CAPT.get("austin_net") == (7, "Matt Jenkins") and LSC_CAPT.get("san_antonio_net") == (35, "Rob Callaway")
       and _cap("austin_net", {"a": 1})["lsc_captain_id"] == 7 and _cap("city_gross", {"a": 1}) == {"a": 1})
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+seeds = [f for f in os.listdir(os.path.join(HERE, "data", "player_photos")) if re.fullmatch(r"h-\d+\.jpg", f)]
+champs = [f for f in os.listdir(os.path.join(HERE, "data", "champion_photos")) if f.endswith(".jpg")]
+check("every seed headshot has a small 160px copy under 20KB, and every champion photo a 300x400 copy under 80KB (load time, Kerry 10/12)",
+      all(os.path.isfile(os.path.join(HERE, "data", "player_photos", "sm", f))
+          and os.path.getsize(os.path.join(HERE, "data", "player_photos", "sm", f)) < 20 * 1024 for f in seeds)
+      and all(os.path.isfile(os.path.join(HERE, "data", "champion_photos", "sm", f))
+              and os.path.getsize(os.path.join(HERE, "data", "champion_photos", "sm", f)) < 80 * 1024 for f in champs))
+full, small = tc.get("/member/photo/c/fellowship_cup-2026.jpg"), tc.get("/member/photo/cs/fellowship_cup-2026.jpg")
+hfull, hsmall = tc.get("/member/photo/h/289.jpg"), tc.get("/member/photo/hs/289.jpg")
+check("the small champion and headshot routes serve JPEGs far lighter than the full ones; unknown keys are 404",
+      small.status_code == 200 and small.mimetype == "image/jpeg" and len(small.data) < len(full.data) / 3
+      and hsmall.status_code == 200 and len(hsmall.data) < len(hfull.data) / 2
+      and tc.get("/member/photo/cs/nope.jpg").status_code == 404 and tc.get("/member/photo/hs/999999.jpg").status_code == 404)
+check("photos cache for a week (the URL carries ?v=mtime) and the index for a minute",
+      "604800" in small.headers.get("Cache-Control", "") and "max-age=60" in tc.get("/api/player-photos").headers.get("Cache-Control", ""))
+check("every small display uses the small route and only the lightbox asks for the full photo",
+      src.count("/member/photo/cs/") >= 2 and src.count("/member/photo/hs/") >= 3 and 'replace("/photo/hs/", "/photo/h/")' in src)
+check("standings: money is larger, Bitter and right-aligned on the name row; names are Bitter (Kerry 10/12)",
+      ".pr-nm { display: flex; align-items: center; justify-content: space-between" in src
+      and ".pr-nm-l { min-width: 0; font-family: 'Bitter'" in src and "font: 700 17px/1 'Bitter'" in src
+      and src.count('<div class="pr-nm"><div class="pr-nm-l">') >= 3 and 'class="pr-pay-l"' in src)
+check("every cell of a standings row is vertically centred on the row (rank, points and buy-in no longer ride high beside the headshot)",
+      "tr[data-pname] > td" in src and "vertical-align: middle; }" in src)
+sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()
+check("the Spotlight headshot enlarges like the trophy photos (full 400px photo in the lightbox, small one on the card)",
+      'data-full="/member/photo/h/' in sp and 'src="/member/photo/hs/' in sp and "function sptLightbox" in sp
+      and ".spt-photo[data-full]" in sp)
 import mcp_server as M                                            # noqa: E402
 b64 = base64.b64encode(JPEG).decode()
 out = json.loads(M._scoring_dispatch("https://www.golfgenius.com/", f"scoring-player-photo:headshot|672|{b64}"))

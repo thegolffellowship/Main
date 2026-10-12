@@ -71,7 +71,7 @@ check("the cup's own season is read from its sessions, not today's date", R.play
 
 src = open(os.path.join(HERE, "templates", "spotlight.html")).read()
 check("the LSC row shows the record where the seat was, with the clinch note and a link per match",
-      "if (l.record)" in src and 'class="r">${esc(rc.text)}' in src and "cup record" in src
+      "if (l.record)" in src and 'class="r${String(rc.text).length > 3 ? " long" : ""}">${esc(rc.text)}' in src and "cup record" in src
       and "?match=${encodeURIComponent(m.match_id)}" in src and "spt-lsc-clinch" in src and "clinched the" in src)
 check("this season's completed contests stay in the main list and only earlier seasons fold into PAST CONTESTS",
       "seasonDone" in src and "if (y === curYear) { seasonDone.push(html); return; }" in src
@@ -82,5 +82,8 @@ check("this season's monthly results fold into one collapsed line, and a decided
 db = open(os.path.join(HERE, "email_parser", "database.py")).read()
 check("get_player_spotlight attaches the record from the shared cached board",
       "_spotlight_lsc_record(customer_id, db_path)" in db and '_spotlight_shared("lsc_board"' in db)
+check("the LSC match lines fold under the record row behind the house chevron (right shut, down open) and a 1-1-1 record stays on one line",
+      '<details class="spt-lsc-wrap">' in src and "details.spt-lsc-wrap[open] > summary .spt-win-chev { transform: rotate(90deg); }" in src
+      and 'String(rc.text).length > 3 ? " long" : ""' in src and ".spt-stand .rk .r.long" in src and "white-space: nowrap" in src)
 print("ALL PASS" if not F else f"FAILED: {F}")
 sys.exit(1 if F else 0)

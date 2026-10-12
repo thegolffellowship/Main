@@ -679,7 +679,7 @@
             .then((j) => { if (j && j.h) { PHOTOS = j; if (card) render(); } }).catch(() => {});
         function photoOf(cids) {
             const ids = (cids || []).map(Number);
-            if (ids.length === 1) { const v = PHOTOS.h[String(ids[0])]; return v ? `/member/photo/h/${ids[0]}.jpg?v=${v}` : null; }
+            if (ids.length === 1) { const v = PHOTOS.h[String(ids[0])]; return v ? `/member/photo/hs/${ids[0]}.jpg?v=${v}` : null; }
             if (ids.length === 2) { const k = ids.slice().sort((x, y) => x - y).join("-"), v = PHOTOS.t[k];
                 return v ? `/member/photo/t/${k}.jpg?v=${v}` : null; }
             return null;

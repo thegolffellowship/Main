@@ -1289,3 +1289,7 @@ The tab bar is flush under the header (no `main` padding-top, no `.pr-section` g
 
 Top-3 standings rows carry a headshot slot (`prAvatarSlot`, filled by `fcApplyAvatars` from the `h` index); other rows keep a blank slot of the same width on desktop. The NET boards no longer assume champion = LSC captain: `app.py` `LSC_CAPTAIN_BY_RACE` (Austin NET customer 7 Matthew Jenkins, San Antonio NET customer 35 Rob Callaway, Kerry 10/12) is added to the points-race payload as `lsc_captain_id` / `lsc_captain_name` (`_with_lsc_captain`). Champion != captain: plaque sub line "Lone Star Cup Captain: <name>", champion badge CHAMPION only, captain row badge LSC CAPTAIN. Update the map when a captain changes (it sits beside `LSC_CAPTAINS` used by the Cup info page).
 
+### Photo load time, standings money row, Spotlight headshot lightbox (v2.544.0, Kerry 2026-10-12)
+
+Small copies keep pages light: `data/champion_photos/sm/` (300x400) and `data/player_photos/sm/` (160x160, `h-<id>.jpg`), served by `/member/photo/cs/<key>.jpg` and `/member/photo/hs/<id>.jpg` (full photo as fallback; an uploaded headshot wins over the seed). Every on-page small display uses them; only the lightbox asks for the full photo. A NEW seed headshot or champion photo needs its small copy (resize with PIL, quality ~82; `test_player_photos.py` fails without it). Standings: money sits on the name row, right-aligned (`.pr-nm`, `.pr-pay`), names and money Bitter. The Spotlight headshot opens full size (`sptLightbox`).
+

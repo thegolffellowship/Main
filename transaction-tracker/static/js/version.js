@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.543.1";
+window.TGF_VERSION = "2.544.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.544.0",
+    date: "2026-10-12",
+    title: "Photos load light, standings money on the name row in Bitter, Spotlight headshot enlarges",
+    changes: [
+      "LOAD TIME (Kerry 10/12: \"load times are increasing\"). The champion photos were 180-450KB each and were loading full size into 60-100px spots (the plaque, the Past Champions strip, the Spotlight thumbnails). Now every small display uses a pre-sized copy: champion photos 300x400 (total for all seven 2.08MB to 183KB) and headshots 160x160 (about 7KB each, 32 of them 1.27MB to 229KB), served by new /member/photo/cs/<key> and /member/photo/hs/<id> routes with the full photo as the fallback. The full-size photo loads only when someone taps to enlarge. Photos cache for a week (every URL carries ?v=mtime, so a replacement is a new URL), the photo index for a minute, and images carry width/height so nothing jumps. Guard: every seed headshot and champion photo must have its small copy (test_player_photos.py).",
+      "STANDINGS (Kerry 10/12). The money won (or projected) is now larger (17px Bitter, green) and right-aligned on the same row as the name, with a small WON / PROJECTED label above it; names in the points-race boards, THE FELLOWSHIP CUP and Monthly are Bitter. On a phone the name block wraps so the captain badge and the money never collide. This supersedes the 2026-07-09 sans-for-dense-data rule for names and money in standings. Also Bitter: Lone Star Cup and Match Play player names and the EVENTS leaderboard's stacked names.",
+      "ALIGNMENT (Kerry 10/12: \"Text needs aligning on each row\"). Rank, points, reset, rounds and buy-in cells now sit on each standings row's middle line instead of riding high beside the taller name block.",
+      "SPOTLIGHT: the player's own headshot opens full size on tap, like the trophy photos (Kerry 10/12). The Lone Star Cup row folds its three match results under the record: the house chevron points right when shut and turns down when open (an \"Open the Cup board\" link sits at the bottom), and a record with two dashes (1-1-1) is set smaller so it stays on one line."
+    ]
+  },
   {
     version: "2.543.1",
     date: "2026-10-12",

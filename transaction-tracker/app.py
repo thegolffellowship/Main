@@ -13413,7 +13413,7 @@ def api_player_photos():
     tier may read it."""
     from email_parser.player_photos import photo_index
     resp = jsonify(photo_index())
-    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Cache-Control"] = "public, max-age=60"
     return resp
 
 
@@ -13449,7 +13449,8 @@ def member_player_photo(kind, key):
     p = photo_file(kind, key)
     if not p:
         return "", 404
-    resp = send_file(str(p), mimetype="image/jpeg", max_age=86400)
+    # a week: every URL carries ?v=<mtime>, so a replaced photo is a new URL
+    resp = send_file(str(p), mimetype="image/jpeg", max_age=604800)
     return resp
 
 

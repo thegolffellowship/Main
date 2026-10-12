@@ -565,7 +565,7 @@ white sub-tab bar with admin-only tabs rendered as right-aligned solid
 orange pills, Bitter headings/stats + Helvetica Neue body, pill buttons
 (inputs stay 8px radius + orange focus ring), chapter-colored band
 headers, and a payout **category color map**. **Typography rule
-(RATIFIED, Kerry 2026-07-09, mailbox #44): Bitter serif only for
+(RATIFIED, Kerry 2026-07-09, mailbox #44; EXCEPTION Kerry 2026-10-12: names and money in every STANDINGS are Bitter, money larger and right-aligned on the name row): Bitter serif only for
 headings, nav/CTA labels, eyebrows, and large stat numerals; dense data
 (table cells, list rows, numeric columns) is system sans with
 tabular-nums — be judicious with Bitter.** `templates/tgf.html` is the

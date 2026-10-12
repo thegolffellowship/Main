@@ -68,7 +68,7 @@
         .spt-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px; }
         .spt-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
         .spt-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
-        .spt-photo { width: 72px; height: 72px; flex: none; border-radius: 50%; object-fit: cover; object-position: center 30%;
+        .spt-photo { cursor: zoom-in; width: 72px; height: 72px; flex: none; border-radius: 50%; object-fit: cover; object-position: center 30%;
             border: 3px solid var(--primary, #E87C3E); }
         /* CUP CHAMPION titles, the card's last row (Kerry 2026-10-12): one line per cup,
            "The Fellowship Cup - 2026 Champion". Nothing renders for a non-champion. */
@@ -101,6 +101,15 @@
            result and the clinch note under the name, one linked line per match. */
         .spt-lsc-wrap { background: #F5F7FC; border-left: 3px solid var(--lsc-navy, #002855); border-top: 1px solid #F0EEE9; }
         .spt-lsc-wrap > .spt-stand { border-top: none; border-left: none; }
+        details.spt-lsc-wrap > summary { list-style: none; cursor: pointer; }
+        details.spt-lsc-wrap > summary::-webkit-details-marker { display: none; }
+        details.spt-lsc-wrap > summary:hover { background: #FDF0E6; }
+        details.spt-lsc-wrap[open] > summary .spt-win-chev { transform: rotate(90deg); }
+        /* a record with two dashes (1-1-1) stays on ONE line: smaller figure, a touch more room */
+        .spt-stand .rk .r.long { font-size: 15px; white-space: nowrap; letter-spacing: -0.3px; }
+        .spt-lsc-wrap .spt-stand .rk { width: 58px; }
+        .spt-lsc-board { display: block; padding: 8px 14px 8px 17px; border-top: 1px solid #E6EAF3; text-decoration: none;
+                         font: 700 11px/1.2 'Bitter', serif; letter-spacing: 0.5px; color: var(--primary, #E87C3E); text-transform: uppercase; }
         .spt-lsc-clinch { font: 700 12px/1.3 'Bitter', serif; color: #7A5C0B; margin-top: 4px; }
         .spt-lsc-matches { padding: 0 0 4px; }
         .spt-lsc-m { display: flex; align-items: flex-start; gap: 9px; padding: 8px 14px 8px 17px; border-top: 1px solid #E6EAF3;
@@ -434,16 +443,28 @@
             loadPlayer(btn.dataset.cid);
         });
         // Past-champion photo lightbox (one delegated handler: the thumbnails are re-rendered per player).
-        document.addEventListener("click", e => {
-            const b = e.target.closest && e.target.closest(".spt-champ-ph");
-            if (!b) return;
+        // The player's own headshot enlarges the same way (Kerry 2026-10-12: "Allow player spotlight photos to be
+        // enlarged too. Just like the full photos for trophy winners").
+        function sptLightbox(src, cap) {
             const lb = document.createElement("div");
-            lb.className = "spt-champ-lb"; lb.setAttribute("role", "dialog"); lb.setAttribute("aria-label", b.dataset.cap);
-            lb.innerHTML = `<img src="/member/photo/c/${esc(b.dataset.key)}.jpg?v=${esc(b.dataset.v)}" alt="${esc(b.dataset.cap)}"><div>${esc(b.dataset.cap)}</div>`;
+            lb.className = "spt-champ-lb"; lb.setAttribute("role", "dialog"); lb.setAttribute("aria-label", cap);
+            lb.innerHTML = `<img src="${esc(src)}" alt="${esc(cap)}"><div>${esc(cap)}</div>`;
             const close = () => { lb.remove(); document.removeEventListener("keydown", onKey); };
             const onKey = ev => { if (ev.key === "Escape") close(); };
             lb.addEventListener("click", close); document.addEventListener("keydown", onKey);
             document.body.appendChild(lb);
+        }
+        document.addEventListener("click", e => {
+            const hp = e.target.closest && e.target.closest(".spt-photo[data-full]");
+            if (hp) { sptLightbox(hp.dataset.full, (document.querySelector(".spt-name") || {}).textContent || ""); return; }
+            const b = e.target.closest && e.target.closest(".spt-champ-ph");
+            if (!b) return;
+            sptLightbox(`/member/photo/c/${b.dataset.key}.jpg?v=${b.dataset.v}`, b.dataset.cap);
+        });
+        document.addEventListener("keydown", e => {
+            if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(".spt-photo[data-full]")) {
+                e.preventDefault(); e.target.click();
+            }
         });
         document.addEventListener("click", e => {
             if (!e.target.closest(".spt-searchbox")) sug.style.display = "none";
@@ -587,7 +608,7 @@
             .catch(() => {});
         function sptHeadshot(cid) {
             const v = SPT_PHOTOS && cid != null ? SPT_PHOTOS.h[String(cid)] : null;
-            return v ? `<img class="spt-photo" src="/member/photo/h/${Number(cid)}.jpg?v=${v}" alt="" onerror="this.remove()">` : "";
+            return v ? `<img class="spt-photo" data-full="/member/photo/h/${Number(cid)}.jpg?v=${v}" src="/member/photo/hs/${Number(cid)}.jpg?v=${v}" alt="" width="72" height="72" role="button" tabindex="0" title="Tap to enlarge" onerror="this.remove()">` : "";
         }
         // CHAMPION TITLES on a phone (Kerry 2026-10-12): all of a player's titles share one line;
         // when they don't fit, the second cup (The Players Cup) drops to its own line and the
@@ -619,7 +640,7 @@
                 const short = c => c === "players_cup" ? "Players Cup" : "Fellowship Cup";
                 return `<div class="spt-champ-photos">` + ph.map(x =>
                     `<button type="button" class="spt-champ-ph" data-key="${esc(x.p.key)}" data-v="${esc(String(x.p.v))}" data-cap="${esc(x.p.caption)}" aria-label="${esc(x.p.caption)}">` +
-                    `<img src="/member/photo/c/${esc(x.p.key)}.jpg?v=${esc(String(x.p.v))}" alt="${esc(x.p.caption)}" loading="lazy" onerror="this.closest('button').remove()">` +
+                    `<img width="62" height="83" src="/member/photo/cs/${esc(x.p.key)}.jpg?v=${esc(String(x.p.v))}" alt="${esc(x.p.caption)}" loading="lazy" onerror="this.closest('button').remove()">` +
                     `<span>${esc(short(x.cup))} ${esc(String(x.p.year))}</span></button>`).join("") + `</div>`;
             }
             // CUP CHAMPION titles (Kerry 2026-10-12): server-built lines, copy of record.
@@ -875,14 +896,16 @@
                     }).join("");
                     const note = rc.clinched
                         ? `<div class="spt-lsc-clinch">${first} clinched the ${esc(String(rc.year))} Lone Star Cup for ${esc(rc.clinch_team || rc.team_name || "")}</div>` : "";
+                    // The match lines fold under the row (Kerry 2026-10-12): the house chevron points right
+                    // when shut and turns down when the three match results are showing.
                     rows.push(
-                        `<div class="spt-lsc-wrap">` +
-                        `<a href="${cupHref}" class="spt-stand spt-stand-lsc">` +
-                        `<div class="rk"><div class="r">${esc(rc.text)}</div><div class="f">cup record</div></div>` +
+                        `<details class="spt-lsc-wrap">` +
+                        `<summary class="spt-stand spt-stand-lsc">` +
+                        `<div class="rk"><div class="r${String(rc.text).length > 3 ? " long" : ""}">${esc(rc.text)}</div><div class="f">cup record</div></div>` +
                         `<div class="mid"><div class="race"><span class="tgf-troph star gold"></span> LONE STAR CUP</div>` +
                         `<div class="meta">${esc(rc.cup_line || (rc.team_name ? "Team " + rc.team_name : ""))}</div>${note}</div>` +
-                        pill + `<span class="spt-go">&rsaquo;</span></a>` +
-                        `<div class="spt-lsc-matches">${matchHtml}</div></div>`);
+                        pill + `<span class="spt-win-chev tgf-exp">&#9654;</span></summary>` +
+                        `<div class="spt-lsc-matches">${matchHtml}<a class="spt-lsc-board" href="${cupHref}">Open the Cup board &rsaquo;</a></div></details>`);
                 } else {
                 rows.push(
                     `<a href="${contestsBase}#tab=lsc" class="spt-stand spt-stand-lsc">` +
