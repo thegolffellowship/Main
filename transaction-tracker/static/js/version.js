@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.549.5";
+window.TGF_VERSION = "2.550.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.550.0",
+    date: "2026-10-12",
+    title: "Standings: one Show All Players box, like the Events leaderboards",
+    changes: [
+      "Kerry 10/12: \"Bought in should always show. There should be a SHOW ALL PLAYERS checkbox only, JUST like the EVENTS LEADERBOARDS do.\" The two Bought in / Not bought in filter boxes are gone. A board that has anyone not bought in now carries ONE checkbox, Show All Players (same wording and look as the Events leaderboards), TICKED by default (Kerry: \"all players should show on landing by default\"): bought-in players are always on the board, and unticking the box hides the grey not-bought-in rows. The choice stays through refreshes and board switches. The grey row colour is explained in How It Works > the board panel.",
+      "BUY IN BUTTONS (Kerry 10/12: \"BUY IN buttons should show now though regardless, until we have a log in state\"). Reverses the previous release for now: until members have a log-in state (window.TGF_MEMBER_ID undefined, today) the BUY IN pill shows on every not-bought-in row of a live Fall board, with no border. Once sign-in exists Kerry's rule stands: signed out (TGF_MEMBER_ID null) shows only the grey, signed in shows BUY IN and the shimmering border on that person's own row only."
+    ]
+  },
   {
     version: "2.549.5",
     date: "2026-10-12",

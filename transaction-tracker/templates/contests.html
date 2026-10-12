@@ -79,13 +79,7 @@
         @keyframes prBuyFirst { 0%, 100% { box-shadow: inset 2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; } 50% { box-shadow: inset 3px 0 0 #FFB27A, inset 0 3px 0 #FFB27A, inset 0 -3px 0 #FFB27A, inset 0 0 14px rgba(232,124,62,.28); } }
         @keyframes prBuyLast { 0%, 100% { box-shadow: inset -2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; } 50% { box-shadow: inset -3px 0 0 #FFB27A, inset 0 3px 0 #FFB27A, inset 0 -3px 0 #FFB27A, inset 0 0 14px rgba(232,124,62,.28); } }
         @media (prefers-reduced-motion: reduce) { tr.pr-buyin-row > td { animation: none !important; } }
-        .pr-buy-legend { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 6px 10px;
-            background: #F8F8F8; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: #4B5563; }
-        .pr-buy-legend b { color: var(--primary, #E87C3E); font-family: 'Bitter', serif; }
-        .pr-buyf { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-        .pr-buyf input { accent-color: var(--primary, #E87C3E); width: 15px; height: 15px; margin: 0; cursor: pointer; }
-        .pr-buy-legend .sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 1px solid #D1D5DB; }
-        .pr-buy-legend .sw.in { background: #fff; } .pr-buy-legend .sw.out { background: #EEEEEC; }
+        .pr-buy-legend { display: flex; justify-content: flex-end; margin: 0 0 6px; font-size: 12px; color: #4B5563; }
         .pr-hiw-glance { margin: 0 0 16px; padding: 12px 14px; background: #F8F8F8; border: 1px solid var(--border); border-radius: 10px; }
         .pr-hiw-glance-tiles { display: flex; gap: 28px; }
         .pr-hiw-glance .l { font: 700 9px/1 'Bitter', serif; letter-spacing: 1px; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
@@ -5556,7 +5550,7 @@
             // The phase pill and the structure note are not repeated here: the chips and sections below already say it.
             if (!tiles && !places && !document.querySelector(".pr-buy-legend")) return;
             const legend = document.querySelector(".pr-buy-legend")
-                ? `<div class="pr-hiw-glance-pl"><div class="l">Who is bought in</div>White rows are bought in; grey rows are not.`
+                ? `<div class="pr-hiw-glance-pl"><div class="l">Who is bought in</div>White rows are bought in; grey rows (tick Show All Players) are not.`
                     + (document.querySelector(".pr-buyin") ? ` Buy-in is still open: tap <b style="color:var(--primary)">BUY IN</b> on a grey row to join.` : "") + `</div>` : "";
             const html = `<div class="pr-hiw-glance"><div class="pr-hiw-glance-tiles">${tiles}</div>`
                 + (places ? `<div class="pr-hiw-glance-pl"><div class="l">Places paid</div><div class="pr-hiw-pay">${places}</div></div>` : "")
@@ -9269,39 +9263,39 @@
     function prBuyBtn(r) {
         // PERSONAL LOGIN HOOK (Kerry 2026-10-12): once members have their own sign-in the page sets
         // window.TGF_MEMBER_ID to the signed-in customer_id. A SIGNED-IN member sees BUY IN on their own row only (with the
-        // shimmering border, prRowShimmer). SIGNED-OUT visitors see NO BUY IN, only the grey row (Kerry 2026-10-12: "Signed
-        // Out visitors will NOT see BUY IN buttons...only the grey"); until sign-in exists everyone is signed out, so no
-        // BUY IN is drawn yet.
+        // shimmering border, prRowShimmer). Once sign-in exists, SIGNED-OUT visitors (TGF_MEMBER_ID === null) see NO BUY IN,
+        // only the grey row (Kerry 2026-10-12: "Signed Out visitors will NOT see BUY IN buttons...only the grey"). UNTIL there
+        // is a log-in state at all (TGF_MEMBER_ID undefined, today) BUY IN shows on every not-bought-in row of a live board
+        // (Kerry: "BUY IN buttons should show now though regardless, until we have a log in state"), with no border.
         const me = window.TGF_MEMBER_ID;
-        if (typeof me !== "number") return "";
-        if (r && r.customer_id !== me) return "";
+        if (me === null) return "";
+        if (typeof me === "number" && r && r.customer_id !== me) return "";
         return (r && r.customer_id && !r.enrolled && prBuyOpen())
             ? `<a class="pr-buyin" href="${PR_BUYIN_URL}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buy in to this contest">BUY IN</a>` : "";
     }
-    // The legend doubles as a FILTER (Kerry 2026-10-12: "The Bought in and Not Bought in checkboxes don't work"):
-    // untick a box to hide those rows. The choice survives the board's re-renders.
-    const prBuyFilter = { in: true, out: true };
+    // SHOW ALL PLAYERS, exactly as on the Events leaderboards (Kerry 2026-10-12: "Bought in should always show. There should
+    // be a SHOW ALL PLAYERS checkbox only, JUST like the EVENTS LEADERBOARDS do"): bought-in players are always on the board;
+    // the box is OFF by default and brings the not-bought-in (grey) rows back in. The choice survives re-renders.
+    // Default TICKED so every player shows on landing (Kerry 2026-10-12: "all players should show on landing by default").
+    let prShowAll = true;
     function prBuyLegend(rows) {
         if (!(rows || []).some(r => r.customer_id && !r.enrolled)) return "";
-        return `<div class="pr-buy-legend">`
-            + `<label class="pr-buyf"><input type="checkbox" data-buyfilter="in"${prBuyFilter.in ? " checked" : ""}><span class="sw in"></span>Bought in</label>`
-            + `<label class="pr-buyf"><input type="checkbox" data-buyfilter="out"${prBuyFilter.out ? " checked" : ""}><span class="sw out"></span>Not bought in</label>`
-            + (prBuyOpen() && typeof window.TGF_MEMBER_ID === "number" ? `<span>&middot; tap <b>BUY IN</b> on your row to join</span>` : "") + `</div>`;
+        return `<div class="pr-buy-legend"><label class="evlb-holetog"><input type="checkbox" data-pr-all${prShowAll ? " checked" : ""}> Show All Players</label></div>`;
     }
     function prApplyBuyFilter() {
         const cont = $("pr-table-container");
         if (!cont) return;
         cont.querySelectorAll("tbody tr[data-cid]").forEach(tr => {
-            const show = tr.classList.contains("pr-nobuy") ? prBuyFilter.out : prBuyFilter.in;
+            const show = tr.classList.contains("pr-nobuy") ? prShowAll : true;
             tr.style.display = show ? "" : "none";
             const nx = tr.nextElementSibling;
             if (nx && nx.matches(".pr-detail-row, .pr-mo-detail")) nx.style.display = show ? "" : "none";
         });
     }
     document.addEventListener("change", ev => {
-        const cb = ev.target && ev.target.matches && ev.target.matches("input[data-buyfilter]") ? ev.target : null;
+        const cb = ev.target && ev.target.matches && ev.target.matches("input[data-pr-all]") ? ev.target : null;
         if (!cb) return;
-        prBuyFilter[cb.dataset.buyfilter] = cb.checked;
+        prShowAll = cb.checked;
         prApplyBuyFilter();
     });
     function prPayBadge(r) {
