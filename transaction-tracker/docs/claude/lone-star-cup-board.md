@@ -1299,3 +1299,7 @@ Every champion photo has three files: the full original (`data/champion_photos/<
 
 Crop offsets (v2.549.0/.1): the `sq` badge crop is top-anchored for most photos; per-photo vertical offsets (px into the 1200x1600 original) are Gus 2026 40, Robert Players Cup 2024 100 and 2026 120, so the whole trophy shows. Jay Horton 2025 is top-anchored (offset 0, whole head, Kerry's call: "I don't like cropping his head").
 
+
+## Chapter / race pickers + address (v2.552.0, Kerry 2026-10-12, CD #1638)
+
+Built additively on the Points Races board: the race chips, the navy LSC pill and HOW IT WORKS are unchanged. `#pr-pickers` (above the title row) holds a chapter button and a race button with a LIVE/FINAL tag; menus on desktop, bottom sheets at <=560px. Config is the `PR_NAV` table in contests.html (chapters TGF / Austin #BF5700 / San Antonio #4B6274; per-race slug + live flag). Picking a race clicks the matching `.sub-tab[data-pr]`, so every existing handler runs. The address is `?chapter=<id>&race=<slug>#race=<key>`; old `#race=` / `#tab=` / `?player=` links still resolve. Landing with no race in the address = TGF Monthly (or the last chapter chosen, localStorage `tgf_pr_chapter`); revert by defaulting to `fall_sa` in the initial-hash block.

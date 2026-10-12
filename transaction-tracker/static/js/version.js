@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.551.1";
+window.TGF_VERSION = "2.552.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.552.0",
+    date: "2026-10-12",
+    title: "Leaderboard: chapter and race pickers beside the chips",
+    changes: [
+      "Kerry 10/12 rulings on Claude Design #1638: the race chips, the navy LONE STAR CUP pill and HOW IT WORKS stay exactly as they were; a CHAPTER picker and a RACE picker (with a LIVE / FINAL tag) now sit above the title row. Phones get bottom sheets. Picking a race clicks the same chip, so nothing else in the board changed.",
+      "The address now carries the race: ?chapter=austin&race=austin-fall-net-2026. Old #race=<key>, #tab=lsc, /member/lonestarcup and ?player= links keep working. Chapters are TGF (all chapters), Austin (#BF5700) and San Antonio (#4B6274), set in one table (PR_NAV).",
+      "Landing: with no race in the address a visitor opens TGF - All chapters on Monthly (or the chapter they chose last time). Kerry answered 'Yes' to CD's landing; if that was not the intent, change the default in the initial-hash block to fall_sa.",
+      "No placeholder tile for players without a photo (unchanged); headshots stay 58px desktop / 52px phone."
+    ]
+  },
   {
     version: "2.551.1",
     date: "2026-10-12",
