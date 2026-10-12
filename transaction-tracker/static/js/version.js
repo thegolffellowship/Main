@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.551.0";
+window.TGF_VERSION = "2.551.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.551.1",
+    date: "2026-10-12",
+    title: "Bridge to regenerate an event's pairings from a lane",
+    changes: [
+      "Kerry 10/12: \"Deploy and then re-generate yourself and review it against our rules.\" New bridge scoring-pairings-generate:<event_id>[|apply] does the PAIRINGS tab's Generate and Save: random mode, partner requests protected, every rule. It is a dry run by default, and with |apply it saves and returns the read-only audit of the result. It refuses an event that has started or is in the past, so a sheet in players' hands is never reshuffled."
+    ]
+  },
   {
     version: "2.551.0",
     date: "2026-10-12",

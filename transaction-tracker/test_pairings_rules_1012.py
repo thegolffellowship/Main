@@ -355,6 +355,26 @@ check("audit: Reggie Johnson (1Y) alone is a hard flag", ("first year player alo
 check("audit: Hinojosa without an Ambassador cart is a hard flag",
       ("guest + Ambassador cart", "Hector Hinojosa") in rules)
 
+print("bridge scoring-pairings-generate")
+import json as _json                                              # noqa: E402
+import mcp_server as _ms                                          # noqa: E402
+evB = 4900
+build(evB)
+register(evB, ALL)
+db.save_event_pairings(evB, {"9": [{"group_num": i + 1, "slot_label": lab,
+                                    "players": [{"name": n, "cart_pos": j + 1} for j, n in enumerate(ns)]}
+                                   for i, (lab, ns) in enumerate(SHEET)]}, db_path=DB)
+dryB = _json.loads(_ms._scoring_dispatch_inner("", f"scoring-pairings-generate:{evB}"))
+check("bridge dry run proposes five groups and writes nothing",
+      len(dryB["groups"]["9"]) == 5 and not dryB["applied"]
+      and len(db.get_event_pairings(evB, db_path=DB)["9"]) == 6, dryB)
+appB = _json.loads(_ms._scoring_dispatch_inner("", f"scoring-pairings-generate:{evB}|apply"))
+check("bridge apply saves five groups and returns the audit with no hard flags",
+      appB["applied"] and len(db.get_event_pairings(evB, db_path=DB)["9"]) == 5
+      and appB["audit"]["summary"]["hard_flags"] == 0, appB.get("audit"))
+pastB = _json.loads(_ms._scoring_dispatch_inner("", "scoring-pairings-generate:4400"))
+check("bridge refuses a past event", "refused" in pastB, pastB)
+
 print()
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

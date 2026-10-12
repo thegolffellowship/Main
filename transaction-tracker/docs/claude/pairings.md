@@ -2193,7 +2193,7 @@ PAIRINGS tab drew only the 18-hole set, so the groups looked deleted.
 - **PAIRINGS tab:** a non-empty set always renders, whatever the format.
 - Guard: `test_sheet_follows_event.py`.
 
-## Rules 16-18: first year players, the reseat that drops a group, guests with an Ambassador (v2.551.0, Kerry 2026-10-12, NOT YET LIVE)
+## Rules 16-18: first year players, the reseat that drops a group, guests with an Ambassador (v2.551.0, Kerry 2026-10-12)
 
 Kerry, verbatim (via the Front Desk, mailbox #1633): "New rule for pairings. I don't want any first year players riding on their own in initial pairings unless it can't be avoided. For instance. Michele McCormick is shown on her own. I don't want that. Also, I just removed and re-seated after removing Chris Espinosa triggered that. However, that reduced us to 20 players. So the reseat should trigger a reduction in groups from 6 to 5 groups, reseating according to pairings rules/standards. Another thing I observe is that 2nd time guest, Hector Hinojosa is being placed with Michelle DelCarmen who is not an ambassador. I would like all guests to always be placed with an ambassador, unless they are the guest of one of our members, or requests someone specificially."
 
@@ -2257,3 +2257,15 @@ Kerry, verbatim: "1st Timers have additional rules to First Year members. You gr
   - the 21-to-20 reseat: five groups, the partner request kept in one cart, the same sheet as a fresh deal;
   - no regroup once started, on a past date, or when roster and sheet differ;
   - the audit's flags on the sheet Kerry saw.
+
+### Regenerate from a lane (v2.551.1)
+
+Kerry 2026-10-12: "Deploy and then re-generate yourself and review it against our rules."
+
+- **Bridge:** `scoring-pairings-generate:<event_id>[|apply]`, the PAIRINGS tab's Generate and Save.
+  - Random mode, with partner requests protected.
+  - No seeds and no Match Play confirms.
+- **Default:** a dry run.
+- **`|apply`:** saves the sheet, writes an action-log row, and returns `event_pairing_audit` on the saved result.
+- **Refused:** an event that has started (`_event_started`) or that is dated before today (Central).
+- **Guard:** the bridge checks in `test_pairings_rules_1012.py`.
