@@ -61521,12 +61521,91 @@ def remove_player_from_pairings(event_id: int, player_name: str,
                       for q in remaining],
         })
 
+    cleaned = {h: [g for g in groups if g.get("players")]
+               for h, groups in pairings.items()}
+    # Kerry 2026-10-12: "removed and re-seated after removing Chris Espinosa
+    # ... that reduced us to 20 players. So the reseat should trigger a
+    # reduction in groups from 6 to 5 groups, reseating according to
+    # pairings rules/standards." Only on a re-seat (never once the event has
+    # started: rule 15b) and only when the roster now fits fewer groups.
+    regrouped = []
+    if reseat:
+        for holes in sorted({h for h, _g, _p in hits}):
+            rg = _regroup_after_removal(event_id, holes, cleaned.get(holes) or [],
+                                        db_path=db_path)
+            regrouped.append(rg)
+            if rg.get("groups"):
+                cleaned[holes] = rg["groups"]
     if not dry_run:
-        cleaned = {h: [g for g in groups if g.get("players")]
-                   for h, groups in pairings.items()}
         save_event_pairings(event_id, cleaned, db_path=db_path)
     return {"found": True, "removed": len(hits), "dry_run": bool(dry_run),
-            "reseated": bool(reseat), "groups": detail}
+            "reseated": bool(reseat), "groups": detail,
+            "regrouped": [{k: v for k, v in r.items() if k != "groups"}
+                          | {"after": [[p.get("name") for p in g.get("players") or []]
+                                       for g in r.get("groups") or []]}
+                          for r in regrouped]}
+
+
+def _regroup_after_removal(event_id: int, holes: str, groups: list,
+                           db_path=None) -> dict:
+    """After a removal, re-deal a holes set into fewer groups when the
+    roster now fits them (Kerry 2026-10-12: 20 players = 5 groups, not 6).
+
+    Full groups (four, or five on a fivesome event) are kept exactly as the
+    sheet has them, seats included: they are passed to the generator as
+    seeds, so a manager's hand-built foursome survives (rule 5), unless its
+    seats break rule 16 or 18 (then it is dealt again too). Everyone
+    else is dealt by `generate_event_pairings` under every pairing rule,
+    the 2026-10-12 ones included. Match Play constraints are not re-asked
+    here; a confirmed match already in a full group stays together.
+
+    Returns {holes, before, needed, applied, reason, groups}. `groups` is
+    the new set (save shape) only when applied. Refuses, with a reason,
+    when the generator's field and the sheet's differ (a late signup not
+    yet seated, a seated player off the roster): re-dealing then would add
+    or drop someone the manager has not placed."""
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT allow_fivesomes FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+    max_group = 5 if ev and int(ev["allow_fivesomes"] or 0) else 4
+    live = [g for g in groups if g.get("players")]
+    n = sum(len(g["players"]) for g in live)
+    needed = max(1, -(-n // max_group))
+    out = {"holes": holes, "before": len(live), "needed": needed,
+           "applied": False, "reason": None, "groups": None}
+    if not live or needed >= len(live):
+        out["reason"] = "group count already fits the field"
+        return out
+    full = [g for g in sorted(live, key=lambda g: g.get("group_num") or 0)
+            if len(g["players"]) >= max_group]
+    seeds = [{"holes": holes, "slot_index": i,
+              "players": [{"name": p["name"], "cart_pos": p["cart_pos"]}
+                          for p in g["players"]]}
+             for i, g in enumerate(full)]
+    try:
+        res = generate_event_pairings(event_id, mode="random", seeds=seeds,
+                                      db_path=db_path,
+                                      drop_seeds_breaking_rules=True)
+    except Exception as e:
+        logger.exception("regroup after removal failed for event %s", event_id)
+        out["reason"] = f"generator failed: {e}"
+        return out
+    new = [g for g in (res.get(holes) or []) if g.get("players")]
+    sheet_keys = {_pair_key_name(p["name"]) for g in live for p in g["players"]}
+    new_keys = {_pair_key_name(p["name"]) for g in new for p in g["players"]}
+    if new_keys != sheet_keys:
+        extra = sorted(new_keys - sheet_keys)
+        missing = sorted(sheet_keys - new_keys)
+        out["reason"] = ("roster and sheet differ"
+                         + (f"; not seated yet: {', '.join(extra)}" if extra else "")
+                         + (f"; seated but off the roster: {', '.join(missing)}" if missing else "")
+                         + " (groups closed up only)")
+        return out
+    if len(new) != needed:
+        out["reason"] = f"generator made {len(new)} groups, expected {needed}"
+        return out
+    out.update(applied=True, groups=new, notes=res.get("mp_notes") or [])
+    return out
 
 
 # ── BLIND DRAWS ─────────────────────────────────────────────────────
@@ -69170,8 +69249,15 @@ def generate_event_pairings(
     mp_pairs: list | None = None,
     race_key: str | None = None,
     db_path=None,
+    drop_seeds_breaking_rules: bool = False,
 ) -> dict:
     """Generate pairings for an event and return (but do NOT save) the result.
+
+    drop_seeds_breaking_rules: a seed whose SAVED seats break rule 16 (a
+        first year player alone in a cart) or rule 18 (a guest with no
+        Ambassador in the cart) is dealt again instead of kept. Used by the
+        regroup after a removal (Kerry 2026-10-12); a manager's seeds from
+        the PAIRINGS tab are always kept (rule 5).
 
     mode: 'random' | 'abcd' | 'standings'
         'standings' orders by the chapter's points race with the LEADERS
@@ -69420,6 +69506,35 @@ def generate_event_pairings(
         partner_map = {p["customer"]: p.get("partner_request") for p in player_items if p.get("customer")}
 
         # Players available for free assignment (not seeded)
+        if drop_seeds_breaking_rules and seed_map[holes]:
+            # Rules 16 + 18 (Kerry 2026-10-12) read on the seed's own seats.
+            _ids0 = {p["customer"]: p.get("customer_id") for p in player_items
+                     if p.get("customer") and p.get("customer_id")}
+            _host0 = _host_of_map(player_items, all_names, roster_ids=_ids0)
+            _keys0 = {_pair_key_name(n) for n in all_names}
+            _row0 = {_pair_key_name(p["customer"]): p for p in player_items if p.get("customer")}
+
+            def _bad_seat(pos_map: dict) -> bool:
+                seats = sorted(pos_map.items())
+                carts = [[n for cp, n in seats if (cp - 1) // 2 == c]
+                         for c in sorted({(cp - 1) // 2 for cp, _n in seats})]
+                for cart in carts:
+                    for n in cart:
+                        r = _row0.get(_pair_key_name(n)) or {}
+                        if len(cart) == 1 and len(seats) > 1 and (r.get("is_new") or r.get("is_first_timer")):
+                            return True
+                        is_guest = not _ls_is_member(r.get("current_player_status"), r.get("user_status"))
+                        if (r and is_guest and not r.get("ambassador")
+                                and _host0.get(_pair_key_name(n)) not in _keys0
+                                and not _find_partner_name(r.get("partner_request"), all_names, n)
+                                and not any((_row0.get(_pair_key_name(m)) or {}).get("ambassador")
+                                            for m in cart if m != n)):
+                            return True
+                return False
+
+            for si in [si for si, pm in seed_map[holes].items() if _bad_seat(pm)]:
+                seeded_players[holes].difference_update(seed_map[holes][si].values())
+                del seed_map[holes][si]
         free_players = [n for n in all_names if n not in seeded_players[holes]]
 
         # ── Host-and-guests units (Kerry 2026-07-30) ──────────────────
@@ -69591,12 +69706,38 @@ def generate_event_pairings(
         _amb = {_pair_key_name(n) for n in ambassadors}
         _ft = {_pair_key_name(n) for n in first_timers}
 
+        # Kerry 2026-10-12: "I don't want any first year players riding on
+        # their own in initial pairings unless it can't be avoided." First
+        # year = the 1Y tag (`is_new`, rule 13) plus a 1st Timer (rule 14
+        # already wants them in an Ambassador's cart, so never alone).
+        no_solo = {_pair_key_name(n) for n in newbies | first_timers}
+        # Kerry 2026-10-12: "I would like all guests to always be placed with
+        # an ambassador, unless they are the guest of one of our members, or
+        # requests someone specificially." A guest = not a member by status
+        # (`_ls_is_member`, the test the request rules already use). Exempt:
+        # a host on this sheet (`_host_of_map`: the "Purchased by" note or the
+        # shared order) or a request that resolves to a player on this sheet.
+        # A request for someone who is not playing exempts nobody (Hector
+        # Hinojosa asked for Dan South, who is not on the 10/13 roster).
+        _here = {_pair_key_name(n) for n in all_names}
+        lone_guests = {n for n in all_names
+                       if not _is_member.get(n, True)
+                       and host_of_all.get(_pair_key_name(n)) not in _here
+                       and not _find_partner_name(partner_map.get(n), all_names, n)}
+        _lg = {_pair_key_name(n) for n in lone_guests}
+        need_amb_cart = _lg
+
         def _rule_misses(g) -> tuple:
-            """(lone back, no leader, 1st Timer without Ambassador) for one group."""
+            """(lone back, no leader, 1st Timer without Ambassador, a first
+            year player who must ride alone, a guest who cannot ride with an
+            Ambassador) for one group."""
             ks = [_pair_key_name(n) for n in g]
+            solo_miss, guest_miss = _group_seat_misses(
+                g, partner_adj, _amb, need_amb_cart, no_solo)
             return (1 if _lone_back_offender(g, tee_map, _sok) else 0,
                     1 if len(g) >= 2 and not any(k in _lead for k in ks) else 0,
-                    1 if any(k in _ft for k in ks) and not any(k in _amb for k in ks) else 0)
+                    1 if any(k in _ft for k in ks) and not any(k in _amb for k in ks) else 0,
+                    solo_miss, guest_miss)
 
         def _keeps_rules(og, oh, ng, nh) -> bool:
             """A history swap after the rule fixes may not make any of them
@@ -69610,12 +69751,27 @@ def generate_event_pairings(
             gp, n2 = _spread_leaders(gp, leaders, locked_names, pair_counts, tee_map, solo_ok)
             gp, n3 = _pair_first_timers_with_ambassadors(
                 gp, ambassadors, first_timers, tee_map, locked_names, pair_counts, solo_ok)
+            # Kerry 2026-10-12: first year players never alone, guests with
+            # an Ambassador. Swaps only when the sheet's total rule misses
+            # drop, so the rules above are never traded away for these.
+            gp = _fix_rule_misses_by_swap(gp, _rule_misses, locked_names, pair_counts)
+            n4 = []
+            for g in gp:
+                _m = _rule_misses(g)
+                if _m[3]:
+                    n4.append(", ".join(n for n in g if _pair_key_name(n) in no_solo)
+                              + ": a first year player rides alone (no other sheet "
+                              "keeps the requests, matches and locks).")
+                if _m[4]:
+                    n4.append(", ".join(n for n in g if _pair_key_name(n) in _lg)
+                              + ": guest without an Ambassador in the cart (no "
+                              "Ambassador free; requests, matches and locks kept).")
             if improve:
                 # The fixes swap by cheapest history but never re-optimise;
                 # on 10/5 that left Baker + Rideout together a 4th time. A
                 # second, guarded pass lowers repeats without undoing them.
                 gp = _swap_improve(gp, pair_counts, locked_names, guard=_keeps_rules)
-            return gp, n1 + n2 + n3
+            return gp, n1 + n2 + n3 + n4
 
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map, max_group)
@@ -69693,9 +69849,10 @@ def generate_event_pairings(
                                         captains=captains, newbies=newbies,
                                         experience=experience,
                                         ambassadors=ambassadors,
-                                        first_timers=first_timers,
+                                        first_timers=first_timers | lone_guests,
                                         rode_before=rode_before,
-                                        solo_streak=solo_streak)
+                                        solo_streak=solo_streak,
+                                        no_solo=no_solo)
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -69790,8 +69947,11 @@ def generate_event_pairings(
         for si in range(n_slots):
             if si in seeded_groups:
                 existing = seeded_groups[si]
-                # Fill remaining spots from free groups
-                if free_group_idx < len(groups_players):
+                # Fill remaining spots from free groups. A FULL seeded group
+                # takes nobody: it used to consume a free group anyway, and
+                # those players vanished from the sheet (found 2026-10-12
+                # building the regroup-after-removal, which seeds full groups).
+                if free_group_idx < len(groups_players) and len(existing) < max_group:
                     needed = max_group - len(existing)
                     fill_players = groups_players[free_group_idx][:needed]
                     if len(fill_players) == needed:
@@ -70163,6 +70323,103 @@ def _pair_first_timers_with_ambassadors(groups: list[list[str]], ambassadors: se
     return groups, notes
 
 
+def _group_seat_misses(names: list[str], partner_adj: set, ambassadors: set,
+                       need_amb_cart: set, no_solo: set) -> tuple[int, int]:
+    """Composition check for Kerry's 2026-10-12 rules, over EVERY seating of
+    the group that keeps requested partners in one cart (the seater's own
+    carts: seats 1&2, 3&4, the odd seat out rides alone):
+
+      * (1, _) "I don't want any first year players riding on their own in
+        initial pairings unless it can't be avoided" — in an odd-sized
+        group, every request-respecting seating leaves a `no_solo` player
+        in the solo seat.
+      * (_, 1) "all guests to always be placed with an ambassador" — no
+        seating gives every guest in `need_amb_cart` an Ambassador in their
+        cart (Kerry's case was Hector Hinojosa riding with a non-Ambassador
+        while the group's Ambassador rode with a requested partner).
+
+    Keys are `_pair_key_name` keys. Groups are at most five players, so the
+    brute force is exact. When no seating can keep every request (a chain
+    of three), all seatings count."""
+    from itertools import permutations
+    ks = [_pair_key_name(n) for n in names]
+    if len(ks) < 2:
+        return 0, 0
+    want_solo = len(ks) % 2 == 1 and any(k in no_solo for k in ks)
+    want_amb = any(k in need_amb_cart and k not in ambassadors for k in ks)
+    if not want_solo and not want_amb:
+        return 0, 0
+
+    def _cart(i):
+        return i // 2
+
+    def _keeps_requests(p):
+        return all(_cart(i) == _cart(j)
+                   for i in range(len(p)) for j in range(i + 1, len(p))
+                   if frozenset((p[i], p[j])) in partner_adj)
+
+    perms = [p for p in permutations(ks) if _keeps_requests(p)] or list(permutations(ks))
+    solo_ok = not want_solo or any(p[-1] not in no_solo for p in perms)
+    amb_ok = not want_amb or any(
+        all(any(_cart(j) == _cart(i) and p[j] in ambassadors
+                for j in range(len(p)) if j != i)
+            for i in range(len(p)) if p[i] in need_amb_cart and p[i] not in ambassadors)
+        for p in perms)
+    return (0 if solo_ok else 1), (0 if amb_ok else 1)
+
+
+def _fix_rule_misses_by_swap(groups: list[list[str]], misses, locked: set,
+                             pair_counts: dict, max_rounds: int = 40
+                             ) -> list[list[str]]:
+    """Swap two unlocked players between groups whenever it lowers the
+    total of `misses(group) -> tuple` across the sheet, taking the cheapest
+    history swap at each step. Used for Kerry's 2026-10-12 rules (a first
+    year player never alone, every guest with an Ambassador). Never moves a
+    locked player (requests, host units, Match Play); group sizes are kept.
+    Because the total of EVERY rule term must drop, a swap can never fix
+    one rule by breaking another (rule 12's lone back tee included)."""
+    groups = [list(g) for g in groups]
+    lockk = {_pair_key_name(n) for n in locked}
+
+    def _total(gs):
+        return sum(sum(misses(g)) for g in gs)
+
+    for _ in range(max_rounds):
+        cur = _total(groups)
+        if cur == 0:
+            break
+        best = None
+        for gi in range(len(groups)):
+            if not sum(misses(groups[gi])):
+                continue
+            for hj in range(len(groups)):
+                if hj == gi:
+                    continue
+                for xi, x in enumerate(groups[gi]):
+                    if _pair_key_name(x) in lockk:
+                        continue
+                    for yi, y in enumerate(groups[hj]):
+                        if _pair_key_name(y) in lockk:
+                            continue
+                        g2, h2 = list(groups[gi]), list(groups[hj])
+                        g2[xi], h2[yi] = y, x
+                        delta = (sum(misses(g2)) + sum(misses(h2))
+                                 - sum(misses(groups[gi])) - sum(misses(groups[hj])))
+                        if delta >= 0:
+                            continue
+                        cost = (_group_score(g2, pair_counts) + _group_score(h2, pair_counts)
+                                - _group_score(groups[gi], pair_counts)
+                                - _group_score(groups[hj], pair_counts))
+                        key = (delta, cost)
+                        if best is None or key < best[0]:
+                            best = (key, gi, hj, g2, h2)
+        if best is None:
+            break
+        _, gi, hj, g2, h2 = best
+        groups[gi], groups[hj] = g2, h2
+    return groups
+
+
 def _arrange_group_seats(names: list[str], mp_opponents: set,
                          partner_adj: set, tee_map: dict,
                          captains: set | None = None,
@@ -70171,7 +70428,8 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                          ambassadors: set | None = None,
                          first_timers: set | None = None,
                          rode_before: set | None = None,
-                         solo_streak: dict | None = None) -> list[str]:
+                         solo_streak: dict | None = None,
+                         no_solo: set | None = None) -> list[str]:
     """Seat order for a settled group — foursomes are already decided;
     this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
     (Kerry's cart-pair ruling).
@@ -70203,6 +70461,12 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
       (weight 500: above a request, below Match Play); someone who rode
       alone last time is avoided when another choice exists (weight 2).
 
+    - First year players never alone (Kerry 2026-10-12): a `no_solo`
+      player (1Y member or 1st Timer) in the solo seat costs 50: below a
+      request (100), above the 1st Timer / guest Ambassador cart (10).
+      The composition half (`_group_seat_misses`) keeps such a group from
+      forming in the first place whenever another sheet exists.
+
     Groups are ≤ 4 players (24 permutations), so brute force is exact.
     """
     from itertools import permutations
@@ -70214,6 +70478,7 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
     experience = experience or {}
     ambassadors = {_pair_key_name(n) for n in (ambassadors or set())}
     first_timers = {_pair_key_name(n) for n in (first_timers or set())}
+    no_solo = {_pair_key_name(n) for n in (no_solo or set())}
 
     def _cart(idx: int) -> int:
         return 0 if idx < 2 else 1
@@ -70252,6 +70517,8 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                 cost += 500
             elif streak == 1:
                 cost += 2
+            if keys[perm[2]] in no_solo:
+                cost += 50
         if newest is not None:
             ni = perm.index(newest)
             if not any(_cart(k) == _cart(ni) and keys[perm[k]] in captains

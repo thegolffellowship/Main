@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.550.0";
+window.TGF_VERSION = "2.551.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.551.0",
+    date: "2026-10-12",
+    title: "Pairings: first year players never alone, guests with an Ambassador, a reseat that frees a group re-deals",
+    changes: [
+      "Kerry 10/12: \"I don't want any first year players riding on their own in initial pairings unless it can't be avoided.\" A 1Y member or a 1st Timer is kept out of the solo seat of a threesome, both when the groups are formed and when the carts are seated. Only when no other sheet keeps the requests, matches and locks does one ride alone, with a note on the PAIRINGS tab.",
+      "Kerry 10/12: \"I would like all guests to always be placed with an ambassador, unless they are the guest of one of our members, or requests someone specificially.\" This is read at the cart, as in his Hector Hinojosa case: the group had an Ambassador, but he rode with his requested partner. A request for someone not playing exempts nobody.",
+      "Kerry 10/12: removing a player and re-seating now re-deals the short groups when the field fits fewer groups (20 players = 5 groups, not 6). Full foursomes stay seat for seat unless their seats break the two new rules. Nothing moves once the event has started, and nothing is re-dealt while the roster and the sheet disagree.",
+      "Found on the way: a full seeded group used to consume one generated group, and those players disappeared from the sheet. Full seeds now take nobody.",
+      "The read-only pairings audit flags both new rules. Guard: test_pairings_rules_1012.py, on the 10/13 Quarry field."
+    ]
+  },
   {
     version: "2.550.0",
     date: "2026-10-12",

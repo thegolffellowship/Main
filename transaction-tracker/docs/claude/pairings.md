@@ -2192,3 +2192,51 @@ PAIRINGS tab drew only the 18-hole set, so the groups looked deleted.
   the Nth slot. Every reader agrees, and the next Save persists it.
 - **PAIRINGS tab:** a non-empty set always renders, whatever the format.
 - Guard: `test_sheet_follows_event.py`.
+
+## Rules 16-18: first year players, the reseat that drops a group, guests with an Ambassador (v2.551.0, Kerry 2026-10-12, NOT YET LIVE)
+
+Kerry, verbatim (via the Front Desk, mailbox #1633): "New rule for pairings. I don't want any first year players riding on their own in initial pairings unless it can't be avoided. For instance. Michele McCormick is shown on her own. I don't want that. Also, I just removed and re-seated after removing Chris Espinosa triggered that. However, that reduced us to 20 players. So the reseat should trigger a reduction in groups from 6 to 5 groups, reseating according to pairings rules/standards. Another thing I observe is that 2nd time guest, Hector Hinojosa is being placed with Michelle DelCarmen who is not an ambassador. I would like all guests to always be placed with an ambassador, unless they are the guest of one of our members, or requests someone specificially."
+
+The case was s9.27 The Quarry (event 3307, Tue 10/13). After Chris Espinosa came off, the saved sheet had 20 players in six groups (4, 4, 3, 3, 3, 3), with four solo carts. Two of those solo riders were 1Y: McCormick and Reggie Johnson. Hector Hinojosa rode with DelCarmen; the group's Ambassador, Larry Anthis, rode with his requested partner Palacios.
+
+### 16 — a first year player never rides alone
+
+- **Who counts as first year.** The code's own two definitions: the 1Y tag (`is_new`, rule 13: joined as a NEW member this year and no handicap round before it), plus a 1st Timer (`is_first_timer`, rule 14). Rule 14 already puts a 1st Timer in an Ambassador's cart, so riding alone breaks it either way.
+- **Composition.** `_group_seat_misses` tries every seating of an odd-sized group that keeps requested partners in one cart. The group is a miss when every such seating leaves a first year player in the solo seat.
+- **Seating.** `_arrange_group_seats(no_solo=)` adds a cost of 50 to a first year player in seat 3 of a threesome. That is below a request (100) and the third-solo-in-a-row rule (500), and above the Ambassador cart (10).
+- **"Unless it can't be avoided".** The generator only accepts a sheet with a miss when no other sheet keeps the requests, matches and locks. When it does, the PAIRINGS tab gets a note.
+
+### 17 — a reseat that frees a group re-deals the short groups
+
+- **Where.** `remove_player_from_pairings` calls `_regroup_after_removal` when it re-seats (before the start only; rule 15b is unchanged) and the field now fits fewer groups: ceil(n / 4), or n / 5 on a fivesome event. For example, 20 players need 5 groups, not 6.
+- **What moves.**
+  - Full groups stay seat for seat. They go to `generate_event_pairings` as seeds, so a hand-built foursome survives (rule 5).
+  - Everyone else is dealt again under every rule.
+  - Match Play matches are not asked again; a match already in a full group stays together.
+- **When it refuses.** If the generator's field and the sheet differ (a late signup not yet seated, or a seated player off the roster), it does not re-deal. It only closes up the group, and says why.
+- **Dry run.** A dry run reports the proposal in `regrouped` and writes nothing.
+- **Generator fix found on the way.** A FULL seeded group used to consume one free group, and those players disappeared from the sheet. Full seeds now take nobody.
+
+### 18 — every guest rides with an Ambassador
+
+- **Who is a guest.** Not a member by status (`_ls_is_member`, the test the request rules already use).
+- **Exempt:**
+  - the guest of a member who is on this sheet (`_host_of_map`: the "Purchased by" note or the shared order);
+  - a guest whose request resolves to a player on this sheet.
+- **Not exempt.** A request for someone who is not playing exempts nobody. Hinojosa asked for Dan South, who is not on the 10/13 roster.
+- **Read at the CART, as in Kerry's case.** The group had an Ambassador, but he rode with his requested partner.
+  - Composition: `_group_seat_misses` is a miss when no request-respecting seating gives each such guest an Ambassador cart-mate.
+  - Seating: the guest joins the rule-14 Ambassador-cart term (weight 10).
+- **Which Ambassador flag.** The generator reads the customer chip (`customers.ambassador`). The per-chapter table (`chapter_ambassadors`) is read by the audit only. They agree for the 10/13 field.
+
+### Shared mechanics, audit and guard
+
+- **Fixer.** `_fix_rule_misses_by_swap` runs after the rule 12 / 7 / 14 fixes. It swaps two unlocked players only when the sheet's total rule misses fall, so one rule is never traded for another. The restart score and the post-fix swap guard both count the two new terms.
+- **Audit.** `pairings_audit.py` flags "first year player alone" and "guest + Ambassador cart" as hard flags.
+- **Guard.** `test_pairings_rules_1012.py`:
+  - the 10/13 field: five foursomes, nobody alone, Hinojosa with an Ambassador;
+  - four 19-player variants (threesomes) with no 1Y alone;
+  - a resolved guest request;
+  - the 21-to-20 reseat: five groups, 1A kept seat for seat;
+  - no regroup once started, on a past date, or when roster and sheet differ;
+  - the audit's flags on the sheet Kerry saw.
