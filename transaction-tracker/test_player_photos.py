@@ -45,6 +45,7 @@ check("path tricks never resolve to a file", pp.photo_file("h", "../t") is None 
 check("a team read finds the pair in either order", pp.photo_file("t", "672-62") is not None)
 
 import app as A                                                   # noqa: E402
+LSC_CAPT, _cap = A.LSC_CAPTAIN_BY_RACE, A._with_lsc_captain
 tc = A.app.test_client()
 r = tc.get("/api/player-photos")
 check("the index is public (member tier) and carries no names", r.status_code == 200
@@ -117,6 +118,14 @@ check("the top tab order is EVENTS | POINTS RACES | LONE STAR CUP | MATCH PLAY (
 check("the tab bar sits flush under the header and the race-chip sub nav pins under it (no page padding or section gap)",
       "body main, html.tgf-wide body main { padding-top: 0; }" in src and ".pr-section:has(> .pr-race-row:first-child) { padding-top: 0; }" in src
       and 'document.querySelector(".pr-race-row")' in src and 'chipRow.style.position = phone ? "" : "sticky"' in src)
+
+check("standings rows: top 3 get a headshot slot (concept B), others a blank slot of the same width, filled from the h index",
+      "function prAvatarSlot" in src and "function fcApplyAvatars" in src and src.count("prAvatarSlot(r, compact)") >= 3
+      and ".pr-av { display: inline-block; width: 40px" in src)
+check("the LSC captain comes from the Cup roster, not the champion: server sends it, the plaque and rows name them",
+      "lsc_captain_id" in src and "capSeparate" in src and "Lone Star Cup Captain: " in src and '"LSC CAPTAIN"' in src
+      and LSC_CAPT.get("austin_net") == (7, "Matt Jenkins") and LSC_CAPT.get("san_antonio_net") == (35, "Rob Callaway")
+      and _cap("austin_net", {"a": 1})["lsc_captain_id"] == 7 and _cap("city_gross", {"a": 1}) == {"a": 1})
 
 import mcp_server as M                                            # noqa: E402
 b64 = base64.b64encode(JPEG).decode()

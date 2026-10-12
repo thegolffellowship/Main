@@ -1285,3 +1285,7 @@ Collapsed months and Champion label (v2.540.1, Kerry 2026-10-12): the Spotlight'
 
 The tab bar is flush under the header (no `main` padding-top, no `.pr-section` gap) and the `.pr-race-row` chip row pins under it on desktop (`prPinBars`). Tab order: EVENTS | POINTS RACES | LONE STAR CUP | MATCH PLAY. Plaques with `data-head="1" data-cids=...` (the city-champion plaque on both NET boards and the new Monthly winner plaque) take the headshot(s) from the `h` block of `/api/player-photos` (`fcApplyHeadshots`); nobody with a headshot, no change. Headshots in the standings rows are a concept (three options shown to Kerry), unbuilt.
 
+### Standings headshots (concept B) and the captain from the Cup roster (v2.543.0, Kerry 2026-10-12)
+
+Top-3 standings rows carry a headshot slot (`prAvatarSlot`, filled by `fcApplyAvatars` from the `h` index); other rows keep a blank slot of the same width on desktop. The NET boards no longer assume champion = LSC captain: `app.py` `LSC_CAPTAIN_BY_RACE` (Austin NET customer 7 Matthew Jenkins, San Antonio NET customer 35 Rob Callaway, Kerry 10/12) is added to the points-race payload as `lsc_captain_id` / `lsc_captain_name` (`_with_lsc_captain`). Champion != captain: plaque sub line "Lone Star Cup Captain: <name>", champion badge CHAMPION only, captain row badge LSC CAPTAIN. Update the map when a captain changes (it sits beside `LSC_CAPTAINS` used by the Cup info page).
+

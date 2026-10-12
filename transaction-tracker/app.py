@@ -11723,7 +11723,7 @@ def api_season_contest_points_race():
     except Exception as e:
         logger.exception("Points race load failed")
         return jsonify({"error": f"Points race load failed: {e}"}), 500
-    return jsonify(data)
+    return jsonify(_with_lsc_captain(race, data))
 
 
 @app.route("/api/season-contests/points-race/live")
@@ -11746,7 +11746,7 @@ def api_points_race_live():
     # the event never happened (Kerry, 2026-08-01 evening).
     force = request.args.get("force") == "1"
     try:
-        return jsonify(get_points_race_live(race, force_refresh=force))
+        return jsonify(_with_lsc_captain(race, get_points_race_live(race, force_refresh=force)))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -13243,6 +13243,18 @@ def member_lonestarcup():
 
 # Captains as named on the Event Info mockup (CoS #1398, EventInfo.dc.html).
 LSC_CAPTAINS = {"austin": "Matt Jenkins", "sa": "Rob Callaway"}
+# the same captains by customer_id, for the NET boards (Kerry 2026-10-12: "Matthew Jenkins was LSC captain for
+# Austin, and Rob Callaway was for San Antonio": Robert Straiton won the Austin NET and passed the captaincy on)
+LSC_CAPTAIN_BY_RACE = {"austin_net": (7, "Matt Jenkins"), "san_antonio_net": (35, "Rob Callaway")}
+
+
+def _with_lsc_captain(race, data):
+    """The Cup roster's captain on a NET race payload, so the board can name
+    the captain even when the champion handed the captaincy to someone else."""
+    cap = LSC_CAPTAIN_BY_RACE.get(race)
+    if cap and isinstance(data, dict):
+        return {**data, "lsc_captain_id": cap[0], "lsc_captain_name": cap[1]}
+    return data
 
 
 def _lsc_info_teams() -> list:

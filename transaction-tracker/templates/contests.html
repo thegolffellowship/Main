@@ -2102,6 +2102,13 @@
             border: 2px solid #D4A017; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: zoom-in; display: block; }
         .champ-heads.many .champ-head { width: 72px; height: 72px; }
         .tgf-champ-plaque.has-head { padding: 7px 1rem 7px 7px; }
+        /* STANDINGS HEADSHOTS, concept B (Kerry 2026-10-12): a larger round headshot on the top 3 only; every other
+           row keeps a blank slot of the same width so the names stay aligned (not on a phone, where width is tight). */
+        .pr-av { display: inline-block; width: 40px; height: 40px; margin-right: 10px; vertical-align: middle; border-radius: 50%; flex: none; }
+        .pr-av.sm { width: 30px; height: 30px; margin-right: 7px; }
+        .pr-av img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: center 30%;
+            border: 2px solid #fff; box-shadow: 0 0 0 1px #d1d5db; display: block; }
+        tr[data-champion] .pr-av img { border-color: #D4A017; box-shadow: 0 0 0 1px #D4A017; }
         .champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex;
             flex-direction: column; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
         .champ-lb img { max-width: 100%; max-height: 82vh; border-radius: 10px; border: 2px solid #D4A017; }
@@ -9334,8 +9341,13 @@
         // LSC captaincy (that's the city NET races' prize). Kerry,
         // championship Sunday 2026-08-16: "champions are crowned".
         const cupChampRace = d.race_key === "players_cup_gross";
+        // The LSC captain is named by the Cup roster, not assumed to be the champion (Kerry 2026-10-12: Robert Straiton
+        // won the Austin NET and handed the captaincy to Matt Jenkins). The server sends the roster's captain.
+        const capId = (!cupChampRace && d.lsc_captain_id) || null;
+        const capSeparate = !!(capId && champs.length && !champIds.has(capId));
         const champTitle = cupChampRace
             ? `2026 THE PLAYERS CUP ${coChamp ? "Co-" : ""}Champion`
+            : capSeparate ? `2026 City ${coChamp ? "Co-" : ""}Champion`
             : `2026 City ${coChamp ? "Co-" : ""}Champion — Lone Star Cup ${coChamp ? "Co-" : ""}Captain`;
         // Chapter renders as a colored badge beside the name, not a column
         // (Kerry 2026-08-02) — showChapter only decides whether the badge
@@ -9505,11 +9517,11 @@
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
                 <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td${cupSlim ? ' style="white-space:normal;"' : ''}>${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td${cupSlim ? ' style="white-space:normal;"' : ''}>${prAvatarSlot(r, compact)}${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
-                        : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${cupChampRace ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}${thruSub}</td>
+                        : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#E8EEF6;color:#002855;border:1px solid #002855;vertical-align:1px;">${compact ? "CAPT" : "LSC CAPTAIN"}</span>` : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}${thruSub}</td>
                 <td style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -9558,7 +9570,7 @@
         const champStrip = champs.length
             ? (cupChampRace
                 ? `<div class="tgf-champ-plaque" data-race="players_cup" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
-                : `<div class="tgf-champ-plaque" data-head="1" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div></div>`)
+                : `<div class="tgf-champ-plaque" data-head="1" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">${capSeparate ? "Lone Star Cup Captain: " + escapeHtml(d.lsc_captain_name || "") : `Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}`}</div></div></div>`)
             : "";
         const pcHolder = cupChampRace ? `<details class="past-champs" data-race="players_cup" hidden></details>` : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
@@ -9743,7 +9755,24 @@
     // HEADSHOT plaques: the city NET champion and each month's winner. The trophy glyph gives
     // way to the headshot(s) of the people named, only those who have one; none, no change.
     let fcHeadIdx = null;
+    // slot for a standings row (concept B): top 3 get a headshot, the rest an empty slot of the same width
+    function prAvatarSlot(r, compact) {
+        if (!r || !r.customer_id) return "";
+        const n = parseInt(String(r.rank == null ? "" : r.rank).replace(/\D/g, ""), 10);
+        const top = n >= 1 && n <= 3;
+        if (!top && compact) return "";
+        return `<span class="pr-av${compact ? " sm" : ""}"${top ? ` data-av="${r.customer_id}"` : ""}></span>`;
+    }
+    function fcApplyAvatars() {
+        document.querySelectorAll(".pr-av[data-av]:not([data-done])").forEach(el => {
+            const id = el.dataset.av;
+            if (!fcHeadIdx || fcHeadIdx[id] == null) return;
+            el.innerHTML = `<img src="/member/photo/h/${id}.jpg?v=${fcHeadIdx[id]}" alt="" loading="lazy" onerror="this.remove()">`;
+            el.dataset.done = "1";
+        });
+    }
     function fcApplyHeadshots() {
+        fcApplyAvatars();
         document.querySelectorAll(".tgf-champ-plaque[data-head]:not([data-photo-done])").forEach(el => {
             const ids = (el.dataset.cids || "").split(",").map(Number).filter(id => id && fcHeadIdx && fcHeadIdx[id] != null).slice(0, 3);
             const glyph = el.querySelector(".tgf-champ-trophy");
@@ -9949,7 +9978,7 @@
                 : '';
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${nameCell}${r.customer_id && fcChampIds.has(r.customer_id)
+                <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${prAvatarSlot(r, compact)}${nameCell}${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
@@ -10133,7 +10162,7 @@
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</td>
+                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${prAvatarSlot(r, compact)}${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>

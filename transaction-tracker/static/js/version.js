@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.542.0";
+window.TGF_VERSION = "2.543.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.543.0",
+    date: "2026-10-12",
+    title: "Standings headshots (concept B) and the LSC captain named from the Cup roster",
+    changes: [
+      "STANDINGS HEADSHOTS, concept B (Kerry 10/12: \"I think I like B slightly more than C\", then \"build B\"). On the points-race boards, THE FELLOWSHIP CUP and Monthly, the top 3 rows wear a larger round headshot (40px; gold ring on the champion's row); every other row keeps an empty slot of the same width so names stay aligned. On a phone the top 3 get a 30px headshot and the other rows take no slot. Someone with no headshot just shows the empty slot. Filled after the board paints from the h block of /api/player-photos (fcApplyAvatars).",
+      "CAPTAINCY (Kerry 10/12: \"Matthew Jenkins was LSC captain for Austin, and Rob Callaway was for San Antonio\"; Robert Straiton won the Austin NET and passed the captaincy on). The NET boards no longer assume the champion is the Lone Star Cup captain. The points-race payload now carries the Cup roster's captain (LSC_CAPTAIN_BY_RACE: Austin NET Matthew Jenkins, customer 7; San Antonio NET Rob Callaway, customer 35). When the champion is not the captain the plaque reads \"2026 Austin City Champion / Robert Straiton / Lone Star Cup Captain: Matt Jenkins\", the champion's row badge says CHAMPION only, and the captain's row gets an LSC CAPTAIN badge. When they are the same person nothing changes (CHAMPION · LSC CAPTAIN). No reason is shown.",
+      "Guards: test_player_photos.py (avatar slots, captain by race, board wiring)."
+    ]
+  },
   {
     version: "2.542.0",
     date: "2026-10-12",
