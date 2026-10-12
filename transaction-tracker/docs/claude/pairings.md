@@ -2224,13 +2224,13 @@ Kerry, verbatim: "1st Timers have additional rules to First Year members. You gr
 ### 17 — a reseat that frees a group re-deals the short groups
 
 - **Where.** `remove_player_from_pairings` calls `_regroup_after_removal` when it re-seats (before the start only; rule 15b is unchanged) and the field now fits fewer groups: ceil(n / 4), or n / 5 on a fivesome event. For example, 20 players need 5 groups, not 6.
-- **What moves.**
-  - Full groups stay seat for seat. They go to `generate_event_pairings` as seeds, so a hand-built foursome survives (rule 5).
-  - Everyone else is dealt again under every rule.
-  - Match Play matches are not asked again; a match already in a full group stays together.
+- **What moves (Kerry 2026-10-12: "When a reseat happens, only locked groups and partner requests should persist").**
+  - The whole holes set is dealt again by the generator under every rule.
+  - Partner requests persist, along with the units the generator already binds: a host with the guests they paid for, and confirmed Match Play.
+  - Locked groups are the PAIRINGS tab's seeds. They live only in the page while a manager generates, so nothing on the server records them and a reseat has none to keep. Saving them is proposed separately (a schema item).
 - **When it refuses.** If the generator's field and the sheet differ (a late signup not yet seated, or a seated player off the roster), it does not re-deal. It only closes up the group, and says why.
 - **Dry run.** A dry run reports the proposal in `regrouped` and writes nothing.
-- **Generator fix found on the way.** A FULL seeded group used to consume one free group, and those players disappeared from the sheet. Full seeds now take nobody.
+- **Generator fix found on the way.** A FULL seeded group (from the PAIRINGS tab's seeds) used to consume one free group, and those players disappeared from the sheet. Full seeds now take nobody.
 
 ### 18 — every guest rides with an Ambassador
 
@@ -2242,16 +2242,18 @@ Kerry, verbatim: "1st Timers have additional rules to First Year members. You gr
 - **Read at the CART, as in Kerry's case.** The group had an Ambassador, but he rode with his requested partner.
   - Composition: `_group_seat_misses` is a miss when no request-respecting seating gives each such guest an Ambassador cart-mate.
   - Seating: the guest joins the rule-14 Ambassador-cart term (weight 10).
-- **Which Ambassador flag.** The generator reads the customer chip (`customers.ambassador`). The per-chapter table (`chapter_ambassadors`) is read by the audit only. They agree for the 10/13 field.
+- **LOCAL Ambassadors only (Kerry 2026-10-12):** "If you're talking about only local chapter ambassadors being paired with 1st Timer/New Member/Guest rules, then yes, I want them paired with local ones."
+  - The generator's Ambassador set is now the event chapter's list (`customer_ambassadors`, through `ambassadors.chapter_ambassadors`). That set feeds rules 7, 14 and 18, the same list the audit reads.
+  - An event with no chapter, or a chapter with no list yet, falls back to the customer chip and says so in a PAIRINGS note.
 
 ### Shared mechanics, audit and guard
 
 - **Fixer.** `_fix_rule_misses_by_swap` runs after the rule 12 / 7 / 14 fixes. It swaps two unlocked players only when the sheet's total rule misses fall, so one rule is never traded for another. The restart score and the post-fix swap guard both count the two new terms.
 - **Audit.** `pairings_audit.py` flags "first year player alone" and "guest + Ambassador cart" as hard flags.
 - **Guard.** `test_pairings_rules_1012.py`:
-  - the 10/13 field: five foursomes, nobody alone, Hinojosa with an Ambassador;
+  - the 10/13 field: five foursomes, nobody alone, Hinojosa with an Ambassador (a LOCAL one when the chapter has its list);
   - four 19-player variants (threesomes) with no 1Y alone;
   - a resolved guest request;
-  - the 21-to-20 reseat: five groups, 1A kept seat for seat;
+  - the 21-to-20 reseat: five groups, the partner request kept in one cart, the same sheet as a fresh deal;
   - no regroup once started, on a past date, or when roster and sheet differ;
   - the audit's flags on the sheet Kerry saw.

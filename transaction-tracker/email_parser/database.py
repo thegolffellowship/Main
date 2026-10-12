@@ -61551,13 +61551,14 @@ def _regroup_after_removal(event_id: int, holes: str, groups: list,
     """After a removal, re-deal a holes set into fewer groups when the
     roster now fits them (Kerry 2026-10-12: 20 players = 5 groups, not 6).
 
-    Full groups (four, or five on a fivesome event) are kept exactly as the
-    sheet has them, seats included: they are passed to the generator as
-    seeds, so a manager's hand-built foursome survives (rule 5), unless its
-    seats break rule 16 or 18 (then it is dealt again too). Everyone
-    else is dealt by `generate_event_pairings` under every pairing rule,
-    the 2026-10-12 ones included. Match Play constraints are not re-asked
-    here; a confirmed match already in a full group stays together.
+    Kerry 2026-10-12: "When a reseat happens, only locked groups and
+    partner requests should persist." The whole set is dealt again by
+    `generate_event_pairings` under every pairing rule, so partner
+    requests (and the units the generator already binds: a host with the
+    guests they paid for, confirmed Match Play) persist. Locked groups are
+    the PAIRINGS tab's seeds, which today live only in the page while a
+    manager generates; nothing on the server records them yet, so there
+    are none to keep here (proposal to persist them: mailbox, 10/12).
 
     Returns {holes, before, needed, applied, reason, groups}. `groups` is
     the new set (save shape) only when applied. Refuses, with a reason,
@@ -61576,16 +61577,8 @@ def _regroup_after_removal(event_id: int, holes: str, groups: list,
     if not live or needed >= len(live):
         out["reason"] = "group count already fits the field"
         return out
-    full = [g for g in sorted(live, key=lambda g: g.get("group_num") or 0)
-            if len(g["players"]) >= max_group]
-    seeds = [{"holes": holes, "slot_index": i,
-              "players": [{"name": p["name"], "cart_pos": p["cart_pos"]}
-                          for p in g["players"]]}
-             for i, g in enumerate(full)]
     try:
-        res = generate_event_pairings(event_id, mode="random", seeds=seeds,
-                                      db_path=db_path,
-                                      drop_seeds_breaking_rules=True)
+        res = generate_event_pairings(event_id, mode="random", db_path=db_path)
     except Exception as e:
         logger.exception("regroup after removal failed for event %s", event_id)
         out["reason"] = f"generator failed: {e}"
@@ -69249,15 +69242,8 @@ def generate_event_pairings(
     mp_pairs: list | None = None,
     race_key: str | None = None,
     db_path=None,
-    drop_seeds_breaking_rules: bool = False,
 ) -> dict:
     """Generate pairings for an event and return (but do NOT save) the result.
-
-    drop_seeds_breaking_rules: a seed whose SAVED seats break rule 16 (a
-        first year player alone in a cart) or rule 18 (a guest with no
-        Ambassador in the cart) is dealt again instead of kept. Used by the
-        regroup after a removal (Kerry 2026-10-12); a manager's seeds from
-        the PAIRINGS tab are always kept (rule 5).
 
     mode: 'random' | 'abcd' | 'standings'
         'standings' orders by the chapter's points race with the LEADERS
@@ -69506,35 +69492,6 @@ def generate_event_pairings(
         partner_map = {p["customer"]: p.get("partner_request") for p in player_items if p.get("customer")}
 
         # Players available for free assignment (not seeded)
-        if drop_seeds_breaking_rules and seed_map[holes]:
-            # Rules 16 + 18 (Kerry 2026-10-12) read on the seed's own seats.
-            _ids0 = {p["customer"]: p.get("customer_id") for p in player_items
-                     if p.get("customer") and p.get("customer_id")}
-            _host0 = _host_of_map(player_items, all_names, roster_ids=_ids0)
-            _keys0 = {_pair_key_name(n) for n in all_names}
-            _row0 = {_pair_key_name(p["customer"]): p for p in player_items if p.get("customer")}
-
-            def _bad_seat(pos_map: dict) -> bool:
-                seats = sorted(pos_map.items())
-                carts = [[n for cp, n in seats if (cp - 1) // 2 == c]
-                         for c in sorted({(cp - 1) // 2 for cp, _n in seats})]
-                for cart in carts:
-                    for n in cart:
-                        r = _row0.get(_pair_key_name(n)) or {}
-                        if len(cart) == 1 and len(seats) > 1 and (r.get("is_new") or r.get("is_first_timer")):
-                            return True
-                        is_guest = not _ls_is_member(r.get("current_player_status"), r.get("user_status"))
-                        if (r and is_guest and not r.get("ambassador")
-                                and _host0.get(_pair_key_name(n)) not in _keys0
-                                and not _find_partner_name(r.get("partner_request"), all_names, n)
-                                and not any((_row0.get(_pair_key_name(m)) or {}).get("ambassador")
-                                            for m in cart if m != n)):
-                            return True
-                return False
-
-            for si in [si for si, pm in seed_map[holes].items() if _bad_seat(pm)]:
-                seeded_players[holes].difference_update(seed_map[holes][si].values())
-                del seed_map[holes][si]
         free_players = [n for n in all_names if n not in seeded_players[holes]]
 
         # ── Host-and-guests units (Kerry 2026-07-30) ──────────────────
@@ -69691,14 +69648,37 @@ def generate_event_pairings(
                    if p.get("customer") and p.get("solo_back_ok")}
         captains = {p["customer"] for p in player_items
                     if p.get("customer") and p.get("group_captain")}
-        leaders = captains | {p["customer"] for p in player_items
-                              if p.get("customer") and p.get("ambassador")}
+        # LOCAL Ambassadors only (Kerry 2026-10-12: "If you're talking about
+        # only local chapter ambassadors being paired with 1st Timer/New
+        # Member/Guest rules, then yes, I want them paired with local ones"):
+        # the event chapter's rows in `customer_ambassadors`, through the one
+        # reader. An event with no chapter (a TGF-wide event) or a chapter
+        # with no list yet falls back to the customer chip, with a note.
+        _amb_local = None
+        if ev.get("chapter_id"):
+            try:
+                from email_parser.ambassadors import chapter_ambassadors
+                with _connect(db_path) as _ac:
+                    _amb_local = chapter_ambassadors(_ac, ev["chapter_id"])
+            except Exception:
+                logger.exception("chapter_ambassadors failed for event %s", event_id)
+                _amb_local = None
+        if _amb_local:
+            ambassadors = {p["customer"] for p in player_items
+                           if p.get("customer") and p.get("customer_id") is not None
+                           and int(p["customer_id"]) in _amb_local}
+        else:
+            ambassadors = {p["customer"] for p in player_items
+                           if p.get("customer") and p.get("ambassador")}
+            _amb_note = ("No local Ambassador list for this chapter: the "
+                         "Ambassador chip on the customer record was used.")
+            if ev.get("chapter_id") and _amb_note not in mp_notes:
+                mp_notes.append(_amb_note)
+        leaders = captains | ambassadors
         newbies = {p["customer"] for p in player_items
                    if p.get("customer") and p.get("is_new")}
         experience = {_pair_key_name(p["customer"]): int(p.get("experience") or 0)
                       for p in player_items if p.get("customer")}
-        ambassadors = {p["customer"] for p in player_items
-                       if p.get("customer") and p.get("ambassador")}
         first_timers = {p["customer"] for p in player_items
                         if p.get("customer") and p.get("is_first_timer")}
         _sok = {_pair_key_name(n) for n in solo_ok}

@@ -30,7 +30,7 @@ Kerry, verbatim: "1st Timers have additional rules to First Year members. You gr
 - **What happens:**
   - the group count drops;
   - the short groups are dealt again under every rule;
-  - a full group keeps its seats unless they break R-H or R-J.
+  - only locked groups and partner requests persist (Kerry, 10/12: "When a reseat happens, only locked groups and partner requests should persist").
 - **What never happens:**
   - nothing changes once the event has started (rule 15b);
   - nothing is re-dealt while the roster and the sheet disagree.
@@ -44,12 +44,11 @@ Kerry, verbatim: "1st Timers have additional rules to First Year members. You gr
 - A request for someone who is not playing does not exempt the guest.
 - **Hard** in the audit.
 
-## Ambassador source (for Kerry to confirm)
+## Local Ambassadors (Kerry, 10/12)
 
-- The generator reads the Ambassador chip on the customer (`customers.ambassador`).
-- The audit reads the per-chapter flag (`customer_ambassadors`).
-- They agree for the 10/13 field.
-- R-J should read the per-chapter flag, as R-A does in v1.2. Kerry to confirm.
+Kerry, verbatim: "If you're talking about only local chapter ambassadors being paired with 1st Timer/New Member/Guest rules, then yes, I want them paired with local ones."
+
+- The Ambassador for a 1st Timer, a New Member or a Guest is one on the event chapter's own list.
 
 ## Built and tested
 

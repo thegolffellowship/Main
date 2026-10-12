@@ -240,6 +240,33 @@ check("Nina (1Y) does not ride alone, though it costs repeat counts", "Nina New"
 c9 = next(c for g in g9 for c in carts(g) if "Ann Ames" in c)
 check("Ann + Bob still ride together", "Bob Bell" in c9, c9)
 
+print("local Ambassadors only (Kerry 10/12)")
+evL = 4800
+build(evL)
+register(evL, ALL)
+with db._connect(DB) as c:
+    sa = c.execute("SELECT chapter_id FROM chapters WHERE name = 'San Antonio'").fetchone()
+    aus = c.execute("SELECT chapter_id FROM chapters WHERE name = 'Austin'").fetchone()
+    sa_id, aus_id = int(sa[0]), int(aus[0])
+    c.execute("UPDATE events SET chapter_id = ? WHERE id = ?", (sa_id, evL))
+    # SA's list: Vasquez, Anthis, Marroquin, Niester. Mazanec keeps his chip
+    # but is on AUSTIN's list only, so he is not a local Ambassador here.
+    c.commit()
+# The generator reads the list only through the module's reader; stub it to
+# SA's list (its writer refuses fixture players with no handicap rounds).
+from email_parser import ambassadors as amb                       # noqa: E402
+_SA_LIST = {900 + ALL.index(n) for n in ("Gus Vasquez", "Larry Anthis", "Scott Marroquin", "Kerry Niester")}
+_AUS_LIST = {900 + ALL.index("Luke Mazanec")}
+_real_reader = amb.chapter_ambassadors
+amb.chapter_ambassadors = lambda conn, cid: _SA_LIST if int(cid) == sa_id else _AUS_LIST if int(cid) == aus_id else set()
+gL, notesL = gen(evL)
+LOCAL = {"Gus Vasquez", "Larry Anthis", "Scott Marroquin", "Kerry Niester"}
+hL = next(c for g in gL for c in carts(g) if "Hector Hinojosa" in c)
+check("Hector rides with a LOCAL (San Antonio) Ambassador, not Mazanec (Austin list)",
+      any(n in LOCAL for n in hL if n != "Hector Hinojosa"), hL)
+check("no fallback note when the chapter has its list", not any("No local Ambassador" in x for x in notesL), notesL)
+amb.chapter_ambassadors = _real_reader
+
 print("guest exemptions")
 ev3 = 4100
 build(ev3)
@@ -272,15 +299,18 @@ after = db.get_event_pairings(ev4, db_path=DB)["9"]
 check("five groups after the removal", len(after) == 5, [len(g["players"]) for g in after])
 seated = sorted(p["name"] for g in after for p in g["players"])
 check("the twenty are all seated once", seated == sorted(ALL), seated)
-kept = {tuple(p["name"] for p in sorted(g["players"], key=lambda p: p["cart_pos"])) for g in after}
-check("the full foursome 1A is kept seat for seat",
-      ("Gus Vasquez", "Michael Murphy", "Rob Burlingame", "Justin Angelone") in kept, kept)
+pal4 = next(c for g in after for c in carts(g) if "Richard Palacios" in c)
+check("the partner request persists through the reseat (Palacios + Anthis, one cart)",
+      "Larry Anthis" in pal4, pal4)
 alone4 = [c[0] for g in after for c in carts(g) if len(c) == 1]
 check("nobody rides alone after the regroup", not alone4, alone4)
 h4 = next(c for g in after for c in carts(g) if "Hector Hinojosa" in c)
 check("1B (Hinojosa riding with DelCarmen) is dealt again: he rides with an Ambassador",
       any(ambs(n) for n in h4 if n != "Hector Hinojosa"), h4)
-check("1B as saved is gone", ("Richard Palacios", "Larry Anthis", "Michelle DelCarmen", "Hector Hinojosa") not in kept)
+fresh = db.generate_event_pairings(ev4, mode="random", db_path=DB)["9"]
+check("Kerry 10/12: only requests persist, so the reseat equals a fresh deal",
+      sorted(sorted(p["name"] for p in g["players"]) for g in after)
+      == sorted(sorted(p["name"] for p in g["players"]) for g in fresh))
 
 print("reseat that must NOT regroup")
 ev5 = 4300
