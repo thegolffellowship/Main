@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.545.6";
+window.TGF_VERSION = "2.546.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.546.0",
+    date: "2026-10-12",
+    title: "Board header: title + How It Works only; no placeholder where there is no photo",
+    changes: [
+      "BOARD HEADER (Kerry 10/12: \"Too much stuff between THE FELLOWSHIP CUP and the Champion Banner. I think all that should go into the HOW IT WORKS button and that button should be right aligned on the same row as the TITLE\"). On every points-race board the title and a right-aligned HOW IT WORKS button share one row, and the champion banner (or the table) follows straight after. The phase pill (REGULAR SEASON ...), the bought-in count, the pot and the places (1st / 2nd ...) and the structure note no longer sit on the board; they open in the popup as a \"This board\" block at the top of How It Works, read from the board on screen at the moment the popup opens. The phone's \"Pot & details\" fold chip is gone with them (the button stays in the header on phones). The LIVE badge and banner are unchanged.",
+      "NO PLACEHOLDER (Kerry 10/12: \"If there isn't a photo for someone, then just leave their name left aligned like a non $ winner. Don't leave a placeholder there\"). A paid or top-3 player with no headshot used to leave a grey block over the start of their name; the slot is now removed, so the name sits at the left like anyone else's."
+    ]
+  },
   {
     version: "2.545.6",
     date: "2026-10-12",

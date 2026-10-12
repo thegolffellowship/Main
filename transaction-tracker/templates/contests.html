@@ -59,6 +59,16 @@
            ratified TGF_Season_Contest_Payouts_v1_0 ladders) */
         #pr-payouts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0.4rem 0 0.55rem; }
         #pr-payouts:empty { display: none; }
+        /* BOARD HEADER (Kerry 2026-10-12: "Too much stuff between THE FELLOWSHIP CUP and the Champion Banner. I think all
+           that should go into the HOW IT WORKS button and that button should be right aligned on the same row as the
+           TITLE"): the phase pill, bought-in count, pot and places and the structure note live in the HOW IT WORKS
+           popup (its "This board" block); only the title and the button stay on the board. */
+        #pr-preamble, #pr-preamble-toggle, #pr-phase-chip { display: none !important; }
+        #pr-hiw-btn { margin-left: auto; }
+        .pr-hiw-glance { margin: 0 0 14px; padding: 10px 12px; background: #F8F8F8; border: 1px solid var(--border);
+            border-radius: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; color: var(--text-muted); }
+        .pr-hiw-glance-h { font: 700 10.5px/1 'Bitter', serif; letter-spacing: 1px; color: #6B7280; text-transform: uppercase; }
+        .pr-hiw-pay { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
         /* Mobile preamble fold (Kerry 2026-08-01): the summary/pot/structure
            block collapses behind one chip so the leaderboard sits one thumb
            away. Desktop never sees the chip. The phase chip hides on phones
@@ -76,9 +86,6 @@
             #pr-preamble { display: none; }
             #pr-preamble.open { display: block; }
             #pr-phase-chip { display: none !important; }
-            /* the header HOW IT WORKS pill folds with the details on phones;
-               a clone inside the preamble keeps it reachable */
-            .standings-section > div:first-child #pr-hiw-btn { display: none; }
         }
         .pr-pot {
             display: inline-flex; align-items: center; height: 26px; padding: 0 12px;
@@ -251,7 +258,7 @@
 
         /* Contest name heading — prominent, name only (Kerry, 2026-07-10) */
         #pr-standings-title {
-            margin: 0; flex-basis: 100%;
+            margin: 0; flex: 1 1 0; min-width: 0;
             font: 700 1.5rem/1.15 'Bitter', serif; letter-spacing: 0.5px;
             text-transform: uppercase; color: var(--text);
         }
@@ -2138,7 +2145,8 @@
            a row without an image has no slot at all, so its name sits at the left. Rank and points read Bitter, centred. */
         td.pr-name-td { position: relative; padding-left: 8px !important; }
         td.pr-name-td.has-av { padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 68px !important; height: 58px; }
-        .pr-av { position: absolute; left: 0; top: 0; bottom: 0; width: 58px; max-height: 58px; display: block; background: #E5E7EB; }
+        .pr-av { position: absolute; left: 0; top: 0; bottom: 0; width: 58px; max-height: 58px; display: block; }
+        .pr-av:empty { display: none; }
         .pr-av img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; border: 0; border-radius: 0; box-shadow: none; }
         #pr-table-container .enrollment-table thead tr:first-child th:first-child { text-align: center; padding-left: 4px; padding-right: 4px; }
         /* what a narrow row hid (handicap, money, badges) reappears under the name once the row is expanded */
@@ -5508,6 +5516,21 @@
         // modal is display:none, so a reopened popup would start where the
         // last reader left off (scrolled to the Got It button)
         const openFor = key => { prHiwRender(key); setOpen(true); modal.scrollTop = 0; };
+        // "This board": what used to sit between the title and the table (Kerry 2026-10-12), read from the live header
+        // nodes at the moment the popup opens, so it is always the board on screen.
+        function prHiwGlance() {
+            const chip = $("pr-phase-chip"), sum = $("pr-summary"), pay = $("pr-payouts"), note = $("pr-structure-note");
+            const phase = chip && chip.style.display && chip.style.display !== "none"
+                ? chip.textContent.replace(/\s+/g, " ").trim() : "";
+            const has = n => n && n.innerHTML.trim();
+            const html = (phase ? `<div>${escapeHtml(phase)}</div>` : "")
+                + (has(sum) ? `<div>${sum.innerHTML}</div>` : "")
+                + (has(pay) ? `<div class="pr-hiw-pay">${pay.innerHTML}</div>` : "")
+                + (has(note) ? `<div>${note.innerHTML}</div>` : "");
+            // first thing inside the sections block, so it shares the popup's own side padding
+            const anchor = content.querySelector(".pr-hiw-secs");
+            if (html && anchor) anchor.insertAdjacentHTML("afterbegin", `<div class="pr-hiw-glance"><div class="pr-hiw-glance-h">This board</div>${html}</div>`);
+        }
         btn.addEventListener("click", e => {
             e.stopPropagation();
             const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
@@ -5515,6 +5538,7 @@
                 : kind === "monthly" ? "monthly"
                 : kind === "tfc" ? "fellowship"
                 : kind === "gross" ? "playersCup" : "cityNet");
+            prHiwGlance();
         });
         if (mpBtn) mpBtn.addEventListener("click", e => { e.stopPropagation(); openFor("matchPlay"); });
         close.addEventListener("click", () => setOpen(false));
@@ -9704,10 +9728,6 @@
     (function () {
         const tog = $("pr-preamble-toggle"), pre = $("pr-preamble");
         if (!tog || !pre) return;
-        if (prIsCompact()) {
-            const hiw = $("pr-hiw-btn");
-            if (hiw) pre.insertBefore(hiw, pre.firstChild);
-        }
         tog.addEventListener("click", () => {
             const open = pre.classList.toggle("open");
             tog.setAttribute("aria-expanded", String(open));
@@ -9815,7 +9835,8 @@
     function fcApplyAvatars() {
         document.querySelectorAll(".pr-av[data-av]:not([data-done])").forEach(el => {
             const id = el.dataset.av;
-            if (!fcHeadIdx || fcHeadIdx[id] == null) return;
+            // no photo, no placeholder: the slot goes and the name stays at the left like a non-winner's (Kerry 2026-10-12)
+            if (!fcHeadIdx || fcHeadIdx[id] == null) { if (fcHeadIdx) el.remove(); return; }
             el.innerHTML = `<img src="/member/photo/hs/${id}.jpg?v=${fcHeadIdx[id]}" alt="" loading="lazy" onerror="this.closest('td') && this.closest('td').classList.remove('has-av'); this.remove()">`;
             const td = el.closest("td"); if (td) td.classList.add("has-av");
             el.dataset.done = "1";
