@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.540.0";
+window.TGF_VERSION = "2.540.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.540.1",
+    date: "2026-10-12",
+    title: "Spotlight: this season's monthly results fold into one line; a decided cup reads Champion",
+    changes: [
+      "Kerry 10/12: \"collapse the monthly results somehow to reduce the length.\" The current season's completed monthly results now sit in one collapsed \"Monthly Results \u00b7 N\" line at the end of the 2026 Season list; tap it to open the months. The live current-month row stays in the list.",
+      "Kerry asked what \"4 from 1st\" meant on Gus's Fellowship Cup row: it was the gap in reset points to the top reset value, which says nothing once the Cup is decided (Gus was 4 from 1st on reset and the champion on the Cup total). A decided Fellowship Cup row now shows \"Champion\" for the cup's overall winner (and the Players Cup row the same for its champion) and no gap for everyone else; undecided cups keep the gap. Guard: test_lsc_record.py."
+    ]
+  },
   {
     version: "2.540.0",
     date: "2026-10-12",

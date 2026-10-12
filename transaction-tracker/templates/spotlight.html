@@ -197,6 +197,7 @@
             font: 700 9px/1.7 'Bitter', serif; letter-spacing: 1px;
             text-transform: uppercase; padding: 3px 14px; }
         .spt-past .spt-stand:first-of-type { border-top: none; }
+        .spt-mo-band { background: #E8E5E0; color: #4B5563; }
 
         /* winnings rows */
         .spt-win { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #F0EEE9; }
@@ -713,9 +714,19 @@
                 // Fellowship Cup carries the distance to the LEAD (Kerry
                 // 2026-08-06: "Add in a points difference from first" — e.g.
                 // "3 from 1st"); "leads" when the player IS first.
-                if (r.key === "fellowship_cup" && r.points_back != null) {
+                // Once a cup is decided the reset-points gap is meaningless (the Cup total
+                // decides it: Gus was "4 from 1st" and champion), so the row says Champion
+                // for the cup's overall winner and drops the gap (Kerry 2026-10-12).
+                const cupKey = r.key === "fellowship_cup" ? "fellowship_cup" : (r.key === "players_cup_gross" ? "players_cup" : null);
+                const isCupChamp = !!cupKey && (d.cup_titles || []).some(
+                    t => t.cup === cupKey && (t.years || []).includes(Number(curYear)));
+                if (r.key === "fellowship_cup" && r.final) {
+                    if (isCupChamp) metaBits.push("Champion");
+                } else if (r.key === "fellowship_cup" && r.points_back != null) {
                     metaBits.push(r.points_back > 0
                         ? `${+(+r.points_back).toFixed(1)} from 1st` : "leads");
+                } else if (isCupChamp && r.final) {
+                    metaBits.push("Champion");
                 }
                 if (r.tournaments != null) metaBits.push(`${r.tournaments} ev`);
                 // City Net cards count MVPs, not GG "wins" (Kerry
@@ -896,7 +907,14 @@
                       (pastByYear[y] || []).join("") + (pastMoByYear[y] || []).join("")).join("") +
                   `</details>`
                 : "";
-            const seasonRows = [...rows, ...seasonDone, ...seasonMo];
+            // This season's monthly results fold into one collapsed line so the list stays short
+            // (Kerry 2026-10-12: "collapse the monthly results somehow to reduce the length").
+            const moFold = seasonMo.length
+                ? `<details class="spt-past spt-mo"><summary class="spt-stand-band spt-mo-band">Monthly Results` +
+                  `<span class="spt-past-n">&middot; ${seasonMo.length}</span><span class="spt-past-ch">&rsaquo;</span></summary>` +
+                  seasonMo.join("") + `</details>`
+                : "";
+            const seasonRows = [...rows, ...seasonDone, ...(moFold ? [moFold] : [])];
             const stands = (seasonRows.length || nPast)
                 ? `<div><div class="spt-sec-head"><span class="t">Where ${esc((d.name || "").split(" ")[0] || "They")} Stands</span>` +
                   `<span class="s" style="color:var(--primary, #E87C3E);font-style:italic;">(Click for Standings)</span></div>` +

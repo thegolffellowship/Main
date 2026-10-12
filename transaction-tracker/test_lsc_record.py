@@ -76,6 +76,9 @@ check("the LSC row shows the record where the seat was, with the clinch note and
 check("this season's completed contests stay in the main list and only earlier seasons fold into PAST CONTESTS",
       "seasonDone" in src and "if (y === curYear) { seasonDone.push(html); return; }" in src
       and "${esc(curYear)} Season" in src and "seasonMo" in src)
+check("this season's monthly results fold into one collapsed line, and a decided cup reads Champion instead of a gap to 1st",
+      "moFold" in src and "Monthly Results" in src and "spt-mo" in src and "isCupChamp" in src
+      and 'metaBits.push("Champion")' in src)
 db = open(os.path.join(HERE, "email_parser", "database.py")).read()
 check("get_player_spotlight attaches the record from the shared cached board",
       "_spotlight_lsc_record(customer_id, db_path)" in db and '_spotlight_shared("lsc_board"' in db)
