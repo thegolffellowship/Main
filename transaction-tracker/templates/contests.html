@@ -65,6 +65,40 @@
            popup (its "This board" block); only the title and the button stay on the board. */
         #pr-preamble, #pr-preamble-toggle, #pr-phase-chip { display: none !important; }
         #pr-hiw-btn { margin-left: auto; }
+        /* CHAPTER / RACE PICKERS (CD #1638 section 2-3, built beside the chips) */
+        .pr-pickers { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 0.6rem; }
+        .pr-pk { position: relative; }
+        .pr-pk-btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #E5E7EB; background: #FBFBFA; border-radius: 8px;
+            padding: 8px 11px; cursor: pointer; font: 700 12px/1.1 'Bitter', Georgia, serif; letter-spacing: 1.2px; text-transform: uppercase; color: #1B1B1B; }
+        .pr-pk-btn i { font-style: normal; color: #E87C3E; font-size: 11px; }
+        .pr-pk-btn.race { background: #fff; font-size: 14px; letter-spacing: .4px; text-transform: none; padding: 7px 12px 7px 14px; }
+        .pr-pk-btn.open { border-color: #E87C3E; }
+        .pr-pk-btn .dot { width: 9px; height: 9px; border-radius: 50%; background: #1B1B1B; flex: none; }
+        .pr-pk-sl { color: #D1D5DB; font-size: 18px; }
+        .pr-pk-tag { font: 700 10px/1 'Bitter', Georgia, serif; letter-spacing: 1.5px; padding: 5px 7px; border-radius: 4px; }
+        .pr-pk-tag.live { color: #15803D; background: #ECFDF3; } .pr-pk-tag.fin { color: #9CA3AF; background: #F3F4F6; }
+        .pr-pk-menu { position: absolute; z-index: 400; top: calc(100% + 6px); left: 0; min-width: 300px; background: #fff; border: 1px solid #E5E7EB;
+            border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 8px; }
+        #pr-pk-race .pr-pk-menu { min-width: 380px; }
+        .pr-pk-menu[hidden], .pr-pk-scrim[hidden] { display: none; }
+        .pr-pk-gh { font: 700 9.5px/1 'Bitter', Georgia, serif; letter-spacing: 1.8px; color: #9CA3AF; text-transform: uppercase; padding: 10px 8px 4px; }
+        .pr-pk-gh span { font-weight: 400; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+        .pr-pk-it { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; border: 0; border-left: 3px solid transparent; background: none;
+            padding: 10px 10px; border-radius: 6px; cursor: pointer; font: 700 13px/1.2 'Bitter', Georgia, serif; color: #1B1B1B; }
+        .pr-pk-it:hover { background: #F8F8F8; }
+        .pr-pk-it.sel { background: #FDF0E6; color: #BF5700; border-left-color: #E87C3E; }
+        .pr-pk-it .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+        .pr-pk-it small { margin-left: auto; font: 700 9px/1 'Bitter', Georgia, serif; letter-spacing: 1.1px; color: #9CA3AF; text-align: right; }
+        .pr-pk-it small.live { color: #15803D; }
+        .pr-pk-foot { font-size: 10.5px; color: #6B7280; padding: 8px 8px 2px; }
+        .pr-pk-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 390; }
+        @media (max-width: 560px) {
+            .pr-pk-menu, #pr-pk-race .pr-pk-menu { position: fixed; left: 0; right: 0; bottom: 0; top: auto; min-width: 0; border-radius: 16px 16px 0 0;
+                padding: 14px 14px 20px; z-index: 400; max-height: 70vh; overflow-y: auto; box-shadow: 0 -8px 30px rgba(0,0,0,.25); }
+            #pr-pk-ch { flex: 1 1 100%; } #pr-pk-ch .pr-pk-btn { width: 100%; box-sizing: border-box; }
+            .pr-pk-sl { display: none; }
+            #pr-race-dd { display: none !important; }
+        }
         /* NOT BOUGHT IN: soft grey row, muted text, BUY IN pill (Kerry 2026-10-12, option A) */
         #pr-table-container tbody tr.pr-nobuy > td { color: #6B7280; }
         #pr-table-container tr.pr-nobuy .cell-link, #pr-table-container tr.pr-nobuy .pr-nm-l { color: #6B7280; }
@@ -2539,6 +2573,14 @@
                     </div>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
+                    <!-- CHAPTER / RACE PICKERS (CD #1638, Kerry 2026-10-12: keep the chips and the LSC pill, add the pickers beside them) -->
+                    <div class="pr-pickers" id="pr-pickers">
+                        <div class="pr-pk" id="pr-pk-ch"><button type="button" class="pr-pk-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dot"></span><span class="t"></span><i>&#9662;</i></button><div class="pr-pk-menu" role="listbox" hidden></div></div>
+                        <span class="pr-pk-sl">/</span>
+                        <div class="pr-pk" id="pr-pk-race"><button type="button" class="pr-pk-btn race" aria-haspopup="listbox" aria-expanded="false"><span class="t"></span><i>&#9662;</i></button><div class="pr-pk-menu" role="listbox" hidden></div></div>
+                        <span class="pr-pk-tag" id="pr-pk-tag"></span>
+                    </div>
+                    <div class="pr-pk-scrim" id="pr-pk-scrim" hidden></div>
                     <!-- HIW left beside the title, badges right (Kerry 2026-08-06) -->
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
                         <h4 id="pr-standings-title"></h4>
@@ -5580,6 +5622,7 @@
             $$(".sub-tab[data-pr]").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
             try { history.replaceState(null, "", "#race=" + btn.dataset.pr); } catch (e) { /* ignore */ }
+            if (typeof prWriteUrl === "function" && PR_NAV.races[btn.dataset.pr]) prWriteUrl(btn.dataset.pr);
             // sync the mobile dropdown + phase chip (v2.56.0, view 1a/1e)
             const ddb = $("pr-race-dd-btn");
             if (ddb) ddb.innerHTML = `${escapeHtml(btn.textContent.trim())} <span style="margin-left:auto;">&#9662;</span>`;
@@ -5590,6 +5633,7 @@
                 (btn.dataset.pr === "monthly" || btn.dataset.pr.startsWith("fall")) ? "none" : "inline-flex";
             loadPrRoster();
             prLoadStandings();
+            if (typeof prSyncPickers === "function") prSyncPickers();
         });
     });
 
@@ -5611,6 +5655,100 @@
                 if (target) target.click();
             });
         });
+    })();
+
+    // ── CHAPTER / RACE PICKERS + URL (CD #1638 built additively, Kerry 2026-10-12) ──
+    // The chips stay, the pickers sit beside them, both drive the same chip click. LIVE / FINAL for the menu rows is this
+    // table (today: the two Fall NETs and Monthly are live); the tag beside the title reads the real board state.
+    const PR_NAV = {
+        chapters: [
+            { id: "tgf", name: "TGF \u00b7 All chapters", color: "#1B1B1B", hint: "Fellowship Cup \u00b7 Players Cup \u00b7 Monthly", races: ["monthly", "tfc", "gross"] },
+            { id: "austin", name: "Austin", color: "#BF5700", races: ["fall_austin", "austin"] },
+            { id: "san-antonio", name: "San Antonio", color: "#4B6274", races: ["fall_sa", "net"] },
+        ],
+        races: {
+            monthly: { name: "Monthly", slug: "monthly-2026", live: true },
+            tfc: { name: "The Fellowship Cup", slug: "fellowship-cup-2026", live: false },
+            gross: { name: "The Players Cup", slug: "players-cup-2026", live: false },
+            fall_austin: { name: "Austin Fall NET", slug: "austin-fall-net-2026", live: true },
+            austin: { name: "Austin NET", slug: "austin-net-2026", live: false },
+            fall_sa: { name: "SA Fall NET", slug: "san-antonio-fall-net-2026", live: true },
+            net: { name: "San Antonio NET", slug: "san-antonio-net-2026", live: false },
+        },
+    };
+    const prChapterOf = key => PR_NAV.chapters.find(c => c.races.includes(key)) || PR_NAV.chapters[0];
+    const prKeyFromSlug = slug => Object.keys(PR_NAV.races).find(k => PR_NAV.races[k].slug === slug) || null;
+    const prDefaultRaceOf = ch => (ch.races.find(k => PR_NAV.races[k].live) || ch.races[0]);
+    // the address carries the chapter and race (?chapter=austin&race=austin-fall-net-2026); the old #race=key stays, so
+    // every existing deep link and a plain reload keep working
+    function prWriteUrl(key) {
+        try {
+            const u = new URL(location.href), ch = prChapterOf(key);
+            u.searchParams.set("chapter", ch.id); u.searchParams.set("race", PR_NAV.races[key].slug);
+            u.hash = "#race=" + key;
+            history.replaceState(null, "", u.toString());
+        } catch (e) { /* ignore */ }
+    }
+    function prCloseMenus() {
+        document.querySelectorAll(".pr-pk-menu").forEach(m => { m.hidden = true; });
+        document.querySelectorAll(".pr-pk-btn").forEach(b => { b.classList.remove("open"); b.setAttribute("aria-expanded", "false"); });
+        const sc = $("pr-pk-scrim"); if (sc) sc.hidden = true;
+    }
+    function prSyncPickers() {
+        const act = document.querySelector(".sub-tab[data-pr].active");
+        const key = act && PR_NAV.races[act.dataset.pr] ? act.dataset.pr : "fall_sa";
+        const ch = prChapterOf(key), race = PR_NAV.races[key];
+        const chBtn = document.querySelector("#pr-pk-ch .pr-pk-btn"), raceBtn = document.querySelector("#pr-pk-race .pr-pk-btn");
+        if (!chBtn || !raceBtn) return;
+        chBtn.querySelector(".dot").style.background = ch.color;
+        chBtn.querySelector(".t").textContent = ch.name;
+        raceBtn.querySelector(".t").textContent = race.name;
+        const tag = $("pr-pk-tag");
+        let fin = false; try { fin = prRaceFinal; } catch (e) { /* not declared yet on first call */ }
+        const live = !fin && race.live;
+        tag.textContent = live ? "LIVE" : "FINAL"; tag.className = "pr-pk-tag " + (live ? "live" : "fin");
+        const row = (k, selKey) => `<button type="button" class="pr-pk-it${k === selKey ? " sel" : ""}" role="option" data-pk-race="${k}"><span>${escapeHtml(PR_NAV.races[k].name)}</span>`
+            + `<small class="${PR_NAV.races[k].live ? "live" : ""}">${PR_NAV.races[k].live ? "LIVE" : "FINAL"}</small></button>`;
+        const tgf = PR_NAV.chapters[0];
+        document.querySelector("#pr-pk-ch .pr-pk-menu").innerHTML = `<div class="pr-pk-gh">Chapter</div>`
+            + PR_NAV.chapters.map(c => `<button type="button" class="pr-pk-it${c.id === ch.id ? " sel" : ""}" role="option" data-pk-ch="${c.id}"><span class="dot" style="background:${c.color}"></span><span>${escapeHtml(c.name)}</span>${c.hint ? `<small>${escapeHtml(c.hint)}</small>` : ""}</button>`).join("");
+        document.querySelector("#pr-pk-race .pr-pk-menu").innerHTML = `<div class="pr-pk-gh">TGF \u00b7 All chapters<span>open to everyone</span></div>`
+            + tgf.races.map(k => row(k, key)).join("")
+            + (ch.id !== "tgf" ? `<div class="pr-pk-gh">${escapeHtml(ch.name)}</div>` + ch.races.map(k => row(k, key)).join("") : "")
+            + `<div class="pr-pk-foot">Other chapters: use the chapter switch.</div>`;
+    }
+    (function () {
+        const wrap = $("pr-pickers"); if (!wrap) return;
+        const openMenu = which => {
+            const btn = document.querySelector(`#pr-pk-${which} .pr-pk-btn`), menu = document.querySelector(`#pr-pk-${which} .pr-pk-menu`);
+            const wasOpen = !menu.hidden;
+            prCloseMenus();
+            if (wasOpen) return;
+            menu.hidden = false; btn.classList.add("open"); btn.setAttribute("aria-expanded", "true");
+            if (window.matchMedia("(max-width: 560px)").matches) $("pr-pk-scrim").hidden = false;
+        };
+        wrap.addEventListener("click", ev => {
+            const btn = ev.target.closest(".pr-pk-btn");
+            if (btn) { ev.stopPropagation(); openMenu(btn.closest(".pr-pk").id === "pr-pk-ch" ? "ch" : "race"); return; }
+            const r = ev.target.closest("[data-pk-race]"), c = ev.target.closest("[data-pk-ch]");
+            let key = null;
+            if (r) key = r.dataset.pkRace;
+            else if (c) {
+                const chap = PR_NAV.chapters.find(x => x.id === c.dataset.pkCh);
+                key = prDefaultRaceOf(chap);
+                try { localStorage.setItem("tgf_pr_chapter", chap.id); } catch (e) { /* ignore */ }
+            }
+            if (key) {
+                try { localStorage.setItem("tgf_pr_chapter", prChapterOf(key).id); } catch (e) { /* ignore */ }
+                prCloseMenus();
+                const chip = document.querySelector(`.sub-tab[data-pr="${key}"]`);
+                if (chip) chip.click();
+            }
+        });
+        $("pr-pk-scrim").addEventListener("click", prCloseMenus);
+        document.addEventListener("click", ev => { if (!ev.target.closest("#pr-pickers")) prCloseMenus(); });
+        document.addEventListener("keydown", ev => { if (ev.key === "Escape") prCloseMenus(); });
+        prSyncPickers();
     })();
 
     async function loadPrRoster() {
@@ -9782,7 +9920,7 @@
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
-        fcChampPhotoLoad(); fcPastChampsLoad(); prApplyBuyFilter();
+        fcChampPhotoLoad(); fcPastChampsLoad(); prApplyBuyFilter(); prSyncPickers();
         $("pr-table-container").dataset.live = liveMode ? "1" : "0";
         // Round list for the expansion's Round 1 / Round 2 card toggle
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupMode ? cupBoards : []);
@@ -10280,7 +10418,7 @@
         // Champ rows expand to the round scorecards (Kerry 2026-08-13:
         // "exactly like City Championship specs"), with the Round 1 /
         // Round 2 toggle handled inside prToggleDetail.
-        fcChampPhotoLoad(); fcPastChampsLoad(); prApplyBuyFilter();
+        fcChampPhotoLoad(); fcPastChampsLoad(); prApplyBuyFilter(); prSyncPickers();
         $("pr-table-container").dataset.live = cupChamp ? "1" : "0";
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupFetchedF);
         if (cupChamp) {
@@ -10444,7 +10582,7 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
-        fcChampPhotoLoad();
+        fcChampPhotoLoad(); prSyncPickers();
         cont.querySelectorAll("button[data-mp]").forEach(b =>
             b.addEventListener("click", () => { prMonthlySel = b.dataset.mp; prRenderMonthly(); }));
         const rbtn = cont.querySelector("#pr-monthly-refresh");
@@ -10771,6 +10909,19 @@
         // filter above narrows to the scorer's event.
         // a Cup round's scorer reads the Cup's matches, on his session (Kerry 10/9)
         if (window.SOLO_EVENT) hash = window.SOLO_CUP ? "#tab=lsc" : "#tab=events";
+        // Landing and the new address (CD #1638, Kerry 2026-10-12): ?chapter=&race= opens that race; with nothing in the address
+        // a visitor lands on TGF \u00b7 All chapters and its live race (Monthly), or on the chapter they chose last time.
+        if (!hash) {
+            const qRace = prKeyFromSlug(new URLSearchParams(location.search).get("race"));
+            let want = qRace;
+            if (!want) {
+                let last = null;
+                try { last = localStorage.getItem("tgf_pr_chapter"); } catch (e) { /* ignore */ }
+                const chap = PR_NAV.chapters.find(c => c.id === last) || PR_NAV.chapters[0];
+                want = prDefaultRaceOf(chap);
+            }
+            hash = "#race=" + want;
+        }
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
             ? raceMatch[1] : null;
@@ -10784,6 +10935,8 @@
             if (chip) chip.style.display =
                 (wantRace === "monthly" || wantRace.startsWith("fall")) ? "none" : "inline-flex";
         }
+        if (typeof prSyncPickers === "function") prSyncPickers();
+        if (wantRace && typeof prWriteUrl === "function" && PR_NAV.races[wantRace]) prWriteUrl(wantRace);
         // #tab=events opens the EVENTS board on load — for the scorer's board
         // page and for a manager; a member page without the tab ignores it
         // (the member flip is Tracker Build's #1149).
