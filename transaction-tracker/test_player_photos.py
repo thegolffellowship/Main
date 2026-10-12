@@ -149,7 +149,7 @@ check("standings: money is larger, Bitter and right-aligned on the name row; nam
       ".pr-nm { display: flex; align-items: center; justify-content: space-between" in src
       and ".pr-nm-l { min-width: 0; font-family: 'Bitter'" in src and "font: 700 17px/1 'Bitter'" in src
       and src.count('<div class="pr-nm"><div class="pr-nm-l">') >= 3 and 'class="pr-pay-l"' in src
-      and src.count('<span class="pr-nm-b">') >= 3 and ".pr-nm-b { margin-top: 2px; }" in src and 'compact ? " tight" : ""' in src)
+      and src.count('<span class="pr-nm-b">') >= 3 and ".pr-nm-chev { display: block; order: 2; margin-left: 6px; }" in src and src.count('<span class="pr-nm-chev">') >= 3 and 'compact ? " tight" : ""' in src)
 check("every cell of a standings row is vertically centred on the row (rank, points and buy-in no longer ride high beside the headshot)",
       "tr[data-pname] > td" in src and "vertical-align: middle; }" in src)
 sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.544.2";
+window.TGF_VERSION = "2.544.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.544.3",
+    date: "2026-10-12",
+    title: "Standings on a phone: the chevron stays on the name line",
+    changes: [
+      "Kerry 10/12: \"For rows like Luke Youngs, could chevrons go on same line as names so it takes up less space?\" On a phone the row chevron now sits at the end of the name line and the badges take their own line only when a row has any, so a row with no badges is one line instead of two. Desktop order is unchanged (badges, then chevron)."
+    ]
+  },
   {
     version: "2.544.2",
     date: "2026-10-12",

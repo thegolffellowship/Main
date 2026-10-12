@@ -112,13 +112,17 @@
            row"): the headshot makes the name block taller, so rank, points, reset, rounds and buy-in were riding high */
         #pr-table-container tbody tr[data-pname] > td, #pr-table-container tbody tr[data-city-rank] > td,
         #pr-table-container tbody tr[data-cid]:not(.pr-mo-detail) > td { vertical-align: middle; }
-        .pr-nm-t, .pr-nm-n, .pr-nm-b { display: inline; }
+        .pr-nm-t, .pr-nm-n, .pr-nm-b, .pr-nm-chev { display: inline; }
         @media (max-width: 560px) {
             .pr-pay { font-size: 14px; } .pr-nm { gap: 6px; }
             .pr-nm-l { white-space: normal; line-height: 1.35; display: flex; align-items: center; }
-            .pr-nm-t { display: block; min-width: 0; }
-            .pr-nm-n, .pr-nm-b { display: block; }
-            .pr-nm-b { margin-top: 2px; }
+            /* the chevron rides at the end of the NAME line; the badges take their own line under it
+               (Kerry 10/12: a row with no badges, like Luke Youngs, should not spend a line on its chevron) */
+            .pr-nm-t { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; }
+            .pr-nm-n { display: block; order: 1; min-width: 0; }
+            .pr-nm-chev { display: block; order: 2; margin-left: 6px; }
+            .pr-nm-b { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; order: 3; flex-basis: 100%; margin-top: 2px; }
+            .pr-nm-b:empty { display: none; }
         }
 
         /* How-it-works link + popup (Kerry, 2026-07-10) */
@@ -9543,7 +9547,7 @@
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}${chevron}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSub}</td>
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}</span><span class="pr-nm-chev">${chevron}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSub}</td>
                 <td style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -10005,7 +10009,7 @@
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
-                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSubF}</td>
+                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}</span><span class="pr-nm-chev">${chevF}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
@@ -10185,7 +10189,7 @@
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-n">${name}</span><span class="pr-nm-b">${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</span></span></div></div></td>
+                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-n">${name}</span><span class="pr-nm-b">${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</span><span class="pr-nm-chev">${chevron}</span></span></div></div></td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>
