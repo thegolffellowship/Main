@@ -19,8 +19,9 @@ from __future__ import annotations
 # Kerry, same day: "Jay Horton was also 2023 champion of The Players Cup which was
 # the first year we awarded that trophy. The Fellowship Cup has been around for all
 # 20 years" (so Fellowship Cup history is long and still to come from Kerry).
+# Kerry, captioning a photo the same day: "Paul Day and The Fellowship Cup in 2023".
 CUP_CHAMPION_HISTORY = {
-    "fellowship_cup": {2024: [299], 2025: [289]},   # Mark Freund; Jay Horton
+    "fellowship_cup": {2023: [497], 2024: [299], 2025: [289]},   # Paul Day; Mark Freund; Jay Horton
     "players_cup": {2023: [289], 2024: [31], 2025: [289]},   # Jay Horton; Robert Straiton; Jay Horton
 }
 

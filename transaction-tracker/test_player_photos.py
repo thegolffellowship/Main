@@ -86,6 +86,9 @@ check("Mark Freund's cropped headshot (299) is in the seed set, and the staged p
       "299" in pp.photo_index()["h"] and tc.get("/member/photo/h/299.jpg").status_code == 200
       and tc.get("/member/photo/c/fellowship_cup-2024.jpg").status_code == 404
       and tc.get("/member/photo/c/fellowship_cup-2025.jpg").status_code == 404)
+check("Paul Day's cropped headshot (497) is in the seed set; his staged 2023 trophy photo is not served",
+      "497" in pp.photo_index()["h"] and tc.get("/member/photo/h/497.jpg").status_code == 200
+      and tc.get("/member/photo/c/fellowship_cup-2023.jpg").status_code == 404)
 check("each cup plaque carries its race and champion ids, and one function applies the photo to whichever is on screen",
       'data-race="players_cup" data-cids=' in src and 'document.querySelector(\'.tgf-champ-plaque[data-race]\')' in src
       and 'fcPhotoIdx[race + "-2026"]' in src)

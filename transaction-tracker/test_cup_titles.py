@@ -28,6 +28,8 @@ check("Robert: 2024 from Kerry's list plus 2026 derived, 'and' joined",
 j = ct.cup_titles(JAY, 2026, cur)
 check("Jay Horton: Fellowship Cup 2025, Players Cup 2023 & 2025 (first year of the Players Cup), Fellowship above Players",
       [t["line"] for t in j] == ["The Fellowship Cup - 2025 Champion", "The Players Cup - 2023 & 2025 Champion"], str(j))
+check("Paul Day (497): Fellowship Cup 2023 from Kerry's photo caption",
+      [t["line"] for t in ct.cup_titles(497, 2026, cur)] == ["The Fellowship Cup - 2023 Champion"])
 check("Mark Freund: Fellowship Cup 2024 only", [t["line"] for t in ct.cup_titles(MARK, 2026, cur)] == ["The Fellowship Cup - 2024 Champion"])
 check("a player who is nobody's champion gets nothing", ct.cup_titles(7, 2026, cur) == [] and ct.cup_titles(7, 2026, None) == [])
 check("a cup that is not final (no champions) derives nothing for 2026",

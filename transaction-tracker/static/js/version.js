@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.540.3";
+window.TGF_VERSION = "2.540.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.540.4",
+    date: "2026-10-12",
+    title: "Paul Day: 2023 Fellowship Cup champion, headshot, photo staged",
+    changes: [
+      "Kerry 10/12 sent \"Paul Day and The Fellowship Cup in 2023\". Taken as Kerry's statement that Paul Day (customer 497) won the 2023 Fellowship Cup: CUP_CHAMPION_HISTORY gains fellowship_cup 2023, so his Spotlight header reads \"The Fellowship Cup - 2023 Champion\" (Kerry can strike it). data/player_photos/h-497.jpg is a 400x400 head-and-shoulders crop (about 45 KB), added to the seed headshots; the 2023 trophy photo is staged in data/champion_photos/fellowship-cup-2023.jpg (about 180 KB, EXIF removed) and, like the 2024 and 2025 ones, is not registered, so nothing serves it yet. Paul's status is expired member (DFW); Kerry has not been asked whether expired members show a headshot. No upload path, no schema. Guards: test_cup_titles.py, test_player_photos.py."
+    ]
+  },
   {
     version: "2.540.3",
     date: "2026-10-12",
