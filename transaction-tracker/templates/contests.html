@@ -9345,6 +9345,11 @@
         // won the Austin NET and handed the captaincy to Matt Jenkins). The server sends the roster's captain.
         const capId = (!cupChampRace && d.lsc_captain_id) || null;
         const capSeparate = !!(capId && champs.length && !champIds.has(capId));
+        // the captain's badge names the team and wears its colours (Kerry 10/12): Austin burnt orange, San Antonio blue-grey
+        const capCity = (d.chapter === "Austin" ? "AUSTIN" : "SAN ANTONIO");
+        const capColors = d.chapter === "Austin"
+            ? "background:var(--chapter-austin,#BF5700);color:#fff;border:1px solid var(--chapter-austin,#BF5700);"
+            : "background:var(--chapter-sa,#D3DDE4);color:#1B1B1B;border:1px solid var(--chapter-sa-alt,#8FA8B8);";
         const champTitle = cupChampRace
             ? `2026 THE PLAYERS CUP ${coChamp ? "Co-" : ""}Champion`
             : capSeparate ? `2026 City ${coChamp ? "Co-" : ""}Champion`
@@ -9521,7 +9526,7 @@
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#E8EEF6;color:#002855;border:1px solid #002855;vertical-align:1px;">${compact ? "CAPT" : "LSC CAPTAIN"}</span>` : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}${thruSub}</td>
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}${thruSub}</td>
                 <td style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -9570,7 +9575,7 @@
         const champStrip = champs.length
             ? (cupChampRace
                 ? `<div class="tgf-champ-plaque" data-race="players_cup" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
-                : `<div class="tgf-champ-plaque" data-head="1" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">${capSeparate ? "Lone Star Cup Captain: " + escapeHtml(d.lsc_captain_name || "") : `Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}`}</div></div></div>`)
+                : `<div class="tgf-champ-plaque" data-head="1" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">${capSeparate ? escapeHtml(d.chapter === "Austin" ? "Austin" : "San Antonio") + " Lone Star Cup Captain: " + escapeHtml(d.lsc_captain_name || "") : `Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}`}</div></div></div>`)
             : "";
         const pcHolder = cupChampRace ? `<details class="past-champs" data-race="players_cup" hidden></details>` : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in

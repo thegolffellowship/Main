@@ -123,7 +123,7 @@ check("standings rows: top 3 get a headshot slot (concept B), others a blank slo
       "function prAvatarSlot" in src and "function fcApplyAvatars" in src and src.count("prAvatarSlot(r, compact)") >= 3
       and ".pr-av { display: inline-block; width: 40px" in src)
 check("the LSC captain comes from the Cup roster, not the champion: server sends it, the plaque and rows name them",
-      "lsc_captain_id" in src and "capSeparate" in src and "Lone Star Cup Captain: " in src and '"LSC CAPTAIN"' in src
+      "lsc_captain_id" in src and "capSeparate" in src and "Lone Star Cup Captain: " in src and 'capCity + " LSC CAPTAIN"' in src and "capColors" in src
       and LSC_CAPT.get("austin_net") == (7, "Matt Jenkins") and LSC_CAPT.get("san_antonio_net") == (35, "Rob Callaway")
       and _cap("austin_net", {"a": 1})["lsc_captain_id"] == 7 and _cap("city_gross", {"a": 1}) == {"a": 1})
 

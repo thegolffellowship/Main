@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.543.0";
+window.TGF_VERSION = "2.543.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.543.1",
+    date: "2026-10-12",
+    title: "The LSC captain badge names the team and wears its colours",
+    changes: [
+      "Kerry 10/12: \"It should say AUSTIN LSC CAPTAIN with team colors or SAN ANTONIO LSC CAPTAIN.\" The captain's row badge on the NET boards now reads AUSTIN LSC CAPTAIN (burnt orange, white text) or SAN ANTONIO LSC CAPTAIN (blue-grey, dark text); on a phone it shortens to AUSTIN CAPT / SA CAPT. The plaque's sub line names the team too (Austin Lone Star Cup Captain: Matt Jenkins)."
+    ]
+  },
   {
     version: "2.543.0",
     date: "2026-10-12",
