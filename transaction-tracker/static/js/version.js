@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.539.1";
+window.TGF_VERSION = "2.539.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.539.2",
+    date: "2026-10-12",
+    title: "Spotlight: on a phone the second cup drops to its own line",
+    changes: [
+      "Kerry 10/12: \"For mobile, if there's too much for one line, move the second cup (The Players Cup) to the 2nd line.\" The champion titles stay on one line with a bar between them while they fit (desktop). When they do not fit, each title takes its own line and the bar goes away; the check re-runs on resize and rotate (sptFitChamps). Today this only applies to Jay Horton, the only player to have won both cups."
+    ]
+  },
   {
     version: "2.539.1",
     date: "2026-10-12",

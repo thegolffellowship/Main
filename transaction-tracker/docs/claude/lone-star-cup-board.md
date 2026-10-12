@@ -1269,3 +1269,5 @@ Players Cup champion photo (v2.539.0, Kerry 2026-10-12): `players_cup-2026` is i
 
 Titles share one line (v2.539.1, Kerry 2026-10-12): a player with both cups reads "The Fellowship Cup - 2025 Champion | The Players Cup - 2024 & 2026 Champion", one row, each title unbroken on wrap.
 
+Phone rule (v2.539.2, Kerry 2026-10-12): when the two titles do not fit one line, The Players Cup takes the second line and the bar is dropped (`sptFitChamps`, class `stacked`, re-run on resize). Only Jay Horton holds both cups to date.
+

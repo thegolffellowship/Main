@@ -78,6 +78,8 @@
         .spt-champ svg { flex: none; width: 17px; height: 17px; }
         .spt-champ-t { white-space: nowrap; }
         .spt-champ-sep { color: #C9A227; margin-left: 3px; }
+        .spt-champ > span.stacked .spt-champ-t { display: block; }
+        .spt-champ > span.stacked .spt-champ-sep { display: none; }
         .spt-name { margin: 0; font: 700 23px/1.05 'Bitter', serif; color: #1B1B1B; min-width: 0; }
         .spt-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
         .spt-idx { text-align: right; flex: none; }
@@ -549,6 +551,17 @@
             const v = SPT_PHOTOS && cid != null ? SPT_PHOTOS.h[String(cid)] : null;
             return v ? `<img class="spt-photo" src="/member/photo/h/${Number(cid)}.jpg?v=${v}" alt="" onerror="this.remove()">` : "";
         }
+        // CHAMPION TITLES on a phone (Kerry 2026-10-12): all of a player's titles share one line;
+        // when they don't fit, the second cup (The Players Cup) drops to its own line and the
+        // bar goes away. Re-checked on resize and rotate.
+        function sptFitChamps() {
+            document.querySelectorAll(".spt-champ > span").forEach(box => {
+                const t = box.querySelectorAll(".spt-champ-t");
+                box.classList.remove("stacked");
+                if (t.length > 1 && t[t.length - 1].offsetTop > t[0].offsetTop + 2) box.classList.add("stacked");
+            });
+        }
+        window.addEventListener("resize", sptFitChamps);
         function render(d) {
             SPT_DATA = d;
             const _wbgYears = (d.winnings_by_game && d.winnings_by_game.years) || [];
@@ -863,6 +876,7 @@
             $("spt-player").innerHTML = hero + scopeBarHtml(d) + strip + stands +
                 scoring + wbgHtml(d) + wins +
                 (d.gg_error ? `<p class="spt-note">Standings feed note: ${esc(d.gg_error)}</p>` : "");
+            sptFitChamps();
         }
 
         // Scope toggle (delegated — the section re-renders on every flip)
