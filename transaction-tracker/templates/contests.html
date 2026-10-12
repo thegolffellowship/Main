@@ -2142,7 +2142,8 @@
         .pr-av img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; border: 0; border-radius: 0; box-shadow: none; }
         #pr-table-container .enrollment-table thead tr:first-child th:first-child { text-align: center; padding-left: 4px; padding-right: 4px; }
         /* what a narrow row hid (handicap, money, badges) reappears under the name once the row is expanded */
-        .pr-hid-line { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 4px; white-space: normal;
+        .pr-hid-line { display: flex; flex-wrap: nowrap; gap: 4px 14px; align-items: center; padding: 6px 12px; margin: 0 0 6px;
+            border-bottom: 1px solid #e5e7eb; background: #fff; white-space: nowrap; overflow-x: auto;
             font: 600 12px/1.3 'Bitter', Georgia, serif; color: #4B5563; }
         .pr-hid-line b { font: 700 8.5px/1 'Bitter', Georgia, serif; letter-spacing: .6px; color: #6B7280; text-transform: uppercase; margin-right: 4px; }
         .pr-hid-line .hp-pay { color: #15803d; font-size: 15px; font-weight: 700; }
@@ -9865,34 +9866,43 @@
             document.fonts.ready.then(() => { prFitNames._again = false; requestAnimationFrame(prFitNames); });
         }
     }
-    // ANYTHING HIDDEN SHOWS WHEN THE ROW IS EXPANDED (Kerry 2026-10-12): the handicap, the money and the badges a
-    // narrow row gave up are listed under the name while its drill-down is open, and removed when it closes.
+    // ANYTHING HIDDEN SHOWS WHEN THE ROW IS EXPANDED (Kerry 2026-10-12), as ONE line across the top of the points /
+    // scorecard detail that opens under the row, so the open row stays short: "HANDICAP 2.8 · WON $135 · AUSTIN ...
+    // CAPTAIN". The detail cell is rewritten when its data arrives, so a small observer puts the line back.
+    function prHiddenItems(tr) {
+        const vis = el => !!el && el.offsetParent !== null;
+        const items = [];
+        const hc = tr.querySelector(".pr-hcp");
+        const hv = hc ? hc.textContent.replace(/[()]/g, "").trim() : (tr.dataset.hcp || "");
+        if (hv && !vis(hc)) items.push(`<span><b>HCP</b>${escapeHtml(hv)}</span>`);
+        const pay = tr.querySelector(".pr-pay");
+        if (tr.dataset.pay && !vis(pay)) items.push(`<span class="hp-pay"><b>${escapeHtml(tr.dataset.payl || "WON")}</b>${escapeHtml(tr.dataset.pay)}</span>`);
+        const bd = tr.querySelector(".pr-nm-b");
+        if (bd && !vis(bd)) {
+            // the badge's own short text where it has one ("AUSTIN CAPT"), its tooltip where it is only a glyph (the trophy)
+            const labels = [...bd.querySelectorAll("[title]")].map(e => e.textContent.replace(/\s+/g, " ").trim() || e.getAttribute("title")).filter(Boolean);
+            const txt = bd.textContent.replace(/\s+/g, " ").trim();
+            if (labels.length || txt) items.push(`<span>${escapeHtml(labels.length ? labels.join(" \u00b7 ") : txt)}</span>`);
+        }
+        const op = tr.querySelector(".pr-opt");
+        if (op && !vis(op) && op.textContent.trim()) items.push(`<span>${escapeHtml(op.textContent.trim())}</span>`);
+        return items;
+    }
     function prSyncHidden() {
         document.querySelectorAll("#pr-table-container tbody tr[data-cid]").forEach(tr => {
-            const td = tr.querySelector("td.pr-name-td");
-            if (!td) return;
             const chev = tr.querySelector(".pr-chevron");
             const open = !!chev && chev.textContent.indexOf("\u25BC") > -1;
-            let line = td.querySelector(".pr-hid-line");
-            if (!open) { if (line) line.remove(); return; }
-            if (line) return;
-            const vis = el => !!el && el.offsetParent !== null;
-            const items = [];
-            const hc = tr.querySelector(".pr-hcp");
-            const hv = hc ? hc.textContent.replace(/[()]/g, "").trim() : (tr.dataset.hcp || "");
-            if (hv && !vis(hc)) items.push(`<span><b>Handicap</b>${escapeHtml(hv)}</span>`);
-            const pay = tr.querySelector(".pr-pay");
-            if (tr.dataset.pay && !vis(pay)) items.push(`<span class="hp-pay"><b>${escapeHtml(tr.dataset.payl || "WON")}</b>${escapeHtml(tr.dataset.pay)}</span>`);
-            const bd = tr.querySelector(".pr-nm-b");
-            if (bd && !vis(bd)) {
-                const labels = [...bd.querySelectorAll("[title]")].map(e => e.getAttribute("title")).filter(Boolean);
-                const txt = bd.textContent.replace(/\s+/g, " ").trim();
-                if (labels.length || txt) items.push(`<span>${escapeHtml(labels.length ? labels.join(" · ") : txt)}</span>`);
-            }
-            const op = tr.querySelector(".pr-opt");
-            if (op && !vis(op) && op.textContent.trim()) items.push(`<span>${escapeHtml(op.textContent.trim())}</span>`);
+            const detail = tr.nextElementSibling;
+            if (!open || !detail || !detail.matches(".pr-detail-row, .pr-mo-detail")) return;
+            const td = detail.firstElementChild;
+            if (!td || td.dataset.hidWatch) return;
+            const items = prHiddenItems(tr);
             if (!items.length) return;
-            td.insertAdjacentHTML("beforeend", `<div class="pr-hid-line">${items.join("")}</div>`);
+            const html = `<div class="pr-hid-line">${items.join("")}</div>`;
+            const put = () => { if (!td.querySelector(":scope > .pr-hid-line")) td.insertAdjacentHTML("afterbegin", html); };
+            put();
+            td.dataset.hidWatch = "1";
+            new MutationObserver(put).observe(td, { childList: true });
         });
     }
     document.addEventListener("click", ev => {

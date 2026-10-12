@@ -157,7 +157,8 @@ check("every cell of a standings row is vertically centred on the row (rank, poi
 check("anyone who won money in a contest gets their headshot, not only the top 3 (paid places and the month's winner)",
       "((n >= 1 && n <= 3) || r._pay || paid)" in src and "prAvatarSlot(r, compact, win)" in src)
 check("anything a narrow row hid (handicap, money, badges) is listed under the name while the row is expanded",
-      "function prSyncHidden" in src and 'class="pr-hid-line"' in src and "data-hcp=" in src and "data-payl=" in src)
+      "function prSyncHidden" in src and 'class="pr-hid-line"' in src and "data-hcp=" in src and "data-payl=" in src
+      and "new MutationObserver(put)" in src and ".pr-detail-row, .pr-mo-detail" in src)
 sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()
 check("the Spotlight profile photo is a rounded square in a frame of the player's chapter colour",
       ".spt-photo-frame.ch-austin { background: var(--chapter-austin" in sp and ".spt-photo-frame.ch-sa" in sp

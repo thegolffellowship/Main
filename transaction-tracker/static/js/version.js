@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.545.4";
+window.TGF_VERSION = "2.545.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.545.5",
+    date: "2026-10-12",
+    title: "Standings: hidden details are one line at the top of the expanded detail",
+    changes: [
+      "Kerry 10/12: \"Any hidden information should just show in a top line on one row if possible to reduce vertical footprint\", then \"HANDICAP could be reduced to HCP.\" What a narrow row hid (handicap, money, badges) no longer stacks inside the name cell and makes the open row tall. It is now ONE line across the top of the points / scorecard detail that opens under the row: HCP 2.8   WON $135   AUSTIN CAPT (one line, scrolls sideways if a phone is very narrow; the badge reads its short on-screen text). The detail cell is rewritten when its data arrives, so a small observer keeps the line at the top."
+    ]
+  },
   {
     version: "2.545.4",
     date: "2026-10-12",
