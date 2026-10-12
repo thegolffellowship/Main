@@ -2092,6 +2092,16 @@
            plaque's padding shrinks to just clear its inset gold rule, and the portrait grows to fill the height. */
         .tgf-champ-plaque.has-photo { padding: 7px 1rem 7px 7px; }
         .tgf-champ-plaque.has-photo .champ-photo { width: 102px; height: 136px; border-radius: 7px; }
+        /* NAV FLUSH under the header (Kerry 2026-10-12: "Nav bar isn't pinning under header. There's space. Same with
+           Sub Nav."): no gap above the tab bar or between it and the race-chip row. */
+        body main, html.tgf-wide body main { padding-top: 0; }
+        .pr-section:has(> .pr-race-row:first-child) { padding-top: 0; }
+        /* HEADSHOT plaques (Kerry 10/12: the NET boards' city champion and each month's winner wear their headshot) */
+        .champ-heads { display: flex; gap: 6px; flex: 0 0 auto; }
+        .champ-head { width: 112px; height: 112px; border-radius: 7px; object-fit: cover; object-position: center 30%;
+            border: 2px solid #D4A017; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: zoom-in; display: block; }
+        .champ-heads.many .champ-head { width: 72px; height: 72px; }
+        .tgf-champ-plaque.has-head { padding: 7px 1rem 7px 7px; }
         .champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex;
             flex-direction: column; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
         .champ-lb img { max-width: 100%; max-height: 82vh; border-radius: 10px; border: 2px solid #D4A017; }
@@ -2189,9 +2199,9 @@
                 {# Lone Star Cup sits FIRST, at the left (Kerry 2026-10-08: "Move the
                    LONE STAR CUP toggle to the left on the nav bar"); EVENTS
                    drops its BETA badge (same message). #}
-                <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
                 {% if member_mode %}<button class="top-tab" data-top="events">Events</button>{% else %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events</button>{% endif %}
                 <button class="top-tab active" data-top="points-race">Points Races</button>
+                <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
                 <button class="top-tab" data-top="match-play">Match Play</button>
                 <button class="top-tab manager-only" data-top="enrollment">Enrollment</button>
             </div>
@@ -2789,6 +2799,14 @@
             tabs.style.top = (h + ctaH) + "px";
             tabs.style.zIndex = "89";
             tabs.style.background = "var(--surface, #fff)";
+        }
+        // the race-chip sub nav pins flush under the tab bar (Kerry 10/12), desktop only: on a phone
+        // its wrapped chips would eat the screen
+        const chipRow = document.querySelector(".pr-race-row");
+        if (chipRow) {
+            chipRow.style.position = phone ? "" : "sticky";
+            chipRow.style.top = phone ? "" : (h + ctaH + (tabs ? tabs.offsetHeight : 0)) + "px";
+            chipRow.style.zIndex = "87";
         }
         // the Lone Star Cup header pins under the sub nav (Kerry 10/8)
         const lscEv = document.querySelector("#section-lone-star-cup .lsc-event");
@@ -9540,7 +9558,7 @@
         const champStrip = champs.length
             ? (cupChampRace
                 ? `<div class="tgf-champ-plaque" data-race="players_cup" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
-                : `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div></div>`)
+                : `<div class="tgf-champ-plaque" data-head="1" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div></div>`)
             : "";
         const pcHolder = cupChampRace ? `<details class="past-champs" data-race="players_cup" hidden></details>` : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
@@ -9719,10 +9737,37 @@
     function fcChampPhotoLoad() {
         if (fcPhotoIdx) { fcApplyChampPhoto(); return; }
         if (!fcPhotoReq) fcPhotoReq = fetch("/api/player-photos").then(r => r.ok ? r.json() : null)
-            .then(j => { fcPhotoIdx = (j && j.c) || {}; }).catch(() => { fcPhotoIdx = {}; });
+            .then(j => { fcPhotoIdx = (j && j.c) || {}; fcHeadIdx = (j && j.h) || {}; }).catch(() => { fcPhotoIdx = {}; fcHeadIdx = {}; });
         fcPhotoReq.then(fcApplyChampPhoto);
     }
+    // HEADSHOT plaques: the city NET champion and each month's winner. The trophy glyph gives
+    // way to the headshot(s) of the people named, only those who have one; none, no change.
+    let fcHeadIdx = null;
+    function fcApplyHeadshots() {
+        document.querySelectorAll(".tgf-champ-plaque[data-head]:not([data-photo-done])").forEach(el => {
+            const ids = (el.dataset.cids || "").split(",").map(Number).filter(id => id && fcHeadIdx && fcHeadIdx[id] != null).slice(0, 3);
+            const glyph = el.querySelector(".tgf-champ-trophy");
+            if (!ids.length || !glyph) return;
+            const nm = (el.querySelector(".tgf-champ-name") || {}).textContent || "";
+            const wrap = document.createElement("div");
+            wrap.className = "champ-heads" + (ids.length > 1 ? " many" : "");
+            ids.forEach(id => {
+                const img = document.createElement("img");
+                img.className = "champ-head"; img.alt = nm; img.setAttribute("role", "button"); img.tabIndex = 0;
+                img.src = `/member/photo/h/${id}.jpg?v=${fcHeadIdx[id]}`;
+                img.onerror = () => img.remove();
+                const open = () => fcChampLightbox(img.src, nm);
+                img.addEventListener("click", open);
+                img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+                wrap.appendChild(img);
+            });
+            glyph.replaceWith(wrap);
+            el.classList.add("has-head");
+            el.dataset.photoDone = "1";
+        });
+    }
     function fcApplyChampPhoto() {
+        fcApplyHeadshots();
         const el = document.querySelector('.tgf-champ-plaque[data-race]');
         const race = el && el.dataset.race;
         const p = fcPhotoIdx && race && fcPhotoIdx[race + "-2026"];
@@ -10102,6 +10147,13 @@
             : sel.complete ? "" : `
             <div style="margin:0 0 0.6rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;${escapeHtml(sel.name)} &middot; In Progress</span></div>`;
 
+        // MONTH WINNER plaque with the headshot (Kerry 10/12), once the month is final
+        const mWin = sel.complete ? (sel.winners || []) : (sel.final ? (sel.final_winners || []) : []);
+        const mLabel = (() => { const [y, m] = String(sel.month).split("-");
+            return new Date(+y, +m - 1, 1).toLocaleString("en-US", { month: "long" }) + " " + y; })();
+        const monthPlaque = mWin.length
+            ? `<div class="tgf-champ-plaque" data-head="1" data-cids="${mWin.map(w => w.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">${escapeHtml(mLabel)} Points ${mWin.length > 1 ? "Winners" : "Winner"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.5rem" : "1.9rem"};">${mWin.map(w => escapeHtml(prFirstLast(w.display_name || w.player_name))).join(" &amp; ")}</div></div></div>`
+            : "";
         cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
                 <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
@@ -10109,7 +10161,7 @@
                            border:1px solid var(--border);border-radius:999px;background:var(--surface);
                            color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
                 ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}
-            </div>${statusChip}
+            </div>${statusChip}${monthPlaque}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
                     <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
@@ -10119,6 +10171,7 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
+        fcChampPhotoLoad();
         cont.querySelectorAll("button[data-mp]").forEach(b =>
             b.addEventListener("click", () => { prMonthlySel = b.dataset.mp; prRenderMonthly(); }));
         const rbtn = cont.querySelector("#pr-monthly-refresh");

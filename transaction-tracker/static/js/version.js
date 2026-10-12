@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.541.0";
+window.TGF_VERSION = "2.542.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.542.0",
+    date: "2026-10-12",
+    title: "LEADERBOARD: nav flush and pinned, Lone Star Cup back in the middle, headshots on the NET and Monthly winners",
+    changes: [
+      "NAV (Kerry 10/12: \"Nav bar isn't pinning under header. There's space. Same with Sub Nav.\"). The page padding above the tab bar and the section gap above the race-chip row are gone, so the tab bar sits flush under the header, and the race chips (SA FALL NET ... AUSTIN NET) now pin flush under the tab bar on desktop (prPinBars). On a phone only the tab bar pins, as before: pinned wrapped chips would eat the screen.",
+      "TAB ORDER: LONE STAR CUP moves back between POINTS RACES and MATCH PLAY (EVENTS | POINTS RACES | LONE STAR CUP | MATCH PLAY).",
+      "HEADSHOTS ON PLAQUES (Kerry 10/12: headshots for San Antonio NET and Austin NET, and for the Monthly points winners). The city-champion plaque on both NET boards now wears the champion's headshot in place of the trophy glyph, and a finished month shows a new \"<Month> Points Winner\" plaque with the winner's headshot above the standings (several winners show side by side, up to three). A winner with no headshot keeps the trophy glyph; tap opens the photo. Same padding rule as the cup plaques. Headshots in the standings rows themselves are a concept only, shown to Kerry, not built.",
+      "Guard: test_player_photos.py (headshot plaques, tab order, flush nav and the pinned chip row)."
+    ]
+  },
   {
     version: "2.541.0",
     date: "2026-10-12",

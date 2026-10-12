@@ -108,6 +108,16 @@ check("each cup plaque carries its race and champion ids, and one function appli
       'data-race="players_cup" data-cids=' in src and 'document.querySelector(\'.tgf-champ-plaque[data-race]\')' in src
       and 'fcPhotoIdx[race + "-2026"]' in src)
 
+check("the NET boards' city champion and each month's winner wear their headshot (data-head plaques filled from the h index)",
+      'data-head="1" data-cids=' in src and "function fcApplyHeadshots" in src and "fcHeadIdx = (j && j.h)" in src
+      and "Points ${mWin.length > 1" in src and "monthPlaque" in src)
+check("the top tab order is EVENTS | POINTS RACES | LONE STAR CUP | MATCH PLAY (Kerry 10/12 put the Cup back in the middle)",
+      src.index('<button class="top-tab active" data-top="points-race">') < src.index('<button class="top-tab" data-top="lone-star-cup">')
+      < src.index('<button class="top-tab" data-top="match-play">'))
+check("the tab bar sits flush under the header and the race-chip sub nav pins under it (no page padding or section gap)",
+      "body main, html.tgf-wide body main { padding-top: 0; }" in src and ".pr-section:has(> .pr-race-row:first-child) { padding-top: 0; }" in src
+      and 'document.querySelector(".pr-race-row")' in src and 'chipRow.style.position = phone ? "" : "sticky"' in src)
+
 import mcp_server as M                                            # noqa: E402
 b64 = base64.b64encode(JPEG).decode()
 out = json.loads(M._scoring_dispatch("https://www.golfgenius.com/", f"scoring-player-photo:headshot|672|{b64}"))
