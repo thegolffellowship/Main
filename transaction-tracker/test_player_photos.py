@@ -120,7 +120,7 @@ check("the tab bar sits flush under the header and the race-chip sub nav pins un
       and 'document.querySelector(".pr-race-row")' in src and 'chipRow.style.position = phone ? "" : "sticky"' in src)
 
 check("standings rows: top 3 get a headshot slot (concept B), others a blank slot of the same width, filled from the h index",
-      "function prAvatarSlot" in src and "function fcApplyAvatars" in src and src.count("prAvatarSlot(r, compact)") >= 3
+      "function prAvatarSlot" in src and "function fcApplyAvatars" in src and src.count("prAvatarSlot(r, compact") >= 3
       and "td.pr-name-td.has-av" in src and ".pr-av { position: absolute; left: 0; top: 0; bottom: 0; width: 58px" in src
       and 'class="pr-rk"' in src and 'class="pr-pts"' in src)
 check("the LSC captain comes from the Cup roster, not the champion: server sends it, the plaque and rows name them",
@@ -154,6 +154,8 @@ check("standings: money is larger, Bitter and right-aligned on the name row; nam
       and ".pr-nm-t.no-badge .pr-nm-b { display: none; }" in src and 'classList.add("no-hcp")' in src and src.count('<span class="pr-nm-chev">') >= 3 and src.count('class="pr-nm-1"') >= 3 and 'RK</th>' in src)
 check("every cell of a standings row is vertically centred on the row (rank, points and buy-in no longer ride high beside the headshot)",
       "tr[data-pname] > td" in src and "vertical-align: middle; }" in src)
+check("anyone who won money in a contest gets their headshot, not only the top 3 (paid places and the month's winner)",
+      "((n >= 1 && n <= 3) || r._pay || paid)" in src and "prAvatarSlot(r, compact, win)" in src)
 check("anything a narrow row hid (handicap, money, badges) is listed under the name while the row is expanded",
       "function prSyncHidden" in src and 'class="pr-hid-line"' in src and "data-hcp=" in src and "data-payl=" in src)
 sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()

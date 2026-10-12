@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.545.3";
+window.TGF_VERSION = "2.545.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.545.4",
+    date: "2026-10-12",
+    title: "Standings: everyone who won money gets their headshot",
+    changes: [
+      "Kerry 10/12: \"Anyone who won money in a contest should get their headshot put up.\" On the points-race boards and THE FELLOWSHIP CUP, a row now carries its square headshot if the player is in the top 3 OR holds a paid place (the row shows money won or projected), whatever their rank; on Monthly, the month's winner does too. Everyone else still has no slot and their name sits at the left. Tied paid places and a payout that reaches below 3rd are covered because the rule reads the money, not the rank."
+    ]
+  },
   {
     version: "2.545.3",
     date: "2026-10-12",
