@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.549.3";
+window.TGF_VERSION = "2.549.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.549.4",
+    date: "2026-10-12",
+    title: "Standings headshots: only bought-in players in the money",
+    changes: [
+      "Kerry 10/12: \"If someone isn't bought in, and/or isn't in the Projected Money, their photo shouldn't show.\" A standings headshot now appears only on a row that is bought in AND carries money won or projected (and on Monthly, the month's winner). The old 'top 3 always get one' rule is gone: a not-bought-in player in 3rd place (Robert Straiton on Austin Fall NET) no longer shows a photo, and neither does anyone outside the paid places. A row without a photo has no slot, so the name sits at the left."
+    ]
+  },
   {
     version: "2.549.3",
     date: "2026-10-12",

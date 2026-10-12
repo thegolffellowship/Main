@@ -9909,12 +9909,12 @@
     // way to the headshot(s) of the people named, only those who have one; none, no change.
     let fcHeadIdx = null;
     // slot for a standings row (concept B): top 3 get a headshot, the rest an empty slot of the same width
-    // Who gets a headshot (Kerry 2026-10-12): the top 3, and ANYONE who won money in the contest (a paid place, or the
-    // month's winner), whatever their rank. Everyone else has no slot and their name sits at the left.
+    // Who gets a headshot (Kerry 2026-10-12): ONLY a player who is bought in AND in the money (the row shows money won or
+    // projected), or the month's winner on Monthly. Not the top 3 as such: someone who is not bought in, or who is outside
+    // the paid places, has no photo and no slot, and their name sits at the left.
     function prAvatarSlot(r, compact, paid) {
         if (!r || !r.customer_id) return "";
-        const n = parseInt(String(r.rank == null ? "" : r.rank).replace(/\D/g, ""), 10);
-        return ((n >= 1 && n <= 3) || r._pay || paid) ? `<span class="pr-av" data-av="${r.customer_id}"></span>` : "";
+        return ((r.enrolled && r._pay) || paid) ? `<span class="pr-av" data-av="${r.customer_id}"></span>` : "";
     }
     function fcApplyAvatars() {
         document.querySelectorAll(".pr-av[data-av]:not([data-done])").forEach(el => {

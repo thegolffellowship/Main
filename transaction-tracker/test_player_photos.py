@@ -160,8 +160,8 @@ check("standings: money is larger, Bitter and right-aligned on the name row; nam
       and ".pr-nm-t.no-badge .pr-nm-b { display: none; }" in src and 'classList.add("no-hcp")' in src and src.count('<span class="pr-nm-chev">') >= 3 and src.count('class="pr-nm-1"') >= 3 and 'RK</th>' in src)
 check("every cell of a standings row is vertically centred on the row (rank, points and buy-in no longer ride high beside the headshot)",
       "tr[data-pname] > td" in src and "vertical-align: middle; }" in src)
-check("anyone who won money in a contest gets their headshot, not only the top 3 (paid places and the month's winner)",
-      "((n >= 1 && n <= 3) || r._pay || paid)" in src and "prAvatarSlot(r, compact, win)" in src)
+check("a headshot only for a player who is bought in AND in the money (or the month's winner): not the top 3 as such",
+      "((r.enrolled && r._pay) || paid)" in src and "prAvatarSlot(r, compact, win)" in src)
 check("the board header is just the title and a right-aligned HOW IT WORKS; the pot, places, bought-in count and phase move into the popup",
       "#pr-preamble, #pr-preamble-toggle, #pr-phase-chip { display: none !important; }" in src and "#pr-hiw-btn { margin-left: auto; }" in src
       and "function prHiwGlance" in src and 'class="pr-hiw-glance"' in src and "prHiwGlance();" in src
