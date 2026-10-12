@@ -121,7 +121,8 @@ check("the tab bar sits flush under the header and the race-chip sub nav pins un
 
 check("standings rows: top 3 get a headshot slot (concept B), others a blank slot of the same width, filled from the h index",
       "function prAvatarSlot" in src and "function fcApplyAvatars" in src and src.count("prAvatarSlot(r, compact)") >= 3
-      and ".pr-av { display: inline-block; width: 40px" in src)
+      and "td.pr-name-td.has-av" in src and ".pr-av { position: absolute; left: 0; top: 0; bottom: 0; width: 58px" in src
+      and 'class="pr-rk"' in src and 'class="pr-pts"' in src)
 check("the LSC captain comes from the Cup roster, not the champion: server sends it, the plaque and rows name them",
       "lsc_captain_id" in src and "capSeparate" in src and "Lone Star Cup Captain: " in src and 'capCity + " LSC CAPTAIN"' in src and "capColors" in src
       and LSC_CAPT.get("austin_net") == (7, "Matt Jenkins") and LSC_CAPT.get("san_antonio_net") == (35, "Rob Callaway")
@@ -149,7 +150,7 @@ check("standings: money is larger, Bitter and right-aligned on the name row; nam
       ".pr-nm { display: flex; align-items: center; justify-content: space-between" in src
       and ".pr-nm-l { min-width: 0; font-family: 'Bitter'" in src and "font: 700 17px/1 'Bitter'" in src
       and src.count('<div class="pr-nm"><div class="pr-nm-l">') >= 3 and 'class="pr-pay-l"' in src
-      and src.count('<span class="pr-nm-b">') >= 3 and ".pr-nm-chev { display: block; order: 2; margin-left: 6px; }" in src and src.count('<span class="pr-nm-chev">') >= 3 and 'compact ? " tight" : ""' in src)
+      and src.count('<span class="pr-nm-b">') >= 3 and ".pr-nm-1.no-hcp .pr-hcp" in src and "function prFitNames" in src and src.count('<span class="pr-nm-chev">') >= 3 and src.count('class="pr-nm-1"') >= 3 and 'RK</th>' in src)
 check("every cell of a standings row is vertically centred on the row (rank, points and buy-in no longer ride high beside the headshot)",
       "tr[data-pname] > td" in src and "vertical-align: middle; }" in src)
 sp = open(os.path.join(HERE, "templates", "spotlight.html")).read()

@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.544.3";
+window.TGF_VERSION = "2.545.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.545.0",
+    date: "2026-10-12",
+    title: "Standings: square full-bleed headshots, RK, Bitter rank and points, two-line rows",
+    changes: [
+      "HEADSHOTS (Kerry 10/12: \"try square images ... full bleed to top and bottom of rows\"). The top-3 standings headshot is now a SQUARE (58px desktop, 52px phone) that runs the full height of its row, edge to edge, with no padding above or below; the name sits to its right. A row with no image has no slot at all, so its name sits at the far left.",
+      "COLUMNS. RANK is now RK, the column is narrower (less gap before Player), and the rank figures are centred and Bitter; the POINTS figures are Bitter too (points-race boards, THE FELLOWSHIP CUP rank, Monthly).",
+      "ROWS NEVER RUN PAST TWO LINES. Line 1 is the name and its chevron (together); only badges go on line 2. On a phone, if the name does not fit, the handicap (and chapter chip) drop first, then the name shrinks (floor 9px), and the badge line shrinks rather than wrap; a few passes settle the column width (prFitNames).",
+      "Guard: test_player_photos.py (square full-bleed slot, RK, rank/points classes, the fit routine)."
+    ]
+  },
   {
     version: "2.544.3",
     date: "2026-10-12",

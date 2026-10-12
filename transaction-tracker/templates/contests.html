@@ -112,20 +112,27 @@
            row"): the headshot makes the name block taller, so rank, points, reset, rounds and buy-in were riding high */
         #pr-table-container tbody tr[data-pname] > td, #pr-table-container tbody tr[data-city-rank] > td,
         #pr-table-container tbody tr[data-cid]:not(.pr-mo-detail) > td { vertical-align: middle; }
-        .pr-nm-t, .pr-nm-n, .pr-nm-b, .pr-nm-chev { display: inline; }
+        /* Row anatomy: [headshot] [ name (hcp) ▶ ] on line 1, badges alone on line 2 (Kerry 2026-10-12: never more than
+           two lines; name and chevron stay together; a narrow window drops the handicap first, then shrinks the name). */
+        .pr-nm-t { display: inline-flex; align-items: center; vertical-align: middle; }
+        .pr-nm-1 { display: contents; }
+        .pr-nm-n { order: 1; }
+        .pr-nm-b { order: 2; margin-left: 6px; }
+        .pr-nm-chev { order: 3; margin-left: 6px; }
+        .pr-nm-b:empty { display: none; }
+        .pr-nm-l { flex: 1 1 auto; }
         @media (max-width: 560px) {
             .pr-pay { font-size: 14px; } .pr-nm { gap: 6px; }
-            .pr-nm-l { white-space: normal; line-height: 1.35; display: flex; align-items: center; }
-            /* the chevron rides at the end of the NAME line; the badges take their own line under it
-               (Kerry 10/12: a row with no badges, like Luke Youngs, should not spend a line on its chevron) */
-            .pr-nm-t { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; }
-            .pr-nm-n { display: block; order: 1; min-width: 0; }
-            .pr-nm-chev { display: block; order: 2; margin-left: 6px; }
-            .pr-nm-b { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; order: 3; flex-basis: 100%; margin-top: 2px; }
+            td.pr-name-td { width: 100%; max-width: 0; }
+            .pr-nm-l { flex: 1 1 0; display: flex; align-items: center; white-space: normal; line-height: 1.3; }
+            .pr-nm-t { display: block; flex: 1 1 auto; min-width: 0; }
+            .pr-nm-1 { display: flex; align-items: center; white-space: nowrap; overflow: hidden; }
+            .pr-nm-n { flex: none; } .pr-nm-chev { flex: none; margin-left: 6px; }
+            .pr-nm-b { display: block; margin: 2px 0 0; white-space: nowrap; overflow: hidden; }
             .pr-nm-b:empty { display: none; }
+            .pr-nm-1.no-hcp .pr-hcp, .pr-nm-1.no-hcp .pr-opt { display: none; }
         }
-
-        /* How-it-works link + popup (Kerry, 2026-07-10) */
+                /* How-it-works link + popup (Kerry, 2026-07-10) */
         .pr-hiw-link {
             display: inline-flex; align-items: center; height: 30px; padding: 0 14px;
             background: var(--primary, #E87C3E); border: none; border-radius: 9999px;
@@ -2123,13 +2130,19 @@
             border: 2px solid #D4A017; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: zoom-in; display: block; }
         .champ-heads.many .champ-head { width: 72px; height: 72px; }
         .tgf-champ-plaque.has-head { padding: 7px 1rem 7px 7px; }
-        /* STANDINGS HEADSHOTS, concept B (Kerry 2026-10-12): a larger round headshot on the top 3 only; every other
-           row keeps a blank slot of the same width so the names stay aligned (not on a phone, where width is tight). */
-        .pr-av { display: inline-block; width: 40px; height: 40px; margin-right: 10px; vertical-align: middle; border-radius: 50%; flex: none; }
-        .pr-av.tight { margin-right: 8px; }
-        .pr-av img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: center 30%;
-            border: 2px solid #fff; box-shadow: 0 0 0 1px #d1d5db; display: block; }
-        tr[data-champion] .pr-av img { border-color: #D4A017; box-shadow: 0 0 0 1px #D4A017; }
+        /* STANDINGS HEADSHOTS (Kerry 2026-10-12): a SQUARE image, full bleed to the top and bottom of the row, top 3 only;
+           a row without an image has no slot at all, so its name sits at the left. Rank and points read Bitter, centred. */
+        td.pr-name-td { position: relative; padding-left: 8px !important; }
+        td.pr-name-td.has-av { padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 68px !important; height: 58px; }
+        .pr-av { position: absolute; left: 0; top: 0; bottom: 0; width: 58px; display: block; background: #E5E7EB; }
+        .pr-av img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; border: 0; border-radius: 0; box-shadow: none; }
+        #pr-table-container .enrollment-table thead tr:first-child th:first-child { text-align: center; padding-left: 4px; padding-right: 4px; }
+        td.pr-rk { font-family: 'Bitter', Georgia, serif; font-weight: 700; text-align: center; padding-left: 4px; padding-right: 4px; }
+        td.pr-pts { font-family: 'Bitter', Georgia, serif; }
+        @media (max-width: 560px) {
+            td.pr-name-td.has-av { padding-left: 60px !important; height: 54px; }
+            .pr-av { width: 52px; }
+        }
         .champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex;
             flex-direction: column; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
         .champ-lb img { max-width: 100%; max-height: 82vh; border-radius: 10px; border: 2px solid #D4A017; }
@@ -9414,7 +9427,7 @@
         // the same 6px padding.
         const statCol = window.TGF_STAT_COL(compact);
         const pad6 = "padding-left:6px;padding-right:6px;";
-        const rankStyle = `width:${compact ? "28px" : "56px"};${pad6}`;
+        const rankStyle = `width:${compact ? "28px" : "40px"};${pad6}`;
         const ptsStyle = resetPrimary
             ? `${statCol}color:var(--text-muted);border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`
             : `${statCol}font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
@@ -9457,7 +9470,7 @@
                 ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;</span>'
                 : '';
             const hcp = r.handicap_index != null
-                ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
+                ? ` <span class="pr-hcp" style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
                 : '';
             // R4 (Kerry-ratified #149/#151): non-members stay ranked on
             // active boards with a status pill — the join/renew path is the
@@ -9541,14 +9554,14 @@
             const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
             return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
-                <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
+                <td class="pr-rk" style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? `<span class="pr-opt">${prChapterBadge(r.player_chapter)}</span>` : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}</span><span class="pr-nm-chev">${chevron}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSub}</td>
-                <td style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSub}</td>
+                <td class="pr-pts" style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
             </tr>`;
@@ -9611,7 +9624,7 @@
         // Round 2 columns").
         const theadHtml = cupMode
             ? `<tr>
-                    <th rowspan="2" style="${rankStyle}">${compact ? "#" : "Rank"}</th>
+                    <th rowspan="2" style="${rankStyle}">RK</th>
                     ${cupSlim ? "" : `<th rowspan="2" style="${mvStyle}" title="Day movement">&#8597;</th>`}
                     <th rowspan="2" style="width:99%;">Player</th>
                     <th rowspan="2" style="${ptsStyle}${champEdge}line-height:1.25;" title="Season points reset — the cups' starting totals">POINTS<br>RESET</th>
@@ -9622,7 +9635,7 @@
                 </tr>
                 <tr>${cupCols.map((bl, bi) => `<th style="${todayStyle}${bi === cupCols.length - 1 ? champEdge : ""}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
             : `<tr>
-                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th>
+                    <th style="${rankStyle}">RK</th>
                     ${liveMode ? `<th style="${mvStyle}" title="Day movement">&#8597;</th>` : ""}
                     <th style="width:99%;">Player</th>
                     <th style="${ptsStyle}"${resetPrimary ? ' title="Pre-reset season points"' : ''}>${resetPrimary ? (compact ? "SEA" : "SEASON") : (compact ? "PTS" : "POINTS")}</th>
@@ -9785,20 +9798,52 @@
     function prAvatarSlot(r, compact) {
         if (!r || !r.customer_id) return "";
         const n = parseInt(String(r.rank == null ? "" : r.rank).replace(/\D/g, ""), 10);
-        const top = n >= 1 && n <= 3;
-        if (!top && compact) return "";
-        return `<span class="pr-av${compact ? " tight" : ""}"${top ? ` data-av="${r.customer_id}"` : ""}></span>`;
+        return (n >= 1 && n <= 3) ? `<span class="pr-av" data-av="${r.customer_id}"></span>` : "";
     }
     function fcApplyAvatars() {
         document.querySelectorAll(".pr-av[data-av]:not([data-done])").forEach(el => {
             const id = el.dataset.av;
             if (!fcHeadIdx || fcHeadIdx[id] == null) return;
-            el.innerHTML = `<img src="/member/photo/hs/${id}.jpg?v=${fcHeadIdx[id]}" alt="" width="40" height="40" loading="lazy" onerror="this.remove()">`;
+            el.innerHTML = `<img src="/member/photo/hs/${id}.jpg?v=${fcHeadIdx[id]}" alt="" loading="lazy" onerror="this.closest('td') && this.closest('td').classList.remove('has-av'); this.remove()">`;
+            const td = el.closest("td"); if (td) td.classList.add("has-av");
             el.dataset.done = "1";
         });
     }
+    // PHONE NAME FIT: a row is two lines at most. Name + chevron are line 1; if the line is too wide the handicap
+    // (and chapter chip) go first, then the name shrinks a half-point at a time (floor 9px).
+    function prFitNames() {
+        if (!window.matchMedia("(max-width: 560px)").matches) return;
+        const lines = [...document.querySelectorAll(".pr-nm-1")];
+        lines.forEach(l => { l.classList.remove("no-hcp"); const n = l.querySelector(".pr-nm-n"); if (n) n.style.fontSize = ""; });
+        document.querySelectorAll(".pr-nm-b").forEach(b => { b.style.zoom = ""; });
+        const need = l => [...l.children].reduce((a, c) => a + c.offsetWidth, 0) + 6;
+        // a few passes: shrinking one row can change the column width every other row is measured against
+        for (let pass = 0; pass < 3; pass++) {
+            lines.forEach(l => {
+                const n = l.querySelector(".pr-nm-n");
+                if (!n || need(l) <= l.clientWidth + 1) return;
+                l.classList.add("no-hcp");
+                let size = parseFloat(getComputedStyle(n).fontSize) || 14;
+                while (need(l) > l.clientWidth + 1 && size > 9) { size -= 0.5; n.style.fontSize = size + "px"; }
+            });
+        }
+        // the badge line keeps to one line too: shrink it rather than let it wrap or clip
+        document.querySelectorAll(".pr-nm-b").forEach(b => {
+            let z = 1;
+            while (b.scrollWidth > b.clientWidth + 1 && z > 0.6) { z -= 0.05; b.style.zoom = z.toFixed(2); }
+        });
+        // Bitter may still be loading when the first pass runs; measure again once it is in
+        if (document.fonts && document.fonts.status !== "loaded" && !prFitNames._again) {
+            prFitNames._again = true;
+            document.fonts.ready.then(() => { prFitNames._again = false; requestAnimationFrame(prFitNames); });
+        }
+    }
+    let prFitTimer = null;
+    window.addEventListener("resize", () => { clearTimeout(prFitTimer); prFitTimer = setTimeout(prFitNames, 120); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(prFitNames);
     function fcApplyHeadshots() {
         fcApplyAvatars();
+        prFitNames();
         document.querySelectorAll(".tgf-champ-plaque[data-head]:not([data-photo-done])").forEach(el => {
             const ids = (el.dataset.cids || "").split(",").map(Number).filter(id => id && fcHeadIdx && fcHeadIdx[id] != null).slice(0, 3);
             const glyph = el.querySelector(".tgf-champ-trophy");
@@ -9922,7 +9967,7 @@
         prRenderStructureNote("THE FELLOWSHIP CUP");
 
         const compact = prIsCompact();
-        const rankTh = `width:${compact ? "28px" : "56px"};padding-left:6px;padding-right:6px;`;
+        const rankTh = `width:${compact ? "28px" : "40px"};padding-left:6px;padding-right:6px;`;
         // THE stat-column standard (tgf-standards.js — Kerry 2026-08-03:
         // "I'd like a standard unless I ask for a specific change"):
         // full-height 2px dividers + stacked titles ride on top of it.
@@ -9960,7 +10005,7 @@
                      : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
                      : (r.customer_id ? "" : "background:#fffbeb;");
             const hcp = r.handicap_index != null
-                ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
+                ? ` <span class="pr-hcp" style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
                 : escapeHtml(r.display_name || r.player_name);
@@ -10004,12 +10049,12 @@
                 ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;</span>'
                 : '';
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
-                <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-n">${nameCell}</span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
+                <td class="pr-rk" style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
+                <td class="pr-name-td"${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}</span><span class="pr-nm-chev">${chevF}</span></span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
-                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}</span><span class="pr-nm-chev">${chevF}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSubF}</td>
+                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
@@ -10017,7 +10062,7 @@
 
         const theadF = cupChamp
             ? `<tr>
-                    <th rowspan="2" style="${rankTh}">${compact ? "#" : "Rank"}</th><th rowspan="2" style="width:99%;">Player</th>
+                    <th rowspan="2" style="${rankTh}">RK</th><th rowspan="2" style="width:99%;">Player</th>
                     ${cupSlimF ? "" : `<th rowspan="2" style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>`}
                     <th rowspan="2" style="${resetThOv}line-height:1.25;" title="Season points reset — the Cup's starting totals">POINTS<br>RESET</th>
                     <th colspan="${cupBoardsF.length}" style="text-align:center;padding-left:6px;padding-right:6px;${champEdgeF}border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;background:var(--surface-dark,#1B1B1B);color:#fff;">TGF CHAMP</th>
@@ -10026,7 +10071,7 @@
                 </tr>
                 <tr>${cupBoardsF.map((bl, bi) => `<th style="${roundTh}${bi === cupBoardsF.length - 1 ? champEdgeF : ""}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
             : `<tr>
-                    <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
+                    <th style="${rankTh}">RK</th><th style="width:99%;">Player</th>
                     <th style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
                     <th style="${resetTh}line-height:1.25;">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
                 </tr>`;
@@ -10156,7 +10201,7 @@
                 ${compact ? x.name.slice(0, 3) : x.name}${(x.complete || x.final) ? "" : " •"}</button>`;
         }).join(" ");
 
-        const rankStyle = `width:${compact ? "28px" : "56px"};`;
+        const rankStyle = `width:${compact ? "28px" : "40px"};`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const purseStyle = `width:${compact ? "48px" : "90px"};text-align:center;`;
@@ -10188,10 +10233,10 @@
             else if (!sel.complete && r.rank === 1)
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
-                <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-n">${name}</span><span class="pr-nm-b">${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</span><span class="pr-nm-chev">${chevron}</span></span></div></div></td>
+                <td class="pr-rk" style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
+                <td class="pr-wrap pr-name-td"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${name}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</span></span></div></div></td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
-                <td style="${ptsStyle}">${r.points}</td>
+                <td class="pr-pts" style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>
             </tr>`;
         }).join("");
@@ -10220,7 +10265,7 @@
             </div>${statusChip}${monthPlaque}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
-                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
+                    <th style="${rankStyle}">RK</th><th style="width:99%;">Player</th>
                     <th style="${rndStyle}" title="Rounds this month">${compact ? "R" : "Rounds"}</th>
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     <th style="${purseStyle}" title="$1 per TGF member at month close; ties split">${compact ? "$" : "POT"}</th>
