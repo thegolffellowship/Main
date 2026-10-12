@@ -163,6 +163,10 @@ check("the board header is just the title and a right-aligned HOW IT WORKS; the 
       and "pre.insertBefore(hiw, pre.firstChild)" not in src)
 check("a player with no headshot gets no placeholder: the slot is removed and the name sits at the left like a non-winner's",
       ".pr-av:empty { display: none; }" in src and "if (fcHeadIdx) el.remove(); return; }" in src)
+check("bought in is plain white and NOT bought in a soft grey row with a BUY IN pill while buy-in is open (option A, Kerry 10/12)",
+      "const PR_BUYIN_URL" in src and "function prBuyBtn" in src and "function prBuyLegend" in src and "tr.pr-nobuy" in src
+      and 'r.enrolled ? ""' in src and 'background:#EEEEEC;' in src and src.count('class="${nobuy ? "pr-nobuy" : ""}"') + src.count('class="${nobuyF ? "pr-nobuy" : ""}"') == 2
+      and "var(--buyin-green,#bbf7d0);\"\n                     : (r.customer_id" not in src and "prBuyLegend(d.standings)" in src and '${showBuy ? "" : prBuyBtn(r)}' in src)
 check("anything a narrow row hid (handicap, money, badges) is listed under the name while the row is expanded",
       "function prSyncHidden" in src and 'class="pr-hid-line"' in src and "data-hcp=" in src and "data-payl=" in src
       and "new MutationObserver(put)" in src and ".pr-detail-row, .pr-mo-detail" in src)

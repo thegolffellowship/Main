@@ -65,6 +65,17 @@
            popup (its "This board" block); only the title and the button stay on the board. */
         #pr-preamble, #pr-preamble-toggle, #pr-phase-chip { display: none !important; }
         #pr-hiw-btn { margin-left: auto; }
+        /* NOT BOUGHT IN: soft grey row, muted text, BUY IN pill (Kerry 2026-10-12, option A) */
+        #pr-table-container tbody tr.pr-nobuy > td { color: #6B7280; }
+        #pr-table-container tr.pr-nobuy .cell-link, #pr-table-container tr.pr-nobuy .pr-nm-l { color: #6B7280; }
+        .pr-buyin { display: inline-block; flex: none; background: var(--primary, #E87C3E); color: #fff !important; border-radius: 9999px;
+            padding: 3px 11px; font: 700 10px/1.3 'Bitter', Georgia, serif; letter-spacing: .6px; text-decoration: none; white-space: nowrap; margin-left: 8px; }
+        .pr-buyin:hover { background: var(--primary-hover, #D06B2E); }
+        .pr-buy-legend { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 6px 10px;
+            background: #F8F8F8; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: #4B5563; }
+        .pr-buy-legend b { color: var(--primary, #E87C3E); font-family: 'Bitter', serif; }
+        .pr-buy-legend .sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 1px solid #D1D5DB; margin-left: 6px; }
+        .pr-buy-legend .sw.in { background: #fff; } .pr-buy-legend .sw.out { background: #EEEEEC; }
         .pr-hiw-glance { margin: 0 0 16px; padding: 12px 14px; background: #F8F8F8; border: 1px solid var(--border); border-radius: 10px; }
         .pr-hiw-glance-tiles { display: flex; gap: 28px; }
         .pr-hiw-glance .l { font: 700 9px/1 'Bitter', serif; letter-spacing: 1px; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
@@ -5533,10 +5544,13 @@
             const tiles = (inM ? tile("Bought in", `${inM[1]}<span> of ${inM[2]}</span>`, "") : "")
                 + (potM ? tile("Pot", escapeHtml(potM[0]), /final/i.test(potTxt) ? "Final &middot; paid out" : "Projected") : "");
             // The phase pill and the structure note are not repeated here: the chips and sections below already say it.
-            if (!tiles && !places) return;
+            if (!tiles && !places && !document.querySelector(".pr-buy-legend")) return;
+            const legend = document.querySelector(".pr-buy-legend")
+                ? `<div class="pr-hiw-glance-pl"><div class="l">Who is bought in</div>White rows are bought in; grey rows are not.`
+                    + (document.querySelector(".pr-buyin") ? ` Buy-in is still open: tap <b style="color:var(--primary)">BUY IN</b> on a grey row to join.` : "") + `</div>` : "";
             const html = `<div class="pr-hiw-glance"><div class="pr-hiw-glance-tiles">${tiles}</div>`
                 + (places ? `<div class="pr-hiw-glance-pl"><div class="l">Places paid</div><div class="pr-hiw-pay">${places}</div></div>` : "")
-                + `</div>`;
+                + legend + `</div>`;
             // first thing inside the sections block, so it shares the popup's own side padding
             const anchor = content.querySelector(".pr-hiw-secs");
             if (anchor) anchor.insertAdjacentHTML("afterbegin", html);
@@ -9232,6 +9246,20 @@
         if (el) el.innerHTML = "";
     }
 
+    // BOUGHT IN vs NOT (Kerry 2026-10-12, option A): bought-in rows are plain white, not-bought-in rows a soft grey with
+    // muted text and a BUY IN button while buy-in can still happen. Replaces green-for-bought-in on these boards.
+    // There is no per-contest buy-in deadline in the data, so "open" means the race is not FINAL yet.
+    const PR_BUYIN_URL = "https://thegolffellowship.com/shop/ols/products/season-contests";
+    function prBuyOpen() { return !prRaceFinal; }
+    function prBuyBtn(r) {
+        return (r && r.customer_id && !r.enrolled && prBuyOpen())
+            ? `<a class="pr-buyin" href="${PR_BUYIN_URL}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buy in to this contest">BUY IN</a>` : "";
+    }
+    function prBuyLegend(rows) {
+        if (!(rows || []).some(r => r.customer_id && !r.enrolled)) return "";
+        return `<div class="pr-buy-legend"><span class="sw in"></span>Bought in <span class="sw out"></span>Not bought in`
+            + (prBuyOpen() ? ` &middot; tap <b>BUY IN</b> to join` : "") + `</div>`;
+    }
     function prPayBadge(r) {
         return r._pay
             ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}"><span class="pr-pay-l">${prRaceFinal ? "WON" : "PROJECTED"}</span>${prFmtMoney(r._pay)}</span>`
@@ -9499,12 +9527,14 @@
         const rowHtml = r => {
             const bg = (r.customer_id && champIds.has(r.customer_id))
                      ? "background:#FDE68A;"   // champion's gold row (Kerry 2026-08-16)
-                     : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
-                     : (r.customer_id ? "" : "background:#fffbeb;");
+                     : r.enrolled ? ""
+                     : (r.customer_id ? "background:#EEEEEC;" : "background:#fffbeb;");
+            const nobuy = !r.enrolled && !!r.customer_id;
             const badge = r.enrolled
                 ? `<span style="color:#15803d;font-weight:700;" title="Bought in">&#10003;${compact ? "" : " IN"}</span>`
                 : (r.customer_id
-                    ? `<span style="color:#b91c1c;font-weight:600;" title="Not bought in">&#10007;${compact ? "" : " Not in"}</span>`
+                    ? (prBuyBtn(r) || `<span style="color:#6B7280;font-weight:600;" title="Not bought in">${compact ? "&mdash;" : "Not in"}</span>`)
+                      + (prBuyBtn(r) && !compact ? ` <span style="color:#6B7280;font-weight:600;margin-left:4px;" title="Not bought in">Not in</span>` : "")
                     : `<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">?${compact ? "" : " Unmatched"}</span>`);
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
@@ -9597,14 +9627,14 @@
                 ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
             const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
-            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
+            return `<tr class="${nobuy ? "pr-nobuy" : ""}" style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
                 <td class="pr-rk" style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
                 <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? `<span class="pr-opt">${prChapterBadge(r.player_chapter)}</span>` : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSub}</td>
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}${showBuy ? "" : prBuyBtn(r)}</div>${thruSub}</td>
                 <td class="pr-pts" style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -9706,7 +9736,7 @@
                 ${showBuy ? `<col style="width:110px">` : ""}
             </colgroup>`
             : "";
-        $("pr-table-container").innerHTML = testStrip + champStrip + pcHolder + `
+        $("pr-table-container").innerHTML = testStrip + champStrip + pcHolder + prBuyLegend(d.standings) + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 ${colgroupCup}
                 <thead>${theadHtml}</thead>
@@ -10103,8 +10133,9 @@
         const rows = d.standings.map(r => {
             const bg = (r.customer_id && fcChampIds.has(r.customer_id))
                      ? "background:#FDE68A;"   // champion's gold row (Kerry 2026-08-16)
-                     : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
-                     : (r.customer_id ? "" : "background:#fffbeb;");
+                     : r.enrolled ? ""
+                     : (r.customer_id ? "background:#EEEEEC;" : "background:#fffbeb;");
+            const nobuyF = !r.enrolled && !!r.customer_id;
             const hcp = r.handicap_index != null
                 ? ` <span class="pr-hcp" style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
@@ -10149,13 +10180,13 @@
             const chevF = expandableF
                 ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;</span>'
                 : '';
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
+            return `<tr class="${nobuyF ? "pr-nobuy" : ""}"${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td class="pr-rk" style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
                 <td class="pr-name-td"${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}</span><span class="pr-nm-chev">${chevF}</span></span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
-                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}</div>${thruSubF}</td>
+                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${prBuyBtn(r)}</div>${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
@@ -10200,7 +10231,7 @@
         const fcStrip = fcChamps.length
             ? `<div class="tgf-champ-plaque" data-race="fellowship_cup" data-cids="${fcChamps.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
             : "";
-        $("pr-table-container").innerHTML = testStripF + fcStrip + `<details class="past-champs" data-race="fellowship_cup" hidden></details>` + `
+        $("pr-table-container").innerHTML = testStripF + fcStrip + `<details class="past-champs" data-race="fellowship_cup" hidden></details>` + prBuyLegend(d.standings) + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 ${colgroupF}
                 <thead>${theadF}</thead>

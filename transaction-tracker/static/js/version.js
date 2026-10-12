@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.546.1";
+window.TGF_VERSION = "2.547.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.547.0",
+    date: "2026-10-12",
+    title: "Bought in is white, not bought in is grey with a BUY IN button",
+    changes: [
+      "Kerry 10/12: \"anyone who is bought in should be regular white so we don't have that green everywhere. Then if they're not bought in, perhaps it's a grey treatment ... explained somewhere ... AND be able to buy in immediately\" (he chose option A). On the Points Races boards and THE FELLOWSHIP CUP: a bought-in row is plain white (no more green fill); a NOT bought-in row is a soft grey with muted text and a BUY IN pill (the BUY-IN column on desktop, in the name row on a phone and on the Cup, which has no such column) that opens the season-contests shop in a new tab. A one-line legend above the table (white = bought in, grey = not bought in, tap BUY IN to join) appears whenever the board has anyone not bought in, and How It Works > the board panel says the same. The BUY IN pill shows while the race is not FINAL (there is no per-contest deadline in the data yet, so that is the stand-in). The champion's gold, money in green text and unmatched-name amber are unchanged. The Events leaderboard, Spotlight pills and badges keep their green for now."
+    ]
+  },
   {
     version: "2.546.1",
     date: "2026-10-12",
