@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.540.1";
+window.TGF_VERSION = "2.540.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.540.2",
+    date: "2026-10-12",
+    title: "Jay Horton's headshot",
+    changes: [
+      "Kerry 10/12 (Jay Horton with The Fellowship Cup, 2025): \"Use that for headshot too.\" data/player_photos/h-289.jpg is a 400x400 head-and-shoulders crop of that photo (about 32 KB), added to the repo seed set like the other headshots, so Jay's face shows on the Cup strips and in his Spotlight header instead of initials. The trophy photo itself is not published anywhere yet (the plaque shows the current year's champion only); Kerry has not chosen where past-champion photos go. No upload path, no schema. Guard: test_player_photos.py."
+    ]
+  },
   {
     version: "2.540.1",
     date: "2026-10-12",
