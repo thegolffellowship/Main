@@ -9263,15 +9263,17 @@
     // Kerry 2026-10-12: buy-in is open ONLY on the contests still live, today SA FALL NET and AUSTIN FALL NET; a
     // completed contest shows no BUY IN and no buy-in column at all. Set per board at render (prBuyOpenNow).
     let prBuyOpenNow = false;
+    function prRowShimmer(buyHtml) { return !!buyHtml && typeof window.TGF_MEMBER_ID === "number"; }
     function prBuyOpenFor(raceKey) { return /fall_net/.test(raceKey || "") && !prRaceFinal; }
     function prBuyOpen() { return prBuyOpenNow; }
     function prBuyBtn(r) {
         // PERSONAL LOGIN HOOK (Kerry 2026-10-12): once members have their own sign-in the page sets
-        // window.TGF_MEMBER_ID to the signed-in customer_id (or null when signed out). Then BUY IN shows on that
-        // person's own row only, and nowhere when signed out. Until then (undefined) it shows on every not-in row.
+        // window.TGF_MEMBER_ID to the signed-in customer_id. A SIGNED-IN member sees BUY IN on their own row only (with the
+        // shimmering border, prRowShimmer). Signed out, or before sign-in exists (undefined / null), every not-bought-in row
+        // simply shows grey with a BUY IN button and no border (Kerry: "For now, and logged out state, just show grey and
+        // BUY IN button").
         const me = window.TGF_MEMBER_ID;
-        if (me === null) return "";
-        if (me !== undefined && r && r.customer_id !== me) return "";
+        if (typeof me === "number" && r && r.customer_id !== me) return "";
         return (r && r.customer_id && !r.enrolled && prBuyOpen())
             ? `<a class="pr-buyin" href="${PR_BUYIN_URL}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buy in to this contest">BUY IN</a>` : "";
     }
@@ -9669,7 +9671,7 @@
                 ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
             const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
-            return `<tr class="${nobuy ? "pr-nobuy" : ""}${buyHtml ? " pr-buyin-row" : ""}" style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
+            return `<tr class="${nobuy ? "pr-nobuy" : ""}${prRowShimmer(buyHtml) ? " pr-buyin-row" : ""}" style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
                 <td class="pr-rk" style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
                 <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? `<span class="pr-opt">${prChapterBadge(r.player_chapter)}</span>` : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.549.2";
+window.TGF_VERSION = "2.549.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.549.3",
+    date: "2026-10-12",
+    title: "No border or shimmer until sign-in; signed out shows grey and BUY IN",
+    changes: [
+      "Kerry 10/12: \"Don't do the border and shimmer currently. Only start that when we do Username and Passwords. For now, and logged out state, just show grey and BUY IN button.\" The orange shimmering row border is switched off: it applies only when window.TGF_MEMBER_ID is a signed-in customer_id, and only on that person's own row (the only row that carries BUY IN then). Today, and for anyone signed out, every not-bought-in row on a live Fall board is just grey with a BUY IN button. This replaces the earlier plan that signed-out visitors would see no BUY IN at all."
+    ]
+  },
   {
     version: "2.549.2",
     date: "2026-10-12",
