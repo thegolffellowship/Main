@@ -83,7 +83,10 @@ db = open(os.path.join(HERE, "email_parser", "database.py")).read()
 check("get_player_spotlight attaches the record from the shared cached board",
       "_spotlight_lsc_record(customer_id, db_path)" in db and '_spotlight_shared("lsc_board"' in db)
 check("the LSC match lines fold under the record row behind the house chevron (right shut, down open) and a 1-1-1 record stays on one line",
-      '<details class="spt-lsc-wrap">' in src and "details.spt-lsc-wrap[open] > summary .spt-win-chev { transform: rotate(90deg); }" in src
+      '<details class="spt-lsc-wrap t-' in src and "details.spt-lsc-wrap[open] > summary .spt-win-chev { transform: rotate(90deg); }" in src
       and 'String(rc.text).length > 3 ? " long" : ""' in src and ".spt-stand .rk .r.long" in src and "white-space: nowrap" in src)
+check("the Spotlight LSC row is branded: Texas-navy bar, white and gold type, the player's team colour as the stripe and match-list tint",
+      "t-${esc(rc.team" in src and "details.spt-lsc-wrap.t-austin { border-left-color: #BF5700" in src
+      and "details.spt-lsc-wrap.t-sa { border-left-color: #4B6274" in src and "summary.spt-stand-lsc { background: var(--lsc-navy" in src)
 print("ALL PASS" if not F else f"FAILED: {F}")
 sys.exit(1 if F else 0)

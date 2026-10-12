@@ -103,7 +103,19 @@
         .spt-lsc-wrap > .spt-stand { border-top: none; border-left: none; }
         details.spt-lsc-wrap > summary { list-style: none; cursor: pointer; }
         details.spt-lsc-wrap > summary::-webkit-details-marker { display: none; }
-        details.spt-lsc-wrap > summary:hover { background: #FDF0E6; }
+        /* BRANDED like the Lone Star Cup page (Kerry 2026-10-12): the Texas navy bar with white and gold type, the
+           player's TEAM colour as the stripe (Austin burnt orange, San Antonio blue-grey) and a team-tinted match list. */
+        details.spt-lsc-wrap { border-left: 5px solid var(--lsc-navy, #002855); background: #fff; }
+        details.spt-lsc-wrap.t-austin { border-left-color: #BF5700; --lsc-tint: #FCF6EF; }
+        details.spt-lsc-wrap.t-sa { border-left-color: #4B6274; --lsc-tint: #EEF3F6; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc { background: var(--lsc-navy, #002855); color: #fff; border-left: none; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc:hover { background: #0A3A6B; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc .race,
+        details.spt-lsc-wrap > summary.spt-stand-lsc .rk .r { color: #fff !important; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc .rk .f { color: #A9BDD6; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc .meta { color: rgba(255,255,255,.9); }
+        details.spt-lsc-wrap > summary.spt-stand-lsc .spt-lsc-clinch { color: #F7E7A0; }
+        details.spt-lsc-wrap .spt-lsc-matches { background: var(--lsc-tint, #F5F7FC); }
         details.spt-lsc-wrap[open] > summary .spt-win-chev { transform: rotate(90deg); }
         /* a record with two dashes (1-1-1) stays on ONE line: smaller figure, a touch more room */
         .spt-stand .rk .r.long { font-size: 15px; white-space: nowrap; letter-spacing: -0.3px; }
@@ -899,7 +911,7 @@
                     // The match lines fold under the row (Kerry 2026-10-12): the house chevron points right
                     // when shut and turns down when the three match results are showing.
                     rows.push(
-                        `<details class="spt-lsc-wrap">` +
+                        `<details class="spt-lsc-wrap t-${esc(rc.team || "")}">` +
                         `<summary class="spt-stand spt-stand-lsc">` +
                         `<div class="rk"><div class="r${String(rc.text).length > 3 ? " long" : ""}">${esc(rc.text)}</div><div class="f">cup record</div></div>` +
                         `<div class="mid"><div class="race"><span class="tgf-troph star gold"></span> LONE STAR CUP</div>` +

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.544.1";
+window.TGF_VERSION = "2.544.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.544.2",
+    date: "2026-10-12",
+    title: "Spotlight: the Lone Star Cup row wears the Cup's colours",
+    changes: [
+      "Kerry 10/12: \"brand the LONE STAR CUP row with similar colors to the LSC colors on that page.\" The Spotlight's Lone Star Cup record row is now the Cup page's Texas-navy bar with white and gold type (the clinch note in gold), a thick left stripe in the player's TEAM colour (Austin burnt orange, San Antonio blue-grey, the same two as the Cup's team cards) and a match list tinted with that team's light shade."
+    ]
+  },
   {
     version: "2.544.1",
     date: "2026-10-12",
