@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.539.0";
+window.TGF_VERSION = "2.539.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.539.1",
+    date: "2026-10-12",
+    title: "Spotlight: a player's cup titles share one line, separated by a bar",
+    changes: [
+      "Kerry 10/12: when a player won both cups the header reads \"The Fellowship Cup - 2025 Champion | The Players Cup - 2024 & 2026 Champion\" on one line instead of two stacked lines. Each title stays whole when the line wraps on a phone, with the bar trailing the title before it. One title reads exactly as before. Server payload unchanged (cup_titles list); test_cup_titles.py still guards it."
+    ]
+  },
   {
     version: "2.539.0",
     date: "2026-10-12",

@@ -1267,3 +1267,5 @@ The last row of the Spotlight header card reads "The Fellowship Cup - 2026 Champ
 
 Players Cup champion photo (v2.539.0, Kerry 2026-10-12): `players_cup-2026` is in `CHAMPION_PHOTOS` (customer 31, Robert Straiton) and the Players Cup plaque (`data-race="players_cup"`) takes it by the same rule, matched to its champion's customer_id. His 400x400 headshot `data/player_photos/h-31.jpg` is a seed headshot cropped from the same photo.
 
+Titles share one line (v2.539.1, Kerry 2026-10-12): a player with both cups reads "The Fellowship Cup - 2025 Champion | The Players Cup - 2024 & 2026 Champion", one row, each title unbroken on wrap.
+
