@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.548.0";
+window.TGF_VERSION = "2.549.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.549.0",
+    date: "2026-10-12",
+    title: "Buy-in only where it is still open, shimmering row, whole-trophy crops",
+    changes: [
+      "BUY-IN ONLY WHERE OPEN (Kerry 10/12: \"Buy ins should NOT show up if the contest is completed. That whole column shouldn't show ... The only events currently still live are the SA FALL & AUSTIN FALL competitions\"). The BUY IN pill and the BUY-IN column now exist only on the two live Fall NET boards (SA FALL NET, AUSTIN FALL NET) while they are not final; every completed contest (City NET, THE FELLOWSHIP CUP, THE PLAYERS CUP, Monthly) shows no BUY IN and no BUY-IN column. The row colours stay (white = bought in, grey = not) with the legend above the table, without the 'tap BUY IN' line. \"NOT IN\" text is gone: the BUY IN pill implies it.",
+      "SHIMMERING ROW: a row that can still buy in wears an orange border that pulses (still, with a plain border, for anyone who has reduced motion switched on) to draw the eye.",
+      "PERSONAL LOGIN HOOK: when members get their own sign-in, set window.TGF_MEMBER_ID to the signed-in customer_id (null when signed out) and BUY IN appears only on that person's own row, nowhere when signed out. Until it is set (today) it shows on every not-bought-in row of a live board. The member sign-in itself stays behind the four-part hard gate (CA #731).",
+      "WHOLE-TROPHY CROPS (Kerry 10/12). The square champion badges are now cropped per photo so the whole trophy shows where the photo allows it: Gus 2026, Robert 2024 and 2026 and the three square originals show the full cup; Jay Horton 2025's original is too tall to hold his face, the whole cup and the plaque base in a square, so his crop drops most of the hat, keeps his face and the whole cup, and shows the top of the plaque."
+    ]
+  },
   {
     version: "2.548.0",
     date: "2026-10-12",

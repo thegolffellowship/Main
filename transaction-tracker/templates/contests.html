@@ -71,6 +71,14 @@
         .pr-buyin { display: inline-block; flex: none; background: var(--primary, #E87C3E); color: #fff !important; border-radius: 9999px;
             padding: 3px 11px; font: 700 10px/1.3 'Bitter', Georgia, serif; letter-spacing: .6px; text-decoration: none; white-space: nowrap; margin-left: 8px; }
         .pr-buyin:hover { background: var(--primary-hover, #D06B2E); }
+        /* the row that can still buy in wears a shimmering orange border (Kerry 2026-10-12) */
+        tr.pr-buyin-row > td { box-shadow: inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; animation: prBuyMid 2s ease-in-out infinite; }
+        tr.pr-buyin-row > td:first-child { box-shadow: inset 2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; animation-name: prBuyFirst; }
+        tr.pr-buyin-row > td:last-child { box-shadow: inset -2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; animation-name: prBuyLast; }
+        @keyframes prBuyMid { 0%, 100% { box-shadow: inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; } 50% { box-shadow: inset 0 3px 0 #FFB27A, inset 0 -3px 0 #FFB27A, inset 0 0 14px rgba(232,124,62,.28); } }
+        @keyframes prBuyFirst { 0%, 100% { box-shadow: inset 2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; } 50% { box-shadow: inset 3px 0 0 #FFB27A, inset 0 3px 0 #FFB27A, inset 0 -3px 0 #FFB27A, inset 0 0 14px rgba(232,124,62,.28); } }
+        @keyframes prBuyLast { 0%, 100% { box-shadow: inset -2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; } 50% { box-shadow: inset -3px 0 0 #FFB27A, inset 0 3px 0 #FFB27A, inset 0 -3px 0 #FFB27A, inset 0 0 14px rgba(232,124,62,.28); } }
+        @media (prefers-reduced-motion: reduce) { tr.pr-buyin-row > td { animation: none !important; } }
         .pr-buy-legend { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 6px 10px;
             background: #F8F8F8; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: #4B5563; }
         .pr-buy-legend b { color: var(--primary, #E87C3E); font-family: 'Bitter', serif; }
@@ -9250,8 +9258,18 @@
     // muted text and a BUY IN button while buy-in can still happen. Replaces green-for-bought-in on these boards.
     // There is no per-contest buy-in deadline in the data, so "open" means the race is not FINAL yet.
     const PR_BUYIN_URL = "https://thegolffellowship.com/shop/ols/products/season-contests";
-    function prBuyOpen() { return !prRaceFinal; }
+    // Kerry 2026-10-12: buy-in is open ONLY on the contests still live, today SA FALL NET and AUSTIN FALL NET; a
+    // completed contest shows no BUY IN and no buy-in column at all. Set per board at render (prBuyOpenNow).
+    let prBuyOpenNow = false;
+    function prBuyOpenFor(raceKey) { return /fall_net/.test(raceKey || "") && !prRaceFinal; }
+    function prBuyOpen() { return prBuyOpenNow; }
     function prBuyBtn(r) {
+        // PERSONAL LOGIN HOOK (Kerry 2026-10-12): once members have their own sign-in the page sets
+        // window.TGF_MEMBER_ID to the signed-in customer_id (or null when signed out). Then BUY IN shows on that
+        // person's own row only, and nowhere when signed out. Until then (undefined) it shows on every not-in row.
+        const me = window.TGF_MEMBER_ID;
+        if (me === null) return "";
+        if (me !== undefined && r && r.customer_id !== me) return "";
         return (r && r.customer_id && !r.enrolled && prBuyOpen())
             ? `<a class="pr-buyin" href="${PR_BUYIN_URL}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buy in to this contest">BUY IN</a>` : "";
     }
@@ -9355,6 +9373,7 @@
     function renderPointsRace(d) {
         prLastData = d;   // applyRole re-renders so staff get the diagnostics line
         prRaceFinal = !!d.race_final;   // WON vs PROJECTED (admin dial)
+        prBuyOpenNow = prBuyOpenFor(d.race_key);
         prResetOfficial = !!d.reset_official;
         // just the contest name — big and clean (Kerry, 2026-07-10)
         $("pr-standings-title").textContent = d.label;
@@ -9429,7 +9448,7 @@
         // Phones drop the Buy-in column (the green row already says who is
         // in) and, outside live mode, the Rounds column too (Kerry
         // 2026-08-01) — the table earns back two columns of thumb room.
-        const showBuy = !compact;
+        const showBuy = !compact && prBuyOpenNow;
         const showRounds = !compact;   // season view only; live swaps it for THRU
         // Once the race is DECLARED final the THRU column is all dashes —
         // drop it, and the freed width lets the WON badges ride the
@@ -9530,11 +9549,11 @@
                      : r.enrolled ? ""
                      : (r.customer_id ? "background:#EEEEEC;" : "background:#fffbeb;");
             const nobuy = !r.enrolled && !!r.customer_id;
+            const buyHtml = prBuyBtn(r);   // "NOT IN" is implied by the BUY IN badge (Kerry 2026-10-12)
             const badge = r.enrolled
                 ? `<span style="color:#15803d;font-weight:700;" title="Bought in">&#10003;${compact ? "" : " IN"}</span>`
                 : (r.customer_id
-                    ? (prBuyBtn(r) || `<span style="color:#6B7280;font-weight:600;" title="Not bought in">${compact ? "&mdash;" : "Not in"}</span>`)
-                      + (prBuyBtn(r) && !compact ? ` <span style="color:#6B7280;font-weight:600;margin-left:4px;" title="Not bought in">Not in</span>` : "")
+                    ? buyHtml
                     : `<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">?${compact ? "" : " Unmatched"}</span>`);
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
@@ -9627,14 +9646,14 @@
                 ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
             const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
-            return `<tr class="${nobuy ? "pr-nobuy" : ""}" style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
+            return `<tr class="${nobuy ? "pr-nobuy" : ""}${buyHtml ? " pr-buyin-row" : ""}" style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
                 <td class="pr-rk" style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
                 <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? `<span class="pr-opt">${prChapterBadge(r.player_chapter)}</span>` : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}${showBuy ? "" : prBuyBtn(r)}</div>${thruSub}</td>
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}${showBuy ? "" : buyHtml}</div>${thruSub}</td>
                 <td class="pr-pts" style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
@@ -10067,6 +10086,7 @@
         // money flips PROJECTED -> WON and the champion wears gold
         // (Kerry, championship Sunday 2026-08-16: "champions are crowned")
         prRaceFinal = !!d.race_final;
+        prBuyOpenNow = false;   // the Cup is decided at the Championship: no buy-in here
         prResetOfficial = !!d.reset_official;
         $("pr-standings-title").textContent = "THE FELLOWSHIP CUP";
         const fcChamps = (prRaceFinal && d.champions) ? d.champions : [];
