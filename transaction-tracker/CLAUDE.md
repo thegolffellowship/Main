@@ -571,7 +571,7 @@ headers, and a payout **category color map**. **Typography rule
 (RATIFIED, Kerry 2026-07-09, mailbox #44; EXCEPTION Kerry 2026-10-12: names and money in every STANDINGS are Bitter, money larger and right-aligned on the name row): Bitter serif only for
 headings, nav/CTA labels, eyebrows, and large stat numerals; dense data
 (table cells, list rows, numeric columns) is system sans with
-tabular-nums — be judicious with Bitter.** `templates/tgf.html` is the
+tabular-nums — be judicious with Bitter.** **Every nav link and every button is Bitter, app-wide (Kerry 2026-10-13: "All nav bar links should be bitters always. Buttons too")**: one rule at the top of `.btn` in dashboard.css covers `button`, `.btn`, `.tab-nav a`, `.sub-tab`, `.top-tab`, `.contest-cta`. `templates/tgf.html` is the
 Phase 1 reference implementation (dark nav, sub-tab pill convention, and
 the GOLFERS "Command Ledger": dark leaderboard rail + golfer winnings
 detail with collapsible chapter bands). Tokens live in `dashboard.css`

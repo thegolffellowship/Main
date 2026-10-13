@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.557.1";
+window.TGF_VERSION = "2.558.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.558.0",
+    date: "2026-10-13",
+    title: "SEASON CONTESTS: Match Play joins the race picker; black column headers; Bitter on every button",
+    changes: [
+      "Kerry 10/13: \"Let's roll MATCH PLAY for each city into the POINTS RACES tab, but change POINTS RACES to SEASON CONTESTS.\" The tab now reads SEASON CONTESTS. Each chapter's race menu lists its Match Play (Austin Match Play, San Antonio Match Play, both FINAL for 2026). Picking one shows the Match Play board under the same chapter and race pickers, with one HOW IT WORKS button, and Match Play's own chapter control hidden (season stays). The MATCH PLAY tab is gone from the bar. Its section and every #tab=mp link still work, and they now land inside SEASON CONTESTS. The address carries ?race=austin-match-play-2026 like any other race.",
+      "Kerry 10/13: \"Can you make the MONTHLY buttons connected toggles rather than separate buttons, to save space?\" The month picker is one connected segmented control, and months are always 3 letters (MAR, APR ... OCT).",
+      "Kerry 10/13: \"Can we make the column headers our TGF Black with white text and rounded top corners? And reduce vertical padding.\" Standings column headers are a #1B1B1B band with white Bitter labels, 8px rounded top corners and about half the old height. The (PROJECTED) eyebrow stays orange.",
+      "Kerry 10/13: \"maybe Show All Players could fit on same line as Past Champions.\" On the Fellowship Cup and Players Cup boards they now share one row.",
+      "Kerry 10/13: \"All nav bar links should be bitters always. Buttons too.\" One app-wide rule in dashboard.css makes every button, .btn, tab link and the ENTER EVENTS & CONTESTS banner Bitter.",
+      "Kerry 10/13, on the phone view: \"This is too many rows above the leaderboard. How can you condense or combine?\" On a phone the area above the board is down from seven rows to two. Row 1 holds the chapter (short name: TGF / Austin / SA), the race picker, and HOW IT WORKS as an (i) disc. The FINAL tag is dropped there, because the champion banner or the LIVE pill carries the status. Row 2 holds the LIVE pill, Past Champions and Show All Players. On Monthly the month strip fits the width and the 'October · In progress' pill folds into the OCT dot.",
+    ],
+  },
   {
     version: "2.557.1",
     date: "2026-10-13",

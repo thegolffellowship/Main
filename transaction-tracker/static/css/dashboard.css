@@ -135,6 +135,12 @@ header h1 {
 }
 
 /* ---- Buttons ---- */
+/* BITTER ON EVERY NAV LINK AND BUTTON, app-wide (Kerry 2026-10-13: "All nav bar links should be bitters always.
+   Buttons too. Like the Monthly taps"). Typography rule #44 already named nav/CTA labels as Bitter; this makes it the
+   default for every <button>, .btn and tab link instead of page by page. Data cells stay sans. */
+button, .btn, input[type="button"], input[type="submit"], .tab-nav a, .sub-tab, .top-tab, .contest-cta {
+    font-family: 'Bitter', Georgia, serif;
+}
 .btn {
     display: inline-flex;
     align-items: center;
