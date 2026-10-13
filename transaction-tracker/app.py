@@ -1748,6 +1748,9 @@ def start_scheduler():
     # Disable with AUTO_GG_SYNC=0.
     def auto_gg_results_sync_job():
         from email_parser.database import auto_gg_results_sync
+        from email_parser.gg_untether import gg_auto_jobs_on
+        if not gg_auto_jobs_on():
+            return          # Kerry 10/13: not needed anymore (gg_auto_jobs)
         try:
             res = auto_gg_results_sync()
             rec = (res.get("payouts") or {}).get("recorded") or []
@@ -1777,6 +1780,9 @@ def start_scheduler():
     # team-board fallback data stands. Disable with AUTO_PAIRINGS_GRAB=0.
     def auto_pairings_grab_job():
         from email_parser.database import import_gg_teesheets_all
+        from email_parser.gg_untether import gg_auto_jobs_on
+        if not gg_auto_jobs_on():
+            return          # Kerry 10/13: not needed anymore (gg_auto_jobs)
         for portal in ("sa", "austin"):
             try:
                 res = import_gg_teesheets_all(portal, apply=True,

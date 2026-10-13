@@ -98,6 +98,22 @@ POINTS_PAUSED = ("Golf Genius points intake is OFF (Kerry 10/13: \"you'll need t
                  "saved snapshot; set app setting gg_points_intake=on only on Kerry's word.")
 
 
+# The automatic Golf Genius JOBS (hourly results check, nightly tee-sheet
+# grab) are OFF unless app setting gg_auto_jobs = "on" (Kerry 10/13: "The
+# hourly results check is not needed anymore" / "Tee sheet grab - won't be
+# needed for anything else now"). Manual bridges still run on purpose.
+JOBS_SETTING = "gg_auto_jobs"
+
+
+def gg_auto_jobs_on(db_path=None) -> bool:
+    try:
+        from email_parser.database import get_app_setting
+        v = (get_app_setting(JOBS_SETTING, db_path=db_path) or "").strip().lower()
+    except Exception:
+        v = ""
+    return v == "on"
+
+
 def gg_points_intake_on(db_path=None) -> bool:
     try:
         from email_parser.database import get_app_setting

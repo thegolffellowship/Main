@@ -9319,7 +9319,7 @@ def _champ_points_fill_rows(race_key: str, fill_race: str, label: str,
 
 
 def fetch_champ_points(race_key: str, max_age: float = 45.0,
-                       db_path: str | Path = DB_PATH) -> dict:
+                       db_path: str | Path = DB_PATH, live: bool = False) -> dict:
     """LIVE championship points for one race, straight off the GG board.
 
     In-memory cached `max_age` seconds so a minute-polling scoreboard with
@@ -9327,6 +9327,19 @@ def fetch_champ_points(race_key: str, max_age: float = 45.0,
     returns the last good payload (marked stale) rather than nothing, so
     the leaderboard does not blank out mid-round."""
     import time as _t
+    # FROZEN (Kerry 10/13: "All needs to be hardened/locked on our side to
+    # not rely on Golf Genius for anything related to 2026 without losing
+    # ANY results"). Once a race's board has been frozen (scoring-gg-
+    # freeze-champ: the exact payload members saw, captured while GG was
+    # still reachable) and GG points intake is off, the frozen copy IS the
+    # board — no GG call, nothing recomputed, no number moves.
+    if not live:
+        from email_parser.gg_untether import gg_points_intake_on
+        if not gg_points_intake_on(db_path):
+            _fz = load_gg_snapshot(f"frozen_champ_points:{race_key}", db_path)
+            if _fz:
+                _fz.pop("fetched_at", None)
+                return _fz
     from golf_genius_sync import fetch_public_page, parse_page_structure
 
     boards = champ_points_boards(db_path=db_path)
@@ -10273,7 +10286,8 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                             max_age: float = 45.0,
                             db_path: str | Path = DB_PATH,
                             board_label: "str | None" = None,
-                            roster_race: "str | None" = None) -> dict:
+                            roster_race: "str | None" = None,
+                            live: bool = False) -> dict:
     """One player's LIVE championship hole-by-hole card, off GG.
 
     Per-hole gross + handicap dots come from the player's scorecard
@@ -10284,6 +10298,19 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
     seconds per (race, player); a GG failure re-serves the last good card
     marked stale, exactly like fetch_champ_points."""
     import time as _t
+    # FROZEN cards (Kerry 10/13, see fetch_champ_points): served from the
+    # capture once intake is off and the race's cards were frozen.
+    if not live:
+        from email_parser.gg_untether import gg_points_intake_on
+        if not gg_points_intake_on(db_path):
+            _fz = load_gg_snapshot(f"frozen_champ_cards:{race_key}", db_path)
+            if _fz:
+                _k = f"{int(customer_id)}|{board_label or ''}|{roster_race or ''}"
+                card = (_fz.get("cards") or {}).get(_k)
+                if card:
+                    return card
+                return {"race": race_key, "configured": True, "holes": [],
+                        "error": "not on the championship board (frozen 2026 record)"}
     from urllib.parse import urlparse
     from golf_genius_sync import (fetch_public_page, parse_scorecard_details,
                                   parse_tee_block, _unwrap_js_string,
@@ -44087,6 +44114,12 @@ def cmp_fetch_live_match(chapter: str, player_a: str, player_b: str,
     60s collapse to one GG walk. Never writes."""
     import time as _t
     import re as _re
+    # 2026 City Match Play is over and every match's detail is stored
+    # (cmp_*.gg_match_detail); with GG intake off nothing polls GG live.
+    from email_parser.gg_untether import gg_points_intake_on
+    if not gg_points_intake_on(db_path):
+        return {"error": "live Golf Genius polling is off (the stored match detail is the record)",
+                "holes": []}
     from urllib.parse import urlparse
     from golf_genius_sync import (fetch_public_page, parse_page_structure,
                                   parse_tournament_aggregates)
@@ -67937,7 +67970,14 @@ def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
     apply=True REPLACES the matched event's pairing_history rows
     (source 'gg_teamnet'). Rode pairs come from board seat order
     (1&2 / 3&4 — Kerry's cart-sequence ruling; for Austin's 2-seat
-    CART rows the pair rode by definition)."""
+    CART rows the pair rode by definition).
+
+    RETIRED (Kerry 10/13: "Definitely remove the Team net import"): it
+    could rewrite pairing history from a GG board. Pairing history now
+    comes from the score-entry groups (scoring-pairings-entry)."""
+    return {"error": "retired: the GG Team Net import is removed (Kerry 10/13); "
+                     "pairing history comes from scoring-pairings-entry",
+            "retired": True}
     from golf_genius_sync import fetch_public_page, parse_page_structure
     widget = _gg_results_widget(portal)
     joiner = "&" if "?" in widget else "?"

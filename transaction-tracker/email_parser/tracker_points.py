@@ -332,7 +332,8 @@ def member_detail(race_key: str, card: str, db_path=None) -> dict | None:
     return None
 
 
-def monthly_best(month_key: str, db_path=None, tracker_lines: list | None = None) -> dict:
+def monthly_best(month_key: str, db_path=None, tracker_lines: list | None = None,
+                 cards: dict | None = None) -> dict:
     """One month's Monthly Points `best` dict (TGF-wide, every point in the
     month, members only) for `_monthly_month_entry`."""
     if tracker_lines is None:
@@ -344,7 +345,7 @@ def monthly_best(month_key: str, db_path=None, tracker_lines: list | None = None
         b = best.setdefault(ln["customer_id"], {
             "player_name": ln["player_name"], "customer_id": ln["customer_id"],
             "chapter": ln["chapter"], "rounds": 0, "points": 0.0,
-            "member_card_id": None, "_events": set()})
+            "member_card_id": (cards or {}).get(ln["customer_id"]), "_events": set()})
         b["points"] = round(b["points"] + ln["points"], 2)
         b["_events"].add(ln["event_id"])
         b["rounds"] = len(b["_events"])
@@ -402,12 +403,21 @@ def rebuild_monthly(db_path=None, apply: bool = False, tracker_lines: list | Non
         if mth in _MONTHLY_ACTIVE:
             keys.append(f"{y:04d}-{mth:02d}")
         y, mth = (y + 1, 1) if mth == 12 else (y, mth + 1)
+    # Each monthly row carries the player's Fall-race card so its row
+    # expansion can show the month's points lines (Kerry 10/13: "The event
+    # scoring records/points details aren't showing for October").
+    cards: dict = {}
+    for rk in TRACKER_RACES:
+        for r in build_race(rk, db_path=db_path, tracker_lines=lines)["rows"]:
+            if r["customer_id"] is not None and r["member_card_id"]:
+                cards.setdefault(r["customer_id"], r["member_card_id"])
     snap = db.load_gg_snapshot("monthly_points", db_path) or {"months": [], "errors": []}
     snap.pop("fetched_at", None)
     months = [m for m in snap.get("months") or [] if m.get("month") not in keys]
     with db._connect(db_path) as conn:
         for k in keys:
-            entry = db._monthly_month_entry(conn, k, monthly_best(k, tracker_lines=lines))
+            entry = db._monthly_month_entry(conn, k, monthly_best(k, tracker_lines=lines,
+                                                                  cards=cards))
             entry["source"] = "tracker"
             months.append(entry)
             out[k] = [(s["rank_label"], s["player_name"], s["points"])

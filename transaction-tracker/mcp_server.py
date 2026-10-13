@@ -4220,6 +4220,22 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _d["best_n_total_of_parsed"] = (db._best_n_total(_d["parsed_events"], _race["best_n"])
                                             if _race.get("best_n") else None)
             return json.dumps(_d, indent=2, default=str)
+        if cmd == "scoring-gg-freeze-champ":
+            # "<race>[|apply]" freezes the championship board members see now;
+            # "<race>|cards[|<start>]" captures every player's card, chunked
+            # (Kerry 10/13: lock 2026 on our side). See email_parser/gg_freeze.py.
+            from email_parser import gg_freeze as _gf
+            parts = [x.strip() for x in (arg or "").split("|")]
+            race = parts[0]
+            if len(parts) > 1 and parts[1] == "cards":
+                st = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+                res = _gf.freeze_cards(race, start=st)
+                _audit("scoring-gg-freeze-champ", f"{race} cards from {st}")
+            else:
+                res = _gf.freeze_points(race, apply=(len(parts) > 1 and parts[1] == "apply"))
+                if res.get("frozen"):
+                    _audit("scoring-gg-freeze-champ", f"{race} points")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-tracker-points":
             # "[apply]" — TRACKER POINTS STANDINGS (Kerry 10/13): rebuild the
             # Fall races and the Tracker's Monthly months from GG's frozen

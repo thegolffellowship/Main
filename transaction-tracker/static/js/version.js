@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.560.0";
+window.TGF_VERSION = "2.561.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.561.0",
+    date: "2026-10-13",
+    title: "2026 locked on our side: championship boards and cards frozen, Golf Genius jobs off, October points expand",
+    changes: [
+      "Kerry 10/13: \"All needs to be hardened/locked on our side to not rely on Golf Genius for anything related to 2026 without losing ANY results.\" The Fellowship Cup and Players Cup boards still added the TGF Championship's points read live off Golf Genius on every open (Leaderboard, Fellowship Cup, Spotlight, Lone Star Cup projection), and each row's championship card was read live too. New email_parser/gg_freeze.py captures EXACTLY what members see now (the full board payload and every player's card, per round) into the database, and those copies are served from then on with no Golf Genius call. The copy saved back in August was deliberately NOT used: it gives Jeff Young 60 Players Cup championship points where the board shows 59, which would flip the champion from Robert Straiton. A freeze is refused if the live board is empty or stale. Bridge scoring-gg-freeze-champ.",
+      "Kerry 10/13: \"The hourly results check is not needed anymore\" / \"Tee sheet grab - won't be needed\" / \"Definitely remove the Team net import\". Both automatic Golf Genius jobs now do nothing unless app setting gg_auto_jobs = on. The GG Team Net import is retired; pairing history comes from the score-entry groups. Live City Match Play polling stops: the season is over and every match's detail is stored. The captured per-event points ledger, the only copy of Golf Genius's answer key once it is gone, is now in the nightly file backup.",
+      "Kerry 10/13: \"The event scoring records/points details aren't showing for October.\" Monthly rows built by the Tracker had no card, so their row expansion asked for nothing. Each row now carries the player's Fall-race card, and the expansion shows the month's points lines and scorecards. Guard: test_gg_hardened_2026.py.",
+    ],
+  },
   {
     version: "2.560.0",
     date: "2026-10-13",

@@ -851,6 +851,26 @@ The blind test matched GG's own boards on every player but the ruled Baker
   from the newest captured ledger.
 - Bridge `scoring-tracker-points[:apply]` (dry run by default).
 
+**2026 is locked on our side (Kerry 2026-10-13: "All needs to be hardened/locked on
+our side to not rely on Golf Genius for anything related to 2026 without losing ANY
+results").**
+- **Championship boards:** the Fellowship Cup / Players Cup championship boards and
+  every player's championship card are FROZEN exactly as members saw them
+  (`email_parser/gg_freeze.py`, `gg_data_snapshots` keys
+  `frozen_champ_points:<race>` / `frozen_champ_cards:<race>`, bridge
+  `scoring-gg-freeze-champ`).
+- **How the freeze is served:** `fetch_champ_points` / `fetch_champ_player_card`
+  serve the freeze while intake is off. They never serve the older
+  `gg_champ_final_board_*` copy, which differs by a point for Jeff Young and would
+  flip the Players Cup champion.
+- **Jobs off:** the hourly results check and the nightly tee-sheet grab do nothing
+  unless app setting `gg_auto_jobs` = `on`.
+- **Retired / stopped:** the GG Team Net import is retired, and live City Match
+  Play polling stops with intake off.
+- **Backup:** the captured points ledger (`gg_points_ledger/`) is in the nightly
+  file backup.
+- Guard `test_gg_hardened_2026.py`.
+
 ## No-push window during live events (CA #829, 2026-09-28, standing rule)
 
 Every push to `main` restarts the Tracker and drops requests in flight
