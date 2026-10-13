@@ -5730,7 +5730,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                  for f, b in split_print_pack(built, only=COURSE_FILE_PARTS)]}
                 if len(parts) > 2 and parts[2].lower() == "send":
                     db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)
-                    out["send"] = send_print_pack_files(built, to_address=(parts[3] if len(parts) > 3 else None))
+                    if len(parts) > 3 and parts[3].lower() == "course":
+                        # |files|send|course: straight to the course contact (Kerry 10/13)
+                        from email_parser.print_pack import send_course_files
+                        out["send"] = send_course_files(built)
+                    else:
+                        out["send"] = send_print_pack_files(built, to_address=(parts[3] if len(parts) > 3 else None))
                 return json.dumps(out, indent=2, default=str)
             built = build_print_pack_for_event(int(parts[0]))
             if not built:
@@ -6540,6 +6545,20 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if isinstance(_out.get("page_size"), int) and isinstance(_out.get("page_count"), int):
                 _out["pages_bytes"] = _out["page_size"] * _out["page_count"]
             return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-course-contact":
+            # "" lists every course print contact; "<course_id>" reads one;
+            # "<course_id>|<email[, email]>|apply" saves it ("" clears).
+            # Where Course Files go (Kerry 10/13: "send straight to course contact").
+            from email_parser.print_pack import course_print_contacts, set_course_print_contact
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0]:
+                return json.dumps(course_print_contacts(), indent=2)
+            if len(_p) < 3 or _p[2].lower() != "apply":
+                return json.dumps({"course_id": int(_p[0]), "contact": course_print_contacts().get(_p[0]),
+                                   "dry_run": len(_p) > 1, "would_set": _p[1] if len(_p) > 1 else None})
+            res = set_course_print_contact(int(_p[0]), _p[1])
+            db.log_agent_action("mcp-claude", "course-print-contact", f"course {_p[0]}: {res}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-role-flags":
             # The live AMB / CAPT / BACK chips (#1090-3). Read-only.
             from email_parser.cos_reads import role_flags as _rf

@@ -2998,6 +2998,15 @@ emailed to me."
   PAIRINGS tab's **Course Files** button, `POST /api/events/<id>/course-files/send`)
   carries only `COURSE_FILE_PARTS`: Starter Sheet, Cart Signs, Scorecards,
   Proximity, Rules of Play. Games & Payouts and Divisions & Flights are left out.
+- **Straight to the course contact** (v2.556.1, Kerry 10/13: "Set it up to send
+  straight to course contact"). Course Files goes To the course's print contact,
+  with `print_pack_recipient` (Kerry, plus the chapter extras) on CC.
+  The contact is kept per course in app setting `course_print_contacts`
+  (`{"<course_id>": "a@x, b@y"}`; `print_pack.set_course_print_contact`, which
+  validates the addresses and the course). With no contact on file the route
+  answers 409 `no_contact`, and the button prompts for the address and saves it
+  (`/api/courses/<id>/print-contact`). Bridges: `scoring-course-contact`, and
+  `scoring-print-pack-pdf:<id>|files|send|course`.
 - **Deploy:** `nixpacks.toml` installs `chromium` from Nix beside
   Python (`nixPkgs`), the WeasyPrint libraries via `nixLibs` (apt libs
   are invisible to the Nix Python — "cannot load library gobject-2.0-0"

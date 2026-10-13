@@ -400,6 +400,78 @@ def print_pack_recipient(ev: dict | None = None, db_path=None) -> str | None:
     return ", ".join(addrs) or None
 
 
+# THE COURSE CONTACT (Kerry 2026-10-13: "Set it up to send straight to
+# course contact"). Per COURSE, keyed by course_id: app setting
+# `course_print_contacts` = {"<course_id>": "addr[, addr]"}. The Course
+# Files email goes To the course contact with Kerry's pack recipients on
+# CC; an event whose course has no contact on file is refused, never sent
+# to a guessed address.
+COURSE_CONTACTS_KEY = "course_print_contacts"
+_EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[A-Za-z]{2,}$")
+
+
+def course_print_contacts(db_path=None) -> dict:
+    import json
+    from email_parser import database as db
+    try:
+        raw = json.loads(db.get_app_setting(COURSE_CONTACTS_KEY, db_path) or "{}")
+    except (ValueError, TypeError):
+        return {}
+    return {str(k): str(v) for k, v in (raw or {}).items() if v}
+
+
+def _event_course_id(ev: dict | None, db_path=None) -> int | None:
+    if not ev:
+        return None
+    if ev.get("course_id"):
+        return int(ev["course_id"])
+    from email_parser import database as db
+    with db._connect(db_path) as conn:
+        row = conn.execute("SELECT course_id FROM events WHERE id = ?", (ev.get("id"),)).fetchone()
+    return int(row["course_id"]) if row and row["course_id"] else None
+
+
+def course_contact_for_event(ev: dict | None, db_path=None) -> str | None:
+    cid = _event_course_id(ev, db_path)
+    return course_print_contacts(db_path).get(str(cid)) if cid else None
+
+
+def set_course_print_contact(course_id: int, addresses: str, db_path=None) -> dict:
+    """Save (or clear, with "") one course's print contact."""
+    import json
+    from email_parser import database as db
+    addrs = [a.strip() for a in re.split(r"[,;\s]+", addresses or "") if a.strip()]
+    bad = [a for a in addrs if not _EMAIL_RE.match(a)]
+    if bad:
+        return {"ok": False, "error": f"not an email address: {', '.join(bad)}"}
+    with db._connect(db_path) as conn:
+        row = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?",
+                           (int(course_id),)).fetchone()
+    if not row:
+        return {"ok": False, "error": f"course {course_id} not found"}
+    cur = course_print_contacts(db_path)
+    if addrs:
+        cur[str(int(course_id))] = ", ".join(addrs)
+    else:
+        cur.pop(str(int(course_id)), None)
+    db.set_app_setting(COURSE_CONTACTS_KEY, json.dumps(cur, sort_keys=True), db_path=db_path)
+    return {"ok": True, "course_id": int(course_id), "course": row["name"],
+            "contact": cur.get(str(int(course_id)))}
+
+
+def send_course_files(built: dict, db_path=None) -> dict:
+    """Course Files straight to the course contact, Kerry on CC."""
+    ev = built.get("event") or {}
+    to = course_contact_for_event(ev, db_path)
+    cid = _event_course_id(ev, db_path)
+    if not to:
+        return {"sent": False, "no_contact": True, "course_id": cid, "course": ev.get("course"),
+                "why": f"no course contact on file for {ev.get('course') or 'this course'}"}
+    return send_print_pack_files(built, to_address=to, db_path=db_path,
+                                 cc_address=print_pack_recipient(ev, db_path=db_path),
+                                 for_course=True)
+
+
 def _esc(v) -> str:
     return html_mod.escape("" if v is None else str(v), quote=True)
 
@@ -533,7 +605,8 @@ def split_print_pack(built: dict, only=None) -> list[tuple[str, bytes]]:
 
 
 def send_print_pack_files(built: dict, to_address: str | None = None, db_path=None,
-                          files: list | None = None) -> dict:
+                          files: list | None = None, cc_address: str | None = None,
+                          for_course: bool = False) -> dict:
     """Mail every report of a built pack as its OWN PDF attachment, one
     email. Does not touch the evening-before pack's sent hash. ``files``
     ([(name, bytes)]) sends those instead of splitting a bound pack."""
@@ -547,16 +620,26 @@ def send_print_pack_files(built: dict, to_address: str | None = None, db_path=No
         return {"sent": False, "why": "mail credentials or recipient not set", "files": listing}
     ev = built["event"]
     rows = "".join(f"<li>{_esc(f)}</li>" for f, _ in files)
-    html = (f'<p style="margin:0 0 1em;">Print files for <b>{_esc(ev.get("item_name"))}</b>, '
-            f'{_esc(ev.get("event_date"))}: one PDF per report, ready to forward to the course.</p>'
-            f'<ul style="margin:0 0 1em;">{rows}</ul>')
+    if for_course:
+        html = (f'<p style="margin:0 0 1em;">Hello,</p>'
+                f'<p style="margin:0 0 1em;">Attached are the print files for The Golf Fellowship\'s '
+                f'event at {_esc(ev.get("course") or "your course")} on {_esc(ev.get("event_date"))}, '
+                f'one PDF per sheet. Could you please print them for us before we arrive?</p>'
+                f'<ul style="margin:0 0 1em;">{rows}</ul>'
+                f'<p style="margin:0 0 1em;">Thank you!<br>The Golf Fellowship</p>')
+    else:
+        html = (f'<p style="margin:0 0 1em;">Print files for <b>{_esc(ev.get("item_name"))}</b>, '
+                f'{_esc(ev.get("event_date"))}: one PDF per report, ready to forward to the course.</p>'
+                f'<ul style="margin:0 0 1em;">{rows}</ul>')
     ok = send_mail_graph(tenant_id=creds["AZURE_TENANT_ID"], client_id=creds["AZURE_CLIENT_ID"],
                          client_secret=creds["AZURE_CLIENT_SECRET"],
                          from_address=creds["EMAIL_ADDRESS"], to_address=to_address,
-                         subject=f"Print files — {ev.get('item_name')} — {ev.get('event_date')}",
-                         html_body=html,
+                         subject=(f"The Golf Fellowship print files — {ev.get('course') or ''} — {ev.get('event_date')}"
+                                  if for_course else
+                                  f"Print files — {ev.get('item_name')} — {ev.get('event_date')}"),
+                         html_body=html, cc_address=cc_address or None,
                          attachments=[(f, b, "application/pdf") for f, b in files])
-    return {"sent": bool(ok), "to": to_address, "files": listing}
+    return {"sent": bool(ok), "to": to_address, "cc": cc_address, "files": listing}
 
 
 def send_event_print_pack(built: dict, to_address: str | None = None,

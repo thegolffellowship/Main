@@ -73,6 +73,36 @@ ev_src = open(os.path.join(HERE, "templates", "events.html"), encoding="utf-8").
 check("Course Files button + route", "sendCourseFiles(" in ev_src and
       '"/api/events/<int:event_id>/course-files/send"' in open(os.path.join(HERE, "app.py"), encoding="utf-8").read())
 
+print("straight to the course contact (Kerry 10/13)")
+import tempfile                                               # noqa: E402
+from email_parser import database as db                       # noqa: E402
+TMP = tempfile.mkdtemp(); DB = os.path.join(TMP, "t.db")
+db.init_db(DB)
+with db._connect(DB) as c:
+    c.execute("INSERT INTO courses (name) VALUES ('The Quarry Golf Club')")
+    qid = c.execute("SELECT course_id FROM courses WHERE name='The Quarry Golf Club'").fetchone()[0]
+    c.commit()
+check("no contact: nothing to send to", pp.course_contact_for_event({"id": 1, "course_id": qid}, db_path=DB) is None)
+check("a bad address is refused", not pp.set_course_print_contact(qid, "not-an-email", db_path=DB)["ok"])
+check("an unknown course is refused", not pp.set_course_print_contact(999999, "a@b.com", db_path=DB)["ok"])
+r = pp.set_course_print_contact(qid, "proshop@quarry.com; events@quarry.com", db_path=DB)
+check("saved per course_id", r["ok"] and r["contact"] == "proshop@quarry.com, events@quarry.com", r)
+check("the event resolves its course's contact",
+      pp.course_contact_for_event({"id": 1, "course_id": qid}, db_path=DB) == "proshop@quarry.com, events@quarry.com")
+_sent = {}
+_orig = pp.send_print_pack_files
+pp.send_print_pack_files = lambda b, **k: _sent.update(k) or {"sent": True, "to": k.get("to_address")}
+os.environ.setdefault("PRINT_PACK_EMAIL_TO", "kerry@thegolffellowship.com")
+res = pp.send_course_files({"event": {"id": 1, "course_id": qid, "chapter": "San Antonio"}}, db_path=DB)
+check("To the course contact, Kerry on CC, course wording",
+      _sent.get("to_address") == "proshop@quarry.com, events@quarry.com"
+      and "kerry@thegolffellowship.com" in (_sent.get("cc_address") or "") and _sent.get("for_course") is True, _sent)
+_sent.clear()
+res = pp.send_course_files({"event": {"id": 2, "course_id": None, "course": "Nowhere"}}, db_path=DB)
+check("no contact: refused, nothing sent", res.get("no_contact") and not _sent, res)
+pp.send_print_pack_files = _orig
+check("clearing the contact", pp.set_course_print_contact(qid, "", db_path=DB)["contact"] is None)
+
 src = open("mcp_server.py", encoding="utf-8").read()
 check("the bridge takes |files and builds with the scorecards forced in",
       'parts[1].lower() == "files"' in src and "force_scorecards=True" in src)

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.556.0";
+window.TGF_VERSION = "2.556.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.556.1",
+    date: "2026-10-13",
+    title: "Course Files go straight to the course contact",
+    changes: [
+      "Kerry 10/13: \"Set it up to send straight to course contact.\" Course Files now emails the course's print contact directly, with Kerry's print-pack recipients on CC: Starter Sheet, Cart Signs, Scorecards, Proximity and Rules of Play, one PDF each, with a short note asking the course to print them. The contact is kept per course (by course_id) in app setting course_print_contacts. The first time a course has no contact, the button asks for the email address and saves it to that course. Nothing is ever sent to a guessed address. Route /api/courses/<id>/print-contact; bridge scoring-course-contact:<course_id>|<email>|apply, and scoring-print-pack-pdf:<id>|files|send|course sends it.",
+    ],
+  },
   {
     version: "2.556.0",
     date: "2026-10-13",
