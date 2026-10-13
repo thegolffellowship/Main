@@ -27,8 +27,10 @@ check("the toggle swaps the label through the one helper", /hint\.innerHTML = mp
 const css = src.match(/@media \(max-width: 560px\) \{\s*\/\* phone: "OPEN"[\s\S]*?\n        \}/);
 check("phone rule at the ONE breakpoint hides the long words, shows the short",
       !!css && /\.mp-hint-long \{ display: none; \}/.test(css[0]) && /\.mp-hint-short \{ display: inline; \}/.test(css[0]));
-check("phone: dots and OPEN share row 1, a start-hole note drops to row 2",
-      !!css && /grid-template-columns: 1fr auto/.test(css[0]) && /mp-illus-note \{ grid-row: 2/.test(css[0]));
+check("phone: note, dots and OPEN share ONE line (Kerry 10/13), side columns may shrink",
+      !!css && /grid-template-columns: minmax\(0, 1fr\) auto minmax\(0, 1fr\)/.test(css[0]) && !/grid-row: 2/.test(css[0]));
+check("the start-hole note reads 'Start N' on a phone",
+      /<span class="mp-hint-long">Started on hole \$\{gen\.startHole\}\.<\/span><span class="mp-hint-short">Start \$\{gen\.startHole\}<\/span>/.test(src));
 check("a live re-render of an open card keeps the CLOSE label",
       /hint\.innerHTML = mpToggleHintHtml\(true\)/.test(src));
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");

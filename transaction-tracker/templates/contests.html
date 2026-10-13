@@ -1500,14 +1500,14 @@
         .mpv2 .mp-dots-line .mp-toggle-hint { justify-self: end; }
         .mpv2 .mp-hint-short { display: none; }
         @media (max-width: 560px) {
-            /* phone: "OPEN" / "CLOSE"; a start-hole note drops under the dots */
+            /* phone: "OPEN" / "CLOSE" and "Start 10", all on the one line
+               (Kerry 10/13: "The Started on hole x should be on the same
+               line as well"). Side columns may shrink to 0 so the dots
+               keep their single line. */
             .mpv2 .mp-hint-long { display: none; }
             .mpv2 .mp-hint-short { display: inline; }
-            .mpv2 .mp-dots-line { grid-template-columns: 1fr auto; gap: 0.25rem 0.4rem; }
-            .mpv2 .mp-dots-line .mp-hole-dots { grid-column: 1; grid-row: 1; }
-            .mpv2 .mp-dots-line .mp-toggle-hint { grid-column: 2; grid-row: 1; }
-            .mpv2 .mp-dots-line .mp-illus-note { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
-            .mpv2 .mp-dots-line .mp-illus-note:empty { display: none; }
+            .mpv2 .mp-dots-line { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.3rem; }
+            .mpv2 .mp-dots-line .mp-illus-note { white-space: nowrap; }
         }
         .mpv2 .mp-scorecard[hidden] { display: none; }
         .mpv2 .mp-scorecard { border-top: 1px solid var(--border); padding: 0.75rem 0.7rem; background: #FCFCFB; }
@@ -6691,7 +6691,7 @@
         // keeps the shared hole dots either way
         const grid = opts.cardHtml || mpScorecardGridHtml(gen, o);
         const note = gen.source === 'gg'
-            ? (gen.startHole ? `Started on hole ${gen.startHole}.` : '')
+            ? (gen.startHole ? `<span class="mp-hint-long">Started on hole ${gen.startHole}.</span><span class="mp-hint-short">Start ${gen.startHole}</span>` : '')
             : 'Illustrative hole map — generated from the result; real scoring wires in from Golf Genius.';
         // dots + note + OPEN CARD on ONE line (Kerry 2026-10-13)
         const dotsLine = `<div class="mp-dots-line">

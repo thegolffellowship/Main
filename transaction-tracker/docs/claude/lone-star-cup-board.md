@@ -1324,8 +1324,9 @@ head in `mpMatchCard` (templates/contests.html), so the change is made there
 once. The head is the meta band, then the strip, then ONE `.mp-dots-line`
 row. On desktop that row is a three-column grid: the start-hole note on the
 left, the `.mp-hole-dots` centred, and the `.mp-toggle-hint` on the right.
-At 560px and under it has two columns: the dots, then the hint. A start-hole
-note drops to a second row, and an empty note takes no space. The label
+At 560px and under it stays one line too (Kerry: "The Started on hole x
+should be on the same line as well"): the side columns may shrink so the dots
+keep one line, and the note reads "Start 10". The label
 comes from `mpToggleHintHtml(open)`:
 - Desktop: OPEN CARD, or COLLAPSE CARD when open.
 - Phone: OPEN, or CLOSE when open.
