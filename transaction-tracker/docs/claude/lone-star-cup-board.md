@@ -1314,7 +1314,7 @@ Built additively on the Points Races board: the race chips, the navy LSC pill an
 - v2.558.0: the tab is SEASON CONTESTS. Match Play per city is a race in each chapter (`PR_NAV.races.mp_austin` / `mp_sa`, field `mp` = the chapter Match Play loads). `prOpenMatchPlay(key)` moves `#pr-pickers` to the top of `#section-match-play`, shows that section and clicks its chapter tab; `prCloseMatchPlay()` moves the pickers back (marker `#pr-pickers-home`). The MATCH PLAY top tab is hidden, and #tab=mp links open it this way. The month picker is a segmented control (`.pr-mo-seg`, 3-letter months). Column headers are a black band with rounded top corners (the table is border-collapse: separate). Past Champions and Show All Players share `.pr-pc-row`.
 - Not built yet from CD #1638: the format meta text, Show all players on the title line, the signed-in YOU strip and avatar (gated on member logins), chapter search and regions (needs the region field).
 
-## OPEN CARD on the dots line — every match card (Kerry 10/13) — v2.558.2
+## OPEN CARD on the dots line — every match card (Kerry 10/13) — v2.559.1
 
 Kerry: "Can you move the OPEN CARD to same line as the dots for the hole
 results so we can reduce the vertical height? On mobile you can reduce OPEN
