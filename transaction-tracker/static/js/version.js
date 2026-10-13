@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.562.2";
+window.TGF_VERSION = "2.562.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.3",
+    date: "2026-10-13",
+    title: "Course contacts: a Scheduling & contracts role",
+    changes: [
+      "Kerry 10/13: \"Yes, add a scheduling role after close-out.\" Migration 0015 adds the course_staff role 'scheduling' (shown as \"Scheduling & contracts\"): the person who books TGF's dates and handles the contracts, such as a course's Director of Sales. SQLite cannot alter a CHECK, so the table is rebuilt with the same rows, ids and indexes. A scheduling contact is NOT on the Course Files email; that stays the primary TGF contact plus the other TGF contacts. Canyon Springs' Brenda Willis, filed under Billing with a note until now (#1746), moves to Scheduling after the deploy. Guard test_course_staff.py.",
+    ],
+  },
   {
     version: "2.562.2",
     date: "2026-10-13",

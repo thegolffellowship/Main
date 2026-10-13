@@ -3042,7 +3042,7 @@ emailed to me."
   `scoring-print-pack-pdf:<id>|files|send|course`.
 - **COURSE STAFF** (v2.562.0, migration 0014, Kerry 10/13 "Deploy now" #1737;
   shape #1699, db-claude #1701). `course_staff` holds one row per person per
-  role per course (`tgf_contact`, `general_manager`, `head_golf_professional`,
+  role per course (`tgf_contact`, `scheduling` (0015, v2.562.3: booking and contracts, not on the print email), `general_manager`, `head_golf_professional`,
   `assistant_general_manager`, `golf_shop`, `food_beverage`, `billing`), keyed
   by `customer_id`; the email comes from `customer_emails`. One primary per role
   per course among active rows (partial unique index). Deactivate, never delete.

@@ -42,7 +42,14 @@ def q(sql, *a):
 print("schema (0014, #1701)")
 sql = open(os.path.join(HERE, "migrations", "0014_course_staff.sql")).read()
 check("the migration applied on init", q("SELECT 1 FROM schema_migrations WHERE name = '0014_course_staff.sql'"))
-check("role CHECK carries the 7 roles verbatim", all(f"'{r}'" in sql for r in cs.ROLES) and len(cs.ROLES) == 7)
+sql15 = open(os.path.join(HERE, "migrations", "0015_course_staff_scheduling_role.sql")).read()
+check("0014 carries its 7 roles; 0015 adds 'scheduling' (Kerry 10/13) and the code knows all 8",
+      len(cs.ROLES) == 8 and "scheduling" in cs.ROLES
+      and all(f"'{r}'" in sql for r in cs.ROLES if r != "scheduling")
+      and all(f"'{r}'" in sql15 for r in cs.ROLES))
+check("0015 applied, and the rebuilt table keeps the primary index",
+      q("SELECT 1 FROM schema_migrations WHERE name = '0015_course_staff_scheduling_role.sql'")
+      and q("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'ux_course_staff_primary'"))
 check("one primary per role per course, among active rows",
       "ux_course_staff_primary" in sql and "WHERE is_primary = 1 AND active = 1" in sql)
 check("course cascades, customer restricts; booleans checked; updated_at",
@@ -85,10 +92,14 @@ r3 = cs.save_staff(qid, name="Miguel Amaya", email="miguel@quarrygolf.com", role
 check("an existing member is reused, not duplicated", r3.get("customer_id") == mid and r3.get("person") == "email", r3)
 cs.save_staff(qid, name="Alec Cech", email="alec@quarrygolf.com", role="tgf_contact", apply=True, db_path=DB)
 
+rs = cs.save_staff(qid, name="Brenda Willis", email="bwillis@arcisgolf.com", role="scheduling",
+                   is_primary=True, apply=True, db_path=DB)
+check("a 'scheduling' contact saves", rs.get("applied") and rs["role"] == "scheduling", rs)
+
 print("print recipients")
 with db._connect(DB) as conn:
     p = cs.print_recipients(conn, qid)
-check("To the primary TGF contact, CC the other TGF contacts",
+check("To the primary TGF contact, CC the other TGF contacts (scheduling is not on the print email)",
       p["ok"] and p["to"] == "chris@quarrygolf.com" and p["cc"] == ["alec@quarrygolf.com"], p)
 dz = cs.save_staff(qid, name="Alec Cech", email="alec@quarrygolf.com", role="tgf_contact", is_primary=True, apply=True, db_path=DB)
 with db._connect(DB) as conn:
@@ -148,6 +159,20 @@ rows = q("SELECT customer_id, role, is_primary FROM course_staff WHERE course_id
 check("applied: 5 course_staff rows, Miguel twice as one person",
       len(rows) == 5 and len({r["customer_id"] for r in rows}) == 4
       and sum(1 for r in rows if r["customer_id"] == mid) == 2, [dict(r) for r in rows])
+
+print("0015 rebuild keeps every row (run 0015 again on a copy that holds rows)")
+import shutil  # noqa: E402
+cp = DB + ".copy"
+shutil.copy(DB, cp)
+c = sqlite3.connect(cp)
+before = c.execute("SELECT course_staff_id, course_id, customer_id, role, is_primary, active FROM course_staff ORDER BY 1").fetchall()
+c.executescript(sql15)
+after = c.execute("SELECT course_staff_id, course_id, customer_id, role, is_primary, active FROM course_staff ORDER BY 1").fetchall()
+idx = c.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'course_staff'").fetchall()
+c.close()
+check("same rows, same ids, same flags after the rebuild", before == after and len(before) > 3, (before, after))
+check("all three indexes re-created", {"idx_course_staff_course", "idx_course_staff_customer",
+      "ux_course_staff_primary"} <= {r[0] for r in idx}, idx)
 
 print("surfaces")
 app_src = open(os.path.join(HERE, "app.py")).read()

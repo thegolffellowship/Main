@@ -25,10 +25,11 @@ import re
 
 logger = logging.getLogger(__name__)
 
-ROLES = ("tgf_contact", "general_manager", "head_golf_professional",
+ROLES = ("tgf_contact", "scheduling", "general_manager", "head_golf_professional",
          "assistant_general_manager", "golf_shop", "food_beverage", "billing")
 ROLE_LABELS = {
     "tgf_contact": "TGF contact",
+    "scheduling": "Scheduling & contracts",   # 0015 (Kerry 10/13)
     "general_manager": "General manager",
     "head_golf_professional": "Head golf professional",
     "assistant_general_manager": "Assistant general manager",
