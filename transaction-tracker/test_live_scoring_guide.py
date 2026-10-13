@@ -39,6 +39,17 @@ check("ten steps, ten screenshots", len(imgs) == 10, imgs)
 folder = os.path.join(appmod.app.static_folder, "img", "live-scoring")
 missing = [i for i in imgs if not os.path.exists(os.path.join(folder, i))]
 check("every screenshot the page names exists", not missing, missing)
+sizes = set()
+for i in imgs:
+    with open(os.path.join(folder, i), "rb") as fh:
+        b = fh.read()
+    j = 2
+    while j < len(b):  # read the JPEG frame header for width x height
+        if b[j] == 0xFF and b[j + 1] in (0xC0, 0xC1, 0xC2):
+            sizes.add((int.from_bytes(b[j + 7:j + 9], "big"), int.from_bytes(b[j + 5:j + 7], "big")))
+            break
+        j += 2 + int.from_bytes(b[j + 2:j + 4], "big")
+check("every screenshot is the same full phone screen, 780x1688", sizes == {(780, 1688)}, sizes)
 check("the par note: a par needs no tap", "Made par? Don't tap anything." in html)
 check("the Take over warning is on the page", "Don't tap Take over." in html)
 check("every step prints its text (a key named copy would print dict.copy)",

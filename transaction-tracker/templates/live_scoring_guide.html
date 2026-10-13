@@ -50,7 +50,9 @@
            font-size: 15px; line-height: 1.45; margin: 0 0 14px; }
     .phone { display: block; margin: 0 auto; width: 100%; max-width: 300px; border: 9px solid var(--ink);
              border-radius: 38px; box-shadow: 0 10px 28px rgba(0,0,0,.18); background: #FFFFFF; }
-    .phone img { display: block; width: 100%; border-radius: 29px; }
+    /* every screenshot is one full iPhone screen (390x844), so every phone
+       is the same size whatever the step shows (Kerry 2026-10-13) */
+    .phone img { display: block; width: 100%; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; border-radius: 29px; }
 
     /* list mode: every step on one page */
     .deck.list { display: block; overflow: visible; }

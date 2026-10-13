@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.562.0";
+window.TGF_VERSION = "2.562.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.1",
+    date: "2026-10-13",
+    title: "Live Scoring how-to: every phone the same size",
+    changes: [
+      "Every screenshot on /member/live-scoring is now one full iPhone screen (390 x 844, saved at 780 x 1688), so the phone frame is the same size on every step whatever the screen shows (Kerry 2026-10-13: 'update the phone images so the phone is the same size in each one, regardless of content'). They had been cropped to their content, so the frames ran from 554 to 879 points tall. The frame also reserves the phone's shape before the picture loads, so the page doesn't jump. test_live_scoring_guide.py checks every image is 780 x 1688.",
+    ],
+  },
   {
     version: "2.562.0",
     date: "2026-10-13",
