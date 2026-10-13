@@ -38902,25 +38902,31 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
     """
     with _connect(db_path) as conn:
         if _gg_untethered_event(conn, event_name, db_path):
-            return []            # untethered: no Golf Genius RSVPs (Kerry 10/8)
+            # untethered: no Golf Genius RSVPs (Kerry 10/8); the Tracker's own
+            # RSVPs (email_uid 'tracker:...', invitations.py) still count.
+            return _rsvps_for_event(conn, event_name, tracker_only=True)
         return _rsvps_for_event(conn, event_name)
 
 
-def _rsvps_for_event(conn: sqlite3.Connection, event_name: str) -> list[dict]:
+def _rsvps_for_event(conn: sqlite3.Connection, event_name: str,
+                     tracker_only: bool = False) -> list[dict]:
     """Body of get_rsvps_for_event on a caller-supplied connection, so the
     pairings roster (`_event_rsvp_only_players`) can read the same resolved
     RSVP list inside its own transaction instead of re-deriving it."""
+    # tracker_only: only the Tracker's own RSVPs (email_uid 'tracker:<event>:<cid>',
+    # email_parser/invitations.py), for events where GG RSVPs are switched off.
+    _src = " AND substr(email_uid, 1, 8) = 'tracker:'" if tracker_only else ""
     rows = conn.execute(
-        """SELECT r1.*
+        f"""SELECT r1.*
            FROM rsvps r1
            INNER JOIN (
                SELECT player_email, MAX(received_at) AS max_date
                FROM rsvps
                WHERE matched_event = ?
-                 AND player_email IS NOT NULL AND player_email != ''
+                 AND player_email IS NOT NULL AND player_email != ''{_src}
                GROUP BY player_email
            ) r2 ON r1.player_email = r2.player_email AND r1.received_at = r2.max_date
-           WHERE r1.matched_event = ?
+           WHERE r1.matched_event = ?{_src.replace('email_uid', 'r1.email_uid')}
            ORDER BY r1.player_name ASC""",
         (event_name, event_name),
     ).fetchall()
@@ -39002,7 +39008,8 @@ def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
         ).fetchall()
         # untethered events carry no Golf Genius RSVPs (Kerry 10/8)
         _unt = _gg_untethered_event_names(conn, db_path)
-        rows = [r for r in rows if (r["matched_event"] or "").strip().lower() not in _unt]
+        rows = [r for r in rows if (r["matched_event"] or "").strip().lower() not in _unt
+                or str(r["email_uid"] or "").startswith("tracker:")]
 
         # Resolve player names from items table (bulk)
         emails = {(r["player_email"] or "").strip().lower() for r in rows if r["player_email"]}
@@ -68909,8 +68916,9 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
     # gg_untether_from. Until then they count (Kerry 10/8: "Still using
     # actively").
     from email_parser.gg_untether import gg_allowed, rsvps_untethered
-    if ev["event_date"] and not gg_allowed(ev["event_date"]) and rsvps_untethered():
-        return []
+    # The Tracker's own RSVPs (invitations.py) still count once GG is off.
+    tracker_only = bool(ev["event_date"] and not gg_allowed(ev["event_date"])
+                        and rsvps_untethered())
     event_name = ev["item_name"]
     ph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
     active = conn.execute(
@@ -68944,7 +68952,7 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
         overrides = {}
     out: list[dict] = []
     seen: set = set()
-    for r in _rsvps_for_event(conn, event_name):
+    for r in _rsvps_for_event(conn, event_name, tracker_only=tracker_only):
         if (r.get("response") or "").upper() != "PLAYING":
             continue
         email = (r.get("player_email") or "").strip().lower()

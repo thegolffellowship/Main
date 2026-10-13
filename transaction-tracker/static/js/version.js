@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.562.2";
+window.TGF_VERSION = "2.563.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.563.0",
+    date: "2026-10-13",
+    title: "Tracker event invitations + RSVPs (off Golf Genius)",
+    changes: [
+      "Kerry 10/13: \"RSVP's are the only thing that we might need to continue, but would rather switch completely on that too starting tomorrow for next week's events.\" New email_parser/invitations.py: one invitation per invitee per event with I'm in / Can't make it buttons. AUDIENCE as Kerry ruled (\"That audience works, go with it\"): the chapter's active members, plus anyone who played that chapter in the last 12 months, plus lead opt-ins; minus opted-out (membership roster remove, a lead's no, the email's own Stop event invitations link), undeliverable addresses, non-member profiles and anyone already registered.",
+      "Kerry: \"go straight to the event registration page if they click I'm In\". I'm in opens the event's registration link; the click is noted, and paying is what puts a player on the roster (a mail scanner can follow a link too). Can't make it and Stop invitations open a confirm page and record only on its tap. With no registration link on the event, I'm in shows the confirm page and records PLAYING. Answers are rsvps rows with email_uid tracker:<event>:<customer_id>, so the roster, Events tab, RSVP log and pairings read them; gg_rsvps_off now hides only Golf Genius rows.",
+      "SCHEDULE (Kerry), 7:00 AM Central: Tuesday event = invitation Wednesday, reminders Friday and Sunday, last call Monday (\"Sign up by 5:00 PM tonight\"); weekend event = invitation the Friday two weeks out, reminders the next Friday and the Tuesday before, last call Wednesday. Reminders and the last call skip anyone registered or who answered either way. Job event_invite_auto does nothing until app setting event_invite_auto = on AND the wording carries Kerry's stamp (event_invite_approved = the template hash). Manual: bridge scoring-event-invite:<id>[|preview|send|<kerry-ok post>[|reminder|lastcall][|confirm]]. test_invitations.py.",
+    ],
+  },
   {
     version: "2.562.2",
     date: "2026-10-13",

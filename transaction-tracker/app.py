@@ -2172,6 +2172,28 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── EVENT INVITATIONS (Kerry 2026-10-13): 7:00 AM Central, Wed/Fri/Sun
+    #    before a Tuesday event; Friday two weeks out, the next Friday and the
+    #    Tuesday before for a weekend event. Does nothing unless app setting
+    #    event_invite_auto = on (Kerry's word) and the wording carries his
+    #    stamp. email_parser/invitations.py.
+    def event_invite_auto_job():
+        from email_parser.invitations import auto_check
+        try:
+            res = auto_check()
+            if res.get("ran"):
+                logger.info("Event invitations: %s", res["ran"])
+        except Exception:
+            logger.exception("Event invitations job failed (non-fatal)")
+    scheduler.add_job(
+        event_invite_auto_job,
+        "cron", hour="7-9", minute="2,17,32,47",
+        timezone="US/Central",
+        id="event_invite_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # ── PAIRINGS APPROVAL PROMPT (Kerry 2026-10-13: the manager reviews and
     #    approves the automated pairings, which sends the player emails).
     #    Every 15 min from :05 (so the 5:00 PM auto-generate has saved):
@@ -4828,6 +4850,51 @@ def api_send_membership_notice(term_id):
     if not result.get("ok"):
         return jsonify(result), 400
     return jsonify(result)
+
+
+@app.route("/rsvp/<token>", methods=["GET", "POST"])
+def public_event_rsvp(token):
+    """TRACKER RSVP from an event invitation (Kerry 2026-10-13, Tracker-only
+    RSVPs). No login: the token is signed (email_parser/invitations.py).
+    GET shows a confirm page and records NOTHING, so a mail scanner that
+    pre-fetches the link can never answer for a player; the answer is
+    recorded on the page's POST."""
+    import html as _h
+    from email_parser import invitations as _inv
+    if request.method == "POST":
+        res = _inv.record_answer(token)
+        if not res.get("ok"):
+            return _public_page("RSVP link", f"<h2>{_h.escape(res['error'])}</h2>"), 400
+        if res["action"] == "unsub":
+            return _public_page("Invitations", "<h2>Done. You won't get event invitations "
+                                "from us any more.</h2><p>Changed your mind? Reply to any "
+                                "TGF email and we'll put you back on.</p>")
+        ev = res.get("event") or {}
+        reg = ev.get("registration_url") or ""
+        if res["action"] == "in":
+            body = ("<h2>You're in. Thanks!</h2><p>You're on the list for "
+                    f"{_h.escape(ev.get('name') or 'the event')}. Pairings go out the day before.</p>"
+                    + (f'<p><a href="{_h.escape(reg)}">Register and pay now</a></p>' if reg else ""))
+        else:
+            body = "<h2>Thanks for letting us know.</h2><p>We'll miss you this week. See you next time.</p>"
+        return _public_page("RSVP", body)
+    # Kerry 10/13: "go straight to the event registration page if they click
+    # I'm In". The click is noted; paying is what puts them on the roster.
+    _go = _inv.click_in(token)
+    if _go.get("ok"):
+        return redirect(_go["redirect"])
+    info = _inv.describe_token(token)
+    if not info.get("ok"):
+        return _public_page("RSVP link", f"<h2>{_h.escape(info['error'])}</h2>"), 400
+    label = {"in": "Yes, I'm in", "out": "I can't make it",
+             "unsub": "Stop event invitations"}[info["action"]]
+    color = {"in": "#15803D", "out": "#4B5563", "unsub": "#b91c1c"}[info["action"]]
+    body = (f"<h2>{_h.escape(info['course'])}</h2><p>{_h.escape(info['date_long'])}. "
+            f"{_h.escape(info['start_sentence'])}</p>"
+            f'<form method="post"><button type="submit" style="background:{color};color:#fff;'
+            'border:0;border-radius:999px;padding:14px 28px;font:bold 18px Georgia,serif;">'
+            f"{_h.escape(label)}</button></form>")
+    return _public_page("RSVP", body)
 
 
 @app.route("/m/roster/<token>")

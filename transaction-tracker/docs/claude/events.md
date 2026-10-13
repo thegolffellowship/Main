@@ -104,6 +104,46 @@ Test: `test_event_links.py`.
 - `transferred` — transferred to another event, shown in **Inactive** section below table. Creates contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target.
 - `wd` — withdrawn, shown in **Inactive** section below table
 
+## Tracker event invitations + RSVPs (v2.563.0, Kerry 2026-10-13)
+
+Kerry: "would rather switch completely on that too starting tomorrow for next
+week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
+
+- **Audience** (Kerry: "That audience works, go with it"), per chapter event:
+  active members of the chapter (home chapter by id, else the text) + anyone
+  who played that chapter in the 12 months before the event + lead opt-ins
+  (`get_lead_export_rows`, mapped to customer_id); minus the invitation
+  opt-out list (app setting `event_invite_optout`), membership
+  `roster_choice = 'remove'`, `course_staff.non_member_ids`, undeliverable
+  addresses, and anyone already registered. `audience(event_id)` reports each
+  person's reasons and every exclusion count.
+- **Message**: words in module constants (SUBJECT/INTRO, REMINDER_*,
+  LASTCALL_*, CLOSING, FOOTER), structure in code, the event-day email's
+  `frame`. `template_hash()` must equal app setting `event_invite_approved`
+  (Kerry's stamp) before any member send.
+- **Links** `/rsvp/<token>` (signed, `make_token`/`verify_token`, expire the
+  day after the event; no login). **I'm in** redirects to the event's
+  `registration_url` and notes the click (`event_invite_clicks:<id>`), never
+  an RSVP (Kerry: "go straight to the event registration page"); with no
+  registration link it shows the confirm page. **Can't make it** / **Stop
+  event invitations**: GET shows a confirm page and records nothing; the POST
+  records. An answer is an `rsvps` row with email_uid
+  `tracker:<event_id>:<customer_id>`, upserted (the latest answer wins).
+- **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
+  tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.
+- **Schedule** (Kerry), 7:00 AM Central, `schedule(event_date)`: weekday event
+  = invite the Wednesday before, reminders Friday and Sunday, **last call**
+  the day before ("Sign up by 5:00 PM tonight", Monday for a Tuesday event);
+  weekend event = invite the Friday two weeks out, reminders the next Friday
+  and the Tuesday before, last call the Wednesday before. Reminders and the
+  last call go only to invitees who are not registered and have no answer.
+  Sent slots per person in app setting `event_invite_sent:<id>`.
+- **Locks**: job `event_invite_auto` (7-9 AM, every 15 min) does nothing
+  unless app setting `event_invite_auto` = `on` (Kerry's word) and the stamp
+  matches. By hand: bridge `scoring-event-invite:<id>` (audience, read-only),
+  `|preview[|<staff>][|reminder|lastcall]` (staff only),
+  `|send|<kerry-ok post>[|reminder|lastcall][|confirm]`.
+
 ## RSVP → event matching: multi-round GG events (v2.151.2, Kerry 2026-07-30)
 GG multi-round events name each round separately ("2026 TGF CHAMPIONSHIP
 round 1" / "round 2" / "Practice Round") while the tracker carries ONE
