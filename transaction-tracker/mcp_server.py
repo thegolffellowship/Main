@@ -3293,6 +3293,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     _r["html_body"] = _body
                 _out.append(_r)
             return json.dumps({"n": len(_out), "templates": _out}, indent=2)
+        if cmd == "scoring-files-backup":
+            # Status of the file stores behind the DB; "|dry" builds + checks the archive
+            # without uploading; "|run" uploads when changed (the nightly job does the same).
+            from email_parser.backups import files_backup_status, run_files_backup
+            mode = (arg or "").strip().lower()
+            if mode == "dry":
+                return json.dumps(run_files_backup(dry_run=True, force=True), indent=2, default=str)
+            if mode == "run":
+                return json.dumps(run_files_backup(), indent=2, default=str)
+            return json.dumps(files_backup_status(), indent=2, default=str)
         if cmd == "scoring-backup-status":
             # Is it configured, and did the last runs succeed?
             from email_parser.backups import backup_status

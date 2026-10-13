@@ -155,3 +155,6 @@ stays the source of truth and the Tracker pushes a mirror:
 **Why this matters beyond convenience:** every doc a session writes now
 reaches Kerry's OneDrive without anyone remembering to drag a file.
 Session documentation stops depending on a human step.
+
+## Files behind the database (CoS #1604, Kerry 2026-10-11)
+The database is backed up off-site (OneDrive nightly + Litestream to R2), but photos are FILES on the volume: `player_photos/` (`h-<customer_id>.jpg`, `t-<low>-<high>.jpg`; the first 42 are also a seed in the repo at `data/player_photos/`) and `se_photos/` (paper-card photos). Litestream replicates SQLite files only, so `backups.run_files_backup()` (called by the 3:15 AM `db_backup` job) archives the stores listed in `backups.FILE_STORES` into one `trackerfiles_<UTC stamp>.tar.gz` under `<backup folder>/files/` in OneDrive, only when the content hash changed (`files_backup_hash`), newest 8 kept. The archive is read back member by member before upload. Restore = download the newest file and extract it into the volume root (paths are volume-relative). The 5:00 digest raises `files_backup_stale` (MEDIUM) when the volume holds content the last upload did not, and prints a FILES BACKUP line. Bridge `scoring-files-backup[:dry|:run]`. **Any new upload path must add its directory to `FILE_STORES` before it goes live.** Guard `test_files_backup.py`.
