@@ -3221,6 +3221,11 @@ does, the member send refuses.**
   address. It writes no `event_day_email_sends` row. This is the way to check
   how a real player's mail app renders it (the 10/13 winmail.dat / TNEF
   fix).
+- **Sender spec, standing config line (#1669, CoS #1692):** Exchange
+  remote domain Default: TNEF Never (set by Kerry 10/13). Before it, Apple
+  Mail and other non-Outlook readers got plain text plus a winmail.dat
+  attachment. The 10/13 player emails that went out before the fix are NOT
+  resent; resend only to a player who reports a problem.
 - **To approve**: Kerry reads a preview, then
   `scoring-setting-set:event_day_email_approved|<template_hash>`.
 - Test: `test_event_day_email.py` (Graph mocked).

@@ -20,6 +20,28 @@ Chris Lopez had no copy, and the start was disputed on event day. **Every
 agreement must be written, sent from TGF, sent to the course's primary
 contact, acknowledged, and logged against the event.**
 
+**STATUS (CoS #1696, 10/13): DESIGN HELD past this doc and Slice 1** (M1 by
+email plus contacts on the `course_staff` shape). The portal, stipulations,
+Master Scheduler and member course survey stay concepts until Kerry places them
+in the Convergence release sequence. The fuller concepts doc for Kerry and CA is
+the Claude Doc "Course Connection: Initial Concepts"
+(https://claude.ai/code/artifact/e511889d-b7cd-4455-a2f0-047388991b37).
+
+**Build on what exists (CoS prior-work review, Project
+`claude/TGF_Course_Connection_Prior_Work_Review_2026-10-13.md`):**
+- Course contracts are designed and ratified in **Schema v3.0** (#1102):
+  `course_contracts` (course x chapter x contract_year: pricing_model,
+  min_players, attrition_pct/deadline, cart/range/walking, payment_terms,
+  formality_level, contract_document_url, status), `contract_cost_items`
+  (per line item, per_player / taxable / tax_included), `course_staff`
+  (person + role + is_primary). The "agreement record" below IS
+  `course_contracts`; events carry overrides. Question 4 below is answered.
+- Contacts (#1683) take the `course_staff` shape keyed to `customer_id`;
+  the per-message To/CC by role sits on top.
+- Stipulations must match the published Policies page (8/25) and Error
+  Handling v1.2 s4 (24h/72h refund windows subject to course policy, weather
+  at course discretion, credit as the cancellation default).
+
 ---
 
 ## 1. FIRST SLICE: the course-facing messages
