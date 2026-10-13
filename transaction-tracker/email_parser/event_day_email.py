@@ -1067,3 +1067,118 @@ def send_event_day_emails(event_id: int, confirm: bool = False, db_path=None) ->
             "failed": failed, "held": built["held"],
             "counts": {**built["counts"], "sent": len(sent), "skipped": len(skipped),
                        "failed": len(failed)}}
+
+
+# ---------------------------------------------------------------------------
+# Re-issue after a start change (Kerry 2026-10-13, the Quarry: "Re-issue to
+# players", then in the Customer Communications session "Approved to send
+# yourself" and "Send it - GO")
+# ---------------------------------------------------------------------------
+
+REISSUE_PREFIX = "UPDATED START: "
+_PANEL_OPEN = 'padding:18px;font-size:16px;line-height:1.5;">'
+
+
+def reissue_banner(start_line: str) -> str:
+    """The orange notice at the top of a re-issued message."""
+    st = _e((start_line or "").replace(" | ", " · "))
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td bgcolor="#FFF7ED" '
+            f'style="background:#FFF7ED;border:2px solid {ORANGE};border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">UPDATED START</div>'
+            f'<div style="padding-top:4px;color:{INK};">Your starting hole has changed. '
+            f'You now start on <strong>{st}</strong>. This replaces the earlier email. '
+            f'Your group and cart are the same.</div></td></tr></table>')
+
+
+def with_banner(html_body: str, banner: str) -> str:
+    """Put the notice at the top of the white panel (or first, unframed)."""
+    i = html_body.find(_PANEL_OPEN)
+    if i < 0:
+        return banner + html_body
+    i += len(_PANEL_OPEN)
+    return html_body[:i] + banner + html_body[i:]
+
+
+def reissue_key(event_id: int, messages: list) -> str:
+    """One key per sheet state: the start line of every ready player."""
+    sig = "|".join(sorted(f"{m['customer_id']}:{m.get('start_line') or ''}" for m in messages))
+    return f"event_day_reissue:{int(event_id)}:{hashlib.sha256(sig.encode()).hexdigest()[:12]}"
+
+
+def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
+                           db_path=None) -> dict:
+    """RE-ISSUE the event-day email after the start holes change: every ready
+    player gets the same approved message with "UPDATED START: " before the
+    subject and an orange notice at the top. The template hash must still
+    match Kerry's stamp; the cited mailbox post must carry Kerry's word
+    (customer_query._kerry_ok, unchanged); confirm=True sends, anything else
+    is a dry run. Once per player per sheet state (app setting
+    reissue_key(...) holds the customer_ids sent), so a repeat run skips them
+    and a later change can be re-issued again. event_day_email_sends is not
+    touched; every message is logged to message_log."""
+    import json as _json
+    from email_parser import database as db
+    from email_parser.customer_query import _kerry_ok
+    tpl = load_template(db_path)
+    appr = approval_state(tpl, db_path)
+    if not appr["approved"]:
+        return {"refused": "template not approved: app setting "
+                           f"{APPROVAL_KEY} must equal the current template hash", **appr}
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+    finally:
+        conn.close()
+    if not ok:
+        return {"refused": f"rule 3b: {why}"}
+    _ensure_scoring(event_id, db_path)
+    built = build_event_day_emails(event_id, db_path=db_path)
+    if built.get("error"):
+        return built
+    if built["template_hash"] != appr["template_hash"]:
+        return {"refused": "template changed during the build"}
+    key = reissue_key(event_id, built["messages"])
+    try:
+        done = set(_json.loads(db.get_app_setting(key, db_path=db_path) or "[]"))
+    except Exception:
+        done = set()
+    todo = [m for m in built["messages"] if m["customer_id"] not in done]
+    out = {"event": built["event"], "authority": why, "key": key, "held": built["held"],
+           "already_reissued": sorted(done),
+           "counts": {**built["counts"], "to_send": len(todo)}}
+    if confirm is not True:
+        return {**out, "dry_run": True,
+                "plan": [{"customer_id": m["customer_id"], "name": m["name"],
+                          "email": m["email"], "start_line": m.get("start_line")} for m in todo],
+                "sample_subject": (REISSUE_PREFIX + todo[0]["subject"]) if todo else None}
+    creds = _creds()
+    if not creds:
+        return {"error": "Email credentials not configured on server"}
+    sent, failed = [], []
+    for m in todo:
+        subject = REISSUE_PREFIX + m["subject"]
+        html = with_banner(m["html"], reissue_banner(m.get("start_line")))
+        good = False
+        try:
+            good = _graph_send(creds, m["email"], subject, html)
+        except Exception:
+            logger.exception("event-day re-issue failed for cid %s", m["customer_id"])
+        row = {"customer_id": m["customer_id"], "name": m["name"], "email": m["email"],
+               "start_line": m.get("start_line")}
+        (sent if good else failed).append(row)
+        if good:
+            done.add(m["customer_id"])
+            try:
+                db.set_app_setting(key, _json.dumps(sorted(done)), db_path=db_path)
+            except Exception:
+                logger.exception("event-day re-issue: could not record cid %s", m["customer_id"])
+        try:
+            db.log_message({"event_name": built["event"]["name"], "channel": "email",
+                            "recipient_name": m["name"], "recipient_address": m["email"],
+                            "subject": subject, "body_preview": "RE-ISSUE " + m["text"][:180],
+                            "status": "sent" if good else "failed",
+                            "sent_by": "event_day_email_reissue"}, db_path=db_path)
+        except Exception:
+            pass
+    return {**out, "sent": sent, "failed": failed,
+            "counts": {**out["counts"], "sent": len(sent), "failed": len(failed)}}

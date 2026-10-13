@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.558.1";
+window.TGF_VERSION = "2.559.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.559.0",
+    date: "2026-10-13",
+    title: "Event-day email: re-issue after a start change (UPDATED START)",
+    changes: [
+      "Kerry 10/13, after the Quarry's start holes moved to 10-15 (Back 9, 4:30 PM shotgun): \"Re-issue to players\", then \"Approved to send yourself\" and \"Send it - GO\". The member send goes once per event and player, so a start change had no way back to the players. New send_event_day_reissue (event_day_email.py) sends the same approved message to every ready player with \"UPDATED START: \" before the subject and an orange notice at the top of the panel (\"Your starting hole has changed. You now start on Hole N. This replaces the earlier email. Your group and cart are the same.\"). It needs the template stamp, a mailbox post carrying Kerry's word (customer_query._kerry_ok, unchanged) and confirm; without confirm it is a dry run. Once per player per sheet state (app setting event_day_reissue:<event>:<hash of the start lines>); event_day_email_sends is untouched; every message is logged. Bridge scoring-event-day-email:<id>|reissue|<post id>[|confirm]. test_event_day_email.py section 4c.",
+    ],
+  },
   {
     version: "2.558.1",
     date: "2026-10-13",

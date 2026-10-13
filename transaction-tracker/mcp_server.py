@@ -1842,7 +1842,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
       scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
-      scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO member-send bridge
+      scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
       scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
@@ -6836,6 +6836,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_ede.send_event_day_preview(
                     int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None),
                     only=_only),
+                    indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "reissue":
+                # "<event_id>|reissue|<kerry-ok post id>[|confirm]" (Kerry
+                # 10/13, the Quarry start change): the approved message again,
+                # "UPDATED START:" + a notice, to every ready player. Refused
+                # without a mailbox post carrying Kerry's word; dry run
+                # without |confirm; once per player per sheet state.
+                db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
+                if len(_p) < 3 or not _p[2].lstrip("#").isdigit():
+                    return json.dumps({"error": "<event_id>|reissue|<kerry-ok post id>[|confirm]"})
+                return json.dumps(_ede.send_event_day_reissue(
+                    int(_p[0]), int(_p[2].lstrip("#")),
+                    confirm=(len(_p) > 3 and _p[3].lower() == "confirm")),
                     indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "test":
                 # "<event_id>|test|<staff addr>|cid=<id>" (Kerry 10/13): ONE

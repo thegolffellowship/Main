@@ -3231,6 +3231,17 @@ does, the member send refuses.**
   Mail and other non-Outlook readers got plain text plus a winmail.dat
   attachment. The 10/13 player emails that went out before the fix are NOT
   resent; resend only to a player who reports a problem.
+- **Re-issue after a start change** (v2.559.0, Kerry 10/13, the Quarry:
+  "Re-issue to players", "Send it - GO"): `send_event_day_reissue(event_id,
+  kerry_ok_post, confirm)`, bridge
+  `scoring-event-day-email:<id>|reissue|<post id>[|confirm]`. The same approved
+  message to every ready player, subject prefixed `UPDATED START: `, an orange
+  notice at the top of the panel naming the new start. Needs the template
+  stamp, a mailbox post carrying Kerry's word (`customer_query._kerry_ok`) and
+  confirm (dry run otherwise). Once per player per sheet state: app setting
+  `event_day_reissue:<event>:<hash of every start line>` holds the
+  customer_ids sent, so another change can be re-issued again. Does not touch
+  `event_day_email_sends`; logged to `message_log` as `event_day_email_reissue`.
 - **To approve**: Kerry reads a preview, then
   `scoring-setting-set:event_day_email_approved|<template_hash>`.
 - Test: `test_event_day_email.py` (Graph mocked).
