@@ -211,8 +211,8 @@ if sync_playwright and CHROME:
             (document.querySelector('.top-tab.active') || {}).dataset?.top,
             document.querySelectorAll('#evlb-list details.evlb-ev').length,
             (document.getElementById('evlb-official') || {}).innerText || '']""")
-        check("/member/results lands on Events, every event listed, Unofficial line shown",
-              landed[0] and landed[1] == "events" and landed[2] == 2 and "official scorer" in landed[3], str(landed))
+        check("/member/results lands on Events, every event listed, no GG-official line (Kerry 10/13: official now)",
+              landed[0] and landed[1] == "events" and landed[2] == 2 and "official scorer" not in landed[3], str(landed))
         mp.screenshot(path=os.path.join(tempfile.gettempdir(), "member-results-390.png"))
         b.close()
 else:

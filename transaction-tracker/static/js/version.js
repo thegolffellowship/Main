@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.563.2";
+window.TGF_VERSION = "2.563.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.563.3",
+    date: "2026-10-13",
+    title: "Scoring page: the dark bar never shrinks",
+    changes: [
+      "Kerry 10/13, scoring from the Mail app: \"the formatting ... in the top bar is smooshed\", then \"That dark bar is getting reduced again. We've had that problem before.\" When a hole card was taller than the screen (an in-app browser with its toolbar), the page shrank the dark bar to 26 px with a 24 px logo to make room. The bar now stays its full size with the 64 px logo on every screen. The room comes out of the card instead, only when it would not fit: the -/+ buttons go from 44 to 38 px, rows close up, the group strip and the Check-the-card cells get a little shorter, and the hole number is 22 px. Both screens still fit a 390x660 phone without scrolling.",
+      "Guards: test_score_entry_ui.py now fails if a tight card shrinks the bar or its logo. test_scorer_nav.py is updated to the 10/13 ruling that the leaderboard no longer says Golf Genius is the official scorer.",
+    ],
+  },
   {
     version: "2.563.2",
     date: "2026-10-13",
