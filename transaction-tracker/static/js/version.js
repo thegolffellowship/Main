@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.559.4";
+window.TGF_VERSION = "2.559.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.559.5",
+    date: "2026-10-13",
+    title: "Tabs open at the top; Knockout champion box removed",
+    changes: [
+      "Kerry 10/13: \"When I click from EVENTS to SEASON CONTESTS (and back) if I'm scrolled down one of the pages, it automatically shows the other page at that scroll down. When we click to new pages, they should all start at the top, not part way down.\" Switching the leaderboard's top tab (Events, Season Contests, Lone Star Cup, Enrollment) now scrolls to the top. Tapping the tab you are already on does not move the page.",
+      "Kerry 10/13: \"Remove the small Champion box in Knockout.\" The champion now shows only in the top banner (v2.559.4).",
+    ],
+  },
   {
     version: "2.559.4",
     date: "2026-10-13",
