@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.562.2";
+window.TGF_VERSION = "2.562.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.3",
+    date: "2026-10-13",
+    title: "Manage contacts opens a window in the event editor",
+    changes: [
+      "Kerry 10/13: \"Manage Contacts link in the Quarry event didn't take me to a manage contacts modal or page.\" The link in Add/Edit Event used to open the Courses page in a new tab, which does nothing useful in the installed app. It now opens a Contacts window over the event editor, where you can add a contact, make one primary, or remove and restore one. Closing it refreshes the contacts box under Course. The Courses page and this window share one panel (static/js/course-staff.js), so they can never drift. Guard test_course_staff.py.",
+    ],
+  },
   {
     version: "2.562.2",
     date: "2026-10-13",

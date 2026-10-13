@@ -3053,7 +3053,8 @@ emailed to me."
   only, never bought or registered; Brevo sync, the pairings roster and
   `query_customers` read it), `seed_quarry`. Routes `GET /api/courses/<id>/staff`
   (manager) and `POST` (admin). UI: the Courses page's **Contacts** panel, and the
-  read-only contacts box under Course in Add/Edit Event. Bridges
+  contacts box under Course in Add/Edit Event, whose **Manage contacts** opens the same
+  panel in a window (`static/js/course-staff.js`: `tgfCourseStaffPanel` / `tgfCourseStaffModal`). Bridges
   `scoring-course-staff`, `scoring-course-staff-set`, `scoring-course-staff-seed`.
   Guard `test_course_staff.py`.
 - **One card per group** (v2.556.2, Kerry 10/13: "Scorecards should always be
