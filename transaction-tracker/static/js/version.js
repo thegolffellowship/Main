@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.557.0";
+window.TGF_VERSION = "2.557.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.557.1",
+    date: "2026-10-13",
+    title: "Leaderboard: Bitter section tabs, no POINTS RACES chevron, lands on the biggest live TGF race",
+    changes: [
+      "Kerry 10/13: \"Didn't it say all nav bars were supposed to be Bitters?\" The section tabs (EVENTS / POINTS RACES / LONE STAR CUP / MATCH PLAY) are now Bitter 700 12px with 1.5px letter spacing, as CD #1638 draws them.",
+      "Kerry 10/13: \"Remove the chevron on the POINTS RACES.\" Gone on every screen size; the race and chapter pickers are the menu.",
+      "Kerry 10/13: \"By default, land on the biggest current TGF Wide event. Right now that's simply October Points. When in season it would be The Fellowship Cup then the Players Cup then the current monthly.\" With no race in the address, every visitor lands on TGF · All chapters and the first LIVE race in that order. Today that is Monthly. The last chapter a visitor chose no longer overrides the landing.",
+    ],
+  },
   {
     version: "2.557.0",
     date: "2026-10-13",

@@ -348,11 +348,12 @@
         .top-tabs::-webkit-scrollbar { display: none; }
         .top-tab {
             padding: 0.65rem clamp(0.5rem, 1.5vw, 1.25rem); cursor: pointer;
-            font-size: 0.82rem;
-            font-weight: 600; color: var(--text-muted); border-bottom: 3px solid transparent;
+            /* Bitter, as CD #1638 L2 draws every section tab (Kerry 2026-10-13) */
+            font: 700 12px/1.2 'Bitter', Georgia, serif; letter-spacing: 1.5px;
+            color: var(--text-muted); border-bottom: 3px solid transparent;
             margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
             background: none; border-top: none; border-left: none; border-right: none;
-            text-transform: uppercase; letter-spacing: 0.04em;
+            text-transform: uppercase;
             white-space: nowrap; flex: 0 0 auto;
         }
         .top-tab:hover { color: var(--text); }
@@ -2151,7 +2152,7 @@
         }
         /* three member top-tabs must fit a 390px phone without scroll */
         @media (max-width: 420px) {
-            .top-tab { padding: 0.5rem 0.55rem; font-size: 0.76rem; letter-spacing: 0; }
+            .top-tab { padding: 0.5rem 0.55rem; font-size: 11px; letter-spacing: 0.6px; }
         }
         /* CHAMPION PLAQUE (Kerry 2026-08-16: "the champion highlight is
            very boring in the amber. How can we really make it pop?") —
@@ -10920,18 +10921,13 @@
         // filter above narrows to the scorer's event.
         // a Cup round's scorer reads the Cup's matches, on his session (Kerry 10/9)
         if (window.SOLO_EVENT) hash = window.SOLO_CUP ? "#tab=lsc" : "#tab=events";
-        // Landing and the new address (CD #1638, Kerry 2026-10-12): ?chapter=&race= opens that race; with nothing in the address
-        // a visitor lands on TGF \u00b7 All chapters and its live race (Monthly), or on the chapter they chose last time.
+        // Landing (Kerry 2026-10-13: "By default, land on the biggest current TGF Wide event ... When in season it would be
+        // The Fellowship Cup then the Players Cup then the current monthly"): ?chapter=&race= opens that race; with nothing
+        // in the address every visitor lands on TGF \u00b7 All chapters and the first LIVE race in PR_NAV's TGF order
+        // (tfc, gross, monthly), today Monthly. The last chapter chosen no longer overrides it.
         if (!hash) {
             const qRace = prKeyFromSlug(new URLSearchParams(location.search).get("race"));
-            let want = qRace;
-            if (!want) {
-                let last = null;
-                try { last = localStorage.getItem("tgf_pr_chapter"); } catch (e) { /* ignore */ }
-                const chap = PR_NAV.chapters.find(c => c.id === last) || PR_NAV.chapters[0];
-                want = prDefaultRaceOf(chap);
-            }
-            hash = "#race=" + want;
+            hash = "#race=" + (qRace || prDefaultRaceOf(PR_NAV.chapters[0]));
         }
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
