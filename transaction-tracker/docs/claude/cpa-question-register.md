@@ -2,7 +2,7 @@
 
 Owner: CFO › CPA Questions lane (session `session_01Ux2pULvc52TZCuQCauhSQf`, mailbox topic `cpa-questions`).
 Reports to: the CFO (tracker-claude, topic `finance-audit`) and Kerry.
-Opened: Tue 2026-10-13. Last updated: 2026-10-13 (mail read through #1721).
+Opened: Tue 2026-10-13. Last updated: 2026-10-13 (mail read through #1722).
 
 ## What this file is
 
@@ -23,9 +23,9 @@ As of 10/13 there is no record in the mailbox of a meeting with Rick, so every 9
 
 | Status | Count |
 |---|---|
-| open | 11 (Q2, Q4, Q6, Q7, Q9, Q10, Q11, Q12, Q13, Q14, Q15) |
+| open | 12 (Q2, Q4, Q6, Q7, Q9, Q10, Q11, Q12, Q13, Q14, Q15, Q17) |
 | with Kerry | 1 (Q16, Chase Slate) |
-| candidate | 8 (C1–C8) |
+| candidate | 7 (C1–C5, C7, C8; C6 became Q17) |
 | asked / answered | 0 |
 
 Q1, Q3, Q5 and Q8 from the 9/30 audit were Kerry's own decisions, not CPA questions. They are listed at the end for completeness.
@@ -167,13 +167,13 @@ Q1, Q3, Q5 and Q8 from the 9/30 audit were Kerry's own decisions, not CPA questi
 
 ## Group D: Deductibility
 
-### C6 (candidate). Event travel mileage: standard rate or actual
-- **Question:** For TGF event travel by car (for example the San Antonio ↔ Brownwood round trip and Cup errands), should TGF claim the IRS standard mileage rate or actual vehicle costs? What log does Rick need?
-- **Facts:** No fuel or vehicle cost for the Cup trip is on TGF's books. The CFO has asked Kerry for round-trip and errand miles. If fuel was charged on 6159, it is either mileage or actual, not both.
-- **Sources:** #1718.
-- **Kerry's position:** none yet (miles not given).
-- **Books meanwhile:** nothing booked.
-- **Status:** candidate. **Rick:** —
+### Q17. Event travel mileage: the 2026 rate, standard vs actual, and Michelle driving
+- **Question:** (a) Which 2026 standard mileage rate applies to an October trip: 72.5¢ (IR-2025-128) or a mid-year 76¢ revision from 7/1, which the CFO saw only in secondary sources (IRB 2026-29) and did not confirm on irs.gov? (b) Standard rate or actual vehicle costs for event travel, and what log does Rick want? (c) Does it matter that Michelle drove Kerry's vehicle for TGF?
+- **Facts:** Lone Star Cup trip, Thu 10/8 to Sun 10/11, San Antonio ↔ The Hideout (Brownwood) plus errands: 375.4 miles (Kerry's figure). At 72.5¢ = $272.16; at 76¢ = $285.30. Gas (Costco before, another stop on the way back) was on Kerry's personal 6159; none on 7680.
+- **Sources:** #1718, #1722.
+- **Kerry's position:** "Gas was bought from Costco right before and from another place on the way back. Probably was 6159 but could have been 7680 too. 375.4 miles" (10/13, #1722).
+- **Books meanwhile:** no mileage row yet (no bridge; Tracker Build asked for an owner-mileage entry path). The two gas charges are NOT booked as TGF expense, to avoid double-counting under the standard rate; one found on 7680 would be an owner draw.
+- **Status:** open. Confirmed by the CFO (#1722); was candidate C6. **Rick:** —
 
 ### C7 (candidate). Event meals: the 50% limit
 - **Question:** Confirm that event meals (player meals at the Cup, Kerry's and Michelle's weekend meals) are business meals at 50%, and whether any (for example food provided to all players as part of the event) are 100%.
@@ -243,3 +243,4 @@ When Kerry relays Rick's answer:
 ## Change log
 
 - 2026-10-13: register opened. Seeded Q1–Q13 from the Bookkeeping Audit artifact, #1071, #1714, #1716/#1718. Added Q14 (#1715), Q15 (#650), Q16 (#1706, with Kerry). Candidates C1–C8 from #420–#448, #1301, #1337, #650/#653, #1715, #1718, #422.
+- 2026-10-13: C6 (mileage) confirmed by the CFO in #1722 and promoted to Q17 with Kerry's 375.4 miles.
