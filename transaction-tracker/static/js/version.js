@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.561.0";
+window.TGF_VERSION = "2.561.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.561.1",
+    date: "2026-10-13",
+    title: "Live Scoring how-to screenshots for the players' email",
+    changes: [
+      "Eight phone screenshots of the Live Scoring steps (open the group card, pick your name, enter a hole, closest to the pin, Check the card, photo and submit, follow along, sign) are now served from static/img/live-scoring/ so the 10/13 how-to email to all players can show them. They were taken on a local test copy with sample names, never on a live group. Images only; no code changed.",
+    ],
+  },
   {
     version: "2.561.0",
     date: "2026-10-13",
