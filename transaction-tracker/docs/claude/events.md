@@ -144,7 +144,7 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   Sent slots per person in app setting `event_invite_sent:<id>`.
 - **TGF events** (Kerry 10/13: "Yes, invite both chapters to the Fall
   Championship") invite both chapters' lists, signed by the San Antonio
-  manager; a named event shows as "Kissing Tree (Fall Championship)".
+  manager; a named event shows as "2026 Fall Championship @ Kissing Tree" (no event code).
 - **Early invitation** on Kerry's word: app setting `event_invite_early`
   `{event_id: "YYYY-MM-DD"}` adds an invite slot that morning (set for 3305 =
   2026-10-14, Kerry: "Just 10/20 events and the Championship"); the regular

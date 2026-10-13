@@ -314,8 +314,11 @@ def _display_name(ev: dict) -> str:
     name = ev.get("item_name") or ""
     if "|" in name:
         left, right = (x.strip() for x in name.split("|", 1))
+        # Kerry 10/13: no event code; "2026 Fall Championship @ Kissing Tree".
         title = event_short_name(left, None).title()
-        return f"{right} ({title})" if right else title
+        year = str(ev.get("event_date") or "")[:4]
+        title = f"{year} {title}" if year.isdigit() and year not in title else title
+        return f"{title} @ {right}" if right else title
     return event_short_name(name, ev.get("course"))
 
 

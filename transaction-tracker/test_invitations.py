@@ -221,7 +221,7 @@ tids = {p["customer_id"] for p in ta.get("people", [])}
 check("a TGF event invites both chapters' lists", 770001 in tids and 770007 in tids, ta.get("counts") or ta)
 evc = dict(db.get_connection(DB).execute("SELECT * FROM events WHERE id = 9399").fetchone())
 mc = inv.build_message(evc, {"customer_id": 770007, "first_name": "Gus"}, "invite", DB)
-check("…signed by a manager, footer names both chapters", not mc["held"] and "San Antonio and Austin" in mc["html"]
+check("…signed by a manager, footer names both chapters", not mc["held"] and "San Antonio and Austin" in mc["html"] and "2026 Fall Champ @ Champ Links" in mc["subject"]
       and "18 holes" in mc["html"], mc["held"])
 db.set_app_setting(inv.EARLY_KEY, json.dumps({"9399": "2026-11-20"}), db_path=DB)
 SENT.clear()
