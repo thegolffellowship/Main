@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.559.6";
+window.TGF_VERSION = "2.560.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.560.0",
+    date: "2026-10-13",
+    title: "The Tracker computes the Fall points races and Monthly itself",
+    changes: [
+      "Kerry 10/13: \"we're not running Golf Genius at all tonight, so I'm relying on you and what we've built to make it all happen now.\" Earlier the same day the 10/6 blind test matched Golf Genius on 33 of 35 players; Mark Parker, a 1st Timer, correctly earned nothing, and Kerry ruled the one difference: \"Yes, 54 is right for Baker.\" New email_parser/tracker_points.py builds the San Antonio and Austin Fall races and the Monthly months from three sources: (1) Golf Genius's own per-event lines through 9/29, captured read-only and frozen in data/points_baseline (past events stay as they were); (2) Kerry-ruled events (10/6); (3) every published event after that, from the scoring engine on the entered cards. Points are net Stableford floored at 0, with a plus off the round once; an 18 counts as two entries; members only; each line goes to the player's home-chapter race; best 6 plus a championship. Rebuilt from those lines, the boards match Golf Genius's own current boards for every player except Baker's ruled 54.",
+      "How it runs. While app setting points_source = tracker, a points board that goes stale after an event rebuilds itself from the Tracker (no network) instead of from Golf Genius, and the monthly job writes the Tracker's months beside Golf Genius's earlier ones. Expanding a row shows our own per-event lines in the same table (counted, then 'not counted'), and concluded races show Golf Genius's table from the captured ledger instead of a blank. The bridge scoring-tracker-points shows the changes as a dry run; scoring-tracker-points:apply writes them. Guard: test_tracker_points.py.",
+    ],
+  },
   {
     version: "2.559.6",
     date: "2026-10-13",

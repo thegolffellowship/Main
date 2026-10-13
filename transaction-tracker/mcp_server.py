@@ -1903,6 +1903,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    another (dry run shows both + the refs moved)
       scoring-customer-dupes       potential duplicate customer profiles (name /
                                    email / phone), report only
+      scoring-tracker-points[:apply]          Tracker Fall standings + Monthly (dry run default)
       scoring-race-detail:<race_key>|<card>  one GG member record's per-event lines
       scoring-race-dupes[:refresh]  one person = one row on every Season Contests
                                    board (GG duplicate member records folded;
@@ -4219,6 +4220,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _d["best_n_total_of_parsed"] = (db._best_n_total(_d["parsed_events"], _race["best_n"])
                                             if _race.get("best_n") else None)
             return json.dumps(_d, indent=2, default=str)
+        if cmd == "scoring-tracker-points":
+            # "[apply]" — TRACKER POINTS STANDINGS (Kerry 10/13): rebuild the
+            # Fall races and the Tracker's Monthly months from GG's frozen
+            # lines through 9/29 + the ruled 10/6 + every published entered
+            # event. Dry run by default: the changes against the rows live
+            # now. "apply" writes them. Live boards then refresh themselves
+            # from the Tracker while app setting points_source = tracker.
+            from email_parser import tracker_points as _tp
+            _apply = (arg or "").strip().lower() == "apply"
+            res = _tp.rebuild(apply=_apply)
+            if _apply:
+                _audit("scoring-tracker-points", "apply")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-race-dupes":
             # "[refresh]" — one person = one row across every Season Contests
             # board. refresh re-fetches every GG race first (write-time merge

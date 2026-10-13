@@ -1,5 +1,5 @@
 {
- "note": "FROZEN Golf Genius Fall-race lines through 9/29/2026 (Kerry 10/13: Tracker computes points from 10/6 on; GG intake OFF). Captured read-only 10/13 via scoring-points-ledger (effective 2026-09-30); lines dated 2026-10-06 or later are dropped here. Never edited by code.",
+ "note": "FROZEN Golf Genius Fall-race lines through 9/29/2026 (Kerry 10/13: the Tracker computes points from 10/6 on; GG intake OFF). Captured read-only 10/13 via scoring-points-ledger, effective 2026-09-30, so 10/6 lines are not in it. Never edited by code.",
  "cutover": "2026-10-06",
  "races": {
   "san_antonio_fall_net": {
@@ -11,47 +11,65 @@
      "lines": [
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "1",
        "points": 12.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "2",
        "points": 11.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "2",
        "points": 10.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T4",
        "points": 9.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 8.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 6.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T11",
        "points": 6.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T8",
        "points": 2.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "11",
        "points": 1.0
       }
      ]
@@ -62,47 +80,65 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "1",
        "points": 13.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "1",
        "points": 10.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T7",
        "points": 9.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 8.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "1",
        "points": 6.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T7",
        "points": 5.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T16",
        "points": 4.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "13",
        "points": 4.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "13",
        "points": 3.0
       }
      ]
@@ -113,32 +149,44 @@
      "lines": [
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 12.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 11.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T4",
        "points": 9.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 9.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "8",
        "points": 5.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T14",
        "points": 3.0
       }
      ]
@@ -149,37 +197,51 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 11.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "3",
        "points": 9.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 8.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 6.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 6.0
       }
      ]
@@ -190,37 +252,51 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "1",
        "points": 11.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T5",
        "points": 10.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "5",
        "points": 8.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 6.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "12",
        "points": 6.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "10",
        "points": 3.0
       }
      ]
@@ -231,22 +307,30 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "1",
        "points": 15.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 10.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "8",
        "points": 7.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       }
      ]
@@ -257,37 +341,51 @@
      "lines": [
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T4",
        "points": 8.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 8.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T6",
        "points": 8.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T7",
        "points": 8.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 6.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T11",
        "points": 6.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T13",
        "points": 4.0
       }
      ]
@@ -298,27 +396,37 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "2",
        "points": 12.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 9.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T12",
        "points": 6.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "12",
        "points": 5.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T13",
        "points": 4.0
       }
      ]
@@ -329,32 +437,44 @@
      "lines": [
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "1",
        "points": 11.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "4",
        "points": 9.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "2",
        "points": 9.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T5",
        "points": 8.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "18",
        "points": 3.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T17",
        "points": 1.0
       }
      ]
@@ -365,37 +485,51 @@
      "lines": [
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "2",
        "points": 10.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 9.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "5",
        "points": 9.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "6",
        "points": 5.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T16",
        "points": 4.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T15",
        "points": 4.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T17",
        "points": 2.0
       }
      ]
@@ -406,32 +540,44 @@
      "lines": [
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T6",
        "points": 8.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T4",
        "points": 8.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T6",
        "points": 8.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T11",
        "points": 6.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T12",
        "points": 6.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "7",
        "points": 4.0
       }
      ]
@@ -442,32 +588,44 @@
      "lines": [
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 11.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T7",
        "points": 8.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T6",
        "points": 7.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "7",
        "points": 6.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "19",
        "points": 1.0
       }
      ]
@@ -478,12 +636,16 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T5",
        "points": 10.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T6",
        "points": 8.0
       }
      ]
@@ -494,17 +656,23 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 8.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 8.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 7.0
       }
      ]
@@ -515,37 +683,51 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 10.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T6",
        "points": 8.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T15",
        "points": 4.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "9",
        "points": 4.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T14",
        "points": 2.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "12",
        "points": 0.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T16",
        "points": 0.0
       }
      ]
@@ -556,27 +738,37 @@
      "lines": [
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T1",
        "points": 12.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T11",
        "points": 5.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T15",
        "points": 4.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T19",
        "points": 3.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T14",
        "points": 3.0
       }
      ]
@@ -587,17 +779,23 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 11.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T5",
        "points": 8.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       }
      ]
@@ -608,22 +806,30 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T4",
        "points": 9.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T6",
        "points": 7.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "12",
        "points": 2.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "23",
        "points": 0.0
       }
      ]
@@ -634,17 +840,23 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T11",
        "points": 6.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T14",
        "points": 2.0
       }
      ]
@@ -655,7 +867,9 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 11.0
       }
      ]
@@ -666,17 +880,23 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T17",
        "points": 1.0
       }
      ]
@@ -687,12 +907,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 8.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T6",
        "points": 7.0
       }
      ]
@@ -703,12 +927,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "3",
        "points": 10.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T10",
        "points": 3.0
       }
      ]
@@ -719,12 +947,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 8.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 4.0
       }
      ]
@@ -735,12 +967,16 @@
      "lines": [
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 9.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T19",
        "points": 3.0
       }
      ]
@@ -751,12 +987,16 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 7.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "22",
        "points": 2.0
       }
      ]
@@ -767,7 +1007,9 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T12",
        "points": 6.0
       }
      ]
@@ -778,22 +1020,30 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T19",
        "points": 3.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T8",
        "points": 2.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T18",
        "points": 0.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T12",
        "points": 0.0
       }
      ]
@@ -804,7 +1054,9 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "15",
        "points": 5.0
       }
      ]
@@ -815,7 +1067,9 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T7",
        "points": 9.0
       }
      ]
@@ -826,17 +1080,23 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T9",
        "points": 4.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T10",
        "points": 3.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T19",
        "points": 2.0
       }
      ]
@@ -857,7 +1117,9 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T5",
        "points": 8.0
       }
      ]
@@ -868,7 +1130,9 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T5",
        "points": 8.0
       }
      ]
@@ -879,17 +1143,23 @@
      "lines": [
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T7",
        "points": 5.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "20",
        "points": 0.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "11",
        "points": 0.0
       }
      ]
@@ -900,12 +1170,16 @@
      "lines": [
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "6",
        "points": 6.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "10",
        "points": 1.0
       }
      ]
@@ -916,12 +1190,16 @@
      "lines": [
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T3",
        "points": 6.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "11",
        "points": 0.0
       }
      ]
@@ -932,12 +1210,16 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T11",
        "points": 5.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T21",
        "points": 0.0
       }
      ]
@@ -948,22 +1230,30 @@
      "lines": [
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "position": "T7",
        "points": 5.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "20",
        "points": 0.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "position": "T12",
        "points": 0.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T18",
        "points": 0.0
       }
      ]
@@ -974,17 +1264,23 @@
      "lines": [
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T17",
        "points": 2.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "21",
        "points": 0.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "24",
        "points": 0.0
       }
      ]
@@ -995,7 +1291,9 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T16",
        "points": 4.0
       }
      ]
@@ -1006,7 +1304,9 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "15",
        "points": 3.0
       }
      ]
@@ -1017,12 +1317,16 @@
      "lines": [
       {
        "date": "2026-09-08",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T14",
        "points": 3.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "19",
        "points": 0.0
       }
      ]
@@ -1033,7 +1337,9 @@
      "lines": [
       {
        "date": "2026-09-15",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T14",
        "points": 2.0
       }
      ]
@@ -1044,7 +1350,9 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF San Antonio 2026",
        "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "position": "T19",
        "points": 2.0
       }
      ]
@@ -1060,47 +1368,65 @@
      "lines": [
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "1",
        "points": 15.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "3",
        "points": 11.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "2",
        "points": 10.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T1",
        "points": 9.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "3",
        "points": 9.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T1",
        "points": 8.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "T2",
        "points": 8.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "T6",
        "points": 7.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T8",
        "points": 7.0
       }
      ]
@@ -1111,42 +1437,58 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "T1",
        "points": 10.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "T3",
        "points": 9.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "5",
        "points": 9.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T4",
        "points": 8.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "4",
        "points": 7.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T4",
        "points": 7.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T6",
        "points": 6.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T7",
        "points": 4.0
       }
      ]
@@ -1157,57 +1499,79 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "2",
        "points": 12.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "T4",
        "points": 8.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T3",
        "points": 8.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T12",
        "points": 6.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "T5",
        "points": 5.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T8",
        "points": 5.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "1",
        "points": 4.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "10",
        "points": 3.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "12",
        "points": 1.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "2",
        "points": 1.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "T6",
        "points": 0.0
       }
      ]
@@ -1218,22 +1582,30 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "T1",
        "points": 10.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T2",
        "points": 9.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T4",
        "points": 7.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "T8",
        "points": 2.0
       }
      ]
@@ -1244,17 +1616,23 @@
      "lines": [
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "1",
        "points": 10.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "T3",
        "points": 9.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T4",
        "points": 8.0
       }
      ]
@@ -1265,22 +1643,30 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "1",
        "points": 12.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "T3",
        "points": 9.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "T9",
        "points": 5.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "9",
        "points": 4.0
       }
      ]
@@ -1291,27 +1677,37 @@
      "lines": [
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "1",
        "points": 11.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T2",
        "points": 9.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "8",
        "points": 6.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "14",
        "points": 0.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "14",
        "points": 0.0
       }
      ]
@@ -1322,32 +1718,44 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T4",
        "points": 8.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "4",
        "points": 8.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "T9",
        "points": 5.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "7",
        "points": 4.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "T10",
        "points": 2.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "13",
        "points": 1.0
       }
      ]
@@ -1358,27 +1766,37 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T4",
        "points": 8.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "8",
        "points": 7.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T6",
        "points": 6.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T6",
        "points": 6.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "11",
        "points": 2.0
       }
      ]
@@ -1389,22 +1807,30 @@
      "lines": [
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T2",
        "points": 9.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T1",
        "points": 8.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "T2",
        "points": 8.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "10",
        "points": 3.0
       }
      ]
@@ -1415,17 +1841,23 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T12",
        "points": 6.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "6",
        "points": 6.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "T5",
        "points": 5.0
       }
      ]
@@ -1436,17 +1868,23 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T2",
        "points": 9.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "T4",
        "points": 8.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "5",
        "points": 8.0
       }
      ]
@@ -1457,27 +1895,37 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "T1",
        "points": 10.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "12",
        "points": 2.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "T10",
        "points": 2.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T12",
        "points": 1.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T18",
        "points": 1.0
       }
      ]
@@ -1488,22 +1936,30 @@
      "lines": [
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "T3",
        "points": 9.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "T4",
        "points": 8.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T16",
        "points": 2.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "10",
        "points": 1.0
       }
      ]
@@ -1514,17 +1970,23 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T3",
        "points": 8.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "9",
        "points": 6.0
       },
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "8",
        "points": 6.0
       }
      ]
@@ -1535,12 +1997,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "1",
        "points": 15.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T8",
        "points": 5.0
       }
      ]
@@ -1551,17 +2017,23 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T8",
        "points": 7.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T8",
        "points": 5.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T7",
        "points": 4.0
       }
      ]
@@ -1572,12 +2044,16 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T14",
        "points": 5.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "8",
        "points": 4.0
       }
      ]
@@ -1588,17 +2064,23 @@
      "lines": [
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T1",
        "points": 8.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "6",
        "points": 5.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "T8",
        "points": 2.0
       }
      ]
@@ -1609,12 +2091,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T1",
        "points": 9.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T10",
        "points": 5.0
       }
      ]
@@ -1625,17 +2111,23 @@
      "lines": [
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "5",
        "points": 6.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T14",
        "points": 5.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "11",
        "points": 3.0
       }
      ]
@@ -1646,12 +2138,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T6",
        "points": 8.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T8",
        "points": 5.0
       }
      ]
@@ -1662,17 +2158,23 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T8",
        "points": 7.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "9",
        "points": 3.0
       },
       {
        "date": "2026-09-22",
+       "event": "TGF Austin 2026",
        "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "position": "11",
        "points": 2.0
       }
      ]
@@ -1683,17 +2185,23 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T8",
        "points": 7.0
       },
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "7",
        "points": 5.0
       },
       {
        "date": "2026-09-08",
+       "event": "TGF Austin 2026",
        "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "position": "11",
        "points": 0.0
       }
      ]
@@ -1704,12 +2212,16 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "T1",
        "points": 10.0
       },
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T16",
        "points": 2.0
       }
      ]
@@ -1720,12 +2232,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T6",
        "points": 8.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "10",
        "points": 3.0
       }
      ]
@@ -1736,12 +2252,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "5",
        "points": 7.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "12",
        "points": 4.0
       }
      ]
@@ -1752,12 +2272,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "4",
        "points": 10.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T11",
        "points": 1.0
       }
      ]
@@ -1768,12 +2292,16 @@
      "lines": [
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T6",
        "points": 6.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T12",
        "points": 1.0
       }
      ]
@@ -1784,12 +2312,16 @@
      "lines": [
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T7",
        "points": 4.0
       },
       {
        "date": "2026-09-12",
+       "event": "TGF Austin 2026",
        "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "10",
        "points": 4.0
       }
      ]
@@ -1800,7 +2332,9 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "7",
        "points": 7.0
       }
      ]
@@ -1811,7 +2345,9 @@
      "lines": [
       {
        "date": "2026-09-15",
+       "event": "TGF Austin 2026",
        "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "position": "5",
        "points": 7.0
       }
      ]
@@ -1822,12 +2358,16 @@
      "lines": [
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "T10",
        "points": 5.0
       },
       {
        "date": "2026-08-29",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "T11",
        "points": 1.0
       }
      ]
@@ -1843,12 +2383,16 @@
      "lines": [
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Back - AUSTIN Fall Net",
+       "position": "1",
        "points": 6.0
       },
       {
        "date": "2026-09-19",
+       "event": "TGF San Antonio 2026",
        "tournament": "s18.11 POINTS Net - Front - AUSTIN Fall Net",
+       "position": "2",
        "points": 0.0
       }
      ]
@@ -1864,7 +2408,9 @@
      "lines": [
       {
        "date": "2026-09-01",
+       "event": "TGF Austin 2026",
        "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "position": "11",
        "points": 1.0
       }
      ]
@@ -1875,7 +2421,9 @@
      "lines": [
       {
        "date": "2026-09-29",
+       "event": "TGF Austin 2026",
        "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "position": "T18",
        "points": 1.0
       }
      ]

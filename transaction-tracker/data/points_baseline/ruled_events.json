@@ -1,0 +1,12 @@
+{
+ "note": "Event points the Tracker computed and Kerry RULED, frozen here because their cards are Golf Genius imports that carry GG's playing handicap, not the Tracker's locked one. Net Stableford, floored at 0, plus off the round. 10/6: Kerry 10/13 'Yes, 54 is right for Baker' (mailbox #1725/#1726). Never edited by code.",
+ "events": {
+  "3308": {"date": "2026-10-06", "code": "s9.26", "chapter": "San Antonio",
+   "points": {"101": 13, "6": 10, "298": 10, "142": 9, "125": 9, "82": 9, "313": 9,
+              "21": 8, "87": 8, "18": 8, "136": 8, "131": 7, "19": 5, "24": 5,
+              "709": 5, "33": 5, "103": 4, "93": 3, "817": 2, "765": 2, "38": 0}},
+  "3316": {"date": "2026-10-06", "code": "a9.26", "chapter": "Austin",
+   "points": {"439": 9, "22": 8, "821": 7, "31": 7, "99": 7, "61": 7, "187": 6,
+              "13": 5, "49": 5, "166": 4, "10": 4, "833": 3, "438": 2, "85": 1}}
+ }
+}

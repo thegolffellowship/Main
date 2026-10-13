@@ -830,6 +830,27 @@ refuses. Manual read-only captures that write elsewhere (`points_ledger`) still
 run, for Kerry's GG comparison. Turn it on only on Kerry's word. Guard
 `test_gg_points_intake.py`.
 
+**The Tracker computes the Fall races and Monthly (Kerry 2026-10-13: "I'm relying
+on you and what we've built")** — `email_parser/tracker_points.py`. It builds
+the standings from three sources:
+- Golf Genius's own lines through 9/29, frozen in `data/points_baseline/fall_2026_gg_through_0929.json`.
+- Kerry-ruled events in `ruled_events.json` (10/6: "Yes, 54 is right for Baker").
+- Every later published entered event, computed by the engine: net Stableford, floored at 0, plus off the round, an 18 = two entries.
+
+Rules:
+- Members only.
+- The player's home-chapter race.
+- Best N, and a championship line always counts.
+
+The blind test matched GG's own boards on every player but the ruled Baker
+(`test_tracker_points.py`). How it runs:
+- While app setting `points_source` = `tracker`, the GG refresh path rebuilds
+  those races from the Tracker instead of refusing (no network), and the
+  monthly job writes the Tracker's months.
+- The row expansion serves our own lines. Concluded races serve GG's table
+  from the newest captured ledger.
+- Bridge `scoring-tracker-points[:apply]` (dry run by default).
+
 ## No-push window during live events (CA #829, 2026-09-28, standing rule)
 
 Every push to `main` restarts the Tracker and drops requests in flight

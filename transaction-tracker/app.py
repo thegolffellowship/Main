@@ -13199,13 +13199,28 @@ def api_season_contest_points_race_detail():
     race = _GG_POINTS_RACES.get(race_key)
     if not race:
         return jsonify({"error": f"Unknown race {race_key!r}"}), 400
-    if not card.isdigit():
+    if not (card.isdigit() or (card[:1] == "c" and card[1:].isdigit())):
         return jsonify({"error": "card must be a numeric member_card_id"}), 400
 
     # GG points intake OFF (Kerry 10/13, CoS #1693-1): the row expansion
     # stops calling Golf Genius; the page still shows the player's cards.
     from email_parser.gg_untether import gg_points_intake_on, POINTS_PAUSED
     if not gg_points_intake_on():
+        # No GG call. A Tracker-computed race serves its own lines; any
+        # other race serves GG's table from the newest captured ledger.
+        from email_parser import tracker_points as _tp
+        try:
+            if race_key in _tp.TRACKER_RACES and _tp.tracker_source_on():
+                d = _tp.member_detail(race_key, card)
+            else:
+                d = _tp.bundle_detail(race_key, card)
+        except Exception:
+            logger.exception("points detail (intake off) failed")
+            d = None
+        if d:
+            from email_parser.database import substitute_gg_tournament_names
+            d["tables"] = substitute_gg_tournament_names(d["tables"])
+            return jsonify(d)
         return jsonify({"tables": [], "paused": True, "note": POINTS_PAUSED})
 
     now = time.time()

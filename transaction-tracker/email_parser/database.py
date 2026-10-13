@@ -8797,6 +8797,18 @@ def refresh_points_race_standings(race_key: str,
     # switch (Kerry 10/13, CoS #1693-1): off = refused, snapshot kept.
     from email_parser.gg_untether import gg_points_intake_on, POINTS_PAUSED
     if not gg_points_intake_on(db_path):
+        # The Tracker computes the Fall races itself (Kerry 10/13: "I'm
+        # relying on you and what we've built") — the same refresh, its
+        # own numbers, nothing fetched (tracker_points).
+        from email_parser import tracker_points as _tp
+        if race_key in _tp.TRACKER_RACES and _tp.tracker_source_on(db_path):
+            n = _tp.write_race(race_key, _tp.build_race(race_key, db_path=db_path),
+                               db_path=db_path)
+            try:
+                _tp.rebuild_monthly(db_path=db_path, apply=True)
+            except Exception:
+                logger.exception("tracker monthly rebuild failed (non-fatal)")
+            return n
         raise RuntimeError(POINTS_PAUSED)
 
     from golf_genius_sync import fetch_season_points_race
@@ -10668,7 +10680,12 @@ def get_points_race_standings(race_key: str,
     from email_parser.gg_untether import gg_points_intake_on
     intake_paused = not gg_points_intake_on(db_path)
     if intake_paused:
-        force_refresh = stale = False
+        # Tracker-computed races keep the refresh window (it rebuilds from
+        # our own cards, no network); every other race just serves its
+        # saved snapshot.
+        from email_parser import tracker_points as _tp
+        if not (race_key in _tp.TRACKER_RACES and _tp.tracker_source_on(db_path)):
+            force_refresh = stale = False
 
     queued_refresh = False
     if (force_refresh or stale) and no_network:
@@ -19827,6 +19844,76 @@ def _synthesize_month_points(conn, month_key: str, errors: list) -> dict:
     return best
 
 
+def _monthly_month_entry(conn, key: str, best: dict) -> dict:
+    """One month's Monthly Points entry (rank, ties, FINAL, purse, winners)
+    from `best` = {person key: {player_name, customer_id, chapter, rounds,
+    points, member_card_id}} — shared by the Golf Genius pages and the
+    Tracker's own month (tracker_points), so both read the same rules."""
+    import calendar
+    from .timezone_utils import today_central
+    today = today_central().isoformat()
+    year, mnum = int(key[:4]), int(key[5:7])
+    last_day = calendar.monthrange(year, mnum)[1]
+    month_end = f"{year:04d}-{mnum:02d}-{last_day:02d}"
+    complete = today > month_end
+    # FINAL once the month's last scheduled event is behind us
+    # (Kerry 2026-09-29: "September points is over now so the
+    # winner should be highlighted") — the page shows the winner
+    # the day after the last event. DISPLAY ONLY: `complete` (the
+    # calendar month over) still gates the recorded payout, so no
+    # money moves a day early on a points total GG may not have
+    # finished awarding.
+    try:
+        _last_ev = conn.execute(
+            """SELECT MAX(event_date) AS d FROM events
+               WHERE event_date BETWEEN ? AND ?
+                 AND lower(COALESCE(status, 'active')) NOT IN ('cancelled', 'canceled')""",
+            (f"{year:04d}-{mnum:02d}-01", month_end)).fetchone()["d"]
+    except sqlite3.OperationalError:
+        _last_ev = None
+    final = complete or bool(_last_ev and today > _last_ev)
+    member_count = conn.execute(
+        """SELECT COUNT(DISTINCT customer_id) AS c
+           FROM customer_memberships
+           WHERE date(started_at) <= ? AND date(expires_at) >= ?""",
+        (month_end, month_end)).fetchone()["c"]
+    standings = sorted(best.values(), key=lambda x: -x["points"])
+    last_pts, last_rank = None, 0
+    for i, row in enumerate(standings, 1):
+        if row["points"] != last_pts:
+            last_rank, last_pts = i, row["points"]
+        row["rank"] = last_rank
+    for row in standings:
+        tied = sum(1 for x in standings if x["rank"] == row["rank"]) > 1
+        row["rank_label"] = f"T{row['rank']}" if tied else str(row["rank"])
+    top = standings[0]["points"] if standings else None
+    winners = [x for x in standings
+               if top is not None and x["points"] == top and top > 0]
+    share = (round(member_count / len(winners), 2)
+             if complete and winners else None)
+    return {
+        "month": key,
+        "name": calendar.month_name[mnum].upper(),
+        "month_end": month_end,
+        "complete": complete,
+        "final": final,
+        "last_event_date": _last_ev,
+        # the leaders, shown once the month is FINAL; `winners`
+        # below (with the $ share) still waits for `complete`
+        "final_winners": ([{"player_name": w["player_name"],
+                            "customer_id": w["customer_id"],
+                            "points": w["points"]} for w in winners]
+                          if final else []),
+        "member_count": member_count,
+        "purse": member_count,
+        "winners": ([{"player_name": w["player_name"],
+                      "customer_id": w["customer_id"],
+                      "share": share} for w in winners]
+                    if complete else []),
+        "standings": standings,
+    }
+
+
 def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
     import calendar
     from golf_genius_sync import (fetch_public_page, parse_page_structure,
@@ -19873,31 +19960,6 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
     with _connect(db_path) as conn:
         today = today_central().isoformat()
         for key in sorted(set(month_pages) | synth_keys):
-            year, mnum = int(key[:4]), int(key[5:7])
-            last_day = calendar.monthrange(year, mnum)[1]
-            month_end = f"{year:04d}-{mnum:02d}-{last_day:02d}"
-            complete = today > month_end
-            # FINAL once the month's last scheduled event is behind us
-            # (Kerry 2026-09-29: "September points is over now so the
-            # winner should be highlighted") — the page shows the winner
-            # the day after the last event. DISPLAY ONLY: `complete` (the
-            # calendar month over) still gates the recorded payout, so no
-            # money moves a day early on a points total GG may not have
-            # finished awarding.
-            try:
-                _last_ev = conn.execute(
-                    """SELECT MAX(event_date) AS d FROM events
-                       WHERE event_date BETWEEN ? AND ?
-                         AND lower(COALESCE(status, 'active')) NOT IN ('cancelled', 'canceled')""",
-                    (f"{year:04d}-{mnum:02d}-01", month_end)).fetchone()["d"]
-            except sqlite3.OperationalError:
-                _last_ev = None
-            final = complete or bool(_last_ev and today > _last_ev)
-            member_count = conn.execute(
-                """SELECT COUNT(DISTINCT customer_id) AS c
-                   FROM customer_memberships
-                   WHERE date(started_at) <= ? AND date(expires_at) >= ?""",
-                (month_end, month_end)).fetchone()["c"]
             best: dict = {}
             if key in synth_keys:
                 best = _synthesize_month_points(conn, key, errors)
@@ -19926,41 +19988,7 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
                                        "rounds": r.get("tournaments"),
                                        "points": pts,
                                        "member_card_id": r.get("member_card_id")}
-            standings = sorted(best.values(), key=lambda x: -x["points"])
-            last_pts, last_rank = None, 0
-            for i, row in enumerate(standings, 1):
-                if row["points"] != last_pts:
-                    last_rank, last_pts = i, row["points"]
-                row["rank"] = last_rank
-            for row in standings:
-                tied = sum(1 for x in standings if x["rank"] == row["rank"]) > 1
-                row["rank_label"] = f"T{row['rank']}" if tied else str(row["rank"])
-            top = standings[0]["points"] if standings else None
-            winners = [x for x in standings
-                       if top is not None and x["points"] == top and top > 0]
-            share = (round(member_count / len(winners), 2)
-                     if complete and winners else None)
-            out_months.append({
-                "month": key,
-                "name": calendar.month_name[mnum].upper(),
-                "month_end": month_end,
-                "complete": complete,
-                "final": final,
-                "last_event_date": _last_ev,
-                # the leaders, shown once the month is FINAL; `winners`
-                # below (with the $ share) still waits for `complete`
-                "final_winners": ([{"player_name": w["player_name"],
-                                    "customer_id": w["customer_id"],
-                                    "points": w["points"]} for w in winners]
-                                  if final else []),
-                "member_count": member_count,
-                "purse": member_count,
-                "winners": ([{"player_name": w["player_name"],
-                              "customer_id": w["customer_id"],
-                              "share": share} for w in winners]
-                            if complete else []),
-                "standings": standings,
-            })
+            out_months.append(_monthly_month_entry(conn, key, best))
     return {"months": out_months, "errors": errors}
 
 
@@ -20281,6 +20309,12 @@ def refresh_monthly_points_snapshot(db_path: str | Path = DB_PATH) -> dict:
     # snapshot; the daily job, the boot bootstrap and Refresh pull nothing.
     from email_parser.gg_untether import gg_points_intake_on, POINTS_PAUSED
     if not gg_points_intake_on(db_path):
+        from email_parser import tracker_points as _tp
+        if _tp.tracker_source_on(db_path):
+            try:
+                _tp.rebuild_monthly(db_path=db_path, apply=True)
+            except Exception:
+                logger.exception("tracker monthly rebuild failed (non-fatal)")
         data = load_gg_snapshot("monthly_points", db_path) or {"months": [], "errors": []}
         data["intake_paused"] = POINTS_PAUSED
         return data
