@@ -1,5 +1,29 @@
-window.TGF_VERSION = "2.556.2";
+window.TGF_VERSION = "2.556.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.556.5",
+    date: "2026-10-13",
+    title: "Health: the event-day email send has its own slow line (60 s)",
+    changes: [
+      "The staff bridge scoring-event-day-email sends one pairing email per roster player (or one test message) through Microsoft Graph and took 6.7 s at the median and 12 s at the slowest on 10/12, so its slow line was flagging a send as a fault every event day. The line is now 60 s instead of the 10 s bridge default. Monitoring only; nothing is sent or changed."
+    ]
+  },
+  {
+    version: "2.556.4",
+    date: "2026-10-13",
+    title: "Backups: player photos and card photos now go off-site with the nightly backup",
+    changes: [
+      "CoS #1604 (ops, no schema): the database was backed up off-site (OneDrive nightly, Litestream to R2), but the files beside it were not. Player photos (player_photos/, named by customer_id) and the scorekeepers' card photos (se_photos/) lived only on the Railway volume; Litestream copies SQLite files only. The 3:15 AM backup job now also archives those two folders into one tar.gz in the same OneDrive backup folder (sub-folder files/), through the same Microsoft Graph credentials, only when their content changed since the last upload (a content hash is kept in app setting files_backup_hash), keeping the newest 8. The archive is read back and checked file by file before it uploads. The 5:00 digest names a MEDIUM finding (files_backup_stale) if last night's upload did not happen, and carries a FILES BACKUP line. Read or test it with bridge scoring-files-backup (status), scoring-files-backup:dry (build and check, upload nothing). A new file store on the volume goes in backups.FILE_STORES. Guard test_files_backup.py."
+    ]
+  },
+  {
+    version: "2.556.3",
+    date: "2026-10-13",
+    title: "Player Spotlight: an open during the warmer's refresh no longer rebuilds the Cup piece itself",
+    changes: [
+      "Three Spotlight opens took about 10.9 s on 10/9 and 10/10 (digest #1567; the Fellowship Cup piece alone is ~8.3 s). Cause: every 90 s the warmer expires the shared entries and then spends ~10 s rebuilding them, and an open that landed inside that window rebuilt the same entries on its own thread. While the warmer is mid-rebuild, every other thread now serves the entry it just expired (at most about 2.5 minutes old) and builds nothing. Nothing is cached longer, no figure changes, and a restart still starts cold until the first warmer tick. Guard in test_perf.py (a page open during a held-open rebuild returns in under 2 s)."
+    ]
+  },
   {
     version: "2.556.2",
     date: "2026-10-13",

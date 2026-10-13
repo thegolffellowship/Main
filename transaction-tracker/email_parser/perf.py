@@ -74,6 +74,7 @@ SLOW_MS = {
     "scoring-print-pack-pdf": 60_000,
     "scoring-scorecards": 60_000,    # |pdf|all binds 24 layout combos in Chromium (21-26 s on 9/29)
     "scoring-spotlight": 20_000,     # staff bridge; a cold Player Spotlight build took 13 s on 10/5, by design after >24 h idle
+    "scoring-event-day-email": 60_000, # sends one email per roster player through Graph: p50 6.7 s, 12 s on 10/12
     "scoring-health": 30_000,        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; cached reads are fast
     "scoring-recap-draft-email": 30_000,
     "auto_gg_results_sync": 600_000,
