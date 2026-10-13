@@ -59038,6 +59038,103 @@ def restore_tgf_payouts_explicit(rows: list, apply: bool = False,
     return out
 
 
+def _tracker_team_and_ctp_rows(ev: dict, notes: list, db_path=None) -> list:
+    """GG-shaped result rows for an UNTETHERED event (no Golf Genius board):
+    Team / CART Net from the Tracker's EVENTS leaderboard and CTP / Longest
+    Putt from the phone claims. Money waits for the field, as the board's
+    own money does (`field_complete`): a team total with holes missing is
+    not a result. Read-only."""
+    out: list = []
+    try:
+        lb = get_event_leaderboard(ev["item_name"], db_path=db_path) or {}
+    except Exception as exc:
+        logger.exception("untethered payouts: leaderboard failed for %s", ev["item_name"])
+        notes.append(f"Team Net / CTP: leaderboard unavailable ({exc}) — skipped")
+        return out
+    if not lb.get("field_complete"):
+        notes.append(
+            f"Team Net / CTP: the field is not complete yet "
+            f"({lb.get('holes_posted')} of {lb.get('holes_needed')} holes posted) — skipped")
+        return out
+    for t in lb.get("teams") or []:
+        if t.get("total_net") is None or not t.get("position"):
+            continue
+        names = [(m.get("player_name") or "").strip() for m in t.get("players") or []]
+        names = [n for n in names if n]
+        if names:
+            out.append({"game": "team_net", "player_name": " + ".join(names),
+                        "position": t["position"], "purse": 0,
+                        "detail": f"Tracker team {t.get('team_num')}"})
+    if not any(r["game"] == "team_net" for r in out):
+        notes.append("Team Net: no team totals on the Tracker leaderboard — skipped")
+    try:
+        from email_parser.score_entry import event_ctp_holders
+        holders = event_ctp_holders(ev["id"], db_path=db_path)
+    except Exception as exc:
+        logger.exception("untethered payouts: CTP holders failed for %s", ev["item_name"])
+        holders = []
+        notes.append(f"CTP: holders unavailable ({exc}) — skipped")
+    for h in holders:
+        label = "Longest Putt" if h["kind"] == "longest_putt" else "CTP"
+        if not h.get("customer_id"):
+            notes.append(f"{label} hole {h['hole']}: nobody holds it — not paid")
+            continue
+        nm = None
+        try:
+            with _connect(db_path) as _c:
+                _r = _c.execute("SELECT first_name, last_name FROM customers "
+                                "WHERE customer_id = ?", (h["customer_id"],)).fetchone()
+            if _r and (_r["first_name"] or _r["last_name"]):
+                nm = f"{_r['first_name'] or ''} {_r['last_name'] or ''}".strip()
+        except Exception:
+            nm = None
+        out.append({"game": h["kind"], "player_name": nm or h.get("name") or "",
+                    "customer_id": h["customer_id"], "purse": 0,
+                    "game_label": f"hole {h['hole']}"})
+    return out
+
+
+def _engine_flight_payout_rows(event_name: str, notes: list, db_path=None) -> list:
+    """Individual Net, Skins and Individual Gross for an UNTETHERED event,
+    paid by the Tracker's engine on the event's flight board
+    (`engine_game_payouts`: the board's SELECTION pins the flights, its
+    AMOUNTS pay the places/skins). A game that is not complete pays nothing
+    and says why; money with no winner is reported, never guessed."""
+    rows: list = []
+    eng = engine_game_payouts(event_name, db_path=db_path)
+    if eng.get("error"):
+        notes.append(f"Ind Net / Skins / Ind Gross: {eng['error']} — skipped "
+                     f"(publish the entered cards first)")
+        return rows
+    for w in eng.get("warnings") or []:
+        notes.append(f"Engine: {w}")
+    for game, prefix in (("individual_net", "Ind Net"), ("skins", "Skins"),
+                         ("individual_gross", "Ind Gross")):
+        g = (eng.get("games") or {}).get(game)
+        if not g or g.get("status") == "not_running":
+            continue
+        if g.get("status") != "paid":
+            notes.append(f"{prefix}: {g.get('status')} — "
+                         + ("; ".join(g.get("notes") or []) or "not final")
+                         + " — skipped")
+            continue
+        for r in g.get("rows") or []:
+            if (r.get("amount") or 0) <= 0:
+                continue
+            det = r.get("detail") or ""
+            rows.append({"golferName": r.get("name") or "",
+                         "customer_id": r.get("customer_id"),
+                         "category": game, "amount": round(float(r["amount"]), 2),
+                         "description": det if det.startswith(prefix)
+                         else f"{prefix} {det}".strip()})
+        for u in g.get("unallocated") or []:
+            notes.append(f"{prefix}: ${float(u.get('amount') or 0):.2f} not paid "
+                         f"(flight {u.get('flight_no')}: {u.get('why')})")
+        if not g.get("sum_check", True):
+            notes.append(f"{prefix}: " + "; ".join(g.get("notes") or ["sum check failed"]))
+    return rows
+
+
 def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
     """Server-side assembly of every DETERMINED winner for one event into
     payout rows — the single source of truth behind both the Games tab's
@@ -59081,11 +59178,25 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
     # ── GG-recorded: Team Net (per-member split), CTP / Longest Putt ──
     gg = get_gg_game_results(ev["item_name"], db_path=db_path)
     gg_rows = gg.get("results") or []
+    # UNTETHERED (Kerry 10/13: "we're not running Golf Genius at all
+    # tonight, so I'm relying on you and what we've built"): an event on or
+    # after gg_untether_from has no GG board, so its Team / CART Net comes
+    # from the Tracker's own EVENTS leaderboard (the teams Kerry sees, with
+    # the drawn blinds and the Team Net pops) and its CTP / Longest Putt
+    # from the holders claimed on the phones — both fed through the SAME
+    # split / tie / blind rules below, in GG's row shape. Individual Net,
+    # Skins and Individual Gross come from the engine on the flight board
+    # (engine_game_payouts), further down. Never auto-recorded: the hourly
+    # bulk pass skips untethered events; this runs on Record Payouts.
+    from email_parser.gg_untether import gg_allowed as _gg_allowed
+    untethered = not _gg_allowed(ev.get("event_date"), db_path)
+    if untethered:
+        gg_rows = _tracker_team_and_ctp_rows(ev, notes, db_path=db_path)
     team_amts = [a for a in (_matrix_num(g_event.get("team1st")),
                              _matrix_num(g_event.get("team2nd"))) if a > 0]
     teams = [r for r in gg_rows if r["game"] == "team_net"]
     if team_amts and g_event.get("teamTotal") not in (None, "NO_EVENT"):
-        if not teams:
+        if not teams and not untethered:
             notes.append("Team Net: no GG-recorded winner yet — skipped")
         # Tied teams (GG "T1"/"T1") split the combined place money — with a
         # single team place, two T1 teams each take half of team1st (s9.17
@@ -59214,7 +59325,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         _matrix_num(g_event.get("ctp1")), _matrix_num(g_event.get("ctp2")),
         _matrix_num(g_event.get("ctp3")), _matrix_num(g_event.get("ctp4")),
     ) if v > 0]
-    if ctp_vals and not proxies:
+    if ctp_vals and not proxies and not untethered:
         notes.append("CTP: no GG-recorded winners yet — skipped")
     for i, p in enumerate(proxies):
         amt = ctp_vals[min(i, len(ctp_vals) - 1)] if ctp_vals else 0
@@ -59225,6 +59336,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         if amt > 0:
             label = "Longest Putt" if p["game"] == "longest_putt" else "CTP"
             rows.append({"golferName": p["player_name"],
+                         "customer_id": p.get("customer_id"),
                          "category": "longest_putt" if p["game"] == "longest_putt" else "ctp",
                          "amount": amt,
                          "description": f"{label} {p.get('game_label') or ''}".strip()})
@@ -59345,7 +59457,8 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
 
     # ── Individual Net (GG purses first; per-flight ladders, tie splits) ──
     net_flights = int(_matrix_num(g_net.get("netFlights")) or 1)
-    if _matrix_num(g_net.get("individualNet")) > 0 and counts["net"] >= 2:
+    if _matrix_num(g_net.get("individualNet")) > 0 and counts["net"] >= 2 \
+            and not untethered:
         _gg_net = _gg_purse_rows("individual_net", "Ind Net")
         if _gg_net:
             rows.extend(_gg_net)
@@ -59396,7 +59509,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
     #    ½-net below 8 gross buyers on 9h stays manual when GG hasn't
     #    posted its board) ──
     skins_total = _matrix_num(g_gross.get("skinsTotal"))
-    if skins_total > 0:
+    if skins_total > 0 and not untethered:
         _gg_skins = _gg_purse_rows("skins", "Skins")
         if _gg_skins:
             rows.extend(_gg_skins)
@@ -59439,7 +59552,7 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                 notes.append(f"Skins: {d.get('status', 'unknown')} — skipped")
 
     # ── Individual Gross (GG purses first; per flight) ──
-    if _matrix_num(g_gross.get("individualGross")) > 0:
+    if _matrix_num(g_gross.get("individualGross")) > 0 and not untethered:
         g_flights = max(1, int(_matrix_num(g_gross.get("grossFlights")) or 1))
         _gg_gross = _gg_purse_rows("individual_gross", "Ind Gross")
         if _gg_gross:
@@ -59507,6 +59620,9 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
         elif d.get("status") != "gg_purse":
             notes.append(f"Ind. Gross: {d.get('status', 'unknown')} — skipped")
 
+    if untethered:
+        rows.extend(_engine_flight_payout_rows(ev["item_name"], notes,
+                                               db_path=db_path))
     notes.append("Hole-in-One is an accruing cross-event pot — never auto-recorded")
     return {"event_name": ev["item_name"], "holes": holes, "counts": counts,
             "rows": rows, "notes": notes,
@@ -59983,7 +60099,8 @@ def record_event_game_payouts(event_name: str, payouts: list,
                 # generic name lookup can't read GG's "VASQUEZ, Gus"
                 # format, so consumption missed 26 of 33 preserved rows on
                 # the first live run and re-inserted them as duplicates.
-                cid = _resolve_customer_for_payout(conn, nm) if nm else None
+                cid = (int(p["customer_id"]) if p.get("customer_id")
+                       else (_resolve_customer_for_payout(conn, nm) if nm else None))
                 hit = None
                 if cid:
                     hit = next((i for i, q in enumerate(pool)
@@ -60045,7 +60162,11 @@ def import_tgf_payouts(event_id: int, payouts: list, db_path=None) -> dict:
         added = 0
         new_payout_ids: list[int] = []
         for p in payouts:
-            customer_id = _resolve_customer_for_payout(conn, p["golferName"])
+            # customer_id is king (principle 6): an assembled row that
+            # already knows its person (the untethered engine / CTP rows)
+            # is recorded to that id; the name resolver is the fallback.
+            customer_id = (int(p["customer_id"]) if p.get("customer_id")
+                           else _resolve_customer_for_payout(conn, p["golferName"]))
             cur = conn.execute(
                 """INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description)
                    VALUES (?, ?, ?, ?, ?)""",

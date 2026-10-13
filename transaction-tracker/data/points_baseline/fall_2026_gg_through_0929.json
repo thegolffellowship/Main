@@ -1,0 +1,1886 @@
+{
+ "note": "FROZEN Golf Genius Fall-race lines through 9/29/2026 (Kerry 10/13: Tracker computes points from 10/6 on; GG intake OFF). Captured read-only 10/13 via scoring-points-ledger (effective 2026-09-30); lines dated 2026-10-06 or later are dropped here. Never edited by code.",
+ "cutover": "2026-10-06",
+ "races": {
+  "san_antonio_fall_net": {
+   "effective_date": "2026-09-30",
+   "players": [
+    {
+     "member_card_id": "12351479",
+     "player_name": "RIDEOUT, Jeff",
+     "lines": [
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 12.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12135103",
+     "player_name": "MAZANEC, Luke",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 13.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11311131",
+     "player_name": "BAKER, Adam",
+     "lines": [
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 12.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11251659",
+     "player_name": "STICH, Dan",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 6.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "183496",
+     "player_name": "NIESTER, Kerry",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "183768",
+     "player_name": "MURPHY, Mike",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 15.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "183750",
+     "player_name": "PALACIOS, Richard",
+     "lines": [
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "7144556",
+     "player_name": "MARROQUIN, Scott",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 12.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11126866",
+     "player_name": "SOUTH, Daniel",
+     "lines": [
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "5287212",
+     "player_name": "WADE, Mary",
+     "lines": [
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "183519",
+     "player_name": "ANTHIS, Larry",
+     "lines": [
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "183516",
+     "player_name": "YOUNG, Jeff",
+     "lines": [
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12360956",
+     "player_name": "SALDANA, Jesse",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "8538469",
+     "player_name": "YOUNGS, Pat",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "348539",
+     "player_name": "VASQUEZ, Gus",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 0.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "10074400",
+     "player_name": "DelCARMEN, Michelle",
+     "lines": [
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 12.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "7085644",
+     "player_name": "FEHLIS, Chuck",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "183850",
+     "player_name": "SHARITZ, Don",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13004025",
+     "player_name": "ALLEN, Morris",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "10945222",
+     "player_name": "BOURQUIN, Craig",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 11.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "183747",
+     "player_name": "BURLINGAME, Rob",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11503287",
+     "player_name": "SANFORD, Andy",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 7.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12349277",
+     "player_name": "WOLIN, Allen",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12415121",
+     "player_name": "AGUILERA, Hector",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "4405838",
+     "player_name": "KULAWIK, Steve",
+     "lines": [
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11335741",
+     "player_name": "SKINNER, Nic",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11258891",
+     "player_name": "THOMPSON, Brian",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 6.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12988391",
+     "player_name": "ANGELONE, Justin",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "5277836",
+     "player_name": "WICKER, Fred",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 5.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "2626330",
+     "player_name": "CALLAWAY, Rob",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 9.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "8329335",
+     "player_name": "HAMILTON, Doug",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 3.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12520764",
+     "player_name": "JOHNSON, Reggie",
+     "lines": []
+    },
+    {
+     "member_card_id": "12999814",
+     "player_name": "MILLER, Daniel",
+     "lines": []
+    },
+    {
+     "member_card_id": "10969802",
+     "player_name": "WAFFORD, Jeremy",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12993288",
+     "player_name": "Williams, Jacob",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 8.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13012450",
+     "player_name": "LEWIS, Wade",
+     "lines": [
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13004034",
+     "player_name": "Pearson, Jason",
+     "lines": [
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13004029",
+     "player_name": "CLARKSON, Bear",
+     "lines": [
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12351478",
+     "player_name": "McCRARY, Justin",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12982254",
+     "player_name": "WALLACE, Will",
+     "lines": [
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - SAN ANTONIO Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - SAN ANTONIO Fall Net",
+       "points": 0.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13004033",
+     "player_name": "McCORMICK, Michele",
+     "lines": [
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "9943059",
+     "player_name": "WILSON, James",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "s9.25 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11606489",
+     "player_name": "ATKINSON, Bob",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "s9.21 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13026331",
+     "player_name": "Espinosa, Christopher",
+     "lines": [
+      {
+       "date": "2026-09-08",
+       "tournament": "s9.22 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 3.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13047009",
+     "player_name": "Mejia, Joe",
+     "lines": [
+      {
+       "date": "2026-09-15",
+       "tournament": "s9.23 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "818241",
+     "player_name": "PETERSON, Will",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "s9.24 POINTS Net - SAN ANTONIO Fall Net",
+       "points": 2.0
+      }
+     ]
+    }
+   ]
+  },
+  "austin_fall_net": {
+   "effective_date": "2026-09-30",
+   "players": [
+    {
+     "member_card_id": "9079869",
+     "player_name": "YOUNGS, Luke",
+     "lines": [
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 15.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 7.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "5199524",
+     "player_name": "WADE, John",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "9245422",
+     "player_name": "STRAITON, Robert",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 12.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 3.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 1.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 1.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11966062",
+     "player_name": "BARTZ, Joshua",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "9229096",
+     "player_name": "VASQUEZ, Lee",
+     "lines": [
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12347458",
+     "player_name": "SCHNEIDER, Louis",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 12.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11184495",
+     "player_name": "Compton, Kyle",
+     "lines": [
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 11.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 0.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12628130",
+     "player_name": "CANNON, Chris",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11432786",
+     "player_name": "SHARP, Matt",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "10056187",
+     "player_name": "CLOER, Neal",
+     "lines": [
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12628132",
+     "player_name": "ZAPATA, Carlos",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 5.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11359163",
+     "player_name": "MOORE, Dion",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13024613",
+     "player_name": "AREVALO, Guillermo",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 1.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "5039652",
+     "player_name": "BARNA, Kelly",
+     "lines": [
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 2.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "7124833",
+     "player_name": "HOGUE, Jay",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 6.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12355458",
+     "player_name": "MCCORMICK, Sam",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 15.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 5.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11510502",
+     "player_name": "HIGHTOWER, Geoff",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11432768",
+     "player_name": "MELCHOR, Eduardo",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12841699",
+     "player_name": "MCDONNELL, Kaleb",
+     "lines": [
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11339709",
+     "player_name": "CHESHIRE, Neil",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 9.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 5.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11510503",
+     "player_name": "Zac Hammond",
+     "lines": [
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11409511",
+     "player_name": "DOGGETT, Hayden",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 5.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13011541",
+     "player_name": "DONOVAN, Tom",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 3.0
+      },
+      {
+       "date": "2026-09-22",
+       "tournament": "a9.24 POINTS Net - AUSTIN Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11571110",
+     "player_name": "JENKINS, Mike",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-09-08",
+       "tournament": "a9.22 POINTS Net - AUSTIN Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11363546",
+     "player_name": "KIRKSEY, Stu",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 2.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11325236",
+     "player_name": "DOGGETT, Bryce",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 8.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 3.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11261715",
+     "player_name": "LUNA, Isabella",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 7.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11369283",
+     "player_name": "REED, Paul",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 10.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12351473",
+     "player_name": "WILLIAMS, Yolanda",
+     "lines": [
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13024612",
+     "player_name": "Hall, Taylor",
+     "lines": [
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 4.0
+      },
+      {
+       "date": "2026-09-12",
+       "tournament": "a18.5 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 4.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12396717",
+     "player_name": "FRANZ, Kyle",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 7.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "13004012",
+     "player_name": "King, Jeff",
+     "lines": [
+      {
+       "date": "2026-09-15",
+       "tournament": "a9.23 POINTS Net - AUSTIN Fall Net",
+       "points": 7.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "12345795",
+     "player_name": "CHESHIRE, Sharon",
+     "lines": [
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 5.0
+      },
+      {
+       "date": "2026-08-29",
+       "tournament": "s18.10 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11920055",
+     "player_name": "GWIN, Billy",
+     "lines": []
+    },
+    {
+     "member_card_id": "13085037",
+     "player_name": "SCHNEIDER, Louis",
+     "lines": [
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Back - AUSTIN Fall Net",
+       "points": 6.0
+      },
+      {
+       "date": "2026-09-19",
+       "tournament": "s18.11 POINTS Net - Front - AUSTIN Fall Net",
+       "points": 0.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11369746",
+     "player_name": "POST, Brent",
+     "lines": []
+    },
+    {
+     "member_card_id": "12992877",
+     "player_name": "BROWN, Kannon",
+     "lines": [
+      {
+       "date": "2026-09-01",
+       "tournament": "a9.21 POINTS Net - AUSTIN Fall Net",
+       "points": 1.0
+      }
+     ]
+    },
+    {
+     "member_card_id": "11441610",
+     "player_name": "ESTES, Ryan",
+     "lines": [
+      {
+       "date": "2026-09-29",
+       "tournament": "a9.25 POINTS Net - AUSTIN Fall Net",
+       "points": 1.0
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

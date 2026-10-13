@@ -154,6 +154,39 @@ credit/transfer/WD (internal ledger moves); anything recording a REAL
 outbound payment (refund, partial-refund, payout-credit, payout
 recording, mark-paid) is admin-only.
 
+## Payouts without Golf Genius (Kerry 2026-10-13, v2.559.6)
+
+Kerry: "we're not running Golf Genius at all tonight, so I'm relying on you
+and what we've built to make it all happen now." For an event on or after
+`gg_untether_from`, `assemble_event_game_payouts` (the Games tab's Record
+Payouts, `game-payouts-preview`, `scoring-payouts-preview`) no longer waits
+for a GG board:
+- **Team / CART Net:** `_tracker_team_and_ctp_rows` reads the teams on the
+  Tracker's own EVENTS leaderboard (`get_event_leaderboard`: the drawn
+  blinds, cart teams, Team Net pops). It feeds them in GG's row shape
+  through the existing split, tie and blind rules, at the matrix
+  `team1st` / `team2nd`.
+- **CTP / Longest Putt:** paid to the holder claimed on the phones,
+  `score_entry.event_ctp_holders`, which includes a manager ruling. The
+  row carries the `customer_id`. An unclaimed hole is named in the notes
+  and not paid.
+- **Individual Net, Skins, Individual Gross:** `_engine_flight_payout_rows`
+  from `engine_game_payouts`, the engine run on the flight board's
+  SELECTION and AMOUNTS. It never takes the GG-label path, which returns
+  `flights_unknown` for a multi-flight game. A flight with no skin is
+  reported as unpaid, never guessed.
+- **When it pays:** Team and CTP wait for the leaderboard's
+  `field_complete`. The engine games need the entered cards published
+  first (`scoring-entry-publish:<id>|apply`) and every card complete.
+- **customer_id:** `import_tgf_payouts` and the preserved-row matcher
+  record to a row's `customer_id` when the row carries one, and fall back
+  to the name resolver otherwise.
+- **Never automatic:** the hourly bulk pass still skips untethered events.
+  Money is recorded only on Record Payouts.
+- **Events before the untether date** keep the GG path unchanged.
+
+Guard: `test_untethered_payouts.py`.
+
 ## Tee Time Advisor status rules (Kerry-ratified framing 2026-09-01, v2.276.0)
 
 The add/edit-event advisor (`renderAdvisor`/`buildTeeSheet` in

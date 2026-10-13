@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.559.5";
+window.TGF_VERSION = "2.559.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.559.6",
+    date: "2026-10-13",
+    title: "Payouts without Golf Genius: Team/CART Net, CTP and multi-flight games from the Tracker",
+    changes: [
+      "Kerry 10/13: \"we're not running Golf Genius at all tonight, so I'm relying on you and what we've built to make it all happen now.\" Record Payouts could not produce Team Net, CART Net, CTP or any multi-flight Individual Net or Skins without a Golf Genius board, about $730 across tonight's Quarry and Forest Creek. For an event on or after the untether date it now reads the Tracker. Team and CART Net come from the EVENTS leaderboard's own teams, with the drawn blinds and Team Net pops, through the same split, tie and blind rules as before. CTP and Longest Putt pay the holder claimed on the phones; an unclaimed hole is named, not paid. Individual Net, Skins and Individual Gross come from the engine run on the event's flight board, so multi-flight games pay per flight; a flight where nobody won a skin is reported as unpaid, never guessed. Team and CTP money waits for a complete field; the engine games need the entered cards published first. Rows carry the player's customer_id and the writer records to it. Nothing records by itself: the hourly pass still skips untethered events, and money is written only when Record Payouts is pressed. Events before the untether date are unchanged. Guard: test_untethered_payouts.py.",
+    ],
+  },
   {
     version: "2.559.5",
     date: "2026-10-13",

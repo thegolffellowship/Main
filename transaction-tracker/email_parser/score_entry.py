@@ -3413,6 +3413,28 @@ def hole_save_times(round_id: int, db_path=None) -> dict:
     return {"round_id": int(round_id), "groups": groups, "subjects": subjects}
 
 
+def event_ctp_holders(event_id: int, db_path=None) -> list[dict]:
+    """The CTP / Longest Putt holder of every contest hole of an event, from
+    the claims entered on the phones (a manager ruling included), for the
+    Tracker's own payouts on an event Golf Genius does not score (Kerry
+    10/13: "we're not running Golf Genius at all tonight"). One row per
+    (round, contest hole) in hole order: {round_id, hole, kind,
+    customer_id, name} with customer_id/name None when nobody holds it.
+    Read-only."""
+    out: list[dict] = []
+    with _closing(_conn(db_path)) as conn:
+        for r in conn.execute("SELECT id FROM se_rounds WHERE event_id = ? "
+                              "ORDER BY round_date, id", (event_id,)).fetchall():
+            rid = r["id"]
+            contests = ctp_contests(conn, rid, db_path=db_path)
+            for hole, kind in (contests.get("holes") or {}).items():
+                cur = _ctp_current(conn, rid, int(hole))
+                out.append({"round_id": rid, "hole": int(hole), "kind": kind,
+                            "customer_id": cur["customer_id"] if cur else None,
+                            "name": cur["display_name"] if cur else None})
+    return out
+
+
 def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None) -> dict:
     with _closing(_conn(db_path)) as conn:
         vr = conn.execute("SELECT version, updated_at FROM se_event_versions "
