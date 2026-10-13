@@ -189,6 +189,7 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
             "invited_by": host_name.get(host_of.get(K(p["name"]))),
             "rsvp_only": bool(r.get("rsvp_only")),
             "solo_history": solo_hist.get(cid) if cid else None,
+            "is_member": bool(db._ls_is_member(c.get("current_player_status"), r.get("user_status"))),
         }
 
     for holes in sorted(sheet, key=str):
@@ -257,6 +258,29 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
                     hit("R-C solo cart (reading)", "hard" if hard else "soft", not hard and not sh.get("solo_carts"),
                         f"{p['name']} rides alone; prior solo carts on record {sh.get('solo_carts')}, "
                         f"{streak} in a row before tonight" + ("; in first three events" if p.get("first_three") else ""))
+            # Kerry 2026-10-12: "I don't want any first year players riding on
+            # their own in initial pairings unless it can't be avoided."
+            for c in carts:
+                if len(c) == 1 and len(ps) > 1 and (c[0]["is_new"] or c[0]["is_first_timer"]):
+                    hit("first year player alone", "hard", False,
+                        f"{c[0]['name']} ({'1st Timer' if c[0]['is_first_timer'] else '1Y'}) rides alone")
+            # Kerry 2026-10-12: "all guests to always be placed with an ambassador,
+            # unless they are the guest of one of our members, or requests someone
+            # specificially." Read at the cart, as in his Hinojosa / DelCarmen case.
+            _field_k = {K(n) for n in field_names}
+            for c in carts:
+                for p in c:
+                    if p.get("is_member") or p["ambassador"]:
+                        continue
+                    if p.get("invited_by") and K(p["invited_by"]) in _field_k:
+                        continue
+                    if any(K(p["name"]) in pr for pr in req_keys):
+                        continue
+                    mates = [x for x in c if x is not p and x["ambassador"]]
+                    hit("guest + Ambassador cart", "hard", bool(mates),
+                        f"{p['name']} (guest) rides with " +
+                        (", ".join(x["name"] for x in c if x is not p) or "nobody") +
+                        ("" if mates else "; no Ambassador in the cart"))
             # R-E soft: cart partners on the same tee band
             for c in carts:
                 if len(c) == 2 and c[0]["tee"] and c[1]["tee"] and c[0]["tee"] != c[1]["tee"]:

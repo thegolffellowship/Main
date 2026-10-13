@@ -3049,6 +3049,84 @@ coordinated with the flighting lane (#603), not a server fix.
 
 ## The EVENT-DAY EMAIL — each player's pairing, from the Tracker (CA #829, built 2026-09-28, NOT approved)
 
+**DESIGN A2 (v2.553.0, Kerry 2026-10-12):** Kerry picked option A of three
+drafts ("A looks the best to me. It would also be nice to show a current
+games breakdown on a card like the Group Card. The more graphic (as long as
+it works on all browsers) the better."), then approved draft A2 ("Perfect
+for now"). The Customer Communications lane owns its content and timing
+(mailbox #1634/#1635).
+- **Structure is code, words are the template.** The seeded template body is
+  greeting + `{spot_card}{games_card}{scoring_button}` + the late/can't-make-it
+  line + sign-off; subject `{event_title}: {start_subject}` ("Tuesday at The
+  Quarry: Hole 3A, 4:30 PM shotgun"; the event code is stripped by
+  `event_short_name`). When the body uses `{spot_card}`, the message is
+  wrapped in `frame()` (grey ground, dark masthead "THE GOLF FELLOWSHIP ·
+  <CHAPTER>" + title, white panel). A template still written with the v1
+  variables renders the v1 way, unframed.
+- **YOUR START card** (`spot_card`): orange header with the start as
+  `start_line` states it, shotgun/tee time (`start_type`, or `start_type_18`
+  for an 18-hole group), date and course; the group with initials circles,
+  "you" / "your cart" and Cart A/B (seats 1&2 / 3&4); TEES (the player's
+  `tee_choice` band through the print pack's `tee_legend`, left out when
+  unknown) and FORMAT (holes + the GAMES tab's team game).
+- **GAMES card** (`games_view` + `games_card`): read ONCE per build from the
+  GAMES tab (`page_probe.event_games_tab`, the page's own math). Shows total in
+  play, player/Net/Gross counts, a pot split bar, a block per section (sub
+  rows and disabled "No Game" rows never print; flights, per-skin and linked
+  TGF MVP notes derived from the tab's own rows), the player's YOU'RE IN /
+  NOT BOUGHT pill (buyer lists by customer_id; no pill for an RSVP-only
+  player), and the HIO pot. Left out for everyone (with `games_note` in the
+  preview) when the tab can't be read, the event has no games, or it is a
+  day-games or package event. It never holds the start.
+- **Email-safe:** tables, `bgcolor` and inline styles only. No images, SVG,
+  flex/grid or `<style>`. Checked at 375 px and 800 px; Outlook desktop
+  squares the corners.
+- **Approval:** the A2 body replaced the approved v1 seed (production's row
+  was verified untouched by its hash f76bf53aa8d5ee65, now in
+  `_PRIOR_SYSTEM_TEMPLATE_BODIES`). The stamp no longer matches, so Kerry
+  re-approves A2 with REPORTS > Email Players > Approve & email.
+  Every send is per Kerry's OK.
+- **v2.554.0 (Kerry 10/13, on the test previews):**
+  - The HIO line shows the RUNNING pot (`get_hio_pot`) with tonight's field
+    contribution beside it.
+  - **YOUR CARD** (`card_strip`, inside the start card): holes played, par,
+    a dot per pop for Individual Net and for the team game, then the handicap
+    chain in words (Index on <tees> → PH; team game allowance % and
+    off-the-low → its handicap; "no pops on par 3s" when that rule is on).
+    Read once per build from `scorecards.build_scorecards(qr="off",
+    allow_gaps=True)`, so it matches the printed card and seeds nothing; no
+    stroke index on the player's tee → no strip.
+  - **Public tee sheet** `/member/teesheet/<event_id>`
+    (`email_parser/member_teesheet.py`): groups, starts, players, carts, tee
+    names; no email, phone, handicap or money; no PIN. The email's
+    `{teesheet_button}` opens it at `#g<group_num>`.
+  - **Live Scoring**: the scoring button needs the event in Live Scoring with
+    its rounds seeded. When it isn't, the build returns `scoring_note` and the
+    staff preview prints it.
+- **MANAGER APPROVAL SENDS IT (v2.555.0, Kerry 2026-10-13):** "for now they
+  should[n']t go out until the manager approves the automated pairings ... a
+  prompt to review and approve the pairings which would then automatically
+  send these emails" / "Make the manager log in first."
+  `email_parser/pairings_approval.py`:
+  - `prompt_check` (job `pairings_approval_prompt`, every 15 min from :05,
+    for the same due window as Live Scoring) switches Live Scoring on and
+    mails the chapter manager (`manager_for`: SA/TGF → kerry@; otherwise the
+    dial `email`, else the manager's `customer_id` email) ONE prompt per
+    sheet fingerprint. A changed sheet re-prompts at most hourly; there are
+    no prompts once player emails went.
+  - `/events/<id>/approve-pairings` (manager login, own chapter; admin any)
+    shows groups, hard audit flags, held players, a sample, and the button.
+    `POST /api/events/<id>/approve-pairings {fingerprint}` refuses a stale
+    sheet (409 + the current fingerprint), records `approved_fp/by/at`, and
+    runs `send_event_day_emails(confirm=True)`. The wording stamp is still
+    required.
+  - State: app setting `pairings_approval`. Dial `pairings_approval_prompt`.
+    Guard `test_pairings_approval.py`.
+  - The ultimate goal (Kerry): send right after generation, with no approval
+    step. Not yet.
+- Not built yet: corrected emails after a pairing change (needs a revision
+  column on `event_day_email_sends`; rule 3b).
+
 **Email Players (v2.528.8, Kerry 2026-10-08, practice round):** an admin
 button on the REPORTS tab (the practice-round row; every single-round
 event) opens the preview: ready / held with reasons / a full sample. Its
@@ -3111,6 +3189,12 @@ does, the member send refuses.**
 - **Bridges**: `scoring-event-day-email:<event_id>` (dry build: counts,
   ready list, held with reasons, one sample text, hash, approval);
   `scoring-event-day-email:<event_id>|preview[|<staff addr>]`.
+- **One player's actual message as a test** (v2.555.1):
+  `scoring-event-day-email:<event_id>|test|<staff addr>|cid=<id>`
+  (`send_event_day_test`): exact subject and body, unwrapped, to one staff
+  address. It writes no `event_day_email_sends` row. This is the way to check
+  how a real player's mail app renders it (the 10/13 winmail.dat / TNEF
+  fix).
 - **To approve**: Kerry reads a preview, then
   `scoring-setting-set:event_day_email_approved|<template_hash>`.
 - Test: `test_event_day_email.py` (Graph mocked).

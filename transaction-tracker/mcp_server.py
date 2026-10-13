@@ -1936,6 +1936,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    dry run lists keep/drop per group, apply
                                    moves handicap bridges to the keeper and
                                    deletes the losers
+      scoring-pairings-generate:<event_id>[|apply]  regenerate an event's
+                                   sheet with the generator (every rule) and,
+                                   with |apply, save it; refused once the
+                                   event has started (Kerry 2026-10-12)
+      scoring-pairings-add-group:<event_id>|<a>;<b>[;...][|apply]  append
+                                   one hand-built group on the next slot
       scoring-pairings-remove:<event>|<player>[|dry]  pull one player from
                                    the saved pairings + re-seat the group
                                    per the TGF adjustment standard (a
@@ -6231,6 +6237,104 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _apply and "error" not in _res:
                 _audit("scoring-pairings-swap", f"event {_ev} swap {_a}<->{_b}")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-pairings-generate":
+            # "<event_id>[|apply]" (Kerry 2026-10-12: "Deploy and then
+            # re-generate yourself and review it against our rules."). The
+            # PAIRINGS tab's Generate + Save, from a lane: random mode,
+            # partner requests protected, no seeds, no Match Play confirms
+            # (none are asked here). Dry run by default; |apply saves. Never
+            # on an event that has started or a past date: the sheet in
+            # players' hands is not reshuffled (rule 15b, past events
+            # frozen). The read-only audit of the result rides along.
+            _parts = [x.strip() for x in arg.split("|")]
+            _apply = len(_parts) > 1 and _parts[1].lower() == "apply"
+            try:
+                _eid = int(_parts[0])
+            except (TypeError, ValueError):
+                return json.dumps({"error": "<event_id>[|apply]"})
+            with db._connect() as _c:
+                _ev = _c.execute("SELECT id, item_name, event_date, start_time, start_time_18 "
+                                 "FROM events WHERE id = ?", (_eid,)).fetchone()
+            if not _ev:
+                return json.dumps({"error": f"event {_eid} not found"})
+            from email_parser.timezone_utils import today_central_str
+            if str(_ev["event_date"] or "") < today_central_str() or db._event_started(dict(_ev)):
+                return json.dumps({"refused": "event has started or is past; its sheet is frozen",
+                                   "event": _ev["item_name"], "event_date": _ev["event_date"]})
+            res = db.generate_event_pairings(_eid, mode="random", protect_partner_requests=True)
+            sets = {h: res[h] for h in ("9", "18") if res.get(h)}
+            out = {"event_id": _eid, "event": _ev["item_name"], "applied": False,
+                   "notes": res.get("mp_notes") or [],
+                   "groups": {h: [{"slot": g.get("slot_label"),
+                                   "players": [p["name"] for p in sorted(g["players"], key=lambda p: p["cart_pos"])]}
+                                  for g in gs] for h, gs in sets.items()}}
+            if _apply and sets:
+                db.save_event_pairings(_eid, sets)
+                db.log_agent_action("tracker-claude", "pairings-generate",
+                                    f"event {_eid} regenerated and saved "
+                                    f"({sum(len(g) for g in sets.values())} groups)")
+                out["applied"] = True
+                from email_parser.pairings_audit import event_pairing_audit
+                _a = event_pairing_audit(_eid)
+                out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags"),
+                                "repeats": _a.get("repeats")}
+            return json.dumps(out, indent=2, default=str)
+        if cmd == "scoring-pairings-add-group":
+            # "<event_id>|<name>;<name>[;...][|apply]" (Kerry 2026-10-12:
+            # "Add Jeff Young and guest Ale along with Pat Youngs into new
+            # group"). Appends ONE hand-built group to the saved sheet, seats
+            # in the order given (1&2 ride together), on the next slot of the
+            # event's start setup. Every name must be on the roster and not
+            # already seated. Refused once the event has started or is past.
+            # Dry run by default; |apply saves; the audit rides along.
+            _parts = [x.strip() for x in arg.split("|")]
+            _apply = len(_parts) > 2 and _parts[2].lower() == "apply"
+            try:
+                _eid = int(_parts[0])
+                _names = [n.strip() for n in _parts[1].split(";") if n.strip()]
+            except (TypeError, ValueError, IndexError):
+                return json.dumps({"error": "<event_id>|<name>;<name>[|apply]"})
+            if not 1 <= len(_names) <= 5:
+                return json.dumps({"error": "a group is 1 to 5 players"})
+            with db._connect() as _c:
+                _ev = _c.execute("SELECT * FROM events WHERE id = ?", (_eid,)).fetchone()
+                if not _ev:
+                    return json.dumps({"error": f"event {_eid} not found"})
+                _ev = dict(_ev)
+                _roster = {db._pair_key_name(r["name"]): r for r in db._event_roster_players(_c, _eid)}
+            from email_parser.timezone_utils import today_central_str
+            if str(_ev["event_date"] or "") < today_central_str() or db._event_started(_ev):
+                return json.dumps({"refused": "event has started or is past; its sheet is frozen"})
+            _sheet = db.get_event_pairings(_eid)
+            _fmt = (_ev.get("format") or "").strip()
+            _holes = "18" if _fmt in ("18 Holes", "27 Holes") else "9"
+            _seated = {db._pair_key_name(p["name"]) for gs in _sheet.values()
+                       if isinstance(gs, list) for g in gs for p in g.get("players") or []}
+            _bad = {"not on the roster": [n for n in _names if db._pair_key_name(n) not in _roster],
+                    "already seated": [n for n in _names if db._pair_key_name(n) in _seated]}
+            if any(_bad.values()):
+                return json.dumps({"refused": {k: v for k, v in _bad.items() if v}})
+            _groups = [g for g in (_sheet.get(_holes) or []) if g.get("players")]
+            _slots = db._pairing_time_slots(_ev, _holes, needed=len(_groups) + 1)
+            _used = {g.get("slot_label") for g in _groups}
+            _label = next((sl for sl in _slots if sl not in _used), f"Group {len(_groups) + 1}")
+            _new = {"group_num": max([g.get("group_num") or 0 for g in _groups] + [0]) + 1,
+                    "slot_label": _label,
+                    "players": [{"name": _roster[db._pair_key_name(n)]["name"], "cart_pos": i + 1,
+                                 "customer_id": _roster[db._pair_key_name(n)].get("customer_id")}
+                                for i, n in enumerate(_names)]}
+            out = {"event_id": _eid, "event": _ev["item_name"], "applied": False, "new_group": _new}
+            if _apply:
+                _sets = {h: gs for h, gs in _sheet.items() if h in ("9", "18") and gs}
+                _sets[_holes] = _groups + [_new]
+                db.save_event_pairings(_eid, _sets)
+                db.log_agent_action("tracker-claude", "pairings-add-group",
+                                    f"event {_eid}: {_label} = {', '.join(p['name'] for p in _new['players'])}")
+                out["applied"] = True
+                from email_parser.pairings_audit import event_pairing_audit
+                _a = event_pairing_audit(_eid)
+                out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags")}
+            return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-pairings-remove":
             # "<event>|<player>[|dry]" — pull one player from the event's
             # SAVED pairings and re-seat the group per Kerry's adjustment
@@ -6690,7 +6794,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _a = _r[0]
             return json.dumps(db.get_event_financial_summary(_a), indent=2, default=str)
         if cmd == "scoring-event-day-email":
-            # "<event_id>[|preview[|<staff addr>[|cids=1,2]]]" — CA #829. The dry build
+            # "<event_id>[|preview[|<staff addr>[|cids=1,2]]]" or
+            # "<event_id>|test|<staff addr>|cid=<id>" — CA #829. The dry build
             # sends nothing; |preview mails one combined preview to staff
             # (@thegolffellowship.com or recap_draft_allow) and refuses any
             # other address. The MEMBER send is deliberately not bridged:
@@ -6709,8 +6814,18 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None),
                     only=_only),
                     indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "test":
+                # "<event_id>|test|<staff addr>|cid=<id>" (Kerry 10/13): ONE
+                # player's actual message, no preview wrapper, to one STAFF
+                # address. Not a member send.
+                db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
+                _cid = next((x[4:] for x in _p[3:] if x.lower().startswith("cid=")), "")
+                if len(_p) < 3 or not _p[2] or not _cid.isdigit():
+                    return json.dumps({"error": "<event_id>|test|<staff addr>|cid=<customer_id>"})
+                return json.dumps(_ede.send_event_day_test(int(_p[0]), int(_cid), _p[2]),
+                                  indent=2, default=str)
             if len(_p) > 1 and _p[1]:
-                return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview"})
+                return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview or |test"})
             return json.dumps(_ede.summarize(_ede.build_event_day_emails(int(_p[0]))),
                               indent=2, default=str)
         if cmd == "scoring-hcp-cards":

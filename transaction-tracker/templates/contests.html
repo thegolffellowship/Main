@@ -59,6 +59,69 @@
            ratified TGF_Season_Contest_Payouts_v1_0 ladders) */
         #pr-payouts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0.4rem 0 0.55rem; }
         #pr-payouts:empty { display: none; }
+        /* BOARD HEADER (Kerry 2026-10-12: "Too much stuff between THE FELLOWSHIP CUP and the Champion Banner. I think all
+           that should go into the HOW IT WORKS button and that button should be right aligned on the same row as the
+           TITLE"): the phase pill, bought-in count, pot and places and the structure note live in the HOW IT WORKS
+           popup (its "This board" block); only the title and the button stay on the board. */
+        #pr-preamble, #pr-preamble-toggle, #pr-phase-chip { display: none !important; }
+        #pr-hiw-btn { margin-left: auto; }
+        /* CHAPTER / RACE PICKERS (CD #1638 section 2-3, built beside the chips) */
+        .pr-pickers { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 0.6rem; }
+        .pr-pk { position: relative; }
+        .pr-pk-btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #E5E7EB; background: #FBFBFA; border-radius: 8px;
+            padding: 8px 11px; cursor: pointer; font: 700 12px/1.1 'Bitter', Georgia, serif; letter-spacing: 1.2px; text-transform: uppercase; color: #1B1B1B; }
+        .pr-pk-btn i { font-style: normal; color: #E87C3E; font-size: 11px; }
+        .pr-pk-btn.race { background: #fff; font-size: 14px; letter-spacing: .4px; text-transform: none; padding: 7px 12px 7px 14px; }
+        .pr-pk-btn.open { border-color: #E87C3E; }
+        .pr-pk-btn .dot { width: 9px; height: 9px; border-radius: 50%; background: #1B1B1B; flex: none; }
+        .pr-pk-sl { color: #D1D5DB; font-size: 18px; }
+        .pr-pk-tag { font: 700 10px/1 'Bitter', Georgia, serif; letter-spacing: 1.5px; padding: 5px 7px; border-radius: 4px; }
+        .pr-pk-tag.live { color: #15803D; background: #ECFDF3; } .pr-pk-tag.fin { color: #9CA3AF; background: #F3F4F6; }
+        .pr-pk-menu { position: absolute; z-index: 400; top: calc(100% + 6px); left: 0; min-width: 300px; background: #fff; border: 1px solid #E5E7EB;
+            border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 8px; }
+        #pr-pk-race .pr-pk-menu { min-width: 380px; }
+        .pr-pk-menu[hidden], .pr-pk-scrim[hidden] { display: none; }
+        .pr-pk-gh { font: 700 9.5px/1 'Bitter', Georgia, serif; letter-spacing: 1.8px; color: #9CA3AF; text-transform: uppercase; padding: 10px 8px 4px; }
+        .pr-pk-gh span { font-weight: 400; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+        .pr-pk-it { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; border: 0; border-left: 3px solid transparent; background: none;
+            padding: 10px 10px; border-radius: 6px; cursor: pointer; font: 700 13px/1.2 'Bitter', Georgia, serif; color: #1B1B1B; }
+        .pr-pk-it:hover { background: #F8F8F8; }
+        .pr-pk-it.sel { background: #FDF0E6; color: #BF5700; border-left-color: #E87C3E; }
+        .pr-pk-it .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+        .pr-pk-it small { margin-left: auto; font: 700 9px/1 'Bitter', Georgia, serif; letter-spacing: 1.1px; color: #9CA3AF; text-align: right; }
+        .pr-pk-it small.live { color: #15803D; }
+        .pr-pk-foot { font-size: 10.5px; color: #6B7280; padding: 8px 8px 2px; }
+        .pr-pk-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 390; }
+        @media (max-width: 560px) {
+            .pr-pk-menu, #pr-pk-race .pr-pk-menu { position: fixed; left: 0; right: 0; bottom: 0; top: auto; min-width: 0; border-radius: 16px 16px 0 0;
+                padding: 14px 14px 20px; z-index: 400; max-height: 70vh; overflow-y: auto; box-shadow: 0 -8px 30px rgba(0,0,0,.25); }
+            #pr-pk-ch { flex: 1 1 100%; } #pr-pk-ch .pr-pk-btn { width: 100%; box-sizing: border-box; }
+            .pr-pk-sl { display: none; }
+            #pr-race-dd { display: none !important; }
+        }
+        /* NOT BOUGHT IN: soft grey row, muted text, BUY IN pill (Kerry 2026-10-12, option A) */
+        #pr-table-container tbody tr.pr-nobuy > td { color: #6B7280; }
+        #pr-table-container tr.pr-nobuy .cell-link, #pr-table-container tr.pr-nobuy .pr-nm-l { color: #6B7280; }
+        .pr-buyin { display: inline-block; flex: none; background: var(--primary, #E87C3E); color: #fff !important; border-radius: 9999px;
+            padding: 3px 11px; font: 700 10px/1.3 'Bitter', Georgia, serif; letter-spacing: .6px; text-decoration: none; white-space: nowrap; margin-left: 8px; }
+        .pr-buyin:hover { background: var(--primary-hover, #D06B2E); }
+        /* the row that can still buy in wears a shimmering orange border (Kerry 2026-10-12) */
+        tr.pr-buyin-row > td { box-shadow: inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; animation: prBuyMid 2s ease-in-out infinite; }
+        tr.pr-buyin-row > td:first-child { box-shadow: inset 2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; animation-name: prBuyFirst; }
+        tr.pr-buyin-row > td:last-child { box-shadow: inset -2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; animation-name: prBuyLast; }
+        @keyframes prBuyMid { 0%, 100% { box-shadow: inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; } 50% { box-shadow: inset 0 3px 0 #FFB27A, inset 0 -3px 0 #FFB27A, inset 0 0 14px rgba(232,124,62,.28); } }
+        @keyframes prBuyFirst { 0%, 100% { box-shadow: inset 2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; } 50% { box-shadow: inset 3px 0 0 #FFB27A, inset 0 3px 0 #FFB27A, inset 0 -3px 0 #FFB27A, inset 0 0 14px rgba(232,124,62,.28); } }
+        @keyframes prBuyLast { 0%, 100% { box-shadow: inset -2px 0 0 #E87C3E, inset 0 2px 0 #E87C3E, inset 0 -2px 0 #E87C3E; } 50% { box-shadow: inset -3px 0 0 #FFB27A, inset 0 3px 0 #FFB27A, inset 0 -3px 0 #FFB27A, inset 0 0 14px rgba(232,124,62,.28); } }
+        @media (prefers-reduced-motion: reduce) { tr.pr-buyin-row > td { animation: none !important; } }
+        .pr-buy-legend { display: flex; justify-content: flex-end; margin: 0 0 6px; font-size: 12px; color: #4B5563; }
+        .pr-hiw-glance { margin: 0 0 16px; padding: 12px 14px; background: #F8F8F8; border: 1px solid var(--border); border-radius: 10px; }
+        .pr-hiw-glance-tiles { display: flex; gap: 28px; }
+        .pr-hiw-glance .l { font: 700 9px/1 'Bitter', serif; letter-spacing: 1px; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
+        .pr-hiw-tile .v { font: 700 22px/1.1 'Bitter', serif; color: #1B1B1B; font-variant-numeric: tabular-nums; }
+        .pr-hiw-tile .v span { font-size: 13px; font-weight: 600; color: #6B7280; }
+        .pr-hiw-tile .s { font: 600 11px/1.2 'Helvetica Neue', Arial, sans-serif; color: #6B7280; margin-top: 2px; }
+        .pr-hiw-glance-pl { margin-top: 10px; padding-top: 10px; border-top: 1px solid #E5E7EB; }
+        .pr-hiw-pay { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
         /* Mobile preamble fold (Kerry 2026-08-01): the summary/pot/structure
            block collapses behind one chip so the leaderboard sits one thumb
            away. Desktop never sees the chip. The phase chip hides on phones
@@ -76,9 +139,6 @@
             #pr-preamble { display: none; }
             #pr-preamble.open { display: block; }
             #pr-phase-chip { display: none !important; }
-            /* the header HOW IT WORKS pill folds with the details on phones;
-               a clone inside the preamble keeps it reachable */
-            .standings-section > div:first-child #pr-hiw-btn { display: none; }
         }
         .pr-pot {
             display: inline-flex; align-items: center; height: 26px; padding: 0 12px;
@@ -98,13 +158,45 @@
         }
         #pr-structure-note:empty { display: none; }
         #pr-structure-note b { color: #1B1B1B; }
-        .pr-pay {
-            display: block; margin-top: 2px; color: #15803d;
-            font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
-            font-variant-numeric: tabular-nums; white-space: nowrap;
+        /* MONEY on the name row (Kerry 2026-10-12): larger, Bitter, right-aligned on the same line as the name.
+           Names in every standings are Bitter too (Kerry: "All names in any standings in the Tracker should be Bitters.
+           Money should be Bitters as well"). Supersedes the 2026-07-09 sans-for-dense-data rule for these two. */
+        .pr-nm { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .pr-nm-l { min-width: 0; font-family: 'Bitter', Georgia, serif; font-weight: 600; }
+        .pr-nm-l .cell-link, .pr-nm-l a { font-family: inherit; font-weight: inherit; }
+        .pr-pay { margin-left: auto; flex: none; text-align: right; color: #15803d; white-space: nowrap;
+            font: 700 17px/1 'Bitter', Georgia, serif; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+        .pr-pay .pr-pay-l { display: block; font: 700 8.5px/1 'Bitter', Georgia, serif; letter-spacing: 0.8px; color: #166534; opacity: .8; margin-bottom: 3px; }
+        .lsc-player, .mp-name, .evlb-nm-stack > span { font-family: 'Bitter', Georgia, serif; }
+        /* every cell of a standings row sits on the row's middle line (Kerry 2026-10-12: "Text needs aligning on each
+           row"): the headshot makes the name block taller, so rank, points, reset, rounds and buy-in were riding high */
+        #pr-table-container tbody tr[data-pname] > td, #pr-table-container tbody tr[data-city-rank] > td,
+        #pr-table-container tbody tr[data-cid]:not(.pr-mo-detail) > td { vertical-align: middle; }
+        /* Row anatomy: [headshot] [ name (hcp) ▶ ] on line 1, badges alone on line 2 (Kerry 2026-10-12: never more than
+           two lines; name and chevron stay together; a narrow window drops the handicap first, then shrinks the name). */
+        .pr-nm-t { display: inline-flex; align-items: center; vertical-align: middle; }
+        .pr-nm-1 { display: contents; }
+        .pr-nm-n { order: 1; }
+        .pr-nm-b { order: 2; margin-left: 6px; }
+        .pr-nm-chev { order: 3; margin-left: 6px; }
+        .pr-nm-b:empty { display: none; }
+        .pr-nm-l { flex: 1 1 auto; }
+        @media (max-width: 560px) {
+            .pr-pay { font-size: 14px; } .pr-nm { gap: 6px; }
+            td.pr-name-td { width: 100%; max-width: 0; }
+            .pr-nm-l { flex: 1 1 0; display: flex; align-items: center; white-space: normal; line-height: 1.3; }
+            .pr-nm-t { display: block; flex: 1 1 auto; min-width: 0; }
+            .pr-nm-1 { display: flex; align-items: center; white-space: nowrap; overflow: hidden; }
+            .pr-nm-n { flex: none; } .pr-nm-chev { flex: none; margin-left: 6px; }
+            .pr-nm-b { display: block; margin: 2px 0 0; white-space: nowrap; overflow: hidden; }
+            .pr-nm-b:empty { display: none; }
+            .pr-nm-1.no-hcp .pr-hcp, .pr-nm-1.no-hcp .pr-opt { display: none; }
+            .pr-nm.no-pay .pr-pay { display: none; }
+            .pr-nm-1.wrap { display: block; white-space: normal; }
+            .pr-nm-1.wrap .pr-nm-n, .pr-nm-1.wrap .pr-nm-chev { display: inline; }
+            .pr-nm-t.no-badge .pr-nm-b { display: none; }
         }
-
-        /* How-it-works link + popup (Kerry, 2026-07-10) */
+                /* How-it-works link + popup (Kerry, 2026-07-10) */
         .pr-hiw-link {
             display: inline-flex; align-items: center; height: 30px; padding: 0 14px;
             background: var(--primary, #E87C3E); border: none; border-radius: 9999px;
@@ -219,7 +311,7 @@
 
         /* Contest name heading — prominent, name only (Kerry, 2026-07-10) */
         #pr-standings-title {
-            margin: 0; flex-basis: 100%;
+            margin: 0; flex: 1 1 0; min-width: 0;
             font: 700 1.5rem/1.15 'Bitter', serif; letter-spacing: 0.5px;
             text-transform: uppercase; color: var(--text);
         }
@@ -2084,6 +2176,57 @@
             width: 36%; left: -60%; transform: skewX(-20deg); pointer-events: none;
             background: linear-gradient(75deg, transparent, rgba(255,255,255,.16), transparent);
             animation: tgfChampShine 3.4s ease-in-out infinite; }
+        /* champion photo in the plaque (Kerry 2026-10-12, Option A): a framed
+           3:4 portrait in the trophy's slot; tap opens it full size. */
+        .champ-photo { flex: 0 0 auto; width: 84px; height: 112px; border-radius: 8px; object-fit: cover;
+            border: 2px solid #D4A017; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: zoom-in; display: block; }
+        /* Kerry 2026-10-12: "extend the photo much closer to the border. Way too much padding." With a photo the
+           plaque's padding shrinks to just clear its inset gold rule, and the portrait grows to fill the height. */
+        .tgf-champ-plaque.has-photo { padding: 7px 1rem 7px 7px; }
+        .tgf-champ-plaque.has-photo .champ-photo { width: 140px; height: 140px; border-radius: 7px; object-position: center top; }
+        /* NAV FLUSH under the header (Kerry 2026-10-12: "Nav bar isn't pinning under header. There's space. Same with
+           Sub Nav."): no gap above the tab bar or between it and the race-chip row. */
+        body main, html.tgf-wide body main { padding-top: 0; }
+        .pr-section:has(> .pr-race-row:first-child) { padding-top: 0; }
+        /* HEADSHOT plaques (Kerry 10/12: the NET boards' city champion and each month's winner wear their headshot) */
+        .champ-heads { display: flex; gap: 6px; flex: 0 0 auto; }
+        .champ-head { width: 112px; height: 112px; border-radius: 7px; object-fit: cover; object-position: center 30%;
+            border: 2px solid #D4A017; box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: zoom-in; display: block; }
+        .champ-heads.many .champ-head { width: 72px; height: 72px; }
+        .tgf-champ-plaque.has-head { padding: 7px 1rem 7px 7px; }
+        /* STANDINGS HEADSHOTS (Kerry 2026-10-12): a SQUARE image, full bleed to the top and bottom of the row, top 3 only;
+           a row without an image has no slot at all, so its name sits at the left. Rank and points read Bitter, centred. */
+        td.pr-name-td { position: relative; padding-left: 8px !important; }
+        td.pr-name-td.has-av { padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 68px !important; height: 58px; }
+        .pr-av { position: absolute; left: 0; top: 0; bottom: 0; width: 58px; max-height: 58px; display: block; }
+        .pr-av:empty { display: none; }
+        .pr-av img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; border: 0; border-radius: 0; box-shadow: none; }
+        #pr-table-container .enrollment-table thead tr:first-child th:first-child { text-align: center; padding-left: 4px; padding-right: 4px; }
+        /* what a narrow row hid (handicap, money, badges) reappears under the name once the row is expanded */
+        .pr-hid-line { display: flex; flex-wrap: nowrap; gap: 4px 14px; align-items: center; padding: 6px 12px; margin: 0 0 6px;
+            border-bottom: 1px solid #e5e7eb; background: #fff; white-space: nowrap; overflow-x: auto;
+            font: 600 12px/1.3 'Bitter', Georgia, serif; color: #4B5563; }
+        .pr-hid-line b { font: 700 8.5px/1 'Bitter', Georgia, serif; letter-spacing: .6px; color: #6B7280; text-transform: uppercase; margin-right: 4px; }
+        .pr-hid-line .hp-pay { color: #15803d; font-size: 15px; font-weight: 700; }
+        td.pr-rk { font-family: 'Bitter', Georgia, serif; font-weight: 700; text-align: center; padding-left: 4px; padding-right: 4px; }
+        td.pr-pts { font-family: 'Bitter', Georgia, serif; }
+        @media (max-width: 560px) {
+            td.pr-name-td.has-av { padding-left: 60px !important; height: 54px; }
+            .pr-av { width: 52px; max-height: 54px; }
+        }
+        .champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex;
+            flex-direction: column; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
+        .champ-lb img { max-width: 100%; max-height: 82vh; border-radius: 10px; border: 2px solid #D4A017; }
+        .champ-lb-cap { margin-top: 10px; color: #F7E7A0; font: 600 0.85rem/1.4 'Bitter', Georgia, serif; text-align: center; }
+        /* PAST CHAMPIONS strip under the plaque (Kerry 2026-10-12): collapsed, year + name, photo when we have one. */
+        .past-champs { margin: 0 0 0.7rem; border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; }
+        .past-champs > summary { cursor: pointer; padding: 0.55rem 0.8rem; font: 700 0.82rem/1.2 'Bitter', Georgia, serif; color: #7A5C0B; }
+        .past-champs-list { display: flex; flex-wrap: wrap; gap: 14px; padding: 0.2rem 0.8rem 0.8rem; }
+        .past-champ { display: flex; flex-direction: column; align-items: center; width: 100px; text-align: center; }
+        .past-champ img, .past-champ .pc-ph { width: 92px; height: 92px; border-radius: 8px; object-fit: cover; border: 2px solid #D4A017; cursor: zoom-in; display: block; background: #F7F1DC; }
+        .past-champ .pc-ph { cursor: default; }
+        .past-champ .pc-y { margin-top: 5px; font: 700 0.85rem/1.1 'Bitter', Georgia, serif; color: #7A5C0B; }
+        .past-champ .pc-n { font-size: 0.78rem; line-height: 1.25; color: #1B1B1B; }
         @keyframes tgfChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
     </style>
 </head>
@@ -2168,9 +2311,9 @@
                 {# Lone Star Cup sits FIRST, at the left (Kerry 2026-10-08: "Move the
                    LONE STAR CUP toggle to the left on the nav bar"); EVENTS
                    drops its BETA badge (same message). #}
-                <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
                 {% if member_mode %}<button class="top-tab" data-top="events">Events</button>{% else %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events</button>{% endif %}
                 <button class="top-tab active" data-top="points-race">Points Races</button>
+                <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
                 <button class="top-tab" data-top="match-play">Match Play</button>
                 <button class="top-tab manager-only" data-top="enrollment">Enrollment</button>
             </div>
@@ -2430,6 +2573,14 @@
                     </div>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
+                    <!-- CHAPTER / RACE PICKERS (CD #1638, Kerry 2026-10-12: keep the chips and the LSC pill, add the pickers beside them) -->
+                    <div class="pr-pickers" id="pr-pickers">
+                        <div class="pr-pk" id="pr-pk-ch"><button type="button" class="pr-pk-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dot"></span><span class="t"></span><i>&#9662;</i></button><div class="pr-pk-menu" role="listbox" hidden></div></div>
+                        <span class="pr-pk-sl">/</span>
+                        <div class="pr-pk" id="pr-pk-race"><button type="button" class="pr-pk-btn race" aria-haspopup="listbox" aria-expanded="false"><span class="t"></span><i>&#9662;</i></button><div class="pr-pk-menu" role="listbox" hidden></div></div>
+                        <span class="pr-pk-tag" id="pr-pk-tag"></span>
+                    </div>
+                    <div class="pr-pk-scrim" id="pr-pk-scrim" hidden></div>
                     <!-- HIW left beside the title, badges right (Kerry 2026-08-06) -->
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
                         <h4 id="pr-standings-title"></h4>
@@ -2769,6 +2920,14 @@
             tabs.style.zIndex = "89";
             tabs.style.background = "var(--surface, #fff)";
         }
+        // the race-chip sub nav pins flush under the tab bar (Kerry 10/12), desktop only: on a phone
+        // its wrapped chips would eat the screen
+        const chipRow = document.querySelector(".pr-race-row");
+        if (chipRow) {
+            chipRow.style.position = phone ? "" : "sticky";
+            chipRow.style.top = phone ? "" : (h + ctaH + (tabs ? tabs.offsetHeight : 0)) + "px";
+            chipRow.style.zIndex = "87";
+        }
         // the Lone Star Cup header pins under the sub nav (Kerry 10/8)
         const lscEv = document.querySelector("#section-lone-star-cup .lsc-event");
         if (lscEv) {
@@ -2878,7 +3037,7 @@
     }
     function lscPhotoOf(cids) {
         const P = lscPhotos || { h: {}, t: {} }, ids = (cids || []).map(Number);
-        if (ids.length === 1) { const v = P.h[String(ids[0])]; return v ? `/member/photo/h/${ids[0]}.jpg?v=${v}` : null; }
+        if (ids.length === 1) { const v = P.h[String(ids[0])]; return v ? `/member/photo/hs/${ids[0]}.jpg?v=${v}` : null; }
         if (ids.length === 2) { const k = ids.slice().sort((x, y) => x - y).join("-"), v = P.t[k];
             return v ? `/member/photo/t/${k}.jpg?v=${v}` : null; }
         return null;
@@ -5418,6 +5577,30 @@
         // modal is display:none, so a reopened popup would start where the
         // last reader left off (scrolled to the Got It button)
         const openFor = key => { prHiwRender(key); setOpen(true); modal.scrollTop = 0; };
+        // "This board": what used to sit between the title and the table (Kerry 2026-10-12), read from the live header
+        // nodes at the moment the popup opens, so it is always the board on screen.
+        function prHiwGlance() {
+            const sum = $("pr-summary"), pay = $("pr-payouts");
+            const potEl = pay && pay.querySelector(".pr-pot");
+            const potTxt = potEl ? potEl.textContent.replace(/\s+/g, " ").trim() : "";
+            const potM = potTxt.match(/\$[\d,]+(?:\.\d+)?/);
+            const inM = sum && sum.textContent.match(/(\d+)\s+of\s+(\d+)/);
+            const places = pay ? [...pay.querySelectorAll(".pr-place")].map(e => e.outerHTML).join("") : "";
+            const tile = (label, value, sub) => `<div class="pr-hiw-tile"><div class="l">${label}</div><div class="v">${value}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
+            const tiles = (inM ? tile("Bought in", `${inM[1]}<span> of ${inM[2]}</span>`, "") : "")
+                + (potM ? tile("Pot", escapeHtml(potM[0]), /final/i.test(potTxt) ? "Final &middot; paid out" : "Projected") : "");
+            // The phase pill and the structure note are not repeated here: the chips and sections below already say it.
+            if (!tiles && !places && !document.querySelector(".pr-buy-legend")) return;
+            const legend = document.querySelector(".pr-buy-legend")
+                ? `<div class="pr-hiw-glance-pl"><div class="l">Who is bought in</div>White rows are bought in; grey rows (tick Show All Players) are not.`
+                    + (document.querySelector(".pr-buyin") ? ` Buy-in is still open: tap <b style="color:var(--primary)">BUY IN</b> on a grey row to join.` : "") + `</div>` : "";
+            const html = `<div class="pr-hiw-glance"><div class="pr-hiw-glance-tiles">${tiles}</div>`
+                + (places ? `<div class="pr-hiw-glance-pl"><div class="l">Places paid</div><div class="pr-hiw-pay">${places}</div></div>` : "")
+                + legend + `</div>`;
+            // first thing inside the sections block, so it shares the popup's own side padding
+            const anchor = content.querySelector(".pr-hiw-secs");
+            if (anchor) anchor.insertAdjacentHTML("afterbegin", html);
+        }
         btn.addEventListener("click", e => {
             e.stopPropagation();
             const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
@@ -5425,6 +5608,7 @@
                 : kind === "monthly" ? "monthly"
                 : kind === "tfc" ? "fellowship"
                 : kind === "gross" ? "playersCup" : "cityNet");
+            prHiwGlance();
         });
         if (mpBtn) mpBtn.addEventListener("click", e => { e.stopPropagation(); openFor("matchPlay"); });
         close.addEventListener("click", () => setOpen(false));
@@ -5438,6 +5622,7 @@
             $$(".sub-tab[data-pr]").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
             try { history.replaceState(null, "", "#race=" + btn.dataset.pr); } catch (e) { /* ignore */ }
+            if (typeof prWriteUrl === "function" && PR_NAV.races[btn.dataset.pr]) prWriteUrl(btn.dataset.pr);
             // sync the mobile dropdown + phase chip (v2.56.0, view 1a/1e)
             const ddb = $("pr-race-dd-btn");
             if (ddb) ddb.innerHTML = `${escapeHtml(btn.textContent.trim())} <span style="margin-left:auto;">&#9662;</span>`;
@@ -5448,6 +5633,7 @@
                 (btn.dataset.pr === "monthly" || btn.dataset.pr.startsWith("fall")) ? "none" : "inline-flex";
             loadPrRoster();
             prLoadStandings();
+            if (typeof prSyncPickers === "function") prSyncPickers();
         });
     });
 
@@ -5469,6 +5655,100 @@
                 if (target) target.click();
             });
         });
+    })();
+
+    // ── CHAPTER / RACE PICKERS + URL (CD #1638 built additively, Kerry 2026-10-12) ──
+    // The chips stay, the pickers sit beside them, both drive the same chip click. LIVE / FINAL for the menu rows is this
+    // table (today: the two Fall NETs and Monthly are live); the tag beside the title reads the real board state.
+    const PR_NAV = {
+        chapters: [
+            { id: "tgf", name: "TGF \u00b7 All chapters", color: "#1B1B1B", hint: "Fellowship Cup \u00b7 Players Cup \u00b7 Monthly", races: ["monthly", "tfc", "gross"] },
+            { id: "austin", name: "Austin", color: "#BF5700", races: ["fall_austin", "austin"] },
+            { id: "san-antonio", name: "San Antonio", color: "#4B6274", races: ["fall_sa", "net"] },
+        ],
+        races: {
+            monthly: { name: "Monthly", slug: "monthly-2026", live: true },
+            tfc: { name: "The Fellowship Cup", slug: "fellowship-cup-2026", live: false },
+            gross: { name: "The Players Cup", slug: "players-cup-2026", live: false },
+            fall_austin: { name: "Austin Fall NET", slug: "austin-fall-net-2026", live: true },
+            austin: { name: "Austin NET", slug: "austin-net-2026", live: false },
+            fall_sa: { name: "SA Fall NET", slug: "san-antonio-fall-net-2026", live: true },
+            net: { name: "San Antonio NET", slug: "san-antonio-net-2026", live: false },
+        },
+    };
+    const prChapterOf = key => PR_NAV.chapters.find(c => c.races.includes(key)) || PR_NAV.chapters[0];
+    const prKeyFromSlug = slug => Object.keys(PR_NAV.races).find(k => PR_NAV.races[k].slug === slug) || null;
+    const prDefaultRaceOf = ch => (ch.races.find(k => PR_NAV.races[k].live) || ch.races[0]);
+    // the address carries the chapter and race (?chapter=austin&race=austin-fall-net-2026); the old #race=key stays, so
+    // every existing deep link and a plain reload keep working
+    function prWriteUrl(key) {
+        try {
+            const u = new URL(location.href), ch = prChapterOf(key);
+            u.searchParams.set("chapter", ch.id); u.searchParams.set("race", PR_NAV.races[key].slug);
+            u.hash = "#race=" + key;
+            history.replaceState(null, "", u.toString());
+        } catch (e) { /* ignore */ }
+    }
+    function prCloseMenus() {
+        document.querySelectorAll(".pr-pk-menu").forEach(m => { m.hidden = true; });
+        document.querySelectorAll(".pr-pk-btn").forEach(b => { b.classList.remove("open"); b.setAttribute("aria-expanded", "false"); });
+        const sc = $("pr-pk-scrim"); if (sc) sc.hidden = true;
+    }
+    function prSyncPickers() {
+        const act = document.querySelector(".sub-tab[data-pr].active");
+        const key = act && PR_NAV.races[act.dataset.pr] ? act.dataset.pr : "fall_sa";
+        const ch = prChapterOf(key), race = PR_NAV.races[key];
+        const chBtn = document.querySelector("#pr-pk-ch .pr-pk-btn"), raceBtn = document.querySelector("#pr-pk-race .pr-pk-btn");
+        if (!chBtn || !raceBtn) return;
+        chBtn.querySelector(".dot").style.background = ch.color;
+        chBtn.querySelector(".t").textContent = ch.name;
+        raceBtn.querySelector(".t").textContent = race.name;
+        const tag = $("pr-pk-tag");
+        let fin = false; try { fin = prRaceFinal; } catch (e) { /* not declared yet on first call */ }
+        const live = !fin && race.live;
+        tag.textContent = live ? "LIVE" : "FINAL"; tag.className = "pr-pk-tag " + (live ? "live" : "fin");
+        const row = (k, selKey) => `<button type="button" class="pr-pk-it${k === selKey ? " sel" : ""}" role="option" data-pk-race="${k}"><span>${escapeHtml(PR_NAV.races[k].name)}</span>`
+            + `<small class="${PR_NAV.races[k].live ? "live" : ""}">${PR_NAV.races[k].live ? "LIVE" : "FINAL"}</small></button>`;
+        const tgf = PR_NAV.chapters[0];
+        document.querySelector("#pr-pk-ch .pr-pk-menu").innerHTML = `<div class="pr-pk-gh">Chapter</div>`
+            + PR_NAV.chapters.map(c => `<button type="button" class="pr-pk-it${c.id === ch.id ? " sel" : ""}" role="option" data-pk-ch="${c.id}"><span class="dot" style="background:${c.color}"></span><span>${escapeHtml(c.name)}</span>${c.hint ? `<small>${escapeHtml(c.hint)}</small>` : ""}</button>`).join("");
+        document.querySelector("#pr-pk-race .pr-pk-menu").innerHTML = `<div class="pr-pk-gh">TGF \u00b7 All chapters<span>open to everyone</span></div>`
+            + tgf.races.map(k => row(k, key)).join("")
+            + (ch.id !== "tgf" ? `<div class="pr-pk-gh">${escapeHtml(ch.name)}</div>` + ch.races.map(k => row(k, key)).join("") : "")
+            + `<div class="pr-pk-foot">Other chapters: use the chapter switch.</div>`;
+    }
+    (function () {
+        const wrap = $("pr-pickers"); if (!wrap) return;
+        const openMenu = which => {
+            const btn = document.querySelector(`#pr-pk-${which} .pr-pk-btn`), menu = document.querySelector(`#pr-pk-${which} .pr-pk-menu`);
+            const wasOpen = !menu.hidden;
+            prCloseMenus();
+            if (wasOpen) return;
+            menu.hidden = false; btn.classList.add("open"); btn.setAttribute("aria-expanded", "true");
+            if (window.matchMedia("(max-width: 560px)").matches) $("pr-pk-scrim").hidden = false;
+        };
+        wrap.addEventListener("click", ev => {
+            const btn = ev.target.closest(".pr-pk-btn");
+            if (btn) { ev.stopPropagation(); openMenu(btn.closest(".pr-pk").id === "pr-pk-ch" ? "ch" : "race"); return; }
+            const r = ev.target.closest("[data-pk-race]"), c = ev.target.closest("[data-pk-ch]");
+            let key = null;
+            if (r) key = r.dataset.pkRace;
+            else if (c) {
+                const chap = PR_NAV.chapters.find(x => x.id === c.dataset.pkCh);
+                key = prDefaultRaceOf(chap);
+                try { localStorage.setItem("tgf_pr_chapter", chap.id); } catch (e) { /* ignore */ }
+            }
+            if (key) {
+                try { localStorage.setItem("tgf_pr_chapter", prChapterOf(key).id); } catch (e) { /* ignore */ }
+                prCloseMenus();
+                const chip = document.querySelector(`.sub-tab[data-pr="${key}"]`);
+                if (chip) chip.click();
+            }
+        });
+        $("pr-pk-scrim").addEventListener("click", prCloseMenus);
+        document.addEventListener("click", ev => { if (!ev.target.closest("#pr-pickers")) prCloseMenus(); });
+        document.addEventListener("keydown", ev => { if (ev.key === "Escape") prCloseMenus(); });
+        prSyncPickers();
     })();
 
     async function loadPrRoster() {
@@ -9108,9 +9388,57 @@
         if (el) el.innerHTML = "";
     }
 
+    // BOUGHT IN vs NOT (Kerry 2026-10-12, option A): bought-in rows are plain white, not-bought-in rows a soft grey with
+    // muted text and a BUY IN button while buy-in can still happen. Replaces green-for-bought-in on these boards.
+    // There is no per-contest buy-in deadline in the data, so "open" means the race is not FINAL yet.
+    const PR_BUYIN_URL = "https://thegolffellowship.com/shop/ols/products/season-contests";
+    // Kerry 2026-10-12: buy-in is open ONLY on the contests still live, today SA FALL NET and AUSTIN FALL NET; a
+    // completed contest shows no BUY IN and no buy-in column at all. Set per board at render (prBuyOpenNow).
+    let prBuyOpenNow = false;
+    function prRowShimmer(buyHtml) { return !!buyHtml && typeof window.TGF_MEMBER_ID === "number"; }
+    function prBuyOpenFor(raceKey) { return /fall_net/.test(raceKey || "") && !prRaceFinal; }
+    function prBuyOpen() { return prBuyOpenNow; }
+    function prBuyBtn(r) {
+        // PERSONAL LOGIN HOOK (Kerry 2026-10-12): once members have their own sign-in the page sets
+        // window.TGF_MEMBER_ID to the signed-in customer_id. A SIGNED-IN member sees BUY IN on their own row only (with the
+        // shimmering border, prRowShimmer). Once sign-in exists, SIGNED-OUT visitors (TGF_MEMBER_ID === null) see NO BUY IN,
+        // only the grey row (Kerry 2026-10-12: "Signed Out visitors will NOT see BUY IN buttons...only the grey"). UNTIL there
+        // is a log-in state at all (TGF_MEMBER_ID undefined, today) BUY IN shows on every not-bought-in row of a live board
+        // (Kerry: "BUY IN buttons should show now though regardless, until we have a log in state"), with no border.
+        const me = window.TGF_MEMBER_ID;
+        if (me === null) return "";
+        if (typeof me === "number" && r && r.customer_id !== me) return "";
+        return (r && r.customer_id && !r.enrolled && prBuyOpen())
+            ? `<a class="pr-buyin" href="${PR_BUYIN_URL}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buy in to this contest">BUY IN</a>` : "";
+    }
+    // SHOW ALL PLAYERS, exactly as on the Events leaderboards (Kerry 2026-10-12: "Bought in should always show. There should
+    // be a SHOW ALL PLAYERS checkbox only, JUST like the EVENTS LEADERBOARDS do"): bought-in players are always on the board;
+    // the box is OFF by default and brings the not-bought-in (grey) rows back in. The choice survives re-renders.
+    // Default TICKED so every player shows on landing (Kerry 2026-10-12: "all players should show on landing by default").
+    let prShowAll = true;
+    function prBuyLegend(rows) {
+        if (!(rows || []).some(r => r.customer_id && !r.enrolled)) return "";
+        return `<div class="pr-buy-legend"><label class="evlb-holetog"><input type="checkbox" data-pr-all${prShowAll ? " checked" : ""}> Show All Players</label></div>`;
+    }
+    function prApplyBuyFilter() {
+        const cont = $("pr-table-container");
+        if (!cont) return;
+        cont.querySelectorAll("tbody tr[data-cid]").forEach(tr => {
+            const show = tr.classList.contains("pr-nobuy") ? prShowAll : true;
+            tr.style.display = show ? "" : "none";
+            const nx = tr.nextElementSibling;
+            if (nx && nx.matches(".pr-detail-row, .pr-mo-detail")) nx.style.display = show ? "" : "none";
+        });
+    }
+    document.addEventListener("change", ev => {
+        const cb = ev.target && ev.target.matches && ev.target.matches("input[data-pr-all]") ? ev.target : null;
+        if (!cb) return;
+        prShowAll = cb.checked;
+        prApplyBuyFilter();
+    });
     function prPayBadge(r) {
         return r._pay
-            ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}">${prRaceFinal ? "WON" : "PROJECTED"}: ${prFmtMoney(r._pay)}</span>`
+            ? `<span class="pr-pay" title="${escapeHtml(r._payTitle || "")}"><span class="pr-pay-l">${prRaceFinal ? "WON" : "PROJECTED"}</span>${prFmtMoney(r._pay)}</span>`
             : "";
     }
 
@@ -9203,6 +9531,7 @@
     function renderPointsRace(d) {
         prLastData = d;   // applyRole re-renders so staff get the diagnostics line
         prRaceFinal = !!d.race_final;   // WON vs PROJECTED (admin dial)
+        prBuyOpenNow = prBuyOpenFor(d.race_key);
         prResetOfficial = !!d.reset_official;
         // just the contest name — big and clean (Kerry, 2026-07-10)
         $("pr-standings-title").textContent = d.label;
@@ -9277,7 +9606,7 @@
         // Phones drop the Buy-in column (the green row already says who is
         // in) and, outside live mode, the Rounds column too (Kerry
         // 2026-08-01) — the table earns back two columns of thumb room.
-        const showBuy = !compact;
+        const showBuy = !compact && prBuyOpenNow;
         const showRounds = !compact;   // season view only; live swaps it for THRU
         // Once the race is DECLARED final the THRU column is all dashes —
         // drop it, and the freed width lets the WON badges ride the
@@ -9295,8 +9624,18 @@
         // LSC captaincy (that's the city NET races' prize). Kerry,
         // championship Sunday 2026-08-16: "champions are crowned".
         const cupChampRace = d.race_key === "players_cup_gross";
+        // The LSC captain is named by the Cup roster, not assumed to be the champion (Kerry 2026-10-12: Robert Straiton
+        // won the Austin NET and handed the captaincy to Matt Jenkins). The server sends the roster's captain.
+        const capId = (!cupChampRace && d.lsc_captain_id) || null;
+        const capSeparate = !!(capId && champs.length && !champIds.has(capId));
+        // the captain's badge names the team and wears its colours (Kerry 10/12): Austin burnt orange, San Antonio blue-grey
+        const capCity = (d.chapter === "Austin" ? "AUSTIN" : "SAN ANTONIO");
+        const capColors = d.chapter === "Austin"
+            ? "background:var(--chapter-austin,#BF5700);color:#fff;border:1px solid var(--chapter-austin,#BF5700);"
+            : "background:var(--chapter-sa,#D3DDE4);color:#1B1B1B;border:1px solid var(--chapter-sa-alt,#8FA8B8);";
         const champTitle = cupChampRace
             ? `2026 THE PLAYERS CUP ${coChamp ? "Co-" : ""}Champion`
+            : capSeparate ? `2026 City ${coChamp ? "Co-" : ""}Champion`
             : `2026 City ${coChamp ? "Co-" : ""}Champion — Lone Star Cup ${coChamp ? "Co-" : ""}Captain`;
         // Chapter renders as a colored badge beside the name, not a column
         // (Kerry 2026-08-02) — showChapter only decides whether the badge
@@ -9337,7 +9676,7 @@
         // the same 6px padding.
         const statCol = window.TGF_STAT_COL(compact);
         const pad6 = "padding-left:6px;padding-right:6px;";
-        const rankStyle = `width:${compact ? "28px" : "56px"};${pad6}`;
+        const rankStyle = `width:${compact ? "28px" : "40px"};${pad6}`;
         const ptsStyle = resetPrimary
             ? `${statCol}color:var(--text-muted);border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`
             : `${statCol}font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
@@ -9365,12 +9704,14 @@
         const rowHtml = r => {
             const bg = (r.customer_id && champIds.has(r.customer_id))
                      ? "background:#FDE68A;"   // champion's gold row (Kerry 2026-08-16)
-                     : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
-                     : (r.customer_id ? "" : "background:#fffbeb;");
+                     : r.enrolled ? ""
+                     : (r.customer_id ? "background:#EEEEEC;" : "background:#fffbeb;");
+            const nobuy = !r.enrolled && !!r.customer_id;
+            const buyHtml = prBuyBtn(r);   // "NOT IN" is implied by the BUY IN badge (Kerry 2026-10-12)
             const badge = r.enrolled
                 ? `<span style="color:#15803d;font-weight:700;" title="Bought in">&#10003;${compact ? "" : " IN"}</span>`
                 : (r.customer_id
-                    ? `<span style="color:#b91c1c;font-weight:600;" title="Not bought in">&#10007;${compact ? "" : " Not in"}</span>`
+                    ? buyHtml
                     : `<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">?${compact ? "" : " Unmatched"}</span>`);
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
@@ -9380,7 +9721,7 @@
                 ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;</span>'
                 : '';
             const hcp = r.handicap_index != null
-                ? ` <span style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
+                ? ` <span class="pr-hcp" style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
                 : '';
             // R4 (Kerry-ratified #149/#151): non-members stay ranked on
             // active boards with a status pill — the join/renew path is the
@@ -9463,15 +9804,15 @@
                 ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
             const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
-            return `<tr style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}">
-                <td style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
+            return `<tr class="${nobuy ? "pr-nobuy" : ""}${prRowShimmer(buyHtml) ? " pr-buyin-row" : ""}" style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
+                <td class="pr-rk" style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td${cupSlim ? ' style="white-space:normal;"' : ''}>${nameCell}${showChapter && !cupSlim ? prChapterBadge(r.player_chapter) : ""}${cupSlim ? "" : hcp}${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? `<span class="pr-opt">${prChapterBadge(r.player_chapter)}</span>` : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
-                        : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${cupChampRace ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
-                    : ""}${chevron}${compact && !prRaceFinal ? "" : prPayBadge(r)}${thruSub}</td>
-                <td style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
+                        : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
+                    : ""}${(capSeparate && r.customer_id === capId) ? ` <span title="${escapeHtml(capCity)} Lone Star Cup Captain" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;${capColors}vertical-align:1px;">${compact ? capCity.replace("San Antonio", "SA") + " CAPT" : capCity + " LSC CAPTAIN"}</span>` : ""}</span></span></div>${compact && !prRaceFinal ? "" : prPayBadge(r)}${showBuy ? "" : buyHtml}</div>${thruSub}</td>
+                <td class="pr-pts" style="${ptsStyle}${cupMode ? champEdge : ""}">${cupMode ? prFmtReset(r.points_reset) : (r.total_points ?? "")}</td>
                 ${midCells}
                 ${showBuy ? `<td style="${buyStyle}">${badge}</td>` : ""}
             </tr>`;
@@ -9518,9 +9859,10 @@
         // as the race is declared final and has a champion.
         const champStrip = champs.length
             ? (cupChampRace
-                ? `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
-                : `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}</div></div></div>`)
+                ? `<div class="tgf-champ-plaque" data-race="players_cup" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 PLAYERS CUP ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
+                : `<div class="tgf-champ-plaque" data-head="1" data-cids="${champs.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 ${escapeHtml(d.chapter || "")} City ${coChamp ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${champs.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div><div class="tgf-champ-sub">${capSeparate ? escapeHtml(d.chapter === "Austin" ? "Austin" : "San Antonio") + " Lone Star Cup Captain: " + escapeHtml(d.lsc_captain_name || "") : `Lone Star Cup ${coChamp ? "Co-Captains" : "Captain"}`}</div></div></div>`)
             : "";
+        const pcHolder = cupChampRace ? `<details class="past-champs" data-race="players_cup" hidden></details>` : "";
         // TEST PHASE strip (Kerry 2026-08-13: "Show leaderboard as in
         // TEST PHASE while we look at all of this. In case members go
         // there in the meantime") — driven by the gg_champ_test_phase
@@ -9533,7 +9875,7 @@
         // Round 2 columns").
         const theadHtml = cupMode
             ? `<tr>
-                    <th rowspan="2" style="${rankStyle}">${compact ? "#" : "Rank"}</th>
+                    <th rowspan="2" style="${rankStyle}">RK</th>
                     ${cupSlim ? "" : `<th rowspan="2" style="${mvStyle}" title="Day movement">&#8597;</th>`}
                     <th rowspan="2" style="width:99%;">Player</th>
                     <th rowspan="2" style="${ptsStyle}${champEdge}line-height:1.25;" title="Season points reset — the cups' starting totals">POINTS<br>RESET</th>
@@ -9544,7 +9886,7 @@
                 </tr>
                 <tr>${cupCols.map((bl, bi) => `<th style="${todayStyle}${bi === cupCols.length - 1 ? champEdge : ""}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
             : `<tr>
-                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th>
+                    <th style="${rankStyle}">RK</th>
                     ${liveMode ? `<th style="${mvStyle}" title="Day movement">&#8597;</th>` : ""}
                     <th style="width:99%;">Player</th>
                     <th style="${ptsStyle}"${resetPrimary ? ' title="Pre-reset season points"' : ''}>${resetPrimary ? (compact ? "SEA" : "SEASON") : (compact ? "PTS" : "POINTS")}</th>
@@ -9571,13 +9913,14 @@
                 ${showBuy ? `<col style="width:110px">` : ""}
             </colgroup>`
             : "";
-        $("pr-table-container").innerHTML = testStrip + champStrip + `
+        $("pr-table-container").innerHTML = testStrip + champStrip + pcHolder + prBuyLegend(d.standings) + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 ${colgroupCup}
                 <thead>${theadHtml}</thead>
                 <tbody>${bodyRows}</tbody>
             </table>${extra}`;
 
+        fcChampPhotoLoad(); fcPastChampsLoad(); prApplyBuyFilter(); prSyncPickers();
         $("pr-table-container").dataset.live = liveMode ? "1" : "0";
         // Round list for the expansion's Round 1 / Round 2 card toggle
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupMode ? cupBoards : []);
@@ -9602,10 +9945,6 @@
     (function () {
         const tog = $("pr-preamble-toggle"), pre = $("pr-preamble");
         if (!tog || !pre) return;
-        if (prIsCompact()) {
-            const hiw = $("pr-hiw-btn");
-            if (hiw) pre.insertBefore(hiw, pre.firstChild);
-        }
         tog.addEventListener("click", () => {
             const open = pre.classList.toggle("open");
             tog.setAttribute("aria-expanded", String(open));
@@ -9687,12 +10026,225 @@
         }
     }
 
+    // CHAMPION PHOTO (Kerry 2026-10-12, Option A): the champion's photo takes the
+    // trophy glyph's slot on the Fellowship Cup plaque. The index is ids only; the
+    // photo shows only while the champion(s) on the plaque are exactly the people
+    // tagged in it, so a changed standing can never put someone in Gus's picture.
+    // No photo, no match, or a load failure: the glyph stays.
+    let fcPhotoIdx = null, fcPhotoReq = null;
+    function fcChampPhotoLoad() {
+        if (fcPhotoIdx) { fcApplyChampPhoto(); return; }
+        if (!fcPhotoReq) fcPhotoReq = fetch("/api/player-photos").then(r => r.ok ? r.json() : null)
+            .then(j => { fcPhotoIdx = (j && j.c) || {}; fcHeadIdx = (j && j.h) || {}; }).catch(() => { fcPhotoIdx = {}; fcHeadIdx = {}; });
+        fcPhotoReq.then(fcApplyChampPhoto);
+    }
+    // HEADSHOT plaques: the city NET champion and each month's winner. The trophy glyph gives
+    // way to the headshot(s) of the people named, only those who have one; none, no change.
+    let fcHeadIdx = null;
+    // slot for a standings row (concept B): top 3 get a headshot, the rest an empty slot of the same width
+    // Who gets a headshot (Kerry 2026-10-12): ONLY a player who is bought in AND in the money (the row shows money won or
+    // projected), or the month's winner on Monthly. Not the top 3 as such: someone who is not bought in, or who is outside
+    // the paid places, has no photo and no slot, and their name sits at the left.
+    function prAvatarSlot(r, compact, paid) {
+        if (!r || !r.customer_id) return "";
+        return ((r.enrolled && r._pay) || paid) ? `<span class="pr-av" data-av="${r.customer_id}"></span>` : "";
+    }
+    function fcApplyAvatars() {
+        document.querySelectorAll(".pr-av[data-av]:not([data-done])").forEach(el => {
+            const id = el.dataset.av;
+            // no photo, no placeholder: the slot goes and the name stays at the left like a non-winner's (Kerry 2026-10-12)
+            if (!fcHeadIdx || fcHeadIdx[id] == null) { if (fcHeadIdx) el.remove(); return; }
+            el.innerHTML = `<img src="/member/photo/hs/${id}.jpg?v=${fcHeadIdx[id]}" alt="" loading="lazy" onerror="this.closest('td') && this.closest('td').classList.remove('has-av'); this.remove()">`;
+            const td = el.closest("td"); if (td) td.classList.add("has-av");
+            el.dataset.done = "1";
+        });
+    }
+    // PHONE NAME FIT: a row is two lines at most. Name + chevron are line 1; if the line is too wide the handicap
+    // (and chapter chip) go first, then the name shrinks a half-point at a time (floor 9px).
+    function prFitNames() {
+        if (!window.matchMedia("(max-width: 560px)").matches) return;
+        const lines = [...document.querySelectorAll(".pr-nm-1")];
+        const reset = l => {
+            l.classList.remove("no-hcp", "wrap");
+            const n = l.querySelector(".pr-nm-n"); if (n) n.style.fontSize = "";
+            const row = l.closest(".pr-nm"); if (row) row.classList.remove("no-pay");
+            const t = l.closest(".pr-nm-t"); if (t) t.classList.remove("no-badge");
+        };
+        lines.forEach(reset);
+        document.querySelectorAll(".pr-nm-b").forEach(b => { b.style.zoom = ""; });
+        const need = l => [...l.children].reduce((a, c) => a + c.offsetWidth, 0) + 6;
+        const fits = l => need(l) <= l.clientWidth + 1;
+        // THE ORDER OF GIVING WAY on a narrow window (Kerry 2026-10-12): 1) the handicap, 2) the money,
+        // 3) the name shrinks (floor 11px); 4) only if it still cannot sit on one line it wraps, the badges
+        // go, and the chevron stays right after the name. A row is never more than two lines.
+        // A few passes: shrinking one row can change the column width every other row is measured against.
+        for (let pass = 0; pass < 3; pass++) {
+            lines.forEach(l => {
+                const n = l.querySelector(".pr-nm-n");
+                if (!n || fits(l)) return;
+                l.classList.add("no-hcp");
+                if (fits(l)) return;
+                const row = l.closest(".pr-nm"); if (row) row.classList.add("no-pay");
+                if (fits(l)) return;
+                let size = parseFloat(getComputedStyle(n).fontSize) || 14;
+                while (!fits(l) && size > 11) { size -= 0.5; n.style.fontSize = size + "px"; }
+                if (fits(l)) return;
+                l.classList.add("wrap");
+                const t = l.closest(".pr-nm-t"); if (t) t.classList.add("no-badge");
+            });
+        }
+        // the badge line keeps to one line too: shrink it rather than let it wrap or clip
+        document.querySelectorAll(".pr-nm-b").forEach(b => {
+            let z = 1;
+            while (b.scrollWidth > b.clientWidth + 1 && z > 0.6) { z -= 0.05; b.style.zoom = z.toFixed(2); }
+        });
+        // Bitter may still be loading when the first pass runs; measure again once it is in
+        if (document.fonts && document.fonts.status !== "loaded" && !prFitNames._again) {
+            prFitNames._again = true;
+            document.fonts.ready.then(() => { prFitNames._again = false; requestAnimationFrame(prFitNames); });
+        }
+    }
+    // ANYTHING HIDDEN SHOWS WHEN THE ROW IS EXPANDED (Kerry 2026-10-12), as ONE line across the top of the points /
+    // scorecard detail that opens under the row, so the open row stays short: "HANDICAP 2.8 · WON $135 · AUSTIN ...
+    // CAPTAIN". The detail cell is rewritten when its data arrives, so a small observer puts the line back.
+    function prHiddenItems(tr) {
+        const vis = el => !!el && el.offsetParent !== null;
+        const items = [];
+        const hc = tr.querySelector(".pr-hcp");
+        const hv = hc ? hc.textContent.replace(/[()]/g, "").trim() : (tr.dataset.hcp || "");
+        if (hv && !vis(hc)) items.push(`<span><b>HCP</b>${escapeHtml(hv)}</span>`);
+        const pay = tr.querySelector(".pr-pay");
+        if (tr.dataset.pay && !vis(pay)) items.push(`<span class="hp-pay"><b>${escapeHtml(tr.dataset.payl || "WON")}</b>${escapeHtml(tr.dataset.pay)}</span>`);
+        const bd = tr.querySelector(".pr-nm-b");
+        if (bd && !vis(bd)) {
+            // the badge's own short text where it has one ("AUSTIN CAPT"), its tooltip where it is only a glyph (the trophy)
+            const labels = [...bd.querySelectorAll("[title]")].map(e => e.textContent.replace(/\s+/g, " ").trim() || e.getAttribute("title")).filter(Boolean);
+            const txt = bd.textContent.replace(/\s+/g, " ").trim();
+            if (labels.length || txt) items.push(`<span>${escapeHtml(labels.length ? labels.join(" \u00b7 ") : txt)}</span>`);
+        }
+        const op = tr.querySelector(".pr-opt");
+        if (op && !vis(op) && op.textContent.trim()) items.push(`<span>${escapeHtml(op.textContent.trim())}</span>`);
+        return items;
+    }
+    function prSyncHidden() {
+        document.querySelectorAll("#pr-table-container tbody tr[data-cid]").forEach(tr => {
+            const chev = tr.querySelector(".pr-chevron");
+            const open = !!chev && chev.textContent.indexOf("\u25BC") > -1;
+            const detail = tr.nextElementSibling;
+            if (!open || !detail || !detail.matches(".pr-detail-row, .pr-mo-detail")) return;
+            const td = detail.firstElementChild;
+            if (!td || td.dataset.hidWatch) return;
+            const items = prHiddenItems(tr);
+            if (!items.length) return;
+            const html = `<div class="pr-hid-line">${items.join("")}</div>`;
+            const put = () => { if (!td.querySelector(":scope > .pr-hid-line")) td.insertAdjacentHTML("afterbegin", html); };
+            put();
+            td.dataset.hidWatch = "1";
+            new MutationObserver(put).observe(td, { childList: true });
+        });
+    }
+    document.addEventListener("click", ev => {
+        if (ev.target.closest && ev.target.closest("#pr-table-container tbody tr[data-cid]")) setTimeout(prSyncHidden, 30);
+    });
+    let prFitTimer = null;
+    window.addEventListener("resize", () => { clearTimeout(prFitTimer); prFitTimer = setTimeout(prFitNames, 120); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(prFitNames);
+    function fcApplyHeadshots() {
+        fcApplyAvatars();
+        prFitNames();
+        document.querySelectorAll(".tgf-champ-plaque[data-head]:not([data-photo-done])").forEach(el => {
+            const ids = (el.dataset.cids || "").split(",").map(Number).filter(id => id && fcHeadIdx && fcHeadIdx[id] != null).slice(0, 3);
+            const glyph = el.querySelector(".tgf-champ-trophy");
+            if (!ids.length || !glyph) return;
+            const nm = (el.querySelector(".tgf-champ-name") || {}).textContent || "";
+            const wrap = document.createElement("div");
+            wrap.className = "champ-heads" + (ids.length > 1 ? " many" : "");
+            ids.forEach(id => {
+                const img = document.createElement("img");
+                img.className = "champ-head"; img.alt = nm; img.setAttribute("role", "button"); img.tabIndex = 0;
+                img.src = `/member/photo/hs/${id}.jpg?v=${fcHeadIdx[id]}`;
+                img.onerror = () => img.remove();
+                const open = () => fcChampLightbox(img.src.replace("/photo/hs/", "/photo/h/"), nm);
+                img.addEventListener("click", open);
+                img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+                wrap.appendChild(img);
+            });
+            glyph.replaceWith(wrap);
+            el.classList.add("has-head");
+            el.dataset.photoDone = "1";
+        });
+    }
+    function fcApplyChampPhoto() {
+        fcApplyHeadshots();
+        const el = document.querySelector('.tgf-champ-plaque[data-race]');
+        const race = el && el.dataset.race;
+        const p = fcPhotoIdx && race && fcPhotoIdx[race + "-2026"];
+        if (!el || !p || el.dataset.photoDone) return;
+        const norm = a => a.map(Number).filter(Boolean).sort((x, y) => x - y).join(",");
+        if (norm((el.dataset.cids || "").split(",")) !== norm(p.ids || [])) return;
+        const glyph = el.querySelector(".tgf-champ-trophy");
+        if (!glyph) return;
+        const src = `/member/photo/cq/${race}-2026.jpg?v=${p.v}`;      // square badge crop for the plaque
+        const fullSrc = `/member/photo/c/${race}-2026.jpg?v=${p.v}`;  // full size only on tap
+        glyph.outerHTML = `<img class="champ-photo" width="140" height="140" src="${src}" alt="${escapeHtml(p.caption)}" role="button" tabindex="0" onerror="this.remove()">`;
+        const img = el.querySelector(".champ-photo");
+        const open = () => fcChampLightbox(fullSrc, p.caption);
+        img.addEventListener("click", open);
+        img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+        el.classList.add("has-photo");
+        el.dataset.photoDone = "1";
+    }
+    // PAST CHAMPIONS (Kerry 2026-10-12): a collapsed strip under the plaque. Years come
+    // from /api/cup-champions (Kerry's list, never inferred); a year with no photo shows
+    // the name only. Filled after the board paints; a failed read leaves nothing behind.
+    let pcData = null, pcReq = null;
+    function fcPastChampsLoad() {
+        if (pcData) { fcPastChampsApply(); return; }
+        if (!pcReq) pcReq = fetch("/api/cup-champions").then(r => r.ok ? r.json() : null)
+            .then(j => { pcData = j || {}; }).catch(() => { pcData = {}; });
+        pcReq.then(fcPastChampsApply);
+    }
+    function fcPastChampsApply() {
+        document.querySelectorAll(".past-champs[data-race]:not([data-done])").forEach(box => {
+            const rows = (pcData && pcData[box.dataset.race]) || [];
+            if (!rows.length) return;
+            const cards = rows.map(r => {
+                const nm = (r.names || []).map(n => escapeHtml(prFirstLast(n))).join(" &amp; ");
+                const ph = r.photo
+                    ? `<img width="92" height="92" src="/member/photo/cq/${r.photo.key}.jpg?v=${r.photo.v}" alt="${escapeHtml(r.photo.caption)}" data-cap="${escapeHtml(r.photo.caption)}" loading="lazy" role="button" tabindex="0" onerror="this.outerHTML='<div class=&quot;pc-ph&quot;></div>'">`
+                    : `<div class="pc-ph"></div>`;
+                return `<div class="past-champ">${ph}<div class="pc-y">${r.year}</div><div class="pc-n">${nm}</div></div>`;
+            }).join("");
+            box.innerHTML = `<summary>Past Champions &middot; ${rows.length}</summary><div class="past-champs-list">${cards}</div>`;
+            box.hidden = false;
+            box.dataset.done = "1";
+            box.querySelectorAll("img[data-cap]").forEach(img => {
+                const open = () => fcChampLightbox(img.src.replace("/photo/cq/", "/photo/c/"), img.dataset.cap);
+                img.addEventListener("click", open);
+                img.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+            });
+        });
+    }
+    function fcChampLightbox(src, caption) {
+        const lb = document.createElement("div");
+        lb.className = "champ-lb";
+        lb.setAttribute("role", "dialog");
+        lb.setAttribute("aria-label", caption);
+        lb.innerHTML = `<img src="${src}" alt="${escapeHtml(caption)}"><div class="champ-lb-cap">${escapeHtml(caption)}</div>`;
+        const close = () => { lb.remove(); document.removeEventListener("keydown", onKey); };
+        const onKey = ev => { if (ev.key === "Escape") close(); };
+        lb.addEventListener("click", close);
+        document.addEventListener("keydown", onKey);
+        document.body.appendChild(lb);
+    }
+
     function renderFellowshipCup(d) {
         // The Cup is decided at the TGF Championship — once the admin
         // declares it FINAL (gg_points_race_final['fellowship_cup']) the
         // money flips PROJECTED -> WON and the champion wears gold
         // (Kerry, championship Sunday 2026-08-16: "champions are crowned")
         prRaceFinal = !!d.race_final;
+        prBuyOpenNow = false;   // the Cup is decided at the Championship: no buy-in here
         prResetOfficial = !!d.reset_official;
         $("pr-standings-title").textContent = "THE FELLOWSHIP CUP";
         const fcChamps = (prRaceFinal && d.champions) ? d.champions : [];
@@ -9724,7 +10276,7 @@
         prRenderStructureNote("THE FELLOWSHIP CUP");
 
         const compact = prIsCompact();
-        const rankTh = `width:${compact ? "28px" : "56px"};padding-left:6px;padding-right:6px;`;
+        const rankTh = `width:${compact ? "28px" : "40px"};padding-left:6px;padding-right:6px;`;
         // THE stat-column standard (tgf-standards.js — Kerry 2026-08-03:
         // "I'd like a standard unless I ask for a specific change"):
         // full-height 2px dividers + stacked titles ride on top of it.
@@ -9759,10 +10311,11 @@
         const rows = d.standings.map(r => {
             const bg = (r.customer_id && fcChampIds.has(r.customer_id))
                      ? "background:#FDE68A;"   // champion's gold row (Kerry 2026-08-16)
-                     : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
-                     : (r.customer_id ? "" : "background:#fffbeb;");
+                     : r.enrolled ? ""
+                     : (r.customer_id ? "background:#EEEEEC;" : "background:#fffbeb;");
+            const nobuyF = !r.enrolled && !!r.customer_id;
             const hcp = r.handicap_index != null
-                ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
+                ? ` <span class="pr-hcp" style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
                 : escapeHtml(r.display_name || r.player_name);
@@ -9805,13 +10358,13 @@
             const chevF = expandableF
                 ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;</span>'
                 : '';
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}" style="${bg}${expandableF ? "cursor:pointer;" : ""}">
-                <td style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td${cupSlimF ? ' style="white-space:normal;"' : ''}>${nameCell}${r.customer_id && fcChampIds.has(r.customer_id)
+            return `<tr class="${nobuyF ? "pr-nobuy" : ""}"${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
+                <td class="pr-rk" style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
+                <td class="pr-name-td"${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}</span><span class="pr-nm-chev">${chevF}</span></span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
-                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}${chevF}${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${thruSubF}</td>
+                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${prBuyBtn(r)}</div>${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
@@ -9819,7 +10372,7 @@
 
         const theadF = cupChamp
             ? `<tr>
-                    <th rowspan="2" style="${rankTh}">${compact ? "#" : "Rank"}</th><th rowspan="2" style="width:99%;">Player</th>
+                    <th rowspan="2" style="${rankTh}">RK</th><th rowspan="2" style="width:99%;">Player</th>
                     ${cupSlimF ? "" : `<th rowspan="2" style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>`}
                     <th rowspan="2" style="${resetThOv}line-height:1.25;" title="Season points reset — the Cup's starting totals">POINTS<br>RESET</th>
                     <th colspan="${cupBoardsF.length}" style="text-align:center;padding-left:6px;padding-right:6px;${champEdgeF}border-bottom:1px dashed #cbd5e1;font-size:${compact ? "0.6rem" : "0.72rem"};letter-spacing:0.06em;background:var(--surface-dark,#1B1B1B);color:#fff;">TGF CHAMP</th>
@@ -9828,7 +10381,7 @@
                 </tr>
                 <tr>${cupBoardsF.map((bl, bi) => `<th style="${roundTh}${bi === cupBoardsF.length - 1 ? champEdgeF : ""}" title="${escapeHtml(bl)} championship points">${escapeHtml(compact ? bl.replace(/round\s*/i, "R") : bl.replace(/round\s*/i, "RD "))}</th>`).join("")}</tr>`
             : `<tr>
-                    <th style="${rankTh}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
+                    <th style="${rankTh}">RK</th><th style="width:99%;">Player</th>
                     <th style="${netTh}line-height:1.25;" title="Rank in their chapter's City Points race">CITY<br>RANK</th>
                     <th style="${resetTh}line-height:1.25;">${d.reset_official ? "" : `<span class="pr-proj" style="display:block;font-size:${compact ? "0.52rem" : "0.65rem"};font-weight:600;letter-spacing:0.03em;">(${compact ? "proj" : "Projected"})</span>`}POINTS<br>RESET</th>
                 </tr>`;
@@ -9854,9 +10407,9 @@
             </colgroup>`
             : "";
         const fcStrip = fcChamps.length
-            ? `<div class="tgf-champ-plaque"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
+            ? `<div class="tgf-champ-plaque" data-race="fellowship_cup" data-cids="${fcChamps.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
             : "";
-        $("pr-table-container").innerHTML = testStripF + fcStrip + `
+        $("pr-table-container").innerHTML = testStripF + fcStrip + `<details class="past-champs" data-race="fellowship_cup" hidden></details>` + prBuyLegend(d.standings) + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 ${colgroupF}
                 <thead>${theadF}</thead>
@@ -9865,6 +10418,7 @@
         // Champ rows expand to the round scorecards (Kerry 2026-08-13:
         // "exactly like City Championship specs"), with the Round 1 /
         // Round 2 toggle handled inside prToggleDetail.
+        fcChampPhotoLoad(); fcPastChampsLoad(); prApplyBuyFilter(); prSyncPickers();
         $("pr-table-container").dataset.live = cupChamp ? "1" : "0";
         $("pr-table-container").dataset.champBoards = JSON.stringify(cupFetchedF);
         if (cupChamp) {
@@ -9957,7 +10511,7 @@
                 ${compact ? x.name.slice(0, 3) : x.name}${(x.complete || x.final) ? "" : " •"}</button>`;
         }).join(" ");
 
-        const rankStyle = `width:${compact ? "28px" : "56px"};`;
+        const rankStyle = `width:${compact ? "28px" : "40px"};`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
         const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const purseStyle = `width:${compact ? "48px" : "90px"};text-align:center;`;
@@ -9989,10 +10543,10 @@
             else if (!sel.complete && r.rank === 1)
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
-                <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</td>
+                <td class="pr-rk" style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
+                <td class="pr-wrap pr-name-td"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact, win)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${name}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</span></span></div></div></td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
-                <td style="${ptsStyle}">${r.points}</td>
+                <td class="pr-pts" style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>
             </tr>`;
         }).join("");
@@ -10004,6 +10558,13 @@
             : sel.complete ? "" : `
             <div style="margin:0 0 0.6rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;${escapeHtml(sel.name)} &middot; In Progress</span></div>`;
 
+        // MONTH WINNER plaque with the headshot (Kerry 10/12), once the month is final
+        const mWin = sel.complete ? (sel.winners || []) : (sel.final ? (sel.final_winners || []) : []);
+        const mLabel = (() => { const [y, m] = String(sel.month).split("-");
+            return new Date(+y, +m - 1, 1).toLocaleString("en-US", { month: "long" }) + " " + y; })();
+        const monthPlaque = mWin.length
+            ? `<div class="tgf-champ-plaque" data-head="1" data-cids="${mWin.map(w => w.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">${escapeHtml(mLabel)} Points ${mWin.length > 1 ? "Winners" : "Winner"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.5rem" : "1.9rem"};">${mWin.map(w => escapeHtml(prFirstLast(w.display_name || w.player_name))).join(" &amp; ")}</div></div></div>`
+            : "";
         cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
                 <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
@@ -10011,16 +10572,17 @@
                            border:1px solid var(--border);border-radius:999px;background:var(--surface);
                            color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
                 ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}
-            </div>${statusChip}
+            </div>${statusChip}${monthPlaque}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>
-                    <th style="${rankStyle}">${compact ? "#" : "Rank"}</th><th style="width:99%;">Player</th>
+                    <th style="${rankStyle}">RK</th><th style="width:99%;">Player</th>
                     <th style="${rndStyle}" title="Rounds this month">${compact ? "R" : "Rounds"}</th>
                     <th style="${ptsStyle}">${compact ? "PTS" : "POINTS"}</th>
                     <th style="${purseStyle}" title="$1 per TGF member at month close; ties split">${compact ? "$" : "POT"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
+        fcChampPhotoLoad(); prSyncPickers();
         cont.querySelectorAll("button[data-mp]").forEach(b =>
             b.addEventListener("click", () => { prMonthlySel = b.dataset.mp; prRenderMonthly(); }));
         const rbtn = cont.querySelector("#pr-monthly-refresh");
@@ -10347,6 +10909,19 @@
         // filter above narrows to the scorer's event.
         // a Cup round's scorer reads the Cup's matches, on his session (Kerry 10/9)
         if (window.SOLO_EVENT) hash = window.SOLO_CUP ? "#tab=lsc" : "#tab=events";
+        // Landing and the new address (CD #1638, Kerry 2026-10-12): ?chapter=&race= opens that race; with nothing in the address
+        // a visitor lands on TGF \u00b7 All chapters and its live race (Monthly), or on the chapter they chose last time.
+        if (!hash) {
+            const qRace = prKeyFromSlug(new URLSearchParams(location.search).get("race"));
+            let want = qRace;
+            if (!want) {
+                let last = null;
+                try { last = localStorage.getItem("tgf_pr_chapter"); } catch (e) { /* ignore */ }
+                const chap = PR_NAV.chapters.find(c => c.id === last) || PR_NAV.chapters[0];
+                want = prDefaultRaceOf(chap);
+            }
+            hash = "#race=" + want;
+        }
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
             ? raceMatch[1] : null;
@@ -10360,6 +10935,8 @@
             if (chip) chip.style.display =
                 (wantRace === "monthly" || wantRace.startsWith("fall")) ? "none" : "inline-flex";
         }
+        if (typeof prSyncPickers === "function") prSyncPickers();
+        if (wantRace && typeof prWriteUrl === "function" && PR_NAV.races[wantRace]) prWriteUrl(wantRace);
         // #tab=events opens the EVENTS board on load — for the scorer's board
         // page and for a manager; a member page without the tab ignores it
         // (the member flip is Tracker Build's #1149).

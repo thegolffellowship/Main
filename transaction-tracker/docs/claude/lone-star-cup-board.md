@@ -1256,3 +1256,50 @@ strips (singles headshots only; pairs keep initials), the opened Cup card
 (singles face-off, pair duo shot), Spotlight's header. After the Cup: the
 photo table + upload page + per-player opt-out (#1577), photos in the recap
 builder.
+
+### Champion photos (v2.537.0, Kerry 2026-10-12)
+
+Gus Vasquez with The Bruce Friesenhahn Fellowship Cup sits in the trophy slot of the THE FELLOWSHIP CUP champion plaque (contests.html `fcApplyChampPhoto`, CSS `.champ-photo`, tap = `fcChampLightbox`). The JPEG is a repo file (`data/champion_photos/`, 1200x1600, EXIF stripped); `CHAMPION_PHOTOS` in email_parser/player_photos.py maps `<race>-<season>` to file, `customer_ids`, cup name and caption. Read-only at runtime: no upload path, no table, git is the backup. The plaque carries `data-cids`; the photo applies only when they equal the tagged ids, else the glyph stays. Index: `/api/player-photos` "c" block; file: `/member/photo/c/<race>-<season>.jpg`. To add a champion photo: crop and strip EXIF first (no image library on the server), add the file, add the registry entry, bump. When 0011 ships this becomes a `photos` row tagged to the champion and the registry is backfilled. Players Cup and city plaques do not read it yet.
+
+### Cup champion titles on the Spotlight header (v2.538.0, Kerry 2026-10-12)
+
+The last row of the Spotlight header card reads "The Fellowship Cup - 2026 Champion" / "The Players Cup - 2024 & 2026 Champion" (one line per cup won, Fellowship above Players; years ascending, "2022, 2024 & 2026" for three or more). `get_player_spotlight` returns `cup_titles` from email_parser/cup_titles.py: the current season is derived from each cup's declared `champions` (final, ENROLLED, best rank), so only OVERALL winners count and a non-enrolled player atop the standings gets nothing; past seasons are `CUP_CHAMPION_HISTORY`, a list Kerry states (2024 Players Cup Robert Straiton; 2024 Fellowship Cup Mark Freund; 2025 both cups Jay Horton), never inferred. The Fellowship Cup plaque no longer shows the cup's name line under the champion's name. Guard test_cup_titles.py.
+
+Players Cup champion photo (v2.539.0, Kerry 2026-10-12): `players_cup-2026` is in `CHAMPION_PHOTOS` (customer 31, Robert Straiton) and the Players Cup plaque (`data-race="players_cup"`) takes it by the same rule, matched to its champion's customer_id. His 400x400 headshot `data/player_photos/h-31.jpg` is a seed headshot cropped from the same photo.
+
+Titles share one line (v2.539.1, Kerry 2026-10-12): a player with both cups reads "The Fellowship Cup - 2025 Champion | The Players Cup - 2024 & 2026 Champion", one row, each title unbroken on wrap.
+
+Phone rule (v2.539.2, Kerry 2026-10-12): when the two titles do not fit one line, The Players Cup takes the second line and the bar is dropped (`sptFitChamps`, class `stacked`, re-run on resize). Only Jay Horton holds both cups to date.
+
+### Spotlight: Lone Star Cup record, and the whole season in WHERE X STANDS (v2.540.0, Kerry 2026-10-12)
+
+Once the cup board is the FINAL (frozen) snapshot, the Spotlight's Lone Star Cup row shows the player's record in the seat's place and one linked line per match (`/member/lonestarcup?match=<id>`): `email_parser/lsc_record.py` `player_record`, read off the frozen board, cached via `_spotlight_shared("lsc_board")`, attached by `get_player_spotlight` as `lone_star_cup.record`. Side 0 of a match is Austin and side 1 San Antonio (TEAM_KEYS order). Session titles are the official ones (FOURBALL, FOURSOMES, SINGLES; the Saturday-afternoon one-ball format is FOURSOMES, not "Chapman"). `LSC_CLINCH` records who delivered the clinching point (2026: SUN-8, Gus Vasquez, from the scorers' hole-save times via `scoring-se-hole-times:20`; the board has no finish times, so it is not derived at read time). WHERE X STANDS lists this season's contests under "<year> Season" (live, then completed with their COMPLETED badge, then monthly results); PAST CONTESTS is earlier seasons only. Skins won per player and weekend photos are not on the row yet. Guard test_lsc_record.py.
+
+Collapsed months and Champion label (v2.540.1, Kerry 2026-10-12): the Spotlight's current-season monthly results fold into one "Monthly Results" line (`moFold`, class `spt-mo`); a decided Fellowship Cup row says "Champion" for the overall winner (and the Players Cup row likewise) instead of the old reset-points gap "N from 1st", which is shown only while the cup is undecided.
+
+### Past Champions and the standard photo look (v2.541.0, Kerry 2026-10-12)
+
+`CHAMPION_PHOTOS` now carries the past champions too (`fellowship_cup-2023/24/25`, `players_cup-2023/24`); a photo is shown only for the people tagged in it. The cup boards get a collapsed "Past Champions" strip under the plaque (contests.html `fcPastChampsLoad`, `<details class="past-champs" data-race=...>`) filled from `GET /api/cup-champions` (`cup_titles.past_champions`, names from `customers`, years from Kerry's `CUP_CHAMPION_HISTORY`, never inferred). `cup_titles()` entries carry `photos`, which the Spotlight draws as tagged thumbnails under the title line (`sptChampPhotos`, tap = lightbox). With a photo the plaque takes class `has-photo` (small padding, portrait 102x136). The 2026 plaque photos are the Adobe "B" look (face-masked shadows/darks lift + background separation, face brightness unchanged). Headshot standard: square, head about 55% of the frame, 9% headroom, centred; shadow touch-ups lift shadows and darks only.
+
+### LEADERBOARD nav, tab order, headshot plaques (v2.542.0, Kerry 2026-10-12)
+
+The tab bar is flush under the header (no `main` padding-top, no `.pr-section` gap) and the `.pr-race-row` chip row pins under it on desktop (`prPinBars`). Tab order: EVENTS | POINTS RACES | LONE STAR CUP | MATCH PLAY. Plaques with `data-head="1" data-cids=...` (the city-champion plaque on both NET boards and the new Monthly winner plaque) take the headshot(s) from the `h` block of `/api/player-photos` (`fcApplyHeadshots`); nobody with a headshot, no change. Headshots in the standings rows are a concept (three options shown to Kerry), unbuilt.
+
+### Standings headshots (concept B) and the captain from the Cup roster (v2.543.0, Kerry 2026-10-12)
+
+Top-3 standings rows carry a headshot slot (`prAvatarSlot`, filled by `fcApplyAvatars` from the `h` index); other rows keep a blank slot of the same width on desktop. The NET boards no longer assume champion = LSC captain: `app.py` `LSC_CAPTAIN_BY_RACE` (Austin NET customer 7 Matthew Jenkins, San Antonio NET customer 35 Rob Callaway, Kerry 10/12) is added to the points-race payload as `lsc_captain_id` / `lsc_captain_name` (`_with_lsc_captain`). Champion != captain: plaque sub line "Lone Star Cup Captain: <name>", champion badge CHAMPION only, captain row badge LSC CAPTAIN. Update the map when a captain changes (it sits beside `LSC_CAPTAINS` used by the Cup info page).
+
+### Photo load time, standings money row, Spotlight headshot lightbox (v2.544.0, Kerry 2026-10-12)
+
+Small copies keep pages light: `data/champion_photos/sm/` (300x400) and `data/player_photos/sm/` (160x160, `h-<id>.jpg`), served by `/member/photo/cs/<key>.jpg` and `/member/photo/hs/<id>.jpg` (full photo as fallback; an uploaded headshot wins over the seed). Every on-page small display uses them; only the lightbox asks for the full photo. A NEW seed headshot or champion photo needs its small copy (resize with PIL, quality ~82; `test_player_photos.py` fails without it). Standings: money sits on the name row, right-aligned (`.pr-nm`, `.pr-pay`), names and money Bitter. The Spotlight headshot opens full size (`sptLightbox`).
+
+### Champion badge crops (v2.548.0, Kerry 2026-10-12)
+
+Every champion photo has three files: the full original (`data/champion_photos/<file>`, shown only in the lightbox), a small copy (`sm/`, 300x400) and a SQUARE badge crop (`sq/`, 400x400, top-anchored: head, torso, trophy) served by `/member/photo/cq/<key>.jpg` for the plaque (140px), the Past Champions strip (92px) and the Spotlight thumbnails (76px). A new photo needs its `sq` (and `sm`) copy; `test_player_photos.py` fails without them.
+
+Crop offsets (v2.549.0/.1): the `sq` badge crop is top-anchored for most photos; per-photo vertical offsets (px into the 1200x1600 original) are Gus 2026 40, Robert Players Cup 2024 100 and 2026 120, so the whole trophy shows. Jay Horton 2025 is top-anchored (offset 0, whole head, Kerry's call: "I don't like cropping his head").
+
+
+## Chapter / race pickers + address (v2.552.0, Kerry 2026-10-12, CD #1638)
+
+Built additively on the Points Races board: the race chips, the navy LSC pill and HOW IT WORKS are unchanged. `#pr-pickers` (above the title row) holds a chapter button and a race button with a LIVE/FINAL tag; menus on desktop, bottom sheets at <=560px. Config is the `PR_NAV` table in contests.html (chapters TGF / Austin #BF5700 / San Antonio #4B6274; per-race slug + live flag). Picking a race clicks the matching `.sub-tab[data-pr]`, so every existing handler runs. The address is `?chapter=<id>&race=<slug>#race=<key>`; old `#race=` / `#tab=` / `?player=` links still resolve. Landing with no race in the address = TGF Monthly (or the last chapter chosen, localStorage `tgf_pr_chapter`); revert by defaulting to `fall_sa` in the initial-hash block.

@@ -1110,3 +1110,25 @@ Events board on Olympia Hills (event 3308) had read Golf Genius imports.
 - Not affected: the Lone Star Cup board (`lsc_cup`) already reads entries
   (`get_entered_scores` → `merge_entry_feed`).
 - Guard: `test_board_entry_mode.py`.
+
+
+## Live Scoring ON BY DEFAULT (v2.554.0, Kerry 2026-10-13)
+
+Kerry: "Turn live scoring on for an event should be default after 5:00p
+Monday pairings are turned on and definitely prior to these emails being
+sent out." This replaces the 9/28 "staff turn an event on; nothing turns one
+on by itself" rule for regular events. `email_parser/live_scoring_default.py`:
+- `ensure_live_scoring(event_id)` adds the event to `score_entry_events` and
+  seeds one round per saved hole set (`seed_round_from_pairings`). It is
+  idempotent and never switches anything off. It skips: status not active, no
+  saved pairings, Golf Genius era (before `gg_untether_from`), and the Lone Star
+  Cup (`lsc_report_context`).
+- Job `live_scoring_auto` (app.py, every 15 min, US/Central) runs it for events
+  dated today, and for events dated tomorrow from 17:00 Central. Dial
+  `live_scoring_auto` (0/off stops the job).
+- The event-day email calls it before every preview and send
+  (`event_day_email._ensure_scoring`), so every message carries its Keep
+  score button.
+- Early seeding is safe: rounds re-sync to later pairing saves (the pairings
+  fingerprint) and re-seeding never touches a score.
+- Guard: `test_live_scoring_default.py`.

@@ -68,8 +68,32 @@
         .spt-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px; }
         .spt-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
         .spt-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
-        .spt-photo { width: 72px; height: 72px; flex: none; border-radius: 50%; object-fit: cover; object-position: center 30%;
-            border: 3px solid var(--primary, #E87C3E); }
+        /* PROFILE PHOTO (Kerry 2026-10-12): a rounded SQUARE in a frame of the player's CHAPTER colour (Austin burnt
+           orange, San Antonio blue-grey, anyone else neutral), a little padding between photo and frame. */
+        .spt-photo-frame { flex: none; padding: 2px; border-radius: 14px; background: #E5E7EB; line-height: 0; }
+        .spt-photo-frame.ch-austin { background: var(--chapter-austin, #BF5700); }
+        .spt-photo-frame.ch-sa { background: var(--chapter-sa-alt, #8FA8B8); }
+        .spt-photo { cursor: zoom-in; width: 80px; height: 80px; border-radius: 12px; object-fit: cover; object-position: center 28%;
+            border: 0; display: block; }
+        /* CUP CHAMPION titles, the card's last row (Kerry 2026-10-12): one line per cup,
+           "The Fellowship Cup - 2026 Champion". Nothing renders for a non-champion. */
+        .spt-champs { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--border); display: flex;
+            flex-direction: column; gap: 5px; }
+        .spt-champ { display: flex; align-items: center; gap: 7px; font: 700 13px/1.25 'Bitter', serif; color: #7A5C0B; }
+        .spt-champ svg { flex: none; width: 17px; height: 17px; }
+        .spt-champ-t { white-space: nowrap; }
+        .spt-champ-sep { color: #C9A227; margin-left: 3px; }
+        /* PAST CHAMPION PHOTOS under the titles (Kerry 2026-10-12): one thumbnail per title year with a photo. */
+        .spt-champ-photos { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+        .spt-champ-ph { background: none; border: 0; padding: 0; cursor: zoom-in; text-align: center; font: 700 10.5px/1.3 'Bitter', serif; color: #7A5C0B; }
+        .spt-champ-ph img { display: block; width: 76px; height: 76px; object-fit: cover; border-radius: 7px; border: 2px solid #D4A017; }
+        .spt-champ-ph span { display: block; margin-top: 3px; max-width: 80px; }
+        .spt-champ-lb { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
+        .spt-champ-lb img { max-width: 100%; max-height: 82vh; border-radius: 10px; border: 2px solid #D4A017; }
+        .spt-champ-lb div { margin-top: 10px; color: #F7E7A0; font: 600 0.85rem/1.4 'Bitter', Georgia, serif; text-align: center; }
+        .spt-champ > span.stacked .spt-champ-t { display: block; }
+        .spt-champ > span.stacked .spt-champ-sep { display: none; }
         .spt-name { margin: 0; font: 700 23px/1.05 'Bitter', serif; color: #1B1B1B; min-width: 0; }
         .spt-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
         .spt-idx { text-align: right; flex: none; }
@@ -78,6 +102,43 @@
                       margin-top: 4px; text-transform: uppercase; }
         /* LONE STAR CUP row — Texas-flag navy, distinct from every race
            row (Kerry 2026-08-03) */
+        /* LONE STAR CUP record row (Kerry 2026-10-12): record in the seat's place, the cup's
+           result and the clinch note under the name, one linked line per match. */
+        .spt-lsc-wrap { background: #F5F7FC; border-left: 3px solid var(--lsc-navy, #002855); border-top: 1px solid #F0EEE9; }
+        .spt-lsc-wrap > .spt-stand { border-top: none; border-left: none; }
+        details.spt-lsc-wrap > summary { list-style: none; cursor: pointer; }
+        details.spt-lsc-wrap > summary::-webkit-details-marker { display: none; }
+        /* BRANDED like the Lone Star Cup page (Kerry 2026-10-12): the Texas navy bar with white and gold type, the
+           player's TEAM colour as the stripe (Austin burnt orange, San Antonio blue-grey) and a team-tinted match list. */
+        details.spt-lsc-wrap { border-left: 5px solid var(--lsc-navy, #002855); background: #fff; }
+        details.spt-lsc-wrap.t-austin { border-left-color: #BF5700; --lsc-tint: #FCF6EF; }
+        details.spt-lsc-wrap.t-sa { border-left-color: #4B6274; --lsc-tint: #EEF3F6; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc { background: var(--lsc-navy, #002855); color: #fff; border-left: none; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc:hover { background: #0A3A6B; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc .race,
+        details.spt-lsc-wrap > summary.spt-stand-lsc .rk .r { color: #fff !important; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc .rk .f { color: #A9BDD6; }
+        details.spt-lsc-wrap > summary.spt-stand-lsc .meta { color: rgba(255,255,255,.9); }
+        details.spt-lsc-wrap > summary.spt-stand-lsc .spt-lsc-clinch { color: #F7E7A0; }
+        details.spt-lsc-wrap .spt-lsc-matches { background: var(--lsc-tint, #F5F7FC); }
+        details.spt-lsc-wrap[open] > summary .spt-win-chev { transform: rotate(90deg); }
+        /* a record with two dashes (1-1-1) stays on ONE line: smaller figure, a touch more room */
+        .spt-stand .rk .r.long { font-size: 15px; white-space: nowrap; letter-spacing: -0.3px; }
+        .spt-lsc-wrap .spt-stand .rk { width: 58px; }
+        .spt-lsc-board { display: block; padding: 8px 14px 8px 17px; border-top: 1px solid #E6EAF3; text-decoration: none;
+                         font: 700 11px/1.2 'Bitter', serif; letter-spacing: 0.5px; color: var(--primary, #E87C3E); text-transform: uppercase; }
+        .spt-lsc-clinch { font: 700 12px/1.3 'Bitter', serif; color: #7A5C0B; margin-top: 4px; }
+        .spt-lsc-matches { padding: 0 0 4px; }
+        .spt-lsc-m { display: flex; align-items: flex-start; gap: 9px; padding: 8px 14px 8px 17px; border-top: 1px solid #E6EAF3;
+                     text-decoration: none; color: inherit; }
+        .spt-lsc-m:hover { background: #FDF0E6; }
+        .spt-lsc-m .res { flex: none; width: 21px; height: 21px; border-radius: 5px; font: 700 11px/21px 'Bitter', serif; text-align: center; }
+        .spt-lsc-m .res.W { color: #1B6B45; background: #C9EBD5; }
+        .spt-lsc-m .res.L { color: #4B5563; background: #E5E7EB; }
+        .spt-lsc-m .res.H { color: #92400E; background: #FEF3C7; }
+        .spt-lsc-m .mm { flex: 1; min-width: 0; font: 500 12.5px/1.3 'Helvetica Neue', Arial, sans-serif; color: #1B1B1B; }
+        .spt-lsc-m .mm b { font: 700 11px/1.3 'Bitter', serif; letter-spacing: 0.4px; color: var(--lsc-navy, #002855); }
+        .spt-lsc-m .who { display: block; font-size: 11.5px; color: #6B7280; margin-top: 1px; }
         .spt-stand-lsc { border-left: 3px solid var(--lsc-navy, #002855); background: #F5F7FC; }
         .spt-stand-lsc .race { color: var(--lsc-navy, #002855) !important; }
         .spt-stand-lsc .rk .r { color: var(--lsc-navy, #002855) !important; }
@@ -171,6 +232,7 @@
             font: 700 9px/1.7 'Bitter', serif; letter-spacing: 1px;
             text-transform: uppercase; padding: 3px 14px; }
         .spt-past .spt-stand:first-of-type { border-top: none; }
+        .spt-mo-band { background: #E8E5E0; color: #4B5563; }
 
         /* winnings rows */
         .spt-win { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #F0EEE9; }
@@ -397,6 +459,30 @@
             q.value = btn.dataset.name;
             loadPlayer(btn.dataset.cid);
         });
+        // Past-champion photo lightbox (one delegated handler: the thumbnails are re-rendered per player).
+        // The player's own headshot enlarges the same way (Kerry 2026-10-12: "Allow player spotlight photos to be
+        // enlarged too. Just like the full photos for trophy winners").
+        function sptLightbox(src, cap) {
+            const lb = document.createElement("div");
+            lb.className = "spt-champ-lb"; lb.setAttribute("role", "dialog"); lb.setAttribute("aria-label", cap);
+            lb.innerHTML = `<img src="${esc(src)}" alt="${esc(cap)}"><div>${esc(cap)}</div>`;
+            const close = () => { lb.remove(); document.removeEventListener("keydown", onKey); };
+            const onKey = ev => { if (ev.key === "Escape") close(); };
+            lb.addEventListener("click", close); document.addEventListener("keydown", onKey);
+            document.body.appendChild(lb);
+        }
+        document.addEventListener("click", e => {
+            const hp = e.target.closest && e.target.closest(".spt-photo[data-full]");
+            if (hp) { sptLightbox(hp.dataset.full, (document.querySelector(".spt-name") || {}).textContent || ""); return; }
+            const b = e.target.closest && e.target.closest(".spt-champ-ph");
+            if (!b) return;
+            sptLightbox(`/member/photo/c/${b.dataset.key}.jpg?v=${b.dataset.v}`, b.dataset.cap);
+        });
+        document.addEventListener("keydown", e => {
+            if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(".spt-photo[data-full]")) {
+                e.preventDefault(); e.target.click();
+            }
+        });
         document.addEventListener("click", e => {
             if (!e.target.closest(".spt-searchbox")) sug.style.display = "none";
         });
@@ -534,13 +620,25 @@
                 SPT_PHOTOS = (j && j.h) ? j : { h: {}, t: {} };
                 // a player already on screen gets his photo without a re-render
                 const w = SPT_DATA && document.querySelector(".spt-who");
-                if (w && !w.querySelector(".spt-photo")) w.insertAdjacentHTML("afterbegin", sptHeadshot(SPT_DATA.customer_id));
+                if (w && !w.querySelector(".spt-photo")) w.insertAdjacentHTML("afterbegin", sptHeadshot(SPT_DATA.customer_id, SPT_DATA.chapter));
             })
             .catch(() => {});
-        function sptHeadshot(cid) {
+        function sptHeadshot(cid, chapter) {
             const v = SPT_PHOTOS && cid != null ? SPT_PHOTOS.h[String(cid)] : null;
-            return v ? `<img class="spt-photo" src="/member/photo/h/${Number(cid)}.jpg?v=${v}" alt="" onerror="this.remove()">` : "";
+            const ch = /austin/i.test(chapter || "") ? "ch-austin" : /san antonio/i.test(chapter || "") ? "ch-sa" : "ch-other";
+            return v ? `<span class="spt-photo-frame ${ch}"><img class="spt-photo" data-full="/member/photo/h/${Number(cid)}.jpg?v=${v}" src="/member/photo/hs/${Number(cid)}.jpg?v=${v}" alt="" width="80" height="80" role="button" tabindex="0" title="Tap to enlarge" onerror="this.parentNode.remove()"></span>` : "";
         }
+        // CHAMPION TITLES on a phone (Kerry 2026-10-12): all of a player's titles share one line;
+        // when they don't fit, the second cup (The Players Cup) drops to its own line and the
+        // bar goes away. Re-checked on resize and rotate.
+        function sptFitChamps() {
+            document.querySelectorAll(".spt-champ > span").forEach(box => {
+                const t = box.querySelectorAll(".spt-champ-t");
+                box.classList.remove("stacked");
+                if (t.length > 1 && t[t.length - 1].offsetTop > t[0].offsetTop + 2) box.classList.add("stacked");
+            });
+        }
+        window.addEventListener("resize", sptFitChamps);
         function render(d) {
             SPT_DATA = d;
             const _wbgYears = (d.winnings_by_game && d.winnings_by_game.years) || [];
@@ -551,9 +649,31 @@
             // row (Kerry 2026-08-03) — the hero line is retired.
             const lscLine = "";
             const hcp = d.handicap_index_18;
+            // Past-champion photos under the titles, oldest first, each tagged with its cup and year;
+            // tap opens it full size. A title year without a registered photo shows none.
+            function sptChampPhotos(titles) {
+                const ph = [];
+                (titles || []).forEach(t => (t.photos || []).forEach(p => ph.push({ cup: t.cup, p })));
+                if (!ph.length) return "";
+                const short = c => c === "players_cup" ? "Players Cup" : "Fellowship Cup";
+                return `<div class="spt-champ-photos">` + ph.map(x =>
+                    `<button type="button" class="spt-champ-ph" data-key="${esc(x.p.key)}" data-v="${esc(String(x.p.v))}" data-cap="${esc(x.p.caption)}" aria-label="${esc(x.p.caption)}">` +
+                    `<img width="76" height="76" src="/member/photo/cq/${esc(x.p.key)}.jpg?v=${esc(String(x.p.v))}" alt="${esc(x.p.caption)}" loading="lazy" onerror="this.closest('button').remove()">` +
+                    `<span>${esc(short(x.cup))} ${esc(String(x.p.year))}</span></button>`).join("") + `</div>`;
+            }
+            // CUP CHAMPION titles (Kerry 2026-10-12): server-built lines, copy of record.
+            const TROPHY = `<svg viewBox="0 0 24 24" fill="none" stroke="#C9A227" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/><polygon points="12 3.4 13.0 5.42 15.23 5.75 13.62 7.33 14.0 9.55 12 8.5 10.0 9.55 10.38 7.33 8.77 5.75 11.0 5.42" fill="#C9A227" stroke="none"/></svg>`;
+            // One line for all of a player's titles, separated by " | " (Kerry 2026-10-12):
+            // "The Fellowship Cup - 2025 Champion | The Players Cup - 2024 & 2026 Champion".
+            // Each title stays whole when the line wraps; the bar trails the title before it.
+            const champLines = (d.cup_titles && d.cup_titles.length)
+                ? `<div class="spt-champs"><div class="spt-champ">${TROPHY}<span>` + d.cup_titles.map((t, i) =>
+                    `<span class="spt-champ-t">${esc(t.line)}${i < d.cup_titles.length - 1 ? ` <span class="spt-champ-sep">|</span>` : ""}</span>`
+                  ).join(" ") + `</span></div>` + sptChampPhotos(d.cup_titles) + `</div>`
+                : "";
             const hero =
                 `<div class="spt-card"><div class="spt-hero-row">` +
-                `<div class="spt-who">${sptHeadshot(d.customer_id)}<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
+                `<div class="spt-who">${sptHeadshot(d.customer_id, d.chapter)}<div style="min-width:0;"><h3 class="spt-name">${esc(d.name)}</h3>` +
                 `<div class="spt-badges">${chapterChip(d.chapter)}` +
                 statusChips(d) +
                 `</div></div></div>` +
@@ -563,7 +683,7 @@
                 `<div class="n">${hcp != null ? esc(hcp.toFixed(1)) : "&mdash;"}</div>` +
                 `<div class="l">Index${d.handicap_index_9 != null ? `<br>9-hole ${esc(d.handicap_index_9.toFixed(1))}` : ""}${d.handicap_player_name ? `<br><span style="color:var(--primary,#E87C3E);">Full detail &rsaquo;</span>` : ""}</div>` +
                 (d.handicap_player_name ? `</a>` : `</div>`) +
-                `</div>${lscLine}</div>`;
+                `</div>${lscLine}${champLines}</div>`;
 
             const st = scopeStats(d);
             const strip =
@@ -642,8 +762,16 @@
             // and historical backfills get their own year bands.
             const rows = [];
             const pastByYear = {};
+            // THIS SEASON stays in full (Kerry 2026-10-12: "reveal all 2026 season contest
+            // results ... PAST CONTESTS would apply to previous seasons"): a completed contest
+            // of the current season goes in seasonDone, shown under the live ones; only an
+            // earlier season folds into PAST CONTESTS.
+            const curYear = String((d.winnings_by_game && d.winnings_by_game.current_year) || new Date().getFullYear());
+            const seasonDone = [];
+            const yearOf = label => (String(label || "").match(/20\d\d/) || [curYear])[0];
             const pastPush = (label, html) => {
-                const y = (String(label || "").match(/20\d\d/) || [String(new Date().getFullYear())])[0];
+                const y = yearOf(label);
+                if (y === curYear) { seasonDone.push(html); return; }
                 (pastByYear[y] = pastByYear[y] || []).push(html);
             };
             // display order (Kerry 2026-07-12): Fellowship Cup above Players Cup
@@ -658,9 +786,19 @@
                 // Fellowship Cup carries the distance to the LEAD (Kerry
                 // 2026-08-06: "Add in a points difference from first" — e.g.
                 // "3 from 1st"); "leads" when the player IS first.
-                if (r.key === "fellowship_cup" && r.points_back != null) {
+                // Once a cup is decided the reset-points gap is meaningless (the Cup total
+                // decides it: Gus was "4 from 1st" and champion), so the row says Champion
+                // for the cup's overall winner and drops the gap (Kerry 2026-10-12).
+                const cupKey = r.key === "fellowship_cup" ? "fellowship_cup" : (r.key === "players_cup_gross" ? "players_cup" : null);
+                const isCupChamp = !!cupKey && (d.cup_titles || []).some(
+                    t => t.cup === cupKey && (t.years || []).includes(Number(curYear)));
+                if (r.key === "fellowship_cup" && r.final) {
+                    if (isCupChamp) metaBits.push("Champion");
+                } else if (r.key === "fellowship_cup" && r.points_back != null) {
                     metaBits.push(r.points_back > 0
                         ? `${+(+r.points_back).toFixed(1)} from 1st` : "leads");
+                } else if (isCupChamp && r.final) {
+                    metaBits.push("Champion");
                 }
                 if (r.tournaments != null) metaBits.push(`${r.tournaments} ev`);
                 // City Net cards count MVPs, not GG "wins" (Kerry
@@ -687,8 +825,10 @@
                     null,
                     // No badge inside PAST CONTESTS (Kerry 2026-09-01:
                     // "Badges for COMPLETED can go away once it's in
-                    // PAST") — the section says it already.
-                    r.final ? "" : statusBadge(r)));
+                    // PAST") — the section says it already. A completed contest
+                    // of THIS season sits among the live ones, so it keeps its
+                    // COMPLETED badge.
+                    (r.final && yearOf(r.label) !== curYear) ? "" : statusBadge(r)));
             });
             // MONTHLY POINTS — current month's standing (Kerry 2026-09-01:
             // "Should also show Monthly Points Races"). No buy-in: every
@@ -757,11 +897,40 @@
                     meta = `Would project via ${l.path} — buy in to make it count`;
                     pill = pillOut;
                 }
+                if (l.record) {
+                    // The cup is FINAL: the record takes the seat's place (Kerry 2026-10-12),
+                    // the team result and the clinch note sit under the name, and every
+                    // match links to its card on the cup board.
+                    const rc = l.record, first = esc((d.name || "").split(" ")[0] || "They");
+                    const cupHref = "/member/lonestarcup";
+                    const RES = { W: "Won", L: "Lost", H: "Halved" };
+                    const matchHtml = rc.matches.map(m => {
+                        const who = (m.partners.length ? `with ${m.partners.map(esc).join(" &amp; ")} ` : "") +
+                                    `vs ${m.opponents.map(esc).join(" &amp; ")}`;
+                        return `<a class="spt-lsc-m" href="${cupHref}?match=${encodeURIComponent(m.match_id)}">` +
+                            `<span class="res ${m.result}">${m.result}</span>` +
+                            `<span class="mm"><b>${esc(m.format)}</b> &middot; ${RES[m.result]}${m.margin ? " " + esc(m.margin) : ""}` +
+                            `<span class="who">${who}</span></span><span class="spt-go">&rsaquo;</span></a>`;
+                    }).join("");
+                    const note = rc.clinched
+                        ? `<div class="spt-lsc-clinch">${first} clinched the ${esc(String(rc.year))} Lone Star Cup for ${esc(rc.clinch_team || rc.team_name || "")}</div>` : "";
+                    // The match lines fold under the row (Kerry 2026-10-12): the house chevron points right
+                    // when shut and turns down when the three match results are showing.
+                    rows.push(
+                        `<details class="spt-lsc-wrap t-${esc(rc.team || "")}">` +
+                        `<summary class="spt-stand spt-stand-lsc">` +
+                        `<div class="rk"><div class="r${String(rc.text).length > 3 ? " long" : ""}">${esc(rc.text)}</div><div class="f">cup record</div></div>` +
+                        `<div class="mid"><div class="race"><span class="tgf-troph star gold"></span> LONE STAR CUP</div>` +
+                        `<div class="meta">${esc(rc.cup_line || (rc.team_name ? "Team " + rc.team_name : ""))}</div>${note}</div>` +
+                        pill + `<span class="spt-win-chev tgf-exp">&#9654;</span></summary>` +
+                        `<div class="spt-lsc-matches">${matchHtml}<a class="spt-lsc-board" href="${cupHref}">Open the Cup board &rsaquo;</a></div></details>`);
+                } else {
                 rows.push(
                     `<a href="${contestsBase}#tab=lsc" class="spt-stand spt-stand-lsc">` +
                     `<div class="rk"><div class="r">${esc(String(rk))}</div><div class="f">${fld}</div></div>` +
                     `<div class="mid"><div class="race"><span class="tgf-troph star gold"></span> LONE STAR CUP</div><div class="meta">${esc(meta)}</div></div>` +
                     pill + `<span class="spt-go">&rsaquo;</span></a>`);
+                }
             }
             // Fall buy-in placeholder LAST — only for a buy-in with no
             // fall board row yet (the races are LIVE as of 2026-09-01, so
@@ -780,6 +949,7 @@
             // below all the majors, latest month to earliest (Kerry
             // 2026-09-01). Server sends monthly_past sorted newest-first.
             const pastMoByYear = {};
+            const seasonMo = [];
             (d.monthly_past || []).forEach(m => {
                 const y = String(m.key || "").slice(0, 4) || String(new Date().getFullYear());
                 const meta = [`${m.points ?? 0} pts`,
@@ -790,7 +960,7 @@
                 // (Kerry 2026-09-01: "when they've placed first at the
                 // end, I want the trophy icon to show there in that left
                 // column where you're showing their ranking").
-                (pastMoByYear[y] = pastMoByYear[y] || []).push(standRow(
+                (y === curYear ? seasonMo : (pastMoByYear[y] = pastMoByYear[y] || [])).push(standRow(
                     m.won ? '<span class="tgf-troph" title="Month won"></span>'
                           : esc(String(m.rank ?? "—")),
                     "#1B1B1B", `of ${m.n_players}`,
@@ -811,10 +981,18 @@
                       (pastByYear[y] || []).join("") + (pastMoByYear[y] || []).join("")).join("") +
                   `</details>`
                 : "";
-            const stands = (rows.length || nPast)
+            // This season's monthly results fold into one collapsed line so the list stays short
+            // (Kerry 2026-10-12: "collapse the monthly results somehow to reduce the length").
+            const moFold = seasonMo.length
+                ? `<details class="spt-past spt-mo"><summary class="spt-stand-band spt-mo-band">Monthly Results` +
+                  `<span class="spt-past-n">&middot; ${seasonMo.length}</span><span class="spt-past-ch">&rsaquo;</span></summary>` +
+                  seasonMo.join("") + `</details>`
+                : "";
+            const seasonRows = [...rows, ...seasonDone, ...(moFold ? [moFold] : [])];
+            const stands = (seasonRows.length || nPast)
                 ? `<div><div class="spt-sec-head"><span class="t">Where ${esc((d.name || "").split(" ")[0] || "They")} Stands</span>` +
                   `<span class="s" style="color:var(--primary, #E87C3E);font-style:italic;">(Click for Standings)</span></div>` +
-                  `<div class="spt-panel">${rows.length ? `<div class="spt-stand-band">Current</div>` : ""}${rows.join("")}${pastHtml}</div></div>`
+                  `<div class="spt-panel">${seasonRows.length ? `<div class="spt-stand-band">${esc(curYear)} Season</div>` : ""}${seasonRows.join("")}${pastHtml}</div></div>`
                 : `<p class="spt-empty">No race appearances yet &mdash; standings show up after their first event.</p>`;
 
             // One row per EVENT with the total; expand for the games
@@ -845,6 +1023,7 @@
             $("spt-player").innerHTML = hero + scopeBarHtml(d) + strip + stands +
                 scoring + wbgHtml(d) + wins +
                 (d.gg_error ? `<p class="spt-note">Standings feed note: ${esc(d.gg_error)}</p>` : "");
+            sptFitChamps();
         }
 
         // Scope toggle (delegated — the section re-renders on every flip)

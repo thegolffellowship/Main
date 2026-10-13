@@ -1,19 +1,441 @@
-window.TGF_VERSION = "2.536.6";
+window.TGF_VERSION = "2.555.3";
 window.TGF_CHANGELOG = [
   {
-    version: "2.536.6",
-    date: "2026-10-11",
+    version: "2.555.3",
+    date: "2026-10-13",
     title: "Backups: player photos and card photos now go off-site with the nightly backup",
     changes: [
       "CoS #1604 (ops, no schema): the database was backed up off-site (OneDrive nightly, Litestream to R2), but the files beside it were not. Player photos (player_photos/, named by customer_id) and the scorekeepers' card photos (se_photos/) lived only on the Railway volume; Litestream copies SQLite files only. The 3:15 AM backup job now also archives those two folders into one tar.gz in the same OneDrive backup folder (sub-folder files/), through the same Microsoft Graph credentials, only when their content changed since the last upload (a content hash is kept in app setting files_backup_hash), keeping the newest 8. The archive is read back and checked file by file before it uploads. The 5:00 digest names a MEDIUM finding (files_backup_stale) if last night's upload did not happen, and carries a FILES BACKUP line. Read or test it with bridge scoring-files-backup (status), scoring-files-backup:dry (build and check, upload nothing). A new file store on the volume goes in backups.FILE_STORES. Guard test_files_backup.py."
     ]
   },
   {
-    version: "2.536.5",
-    date: "2026-10-11",
+    version: "2.555.2",
+    date: "2026-10-13",
     title: "Player Spotlight: an open during the warmer's refresh no longer rebuilds the Cup piece itself",
     changes: [
       "Three Spotlight opens took about 10.9 s on 10/9 and 10/10 (digest #1567; the Fellowship Cup piece alone is ~8.3 s). Cause: every 90 s the warmer expires the shared entries and then spends ~10 s rebuilding them, and an open that landed inside that window rebuilt the same entries on its own thread. While the warmer is mid-rebuild, every other thread now serves the entry it just expired (at most about 2.5 minutes old) and builds nothing. Nothing is cached longer, no figure changes, and a restart still starts cold until the first warmer tick. Guard in test_perf.py (a page open during a held-open rebuild returns in under 2 s)."
+    ]
+  },
+  {
+    version: "2.555.1",
+    date: "2026-10-13",
+    title: "Event-day email: send one player's actual message to staff as a test",
+    changes: [
+      "Kerry 10/13, checking the Apple Mail fix (Exchange 'rich-text format' set to Never): \"The preview looks fine but it did before too because it was in a container. Can you resend my actual player email?\" New bridge option scoring-event-day-email:<event_id>|test|<staff addr>|cid=<customer_id> (send_event_day_test): that player's exact subject and body, with no preview wrapper, to ONE staff address (@thegolffellowship.com or recap_draft_allow). It is not a member send: it writes no event_day_email_sends row and is logged to message_log as a test."
+    ]
+  },
+  {
+    version: "2.555.0",
+    date: "2026-10-13",
+    title: "Manager approves the pairings, which sends the player emails",
+    changes: [
+      "Kerry 10/13: \"I'm thinking those emails go out ultimately right after the pairings are generated. But for now they should t go out until the manager approves the automated pairings. So the manager needs to receive a prompt to review and approve the pairings which would then automatically send these emails.\" and \"Make the manager log in first.\"",
+      "After the 5 PM auto-generate, job pairings_approval_prompt (every 15 min from :05) emails the chapter's manager ONE 'Pairings ready to approve' message per sheet: the groups, any hard pairing-rule flags, who would get no email and why, a sample player email, and a link to the review page. San Antonio and national events go to kerry@thegolffellowship.com. Austin goes to Robert's own email; the chapter_managers dial can set an email per chapter.",
+      "The review page /events/<id>/approve-pairings requires a LOGIN. Managers can open only their own chapter's events; admins can open any. Its one button, 'Approve pairings & email N players', records who approved which sheet (a fingerprint) and sends every player the event-day email, once each.",
+      "If the sheet changes after the prompt, the old approval is refused and the page reloads to the new one; a fresh prompt goes out at most hourly. Once the emails have gone, no more prompts. Kerry still approves the email wording once (event_day_email_approved); until he does, approving a sheet sends nothing.",
+      "State is kept in app setting pairings_approval; there is no new table. Dial pairings_approval_prompt (0/off stops the prompts). email_parser/pairings_approval.py; test_pairings_approval.py."
+    ]
+  },
+  {
+    version: "2.554.0",
+    date: "2026-10-13",
+    title: "Tee sheet email: running HIO pot, YOUR CARD pops strip, a public tee sheet page; Live Scoring on by default",
+    changes: [
+      "Kerry 10/13, on the test previews: \"The hole in one pot is not showing the total. Also, what about links for their live scoring and for the full tee sheet? Or a view of their scorecard to see where their pops are going. Or perhaps how their PHs are calculated for each game.\"",
+      "Hole-in-One: the games card now shows the RUNNING pot (get_hio_pot, the GAMES tab banner's own reader), with tonight's field contribution beside it. Before, it showed only the day's contribution.",
+      "YOUR CARD, inside the start card: the holes being played, with par and a dot on each hole where the player gets a pop. One row is for Individual Net and one for the team game (Team or Cart Net). Below it, the handicap chain in words: Index and tees to Playing Handicap, then the team game's allowance (and off-the-low when it applies) to its handicap, with 'no pops on par 3s' when that rule is on. Every number is the printed scorecard's (scorecards.build_scorecards, qr off so nothing is seeded); a player whose tee has no stroke index gets no strip, never a guess.",
+      "New public page /member/teesheet/<event_id>: every group's start, players, carts and tees from the saved sheet. Names only, with no email, phone, handicap or money, and no PIN, like the rest of /member. Each player's email has a 'See the full tee sheet' button that opens on his own group (#g<group>).",
+      "Live Scoring: the Keep score button appears only when Live Scoring is on for the event. The build and the staff preview now say so plainly when it is off, so it can be turned on before sending.",
+      "The template gains {teesheet_button}. The first A2 body (never approved or sent) is in the priors, so the live row updates, and Kerry's Approve & email click approves this version.",
+      "LIVE SCORING ON BY DEFAULT (Kerry 10/13: \"Turn live scoring on for an event should be default after 5:00p Monday pairings are turned on and definitely prior to these emails being sent out.\"). New job live_scoring_auto (every 15 min): from 5:00 PM Central the day before an event, and all of event day, an event with saved pairings is added to score_entry_events and its rounds are seeded, so every group has its scoring link. Rounds re-sync to later pairing changes and never lose a score. The Email Players preview, the staff preview and the member send also switch the event on first. It never switches anything off. Skipped: Golf Genius era events, the Lone Star Cup, and events with no saved sheet. Dial live_scoring_auto (0/off stops the job). email_parser/live_scoring_default.py; test_live_scoring_default.py."
+    ]
+  },
+  {
+    version: "2.553.1",
+    date: "2026-10-12",
+    title: "Pairings: a 1st Timer's or guest's Ambassador is on their own tees",
+    changes: [
+      "Kerry 10/12: \"1st Timers/New Members/Guests to be placed with ambassadors on their own tees unless they've already played together.\" The Ambassador a 1st Timer or guest rides with must be on the same tee band. If no local Ambassador in the field is on that band, the nearest band any of them plays counts, and so does one they have already played with this season. The rule ranks in the 1st Timer tier, above the count rules. Whether New Members (1Y) also need an Ambassador waits on Kerry.",
+      "Kerry 10/12: \"A 1st year member gets an ambassador on same tees their first three events.\" A 1Y member with fewer than three rounds on file before the event (distinct round dates, every chapter) rides with a local Ambassador on their tees, by the same fit as a 1st Timer. From the fourth event they graduate to the First Year rules alone (never ride alone).",
+      "New bridge scoring-pairings-add-group:<event_id>|<a>;<b>[;...][|apply] appends one hand-built group to a saved sheet on the next free slot, with seats in the order given. Every name must be on the roster and not already seated. It refuses a started or past event, and it is a dry run unless |apply. Built for Kerry 10/12: \"Add Jeff Young and guest Ale along with Pat Youngs into new group.\""
+    ]
+  },
+  {
+    version: "2.553.0",
+    date: "2026-10-12",
+    title: "Tee sheet email: design A2, with a group card and a games card",
+    changes: [
+      "Kerry 10/12 picked design A for the personal tee sheet email (\"A looks the best to me. It would also be nice to show a current games breakdown on a card like the Group Card. The more graphic (as long as it works on all browsers) the better.\") and approved draft A2: \"Perfect for now\".",
+      "Each player's email has a dark masthead (chapter, then 'Tuesday at The Quarry'). Below it come an orange YOUR START card (the start as the Starter Sheet states it, shotgun or tee time, date and course), the group with an initials circle and cart for each player, and the player's tees and the format.",
+      "The new GAMES card is read from the event's own GAMES tab (page_probe), never recomputed. It shows the total in play, the player / Net / Gross counts, a bar splitting the pot by section, and one block per section with each game's pot. Each block carries a YOU'RE IN or NOT BOUGHT pill for that player, and the card ends with the Hole-in-One pot. If the tab can't be read, the card is left out for everyone and the preview says why; the start still goes out.",
+      "The subject reads 'Tuesday at The Quarry: Hole 3A, 4:30 PM shotgun'. The internal event code never reaches a player. The scoring link is a button when the event is in Live Scoring.",
+      "Email-safe on purpose: tables, bgcolor and inline styles only, with no images, SVG, flexbox or style blocks. The structure is code (event_day_email.py); the words around it stay the editable system template. A template still written with the v1 variables keeps rendering the v1 way.",
+      "The new wording changes the template hash, so the v1 approval stamp no longer matches. Before any member send, Kerry previews A2 on REPORTS > Email Players, and his Approve & email click approves it. Every send still waits on his OK."
+    ]
+  },
+  {
+    version: "2.552.0",
+    date: "2026-10-12",
+    title: "Leaderboard: chapter and race pickers beside the chips",
+    changes: [
+      "Kerry 10/12 rulings on Claude Design #1638: the race chips, the navy LONE STAR CUP pill and HOW IT WORKS stay exactly as they were; a CHAPTER picker and a RACE picker (with a LIVE / FINAL tag) now sit above the title row. Phones get bottom sheets. Picking a race clicks the same chip, so nothing else in the board changed.",
+      "The address now carries the race: ?chapter=austin&race=austin-fall-net-2026. Old #race=<key>, #tab=lsc, /member/lonestarcup and ?player= links keep working. Chapters are TGF (all chapters), Austin (#BF5700) and San Antonio (#4B6274), set in one table (PR_NAV).",
+      "Landing: with no race in the address a visitor opens TGF - All chapters on Monthly (or the chapter they chose last time). Kerry answered 'Yes' to CD's landing; if that was not the intent, change the default in the initial-hash block to fall_sa.",
+      "No placeholder tile for players without a photo (unchanged); headshots stay 58px desktop / 52px phone."
+    ]
+  },
+  {
+    version: "2.551.1",
+    date: "2026-10-12",
+    title: "Bridge to regenerate an event's pairings from a lane",
+    changes: [
+      "Kerry 10/12: \"Deploy and then re-generate yourself and review it against our rules.\" New bridge scoring-pairings-generate:<event_id>[|apply] does the PAIRINGS tab's Generate and Save: random mode, partner requests protected, every rule. It is a dry run by default, and with |apply it saves and returns the read-only audit of the result. It refuses an event that has started or is in the past, so a sheet in players' hands is never reshuffled."
+    ]
+  },
+  {
+    version: "2.551.0",
+    date: "2026-10-12",
+    title: "Pairings: first year players never alone, guests with an Ambassador, a reseat that frees a group re-deals",
+    changes: [
+      "Kerry 10/12: \"I don't want any first year players riding on their own in initial pairings unless it can't be avoided.\" A 1Y member or a 1st Timer is kept out of the solo seat of a threesome, both when the groups are formed and when the carts are seated. Only when no other sheet keeps the requests, matches and locks does one ride alone, with a note on the PAIRINGS tab.",
+      "Kerry 10/12: \"I would like all guests to always be placed with an ambassador, unless they are the guest of one of our members, or requests someone specificially.\" This is read at the cart, as in his Hector Hinojosa case: the group had an Ambassador, but he rode with his requested partner. A request for someone not playing exempts nobody.",
+      "Kerry 10/12: removing a player and re-seating now re-deals the short groups when the field fits fewer groups (20 players = 5 groups, not 6). Nothing moves once the event has started, and nothing is re-dealt while the roster and the sheet disagree.",
+      "Found on the way: a full seeded group used to consume one generated group, and those players disappeared from the sheet. Full seeds now take nobody.",
+      "Kerry 10/12: \"1st Timer and First Year member rules do need to supercede count rules, only if there's a conflict.\" Sheets are now compared on those misses first and repeat counts second. In the cart seater, the 1st Timer Ambassador cart (40) and First Year never alone (50) now sit above the count terms. The third-solo-in-a-row rule drops from 500 to 30 and cart history stays at 0.4. Requests and Match Play are unchanged.",
+      "Kerry 10/12: \"When a reseat happens, only locked groups and partner requests should persist.\" The reseat re-deals the whole set under every rule and keeps the partner requests. Locked groups are not saved on the server today, so none are kept yet.",
+      "Kerry 10/12: the Ambassador for a 1st Timer, New Member or Guest is a LOCAL one, from the event chapter's Ambassador list. A chapter with no list falls back to the customer chip, with a note.",
+      "The read-only pairings audit flags both new rules. Guard: test_pairings_rules_1012.py, on the 10/13 Quarry field."
+    ]
+  },
+  {
+    version: "2.550.0",
+    date: "2026-10-12",
+    title: "Standings: one Show All Players box, like the Events leaderboards",
+    changes: [
+      "Kerry 10/12: \"Bought in should always show. There should be a SHOW ALL PLAYERS checkbox only, JUST like the EVENTS LEADERBOARDS do.\" The two Bought in / Not bought in filter boxes are gone. A board that has anyone not bought in now carries ONE checkbox, Show All Players (same wording and look as the Events leaderboards), TICKED by default (Kerry: \"all players should show on landing by default\"): bought-in players are always on the board, and unticking the box hides the grey not-bought-in rows. The choice stays through refreshes and board switches. The grey row colour is explained in How It Works > the board panel.",
+      "BUY IN BUTTONS (Kerry 10/12: \"BUY IN buttons should show now though regardless, until we have a log in state\"). Reverses the previous release for now: until members have a log-in state (window.TGF_MEMBER_ID undefined, today) the BUY IN pill shows on every not-bought-in row of a live Fall board, with no border. Once sign-in exists Kerry's rule stands: signed out (TGF_MEMBER_ID null) shows only the grey, signed in shows BUY IN and the shimmering border on that person's own row only."
+    ]
+  },
+  {
+    version: "2.549.5",
+    date: "2026-10-12",
+    title: "Signed-out visitors see the grey rows, no BUY IN button",
+    changes: [
+      "Kerry 10/12: \"Signed Out visitors will NOT see BUY IN buttons...only the grey.\" The BUY IN pill is drawn only for a signed-in member, on their own row (window.TGF_MEMBER_ID is their customer_id), and that row alone gets the shimmering border. Anyone signed out sees not-bought-in players as grey rows with nothing to click, and the legend drops the 'tap BUY IN' line. Because member sign-in is not built yet, nobody sees a BUY IN button today. This replaces the previous release's 'signed out shows grey and BUY IN'."
+    ]
+  },
+  {
+    version: "2.549.4",
+    date: "2026-10-12",
+    title: "Standings headshots: only bought-in players in the money",
+    changes: [
+      "Kerry 10/12: \"If someone isn't bought in, and/or isn't in the Projected Money, their photo shouldn't show.\" A standings headshot now appears only on a row that is bought in AND carries money won or projected (and on Monthly, the month's winner). The old 'top 3 always get one' rule is gone: a not-bought-in player in 3rd place (Robert Straiton on Austin Fall NET) no longer shows a photo, and neither does anyone outside the paid places. A row without a photo has no slot, so the name sits at the left."
+    ]
+  },
+  {
+    version: "2.549.3",
+    date: "2026-10-12",
+    title: "No border or shimmer until sign-in; signed out shows grey and BUY IN",
+    changes: [
+      "Kerry 10/12: \"Don't do the border and shimmer currently. Only start that when we do Username and Passwords. For now, and logged out state, just show grey and BUY IN button.\" The orange shimmering row border is switched off: it applies only when window.TGF_MEMBER_ID is a signed-in customer_id, and only on that person's own row (the only row that carries BUY IN then). Today, and for anyone signed out, every not-bought-in row on a live Fall board is just grey with a BUY IN button. This replaces the earlier plan that signed-out visitors would see no BUY IN at all."
+    ]
+  },
+  {
+    version: "2.549.2",
+    date: "2026-10-12",
+    title: "The Bought in / Not bought in boxes are real filters",
+    changes: [
+      "Kerry 10/12: \"The Bought in and Not Bought in checkboxes don't work.\" The two boxes in the legend above the standings were only colour swatches that looked like checkboxes. They are now real, ticked-by-default checkboxes: untick Not bought in to see only the people who are in, untick Bought in to see only the people who are not (a row's open drill-down hides with it). The choice stays when the board refreshes or you switch boards. Guard: test_player_photos.py."
+    ]
+  },
+  {
+    version: "2.549.1",
+    date: "2026-10-12",
+    title: "Jay Horton's 2025 badge: back to the full-head crop",
+    changes: [
+      "Kerry 10/12: \"Let's go with original crop for Jay Horton. I don't like cropping his head on that.\" The square badge for Jay Horton's 2025 Fellowship Cup photo is the top-anchored crop again (whole head and hat, the cup up to the base of the plaque); the full photo still opens on tap."
+    ]
+  },
+  {
+    version: "2.549.0",
+    date: "2026-10-12",
+    title: "Buy-in only where it is still open, shimmering row, whole-trophy crops",
+    changes: [
+      "BUY-IN ONLY WHERE OPEN (Kerry 10/12: \"Buy ins should NOT show up if the contest is completed. That whole column shouldn't show ... The only events currently still live are the SA FALL & AUSTIN FALL competitions\"). The BUY IN pill and the BUY-IN column now exist only on the two live Fall NET boards (SA FALL NET, AUSTIN FALL NET) while they are not final; every completed contest (City NET, THE FELLOWSHIP CUP, THE PLAYERS CUP, Monthly) shows no BUY IN and no BUY-IN column. The row colours stay (white = bought in, grey = not) with the legend above the table, without the 'tap BUY IN' line. \"NOT IN\" text is gone: the BUY IN pill implies it.",
+      "SHIMMERING ROW: a row that can still buy in wears an orange border that pulses (still, with a plain border, for anyone who has reduced motion switched on) to draw the eye.",
+      "PERSONAL LOGIN HOOK: when members get their own sign-in, set window.TGF_MEMBER_ID to the signed-in customer_id (null when signed out) and BUY IN appears only on that person's own row, nowhere when signed out. Until it is set (today) it shows on every not-bought-in row of a live board. The member sign-in itself stays behind the four-part hard gate (CA #731).",
+      "WHOLE-TROPHY CROPS (Kerry 10/12). The square champion badges are now cropped per photo so the whole trophy shows where the photo allows it: Gus 2026, Robert 2024 and 2026 and the three square originals show the full cup; Jay Horton 2025's original is too tall to hold his face, the whole cup and the plaque base in a square, so his crop drops most of the hat, keeps his face and the whole cup, and shows the top of the plaque."
+    ]
+  },
+  {
+    version: "2.548.0",
+    date: "2026-10-12",
+    title: "Champion photos: square badge crops, larger; full photo on tap",
+    changes: [
+      "Kerry 10/12: \"for these champ photos crop them square for the badge so torso and trophy shows only. Full enlargement when clicked can include the full image. I want this so it can show larger.\" The champion badge on THE FELLOWSHIP CUP and THE PLAYERS CUP plaques is now a SQUARE crop (head, torso and trophy) at 140px (was a 102x136 portrait); the Past Champions strip thumbnails are 92px squares (were 84x112) and the Spotlight title thumbnails 76px squares (were 62x83). Tap still opens the FULL photo. Served by /member/photo/cq/<key> from pre-cropped 400x400 files (data/champion_photos/sq, about 31-45KB each), so pages stay light. A new champion photo needs its sq crop (test_player_photos.py fails without it)."
+    ]
+  },
+  {
+    version: "2.547.0",
+    date: "2026-10-12",
+    title: "Bought in is white, not bought in is grey with a BUY IN button",
+    changes: [
+      "Kerry 10/12: \"anyone who is bought in should be regular white so we don't have that green everywhere. Then if they're not bought in, perhaps it's a grey treatment ... explained somewhere ... AND be able to buy in immediately\" (he chose option A). On the Points Races boards and THE FELLOWSHIP CUP: a bought-in row is plain white (no more green fill); a NOT bought-in row is a soft grey with muted text and a BUY IN pill (the BUY-IN column on desktop, in the name row on a phone and on the Cup, which has no such column) that opens the season-contests shop in a new tab. A one-line legend above the table (white = bought in, grey = not bought in, tap BUY IN to join) appears whenever the board has anyone not bought in, and How It Works > the board panel says the same. The BUY IN pill shows while the race is not FINAL (there is no per-contest deadline in the data yet, so that is the stand-in). The champion's gold, money in green text and unmatched-name amber are unchanged. The Events leaderboard, Spotlight pills and badges keep their green for now."
+    ]
+  },
+  {
+    version: "2.546.1",
+    date: "2026-10-12",
+    title: "How It Works: the \"This board\" block, tidied",
+    changes: [
+      "Kerry 10/12: \"That could be formatted better and be less redundant with the Best 10 + mention.\" The block at the top of How It Works drops the phase line and the structure note (the chips and sections directly below already say \"best 10 + City Championship\") and becomes a small stat panel: BOUGHT IN 9 of 53 and POT $360 (with Final / Projected under it) side by side, then a PLACES PAID row of the 1st / 2nd / 3rd chips."
+    ]
+  },
+  {
+    version: "2.546.0",
+    date: "2026-10-12",
+    title: "Board header: title + How It Works only; no placeholder where there is no photo",
+    changes: [
+      "BOARD HEADER (Kerry 10/12: \"Too much stuff between THE FELLOWSHIP CUP and the Champion Banner. I think all that should go into the HOW IT WORKS button and that button should be right aligned on the same row as the TITLE\"). On every points-race board the title and a right-aligned HOW IT WORKS button share one row, and the champion banner (or the table) follows straight after. The phase pill (REGULAR SEASON ...), the bought-in count, the pot and the places (1st / 2nd ...) and the structure note no longer sit on the board; they open in the popup as a \"This board\" block at the top of How It Works, read from the board on screen at the moment the popup opens. The phone's \"Pot & details\" fold chip is gone with them (the button stays in the header on phones). The LIVE badge and banner are unchanged.",
+      "NO PLACEHOLDER (Kerry 10/12: \"If there isn't a photo for someone, then just leave their name left aligned like a non $ winner. Don't leave a placeholder there\"). A paid or top-3 player with no headshot used to leave a grey block over the start of their name; the slot is now removed, so the name sits at the left like anyone else's."
+    ]
+  },
+  {
+    version: "2.545.6",
+    date: "2026-10-12",
+    title: "Spotlight profile photo: thinner frame",
+    changes: [
+      "Kerry 10/12: \"Less padding around the photo.\" The chapter-colour frame around the Spotlight profile photo is 2px (was 4px) and the photo grows to 80px inside it (was 76px), so the whole badge keeps its size and the picture gets the room."
+    ]
+  },
+  {
+    version: "2.545.5",
+    date: "2026-10-12",
+    title: "Standings: hidden details are one line at the top of the expanded detail",
+    changes: [
+      "Kerry 10/12: \"Any hidden information should just show in a top line on one row if possible to reduce vertical footprint\", then \"HANDICAP could be reduced to HCP.\" What a narrow row hid (handicap, money, badges) no longer stacks inside the name cell and makes the open row tall. It is now ONE line across the top of the points / scorecard detail that opens under the row: HCP 2.8   WON $135   AUSTIN CAPT (one line, scrolls sideways if a phone is very narrow; the badge reads its short on-screen text). The detail cell is rewritten when its data arrives, so a small observer keeps the line at the top."
+    ]
+  },
+  {
+    version: "2.545.4",
+    date: "2026-10-12",
+    title: "Standings: everyone who won money gets their headshot",
+    changes: [
+      "Kerry 10/12: \"Anyone who won money in a contest should get their headshot put up.\" On the points-race boards and THE FELLOWSHIP CUP, a row now carries its square headshot if the player is in the top 3 OR holds a paid place (the row shows money won or projected), whatever their rank; on Monthly, the month's winner does too. Everyone else still has no slot and their name sits at the left. Tied paid places and a payout that reaches below 3rd are covered because the rule reads the money, not the rank."
+    ]
+  },
+  {
+    version: "2.545.3",
+    date: "2026-10-12",
+    title: "Spotlight profile photo: rounded square in a chapter-colour frame",
+    changes: [
+      "Kerry 10/12: \"Let's do squares for the profile pages too. They can have a little padding still. But the color around the photo should be the chapter color. Also apply rounded corners.\" The Spotlight header photo is now a rounded square (76px, 12px corners) inside a 4px frame in the player's CHAPTER colour: Austin burnt orange, San Antonio blue-grey, anyone else neutral grey. Tap still opens the full photo. (Also, per Kerry: an expanded standings row keeps its headshot square and the same size, no stretch; that cap shipped in 2.545.2.)"
+    ]
+  },
+  {
+    version: "2.545.2",
+    date: "2026-10-12",
+    title: "Standings: what a narrow row hid shows when the row is expanded",
+    changes: [
+      "Kerry 10/12: \"Anything hidden can show when player row is expanded.\" When a standings row is opened, whatever it gave up to fit (the handicap, the money won or projected, the badges such as CHAMPION or the team's LSC CAPTAIN) is listed under the name for as long as the row is open (prSyncHidden), and removed when it closes. Rows carry data-hcp / data-pay so even what was never drawn on a phone (money before a race is final) can be shown. The headshot is capped at row height so an expanded row does not stretch it."
+    ]
+  },
+  {
+    version: "2.545.1",
+    date: "2026-10-12",
+    title: "Standings on a narrow window: the order things give way",
+    changes: [
+      "Kerry 10/12: \"Handicap should hide before chevron on narrowing. Order of hiding. Handicap, Money. If name has to wrap, then hide badge and keep chevron after name.\" On a phone-width window a standings row now gives way in this order: 1) the handicap (and chapter chip), 2) the money won, 3) the name shrinks (floor 11px, was 9), 4) only if it still cannot fit on one line, the name wraps onto a second line, the badges are hidden, and the chevron stays right after the name. A row is never more than two lines (prFitNames)."
+    ]
+  },
+  {
+    version: "2.545.0",
+    date: "2026-10-12",
+    title: "Standings: square full-bleed headshots, RK, Bitter rank and points, two-line rows",
+    changes: [
+      "HEADSHOTS (Kerry 10/12: \"try square images ... full bleed to top and bottom of rows\"). The top-3 standings headshot is now a SQUARE (58px desktop, 52px phone) that runs the full height of its row, edge to edge, with no padding above or below; the name sits to its right. A row with no image has no slot at all, so its name sits at the far left.",
+      "COLUMNS. RANK is now RK, the column is narrower (less gap before Player), and the rank figures are centred and Bitter; the POINTS figures are Bitter too (points-race boards, THE FELLOWSHIP CUP rank, Monthly).",
+      "ROWS NEVER RUN PAST TWO LINES. Line 1 is the name and its chevron (together); only badges go on line 2. On a phone, if the name does not fit, the handicap (and chapter chip) drop first, then the name shrinks (floor 9px), and the badge line shrinks rather than wrap; a few passes settle the column width (prFitNames).",
+      "Guard: test_player_photos.py (square full-bleed slot, RK, rank/points classes, the fit routine)."
+    ]
+  },
+  {
+    version: "2.544.3",
+    date: "2026-10-12",
+    title: "Standings on a phone: the chevron stays on the name line",
+    changes: [
+      "Kerry 10/12: \"For rows like Luke Youngs, could chevrons go on same line as names so it takes up less space?\" On a phone the row chevron now sits at the end of the name line and the badges take their own line only when a row has any, so a row with no badges is one line instead of two. Desktop order is unchanged (badges, then chevron)."
+    ]
+  },
+  {
+    version: "2.544.2",
+    date: "2026-10-12",
+    title: "Spotlight: the Lone Star Cup row wears the Cup's colours",
+    changes: [
+      "Kerry 10/12: \"brand the LONE STAR CUP row with similar colors to the LSC colors on that page.\" The Spotlight's Lone Star Cup record row is now the Cup page's Texas-navy bar with white and gold type (the clinch note in gold), a thick left stripe in the player's TEAM colour (Austin burnt orange, San Antonio blue-grey, the same two as the Cup's team cards) and a match list tinted with that team's light shade."
+    ]
+  },
+  {
+    version: "2.544.1",
+    date: "2026-10-12",
+    title: "Standings on a phone: badges under the name, headshot stays full size",
+    changes: [
+      "Kerry 10/12: \"Maybe badges right under name on mobile so image can stay larger.\" On a phone the standings headshot is back to 40px (it had shrunk to 30px) and the badges (champion, AUSTIN/SAN ANTONIO captain, status, the row chevron) sit on a line right under the name; on desktop they stay inline after the name as before. Same on THE FELLOWSHIP CUP and Monthly."
+    ]
+  },
+  {
+    version: "2.544.0",
+    date: "2026-10-12",
+    title: "Photos load light, standings money on the name row in Bitter, Spotlight headshot enlarges",
+    changes: [
+      "LOAD TIME (Kerry 10/12: \"load times are increasing\"). The champion photos were 180-450KB each and were loading full size into 60-100px spots (the plaque, the Past Champions strip, the Spotlight thumbnails). Now every small display uses a pre-sized copy: champion photos 300x400 (total for all seven 2.08MB to 183KB) and headshots 160x160 (about 7KB each, 32 of them 1.27MB to 229KB), served by new /member/photo/cs/<key> and /member/photo/hs/<id> routes with the full photo as the fallback. The full-size photo loads only when someone taps to enlarge. Photos cache for a week (every URL carries ?v=mtime, so a replacement is a new URL), the photo index for a minute, and images carry width/height so nothing jumps. Guard: every seed headshot and champion photo must have its small copy (test_player_photos.py).",
+      "STANDINGS (Kerry 10/12). The money won (or projected) is now larger (17px Bitter, green) and right-aligned on the same row as the name, with a small WON / PROJECTED label above it; names in the points-race boards, THE FELLOWSHIP CUP and Monthly are Bitter. On a phone the name block wraps so the captain badge and the money never collide. This supersedes the 2026-07-09 sans-for-dense-data rule for names and money in standings. Also Bitter: Lone Star Cup and Match Play player names and the EVENTS leaderboard's stacked names.",
+      "ALIGNMENT (Kerry 10/12: \"Text needs aligning on each row\"). Rank, points, reset, rounds and buy-in cells now sit on each standings row's middle line instead of riding high beside the taller name block.",
+      "SPOTLIGHT: the player's own headshot opens full size on tap, like the trophy photos (Kerry 10/12). The Lone Star Cup row folds its three match results under the record: the house chevron points right when shut and turns down when open (an \"Open the Cup board\" link sits at the bottom), and a record with two dashes (1-1-1) is set smaller so it stays on one line."
+    ]
+  },
+  {
+    version: "2.543.1",
+    date: "2026-10-12",
+    title: "The LSC captain badge names the team and wears its colours",
+    changes: [
+      "Kerry 10/12: \"It should say AUSTIN LSC CAPTAIN with team colors or SAN ANTONIO LSC CAPTAIN.\" The captain's row badge on the NET boards now reads AUSTIN LSC CAPTAIN (burnt orange, white text) or SAN ANTONIO LSC CAPTAIN (blue-grey, dark text); on a phone it shortens to AUSTIN CAPT / SA CAPT. The plaque's sub line names the team too (Austin Lone Star Cup Captain: Matt Jenkins)."
+    ]
+  },
+  {
+    version: "2.543.0",
+    date: "2026-10-12",
+    title: "Standings headshots (concept B) and the LSC captain named from the Cup roster",
+    changes: [
+      "STANDINGS HEADSHOTS, concept B (Kerry 10/12: \"I think I like B slightly more than C\", then \"build B\"). On the points-race boards, THE FELLOWSHIP CUP and Monthly, the top 3 rows wear a larger round headshot (40px; gold ring on the champion's row); every other row keeps an empty slot of the same width so names stay aligned. On a phone the top 3 get a 30px headshot and the other rows take no slot. Someone with no headshot just shows the empty slot. Filled after the board paints from the h block of /api/player-photos (fcApplyAvatars).",
+      "CAPTAINCY (Kerry 10/12: \"Matthew Jenkins was LSC captain for Austin, and Rob Callaway was for San Antonio\"; Robert Straiton won the Austin NET and passed the captaincy on). The NET boards no longer assume the champion is the Lone Star Cup captain. The points-race payload now carries the Cup roster's captain (LSC_CAPTAIN_BY_RACE: Austin NET Matthew Jenkins, customer 7; San Antonio NET Rob Callaway, customer 35). When the champion is not the captain the plaque reads \"2026 Austin City Champion / Robert Straiton / Lone Star Cup Captain: Matt Jenkins\", the champion's row badge says CHAMPION only, and the captain's row gets an LSC CAPTAIN badge. When they are the same person nothing changes (CHAMPION · LSC CAPTAIN). No reason is shown.",
+      "Guards: test_player_photos.py (avatar slots, captain by race, board wiring)."
+    ]
+  },
+  {
+    version: "2.542.0",
+    date: "2026-10-12",
+    title: "LEADERBOARD: nav flush and pinned, Lone Star Cup back in the middle, headshots on the NET and Monthly winners",
+    changes: [
+      "NAV (Kerry 10/12: \"Nav bar isn't pinning under header. There's space. Same with Sub Nav.\"). The page padding above the tab bar and the section gap above the race-chip row are gone, so the tab bar sits flush under the header, and the race chips (SA FALL NET ... AUSTIN NET) now pin flush under the tab bar on desktop (prPinBars). On a phone only the tab bar pins, as before: pinned wrapped chips would eat the screen.",
+      "TAB ORDER: LONE STAR CUP moves back between POINTS RACES and MATCH PLAY (EVENTS | POINTS RACES | LONE STAR CUP | MATCH PLAY).",
+      "HEADSHOTS ON PLAQUES (Kerry 10/12: headshots for San Antonio NET and Austin NET, and for the Monthly points winners). The city-champion plaque on both NET boards now wears the champion's headshot in place of the trophy glyph, and a finished month shows a new \"<Month> Points Winner\" plaque with the winner's headshot above the standings (several winners show side by side, up to three). A winner with no headshot keeps the trophy glyph; tap opens the photo. Same padding rule as the cup plaques. Headshots in the standings rows themselves are a concept only, shown to Kerry, not built.",
+      "Guard: test_player_photos.py (headshot plaques, tab order, flush nav and the pinned chip row)."
+    ]
+  },
+  {
+    version: "2.541.0",
+    date: "2026-10-12",
+    title: "Past Champions on the cup boards and the Spotlight; the standard portrait look; headshot touch-ups",
+    changes: [
+      "PAST CHAMPIONS (Kerry 10/12: \"Both on the 1 Past Champions and 2 Spotlight\"). The Fellowship Cup and Players Cup boards each get a collapsed \"Past Champions\" strip under the plaque, newest year first, year + champion name, with the champion's photo where we have one (tap opens it full size). It reads GET /api/cup-champions, built from Kerry's own list (CUP_CHAMPION_HISTORY) and the registered photos; a year with no photo shows the name only (Players Cup 2025). On the Spotlight, each cup title with a photo shows a small tagged thumbnail under the title line (Jay Horton: Fellowship Cup 2025, Players Cup 2023); tap opens it. Registered in CHAMPION_PHOTOS: Fellowship Cup 2023 Paul Day, 2024 Mark Freund, 2025 Jay Horton; Players Cup 2023 Jay Horton, 2024 Robert Straiton. A photo only attaches to someone tagged in it.",
+      "STANDARD PHOTO LOOK (Kerry 10/12, Adobe \"B\": face-first lighting with background separation). The 2026 Gus Vasquez and Robert Straiton plaque photos are replaced with the B versions (1200x1600). With a photo, the plaque's padding now shrinks to just clear its gold rule and the portrait grows (102x136), so it sits close to the border (Kerry: \"way too much padding\").",
+      "HEADSHOTS. Robert Straiton, Jay Horton, Mark Freund and Paul Day use the consistent-zoom crop (head about 55% of the square, 9% headroom, centred; approved by Kerry). Strong-shadow headshots lifted on shadows and darks only, never overall face brightness (Adobe masks of face, neck and ears): Neal Cloer, Luke Youngs, Chris Cannon and John Wade at the stronger setting, Chuck Fehlis and Julius Jenkins at the medium one. Mary Wade, Walter Hogue and Jay Hogue were measured and left as they were (their shadows do not respond; more lift only brightens).",
+      "Guards: test_player_photos.py (five past photos registered and served, /api/cup-champions names and photo tags, no contact data), test_cup_titles.py (photos attach only to people in them, past_champions, both templates)."
+    ]
+  },
+  {
+    version: "2.540.6",
+    date: "2026-10-12",
+    title: "Robert Straiton's 2024 Players Cup photo staged",
+    changes: [
+      "Kerry 10/12 sent \"Robert STRAITON and The Players Cup in 2024 at The Bandit and 2024 TGF Championship\", which matches the 2024 Players Cup title already recorded for Robert (customer 31). Staged in data/champion_photos/players-cup-2024.jpg (1200x1600, EXIF removed) with the other past-champion photos; not registered in CHAMPION_PHOTOS, so nothing serves or shows it until Kerry chooses where past-champion photos appear. Guard: test_player_photos.py."
+    ]
+  },
+  {
+    version: "2.540.5",
+    date: "2026-10-12",
+    title: "Jay Horton's 2023 Players Cup photo staged",
+    changes: [
+      "Kerry 10/12 sent \"Jay Horton and The Players Cup in 2023\", which matches the 2023 Players Cup title already recorded for Jay (customer 289). The photo is staged in data/champion_photos/players-cup-2023.jpg (1200x1200, EXIF removed, about 270 KB) with the other past-champion photos; it is not registered in CHAMPION_PHOTOS, so nothing serves or shows it until Kerry chooses where past-champion photos appear. Jay's headshot stays the one cropped from the 2025 Fellowship Cup photo. Guard: test_player_photos.py."
+    ]
+  },
+  {
+    version: "2.540.4",
+    date: "2026-10-12",
+    title: "Paul Day: 2023 Fellowship Cup champion, headshot, photo staged",
+    changes: [
+      "Kerry 10/12 sent \"Paul Day and The Fellowship Cup in 2023\". Taken as Kerry's statement that Paul Day (customer 497) won the 2023 Fellowship Cup: CUP_CHAMPION_HISTORY gains fellowship_cup 2023, so his Spotlight header reads \"The Fellowship Cup - 2023 Champion\" (Kerry can strike it). data/player_photos/h-497.jpg is a 400x400 head-and-shoulders crop (about 45 KB), added to the seed headshots; the 2023 trophy photo is staged in data/champion_photos/fellowship-cup-2023.jpg (about 180 KB, EXIF removed) and, like the 2024 and 2025 ones, is not registered, so nothing serves it yet. Paul's status is expired member (DFW); Kerry has not been asked whether expired members show a headshot. No upload path, no schema. Guards: test_cup_titles.py, test_player_photos.py."
+    ]
+  },
+  {
+    version: "2.540.3",
+    date: "2026-10-12",
+    title: "Mark Freund's headshot; past-champion photos staged",
+    changes: [
+      "Kerry 10/12 (Mark Freund with The Fellowship Cup, 2024): data/player_photos/h-299.jpg is a 400x400 head-and-shoulders crop of that photo (about 35 KB), added to the repo seed set like the other headshots, so Mark's face shows on the Cup strips and in his Spotlight header instead of initials.",
+      "The two past-champion trophy photos Kerry has sent (Mark Freund 2024, Jay Horton 2025) are staged in data/champion_photos/ (fellowship-cup-2024.jpg, fellowship-cup-2025.jpg, EXIF removed, about 240 and 280 KB) so they are kept in git, but NOT registered in CHAMPION_PHOTOS, so nothing serves or shows them yet. Where past-champion photos appear (a Past Champions strip on the cup boards, the player's own Spotlight) is Kerry's call. No upload path, no schema. Guard: test_player_photos.py."
+    ]
+  },
+  {
+    version: "2.540.2",
+    date: "2026-10-12",
+    title: "Jay Horton's headshot",
+    changes: [
+      "Kerry 10/12 (Jay Horton with The Fellowship Cup, 2025): \"Use that for headshot too.\" data/player_photos/h-289.jpg is a 400x400 head-and-shoulders crop of that photo (about 32 KB), added to the repo seed set like the other headshots, so Jay's face shows on the Cup strips and in his Spotlight header instead of initials. The trophy photo itself is not published anywhere yet (the plaque shows the current year's champion only); Kerry has not chosen where past-champion photos go. No upload path, no schema. Guard: test_player_photos.py."
+    ]
+  },
+  {
+    version: "2.540.1",
+    date: "2026-10-12",
+    title: "Spotlight: this season's monthly results fold into one line; a decided cup reads Champion",
+    changes: [
+      "Kerry 10/12: \"collapse the monthly results somehow to reduce the length.\" The current season's completed monthly results now sit in one collapsed \"Monthly Results \u00b7 N\" line at the end of the 2026 Season list; tap it to open the months. The live current-month row stays in the list.",
+      "Kerry asked what \"4 from 1st\" meant on Gus's Fellowship Cup row: it was the gap in reset points to the top reset value, which says nothing once the Cup is decided (Gus was 4 from 1st on reset and the champion on the Cup total). A decided Fellowship Cup row now shows \"Champion\" for the cup's overall winner (and the Players Cup row the same for its champion) and no gap for everyone else; undecided cups keep the gap. Guard: test_lsc_record.py."
+    ]
+  },
+  {
+    version: "2.540.0",
+    date: "2026-10-12",
+    title: "Spotlight: Lone Star Cup record and matches; the whole season stays in WHERE X STANDS",
+    changes: [
+      "Kerry 10/12: \"Show Record where Seat is. Also, reveal all 2026 season contest results in WHERE X STANDS rather than just Currently active. Then any PAST CONTESTS would apply to previous seasons.\" Once the cup board is the FINAL snapshot, the Lone Star Cup row shows the player's record (e.g. 2\u20131, with a halve as 2\u20131\u20131) in the seat's place, the team result under the name (\"Team San Antonio retained the Cup, 17\u00bd\u201310\u00bd\"), and one line per match: W/L/H, the session's official title (FOURBALL, FOURSOMES, SINGLES), the margin, the partner and the opponents, each linking to that match's card on the Lone Star Cup board (?match=<id>). Before the board is final the seat view is unchanged. Read-only off the frozen board (email_parser/lsc_record.py, cached with the other Spotlight builders); nothing is scored or recomputed.",
+      "\"Gus clinched the 2026 Lone Star Cup for San Antonio\" (Kerry's wording) shows under his result. It is a stated fact checked against the scorers' hole-save times: San Antonio stood at 9.5 after Saturday, needed more than 14, and Gus's 5&3 singles win (closing hole saved 18:21:54 UTC) took them from 13.5 to 14.5, eleven minutes before the next San Antonio point. The board has no finish times, so the clincher is recorded in LSC_CLINCH rather than derived at read time.",
+      "WHERE X STANDS now opens with every contest of the current season under a \"2026 Season\" band (live first, then completed races with their COMPLETED badge, then the monthly results); PAST CONTESTS holds earlier seasons only and does not appear until there is one. Guard: test_lsc_record.py."
+    ]
+  },
+  {
+    version: "2.539.2",
+    date: "2026-10-12",
+    title: "Spotlight: on a phone the second cup drops to its own line",
+    changes: [
+      "Kerry 10/12: \"For mobile, if there's too much for one line, move the second cup (The Players Cup) to the 2nd line.\" The champion titles stay on one line with a bar between them while they fit (desktop). When they do not fit, each title takes its own line and the bar goes away; the check re-runs on resize and rotate (sptFitChamps). Today this only applies to Jay Horton, the only player to have won both cups."
+    ]
+  },
+  {
+    version: "2.539.1",
+    date: "2026-10-12",
+    title: "Spotlight: a player's cup titles share one line, separated by a bar",
+    changes: [
+      "Kerry 10/12: when a player won both cups the header reads \"The Fellowship Cup - 2025 Champion | The Players Cup - 2024 & 2026 Champion\" on one line instead of two stacked lines. Each title stays whole when the line wraps on a phone, with the bar trailing the title before it. One title reads exactly as before. Server payload unchanged (cup_titles list); test_cup_titles.py still guards it."
+    ]
+  },
+  {
+    version: "2.539.0",
+    date: "2026-10-12",
+    title: "THE PLAYERS CUP: the champion's photo on the plaque; Robert Straiton's headshot",
+    changes: [
+      "Kerry 10/12 (Robert Straiton with the 2026 Players Cup): the same plaque treatment as the Fellowship Cup. The Players Cup champion plaque shows the photo in the trophy slot, tap for the full photo with its caption, glyph kept when there is no photo or the champion is anyone else. One function now applies a champion photo to whichever cup plaque is on screen, keyed by race ('players_cup' / 'fellowship_cup'); the city champion plaques are unchanged. CHAMPION_PHOTOS gains players_cup-2026 (customer 31, data/champion_photos/players-cup-2026.jpg, 1200x1600, about 350 KB, EXIF removed).",
+      "Kerry: \"You can also crop this photo for his standard headshot for profile.\" data/player_photos/h-31.jpg is a 400x400 head-and-shoulders crop of the same photo (about 35 KB), added to the repo seed set like the other 42 headshots, so Robert's face now shows on the Cup strips and in his Spotlight header where only initials showed. No upload path, no schema; guard test_player_photos.py."
+    ]
+  },
+  {
+    version: "2.538.0",
+    date: "2026-10-12",
+    title: "Spotlight: cup champion titles under the photo; the plaque drops its third line",
+    changes: [
+      "Kerry 10/12: \"if someone was either The Fellowship Cup or The Players Cup Champion, they need that listed in the header under their photo on the bottom of that card. 'The Fellowship Cup - 2026 Champion' for Gus Vasquez. For Robert Straiton 'The Players Cup - 2024 & 2026 Champion'\" and \"Only the overall winners of the Players cup and Fellowship cup get this treatment.\" The Spotlight header card now ends with one gold-trophy line per cup the player won, Fellowship Cup above Players Cup, copy exactly as Kerry typed it (a hyphen; years ascending, '2024 & 2026', and '2022, 2024 & 2026' for three or more).",
+      "Source: the current season is DERIVED from each cup's declared champion(s) (the same `champions` the plaque and the money use: final, enrolled, best rank), so a player who tops the standings without being bought in (Gus on the Players Cup) gets no line. Past seasons are not in the Spotlight data, so they come from a short list Kerry states, never inferred (email_parser/cup_titles.py CUP_CHAMPION_HISTORY): Robert Straiton 2024 Players Cup; Mark Freund 2024 Fellowship Cup; Jay Horton 2025 both cups. More years are added only on Kerry's word. get_player_spotlight carries `cup_titles`; no schema. Guard: test_cup_titles.py.",
+      "The Fellowship Cup plaque loses its third line (\"The Bruce Friesenhahn Fellowship Cup\"); the champion title and name are all it shows, and the cup's name is in the photo's tag (Kerry: \"that's perfect\")."
+    ]
+  },
+  {
+    version: "2.537.0",
+    date: "2026-10-12",
+    title: "THE FELLOWSHIP CUP: the champion's photo on the plaque",
+    changes: [
+      "Kerry 10/12 (Gus Vasquez with The Bruce Friesenhahn Fellowship Cup): \"something definitely on the leaderboard results for that.\" Option A ratified: the champion plaque on the THE FELLOWSHIP CUP board shows the photo in the trophy glyph's slot, a framed 3:4 portrait with the cup's name under the champion's name; a tap opens the photo full size with its caption (tap, Escape or Enter closes). The glyph stays when there is no photo, the photo fails to load, or the champion(s) on the plaque are not exactly the people tagged in it, so a changed standing can never put someone in Gus's picture.",
+      "No upload path and no schema: the finished JPEG ships in the repo (data/champion_photos/fellowship-cup-2026.jpg, 1200x1600, about 270 KB, EXIF removed) and is read-only at runtime, so git is its backup and the photo-files backup hold (#1604) does not apply. email_parser/player_photos.py gains CHAMPION_PHOTOS (key race-season, customer_ids, cup name, caption); /api/player-photos carries a \"c\" block (version stamp, ids, cup, caption; the champion's name is already on the board) and /member/photo/c/<race-season>.jpg serves it. When migration 0011 ships the registry backfills into photos + photo_tags. Players Cup and city plaques are unchanged until they have photos. Guards: test_player_photos.py (18 plus the existing checks)."
     ]
   },
   {

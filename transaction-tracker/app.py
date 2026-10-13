@@ -2141,6 +2141,56 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── LIVE SCORING ON BY DEFAULT (Kerry 2026-10-13: "Turn live scoring on
+    #    for an event should be default after 5:00p Monday pairings are
+    #    turned on and definitely prior to these emails being sent out.").
+    #    Every 15 minutes: an event dated today, or tomorrow once it is 5 PM
+    #    Central, with saved pairings is switched on and its rounds seeded.
+    #    Never switches anything off. Dial `live_scoring_auto` (0/off stops
+    #    it). email_parser/live_scoring_default.py.
+    def live_scoring_auto_job():
+        from email_parser.live_scoring_default import live_scoring_auto_check
+        try:
+            res = live_scoring_auto_check()
+            on = {k: v for k, v in (res.get("events") or {}).items() if v.get("newly_enabled")}
+            if on:
+                logger.info("Live scoring auto: switched on %s", on)
+        except Exception:
+            logger.exception("Live scoring auto failed (non-fatal)")
+    scheduler.add_job(
+        live_scoring_auto_job,
+        "cron", minute="*/15",
+        timezone="US/Central",
+        id="live_scoring_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # ── PAIRINGS APPROVAL PROMPT (Kerry 2026-10-13: the manager reviews and
+    #    approves the automated pairings, which sends the player emails).
+    #    Every 15 min from :05 (so the 5:00 PM auto-generate has saved):
+    #    each due event's chapter manager gets ONE prompt per sheet (a
+    #    changed sheet re-prompts at most hourly; none once emails went).
+    #    Dial `pairings_approval_prompt` (0/off stops it).
+    #    email_parser/pairings_approval.py.
+    def pairings_approval_prompt_job():
+        from email_parser.pairings_approval import prompt_check
+        try:
+            res = prompt_check()
+            sent = {k: v for k, v in (res.get("events") or {}).items() if v.get("status") == "sent"}
+            if sent:
+                logger.info("Pairings approval prompts: %s", sent)
+        except Exception:
+            logger.exception("Pairings approval prompt failed (non-fatal)")
+    scheduler.add_job(
+        pairings_approval_prompt_job,
+        "cron", minute="5-59/15",
+        timezone="US/Central",
+        id="pairings_approval_prompt",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -5927,6 +5977,43 @@ def auto_generate_pairings_job():
         logger.exception("pairings auto-generate failed")
 
 
+@app.route("/events/<int:event_id>/approve-pairings")
+@require_role("manager")
+def approve_pairings_page(event_id):
+    """MANAGER APPROVES THE PAIRINGS (Kerry 2026-10-13: "the manager needs to
+    receive a prompt to review and approve the pairings which would then
+    automatically send these emails" / "Make the manager log in first.").
+    The review: groups, hard rule flags, who gets no email, a sample, and
+    one Approve button. email_parser/pairings_approval.py."""
+    from email_parser.pairings_approval import review, render_page, may_approve
+    rv = review(event_id)
+    if rv.get("error"):
+        return rv["error"], 404
+    why = may_approve(session.get("role"), session.get("chapter"), rv["event"]["chapter"])
+    if why:
+        return why, 403
+    return render_page(rv)
+
+
+@app.route("/api/events/<int:event_id>/approve-pairings", methods=["POST"])
+@require_role("manager")
+def api_approve_pairings(event_id):
+    """Approve the saved sheet (its fingerprint must match) and email every
+    player their event-day email. Manager of the event's chapter, or admin."""
+    from email_parser.pairings_approval import approve_and_send
+    body = request.get_json(silent=True) or {}
+    who = session.get("role") or "?"
+    if session.get("chapter"):
+        who = f"{who} ({session.get('chapter')})"
+    res = approve_and_send(event_id, str(body.get("fingerprint") or ""),
+                           role=session.get("role"), session_chapter=session.get("chapter"),
+                           approved_by=who)
+    code = res.pop("code", None) if isinstance(res, dict) else None
+    if res.get("refused"):
+        return jsonify(res), 409
+    return jsonify(res), (code or (500 if res.get("error") else 200))
+
+
 @app.route("/api/events/<int:event_id>/event-day-email")
 @require_role("admin")
 def api_event_day_email_preview(event_id):
@@ -5936,7 +6023,10 @@ def api_event_day_email_preview(event_id):
     per player from the SAVED pairings (start, group, cart partner, the
     player's own scoring link): counts, the held list with reasons, two
     full samples, and whether the wording is approved. Sends nothing."""
-    from email_parser.event_day_email import build_event_day_emails
+    from email_parser.event_day_email import build_event_day_emails, _ensure_scoring
+    # Kerry 10/13: Live Scoring is on before these emails go out, so the
+    # preview he approves is the message with its Keep score button.
+    _ensure_scoring(event_id)
     built = build_event_day_emails(event_id)
     if built.get("error"):
         return jsonify(built), 404
@@ -11735,7 +11825,7 @@ def api_season_contest_points_race():
     except Exception as e:
         logger.exception("Points race load failed")
         return jsonify({"error": f"Points race load failed: {e}"}), 500
-    return jsonify(data)
+    return jsonify(_with_lsc_captain(race, data))
 
 
 @app.route("/api/season-contests/points-race/live")
@@ -11758,7 +11848,7 @@ def api_points_race_live():
     # the event never happened (Kerry, 2026-08-01 evening).
     force = request.args.get("force") == "1"
     try:
-        return jsonify(get_points_race_live(race, force_refresh=force))
+        return jsonify(_with_lsc_captain(race, get_points_race_live(race, force_refresh=force)))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -13255,6 +13345,18 @@ def member_lonestarcup():
 
 # Captains as named on the Event Info mockup (CoS #1398, EventInfo.dc.html).
 LSC_CAPTAINS = {"austin": "Matt Jenkins", "sa": "Rob Callaway"}
+# the same captains by customer_id, for the NET boards (Kerry 2026-10-12: "Matthew Jenkins was LSC captain for
+# Austin, and Rob Callaway was for San Antonio": Robert Straiton won the Austin NET and passed the captaincy on)
+LSC_CAPTAIN_BY_RACE = {"austin_net": (7, "Matt Jenkins"), "san_antonio_net": (35, "Rob Callaway")}
+
+
+def _with_lsc_captain(race, data):
+    """The Cup roster's captain on a NET race payload, so the board can name
+    the captain even when the champion handed the captaincy to someone else."""
+    cap = LSC_CAPTAIN_BY_RACE.get(race)
+    if cap and isinstance(data, dict):
+        return {**data, "lsc_captain_id": cap[0], "lsc_captain_name": cap[1]}
+    return data
 
 
 def _lsc_info_teams() -> list:
@@ -13361,6 +13463,18 @@ def _lsc_practice_count(cup_event_id) -> int | None:
         return None
 
 
+@app.route("/member/teesheet/<int:event_id>")
+def member_teesheet(event_id):
+    """THE MEMBER TEE SHEET (Kerry 2026-10-13): public, read-only, names /
+    starts / carts / tees only. Linked from each player's event-day email
+    (#g<group> lands on his group). email_parser/member_teesheet.py."""
+    from email_parser.member_teesheet import build_teesheet, render_teesheet
+    data = build_teesheet(event_id)
+    if not data:
+        return "Event not found", 404
+    return render_teesheet(data)
+
+
 @app.route("/member/matchplay/<chapter_slug>")
 def member_matchplay(chapter_slug):
     """Chapter-specific shareable Match Play links (Kerry 2026-08-21:
@@ -13413,6 +13527,29 @@ def api_player_photos():
     tier may read it."""
     from email_parser.player_photos import photo_index
     resp = jsonify(photo_index())
+    resp.headers["Cache-Control"] = "public, max-age=60"
+    return resp
+
+
+@app.route("/api/cup-champions")
+@require_role("member")
+def api_cup_champions():
+    """PAST CHAMPIONS for the two cup boards (Kerry 2026-10-12): the years Kerry
+    has stated (email_parser/cup_titles.py CUP_CHAMPION_HISTORY), the
+    champion's display name, and the registered photo when there is one.
+    Names of past champions only; no contact data."""
+    from email_parser.cup_titles import CUP_CHAMPION_HISTORY, past_champions
+    ids = {i for h in CUP_CHAMPION_HISTORY.values() for v in h.values() for i in v}
+    names = {}
+    conn = get_connection()
+    try:
+        q = ",".join("?" * len(ids))
+        for r in conn.execute(f"SELECT customer_id, first_name, last_name FROM customers WHERE customer_id IN ({q})",
+                              sorted(ids)):
+            names[r[0]] = f"{r[1] or ''} {r[2] or ''}".strip()
+    finally:
+        conn.close()
+    resp = jsonify(past_champions(names))
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
@@ -13426,7 +13563,8 @@ def member_player_photo(kind, key):
     p = photo_file(kind, key)
     if not p:
         return "", 404
-    resp = send_file(str(p), mimetype="image/jpeg", max_age=86400)
+    # a week: every URL carries ?v=<mtime>, so a replaced photo is a new URL
+    resp = send_file(str(p), mimetype="image/jpeg", max_age=604800)
     return resp
 
 

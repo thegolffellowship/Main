@@ -68,38 +68,145 @@ db.save_event_pairings(EV, {"9": [
         {"name": "Eli Eno", "cart_pos": 1, "customer_id": 880005},
         {"name": "Gus Gray", "cart_pos": 2, "customer_id": 880007}]}]}, db_path=DB)
 
-print("1. The dry build")
+# The GAMES tab as page_probe returns it (trimmed from s9.27 The Quarry,
+# 10/12): the card is built from this, never recomputed.
+GAMES_TAB = {
+    "counts": {"players": 7, "net": 3, "gross": 2},
+    "sections": [
+        {"section": "INCLUDED GAMES (7 players)", "rows": [
+            {"game": "TEAM Net", "pot": "$80", "1st": "$80"},
+            {"game": "CTP #1", "pot": "$20"}],
+         "subtotal": {"pot": "$100"}},
+        {"section": "NET GAMES (3 players)", "rows": [
+            {"game": "Individual Net", "pot": "$117", "flights": "2"},
+            {"game": "Low Flight", "1st": "$58.50", "2nd": "\u2014", "sub": True},
+            {"game": "High Flight", "1st": "$58.50", "2nd": "\u2014", "sub": True},
+            {"game": "TGF MVP \U0001F517", "pot": "$46"},
+            {"game": "Test Links GC", "pot": "$26", "sub": True}],
+         "subtotal": {"pot": "$163"}},
+        {"section": "GROSS GAMES (2 players)", "rows": [
+            {"game": "Skins Gross", "pot": "$104", "flights": "2"},
+            {"game": "Per skin: 1=$52, 2=$26, 3=$17.33", "sub": True},
+            {"game": "Ind. Gross", "note": "No Game", "disabled": True}],
+         "subtotal": {"pot": "$104"}}],
+    "total": {"pot": "$367"},
+    "hole_in_one": ["Hole-in-One Pot: $33 (a9.27 $13 + s9.27 $20)", ""],
+    "buyers": {"players": [{"customer_id": c} for c in (880001, 880002, 880003, 880004, 880005, 880006, 880007)],
+               "net": [{"customer_id": c} for c in (880001, 880002, 880005)],
+               "gross": [{"customer_id": c} for c in (880002, 880004)]},
+    "mvp_link": {"linked": [{"event_name": "a9.27 Forest Creek", "course": "Forest Creek Golf Club",
+                             "chapter": "Austin"}]},
+    "team_type": "TEAM Net",
+}
+ede._read_games_tab = lambda eid: GAMES_TAB   # no Chromium in a test
+
+print("1. The dry build (design A2, Kerry 10/12)")
 tpl = ede.load_template(DB)
-check("the template is seeded as DATA (message_templates row)", bool(tpl) and "{group_block}" in tpl["html_body"], tpl)
+check("the template is seeded as DATA with the A2 cards",
+      bool(tpl) and all(t in tpl["html_body"] for t in ("{spot_card}", "{games_card}", "{scoring_button}")), tpl)
+check("the A2 wording replaced the approved v1 hash", tpl["hash"] != "f76bf53aa8d5ee65", tpl["hash"])
 b = ede.build_event_day_emails(EV, db_path=DB)
 by = {m["customer_id"]: m for m in b.get("messages", [])}
 held = {h["customer_id"]: h["reason"] for h in b.get("held", [])}
 ann = by.get(880001, {})
+at = ann.get("text", "")
 check("Ann's message is ready, to her canonical email", ann.get("email") == "ann@example.test", b)
-check("…with her start stated as the Starter Sheet states it", "Your start: Hole 1A | 8:00 AM" in ann.get("text", ""), ann.get("text"))
-check("…her three group-mates and not herself",
-      all(f"- {n}" in ann.get("text", "") for n in ("Bob Baker", "Cal Cole", "Dee Dunn"))
-      and "- Ann Able" not in ann.get("text", ""), ann.get("text"))
-check("…her cart partner (seats 1&2)", "Your cart partner: Bob Baker" in ann.get("text", ""), ann.get("text"))
-check("…course, date, and the chapter manager",
-      "Test Links GC" in ann.get("text", "") and "Tuesday, October 13, 2026" in ann.get("text", "")
-      and "Kerry" in ann.get("text", ""), ann.get("text"))
-check("…games: NET in, GROSS not bought",
-      "NET games (Individual Net + MVP): you're in" in ann.get("text", "")
-      and "GROSS games (Skins + Individual Gross): not bought" in ann.get("text", ""), ann.get("text"))
-check("BOTH buyer is in both", by.get(880002, {}).get("text", "").count("you're in") == 2)
-check("Cal's cart partner is Dee (seats 3&4)", "Your cart partner: Dee Dunn" in by.get(880003, {}).get("text", ""))
+check("subject: day + course, start, shotgun; no internal code",
+      ann.get("subject") == "Tuesday at TEST LINKS: Hole 1A, 8:00 AM shotgun", ann.get("subject"))
+check("…the START card states the start as the Starter Sheet does",
+      "YOUR START" in at and "Hole 1A \u00b7 8:00 AM" in at
+      and "Shotgun \u00b7 Tuesday, October 13 \u00b7 Test Links GC" in at, at)
+check("…the group lists all four with initials, herself marked",
+      all(n in at for n in ("Ann Able you \u00b7 Cart A", "Bob Baker your cart \u00b7 Cart A",
+                            "Cal Cole Cart B", "Dee Dunn Cart B"))
+      and ">AA<" in ann.get("html", ""), at)
+check("…format from the event and the games tab", "9 holes \u00b7 Team Net" in at, at)
+check("…the chapter manager", "Text Kerry at" in at and "Kerry\nThe Golf Fellowship" in at, at)
+check("the frame wraps it: masthead with chapter and title",
+      "THE GOLF FELLOWSHIP \u00b7 SAN ANTONIO" in ann.get("html", "")
+      and "Tuesday at TEST LINKS" in ann.get("html", ""))
+print("1b. The Games card")
+check("total in play and counts", "$367 in play" in at and "TUESDAY'S GAMES" in at, at)
+check("one block per section with its pot", all(x in at for x in (
+      "INCLUDED everyone \u00b7 $100", "NET GAMES 3 players \u00b7 $163", "GROSS GAMES 2 players \u00b7 $104")), at)
+check("game names made plain, flight + skin notes, linked MVP", all(x in at for x in (
+      "Closest to the Pin #1 $20", "2 flights, $58.50 to each flight winner",
+      "one skin pays $52, two pay $26 each", "TGF MVP with Austin at Forest Creek $46")), at)
+check("sub rows and a 'No Game' row never print",
+      "Low Flight" not in at and "Ind" not in at.replace("Individual Net", "") and "Test Links GC $26" not in at, at)
+check("Ann: INCLUDED + NET in, GROSS not bought",
+      at.count("YOU'RE IN") == 2 and at.count("NOT BOUGHT") == 1, at)
+check("Bob (BOTH) is in all three", by.get(880002, {}).get("text", "").count("YOU'RE IN") == 3)
+check("Cal (none): included only", by.get(880003, {}).get("text", "").count("NOT BOUGHT") == 2)
+check("a split bar sized by pot (cells add to 100%)",
+      ann.get("html", "").count('height="12"') == 3, ann.get("html", "")[:200])
+check("email-safe: no <style>, <img>, <svg>, flex or grid in the body",
+      not any(x in ann.get("html", "").lower() for x in ("<style", "<img", "<svg", "display:flex", "display:grid")))
 check("house paragraph spacing applied (normalize_email_html)", 'style="margin:0 0 1em;"' in ann.get("html", ""))
 check("no brace survives in any ready message",
       not any("{" in m["html"] or "{" in m["subject"] for m in b["messages"]))
 check("seated player with no email is HELD", "no email" in held.get(880005, ""), held)
 check("roster player not on the sheet is HELD", "not in a group" in held.get(880006, ""), held)
-check("Gus (group 2) is ready with Eli as his mate", "- Eli Eno" in by.get(880007, {}).get("text", ""))
+check("Gus (group 2, two players) is ready with Eli on his card", "Eli Eno" in by.get(880007, {}).get("text", ""))
 check("counts add up", b["counts"] == {"roster": 7, "ready": 5, "held": 2}, b["counts"])
+check("no games note when the tab reads", b["games_note"] is None, b["games_note"])
 check("unapproved by default", b["approved"] is False)
+bad = ede.build_event_day_emails(EV, db_path=DB, games_tab={"error": "no Chromium on this deploy"})
+check("an unreadable games tab drops the card, never the start",
+      bad["counts"]["ready"] == 5 and "games card omitted" in (bad["games_note"] or "")
+      and all("in play" not in m["text"] and "YOUR START" in m["text"] for m in bad["messages"]), bad["games_note"])
 b2 = ede.build_event_day_emails(EV2, db_path=DB)
 check("an unsaved sheet holds everybody", b2["counts"]["ready"] == 0
       and all("pairings not saved" in h["reason"] for h in b2["held"] if h.get("email")), b2["counts"])
+
+print("1d. Kerry 10/13: HIO total, live scoring, tee sheet, pops")
+check("the HIO line shows the RUNNING pot and what tonight adds",
+      "Hole-in-One Pot: $" in at and "Tuesday's field adds $33" in at, at)
+check("Live Scoring off: no Keep score button, and the build says so",
+      "Keep score on your phone" not in at and "Live Scoring is not on" in (b.get("scoring_note") or ""),
+      b.get("scoring_note"))
+check("a tee sheet button that lands on the player's group",
+      "See the full tee sheet" in at and "/member/teesheet/9101#g1" in ann.get("html", ""), ann.get("html", "")[-900:])
+strip = ede.card_strip(
+    {"ph": "6", "net": "5", "ph_dots": {11: 1, 13: 1, 18: 2}, "net_dots": {11: 1, 18: 1},
+     "si_by_hole": {h: h - 9 for h in range(10, 19)}},
+    {"holes": list(range(10, 19)), "par": {h: 4 for h in range(10, 19)}},
+    {"name": "Team Net", "pct": 85, "unit": "group", "off_low": False, "par3_suppressed": True},
+    {"index": 12.4}, "Gold Tees")
+st = ede.html_to_text(strip)
+check("YOUR CARD strip: holes, par, NET and TEAM pop rows",
+      all(x in st for x in ("YOUR CARD", "HOLE 10 11 12", "PAR 4 4", "NET", "TEAM"))
+      and strip.count("&#9679;") == 7, st)   # 6 pops + the legend dot
+check("…and the handicap chain in words",
+      "Index 12.4 on the Gold Tees gives you a Playing Handicap of 6 for Individual Net." in st
+      and "Team Net uses 85% of your handicap: 5." in st and "No team pops on par 3s." in st, st)
+check("no strip without stroke indexes (never guessed)",
+      ede.card_strip({"ph": "6", "si_by_hole": {}}, {"holes": [10]}, {}, None, None) == "")
+from email_parser import member_teesheet as mts
+td = mts.build_teesheet(EV, db_path=DB)
+page = mts.render_teesheet(td)
+check("the member tee sheet lists every group with its anchor and players",
+      'id="g1"' in page and 'id="g2"' in page and "Ann Able" in page and "Gus Gray" in page
+      and "Hole 1A \u00b7 8:00 AM" in page, page[:300])
+check("…and carries no email, phone or money",
+      "@" not in page.replace("@media", "") and "$" not in page, page)
+check("an event with no saved sheet says so", "not posted yet" in mts.render_teesheet(mts.build_teesheet(EV2, db_path=DB)))
+
+print("1c. A template still written the v1 way keeps working (Kerry may edit in the UI)")
+V1 = ("<p>Hi {first_name},</p><p><strong>Your start:</strong> {start_line}</p>"
+      "<p><strong>Your group:</strong></p>{group_block}{cart_block}{games_block}"
+      "<p>Text {manager_name} at {manager_phone}.</p>")
+with db._connect(DB) as conn:
+    conn.execute("UPDATE message_templates SET html_body = ? WHERE id = ?", (V1, tpl["id"])); conn.commit()
+v1 = ede.build_event_day_emails(EV, db_path=DB)
+a1 = {m["customer_id"]: m for m in v1["messages"]}.get(880001, {})
+check("v1 body: plain start, list, cart line, games list, no frame",
+      "Your start: Hole 1A | 8:00 AM" in a1.get("text", "") and "- Bob Baker" in a1.get("text", "")
+      and "Your cart partner: Bob Baker" in a1.get("text", "")
+      and "NET games (Individual Net + MVP): you're in" in a1.get("text", "")
+      and "THE GOLF FELLOWSHIP" not in a1.get("html", ""), a1.get("text"))
+with db._connect(DB) as conn:
+    conn.execute("UPDATE message_templates SET html_body = ? WHERE id = ?", (tpl["html_body"], tpl["id"])); conn.commit()
 
 print("2. The boundary guard")
 with db._connect(DB) as conn:
@@ -143,7 +250,7 @@ check("refused without the approval stamp", "refused" in r and not SENT, r)
 db.set_app_setting(ede.APPROVAL_KEY, tpl["hash"], db_path=DB)
 r = ede.send_event_day_emails(EV, confirm=False, db_path=DB)
 check("refused without confirm, even when approved", "refused" in r and not SENT, r)
-set_body(orig_body.replace("See you out there", "See you soon"))
+set_body(orig_body.replace("See you on the first tee", "See you soon"))
 r = ede.send_event_day_emails(EV, confirm=True, db_path=DB)
 check("an edited template voids the stamp", "refused" in r and not SENT, r)
 set_body(orig_body)
@@ -161,6 +268,19 @@ with db._connect(DB) as conn:
     rows = conn.execute("SELECT customer_id, status FROM event_day_email_sends WHERE event_id = ?", (EV,)).fetchall()
 check("one 'sent' row per customer", len(rows) == 5 and all(x["status"] == "sent" for x in rows), [tuple(x) for x in rows])
 
+print("4b. One player's actual message as a staff test")
+SENT.clear()
+r = ede.send_event_day_test(EV, 880001, "pat@gmail.com", db_path=DB)
+check("a test to a non-staff address is refused", "error" in r and not SENT, r)
+r = ede.send_event_day_test(EV, 880001, "kerry@thegolffellowship.com", db_path=DB)
+check("the test is the player's exact message, unwrapped",
+      r.get("status") == "sent" and len(SENT) == 1 and SENT[0]["subject"] == by[880001]["subject"]
+      and "PREVIEW" not in SENT[0]["html_body"] and "YOUR START" in SENT[0]["html_body"], r)
+with db._connect(DB) as conn:
+    n = conn.execute("SELECT COUNT(*) FROM event_day_email_sends WHERE event_id = ?", (EV,)).fetchone()[0]
+check("…and it is not counted as the player's send", n == 5, n)
+check("a held player has no test", "held" in (ede.send_event_day_test(EV, 880005, "kerry@thegolffellowship.com", db_path=DB).get("error") or ""))
+
 print("5. The bridge")
 os.environ["DATABASE_PATH"] = DB
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -176,8 +296,8 @@ out = json.loads(mcp_server._scoring_dispatch("", f"scoring-event-day-email:{EV}
 check("there is no member-send bridge", "error" in out and not SENT, out)
 
 # EMAIL PLAYERS (Kerry 2026-10-08): the scoring link and the admin routes
-check("the template carries each player's scoring link ({scoring_block})",
-      "{scoring_block}" in (tpl or {}).get("html_body", ""))
+check("the template carries each player's scoring button ({scoring_button})",
+      "{scoring_button}" in (tpl or {}).get("html_body", ""))
 check("no Live Scoring on the event: no scoring line, nothing held for it",
       all("Keep score on your phone" not in m["text"] for m in b["messages"]))
 os.environ.setdefault("SECRET_KEY", "test-secret")
@@ -185,6 +305,8 @@ os.environ.setdefault("ADMIN_PIN", "4242")
 import app as _app
 _cl = _app.app.test_client()
 check("the Email Players preview is admin only", _cl.get("/api/events/1/event-day-email").status_code in (401, 302, 403))
+check("the member tee sheet is public (no PIN) and 404s an unknown event",
+      _cl.get(f"/member/teesheet/{EV}").status_code == 200 and _cl.get("/member/teesheet/999999").status_code == 404)
 check("the Email Players send is admin only",
       _cl.post("/api/events/1/event-day-email/send", json={}).status_code in (401, 302, 403))
 
