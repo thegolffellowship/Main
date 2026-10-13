@@ -654,8 +654,10 @@ that are NOT layout-mode switches (640px scorecard/points density, 700/720/
 760px grid collapses, 900px split panes) are cosmetic and stay as they are.
 Because the desktop layout now runs down to 561px, `shell.css` wraps the
 header into two rows between 561px and 1479px (brand + right-hand pills on
-row 1, links on row 2; member shell: brand + CTA, then the three tabs) —
-above 1480px the single row is unchanged.
+row 1, links on row 2) —
+above 1480px the single row is unchanged. The MEMBER shell (brand + three
+tabs + CTA) stays on one row down to 860px and wraps only 561–859px (Kerry
+2026-10-13).
 
 ## Handicap identity: `customer_id` (v2.459.0)
 
