@@ -874,6 +874,17 @@ def _graph_send(creds, to, subject, html_body) -> bool:
                                    to_address=to, subject=subject, html_body=html_body)
 
 
+def _ensure_scoring(event_id: int, db_path=None) -> None:
+    """Kerry 10/13: Live Scoring is on "definitely prior to these emails
+    being sent out". Before a preview or a send is built, switch the event on
+    and seed its rounds so every message carries its Keep score button."""
+    try:
+        from email_parser.live_scoring_default import ensure_live_scoring
+        ensure_live_scoring(int(event_id), db_path=db_path)
+    except Exception:
+        logger.exception("event-day email: could not switch Live Scoring on (non-fatal)")
+
+
 def send_event_day_preview(event_id: int, to_address=None, db_path=None, only=None) -> dict:
     """ONE combined preview (first few rendered messages + the held list +
     counts) to STAFF ONLY. A non-staff address is refused."""
@@ -890,6 +901,7 @@ def send_event_day_preview(event_id: int, to_address=None, db_path=None, only=No
     bad = staff_only(to, gs)
     if bad:
         return {"error": f"the event-day preview goes to TGF staff only; refused {bad}"}
+    _ensure_scoring(event_id, db_path)
     built = build_event_day_emails(event_id, db_path=db_path)
     if built.get("error"):
         return built
@@ -955,6 +967,7 @@ def send_event_day_emails(event_id: int, confirm: bool = False, db_path=None) ->
     creds = _creds()
     if not creds:
         return {"error": "Email credentials not configured on server"}
+    _ensure_scoring(event_id, db_path)
     built = build_event_day_emails(event_id, db_path=db_path)
     if built.get("error"):
         return built

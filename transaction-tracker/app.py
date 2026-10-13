@@ -2129,6 +2129,31 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── LIVE SCORING ON BY DEFAULT (Kerry 2026-10-13: "Turn live scoring on
+    #    for an event should be default after 5:00p Monday pairings are
+    #    turned on and definitely prior to these emails being sent out.").
+    #    Every 15 minutes: an event dated today, or tomorrow once it is 5 PM
+    #    Central, with saved pairings is switched on and its rounds seeded.
+    #    Never switches anything off. Dial `live_scoring_auto` (0/off stops
+    #    it). email_parser/live_scoring_default.py.
+    def live_scoring_auto_job():
+        from email_parser.live_scoring_default import live_scoring_auto_check
+        try:
+            res = live_scoring_auto_check()
+            on = {k: v for k, v in (res.get("events") or {}).items() if v.get("newly_enabled")}
+            if on:
+                logger.info("Live scoring auto: switched on %s", on)
+        except Exception:
+            logger.exception("Live scoring auto failed (non-fatal)")
+    scheduler.add_job(
+        live_scoring_auto_job,
+        "cron", minute="*/15",
+        timezone="US/Central",
+        id="live_scoring_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -5924,7 +5949,10 @@ def api_event_day_email_preview(event_id):
     per player from the SAVED pairings (start, group, cart partner, the
     player's own scoring link): counts, the held list with reasons, two
     full samples, and whether the wording is approved. Sends nothing."""
-    from email_parser.event_day_email import build_event_day_emails
+    from email_parser.event_day_email import build_event_day_emails, _ensure_scoring
+    # Kerry 10/13: Live Scoring is on before these emails go out, so the
+    # preview he approves is the message with its Keep score button.
+    _ensure_scoring(event_id)
     built = build_event_day_emails(event_id)
     if built.get("error"):
         return jsonify(built), 404

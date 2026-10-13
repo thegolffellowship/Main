@@ -134,7 +134,9 @@ def round_is_preview(round_id: int, db_path=None) -> bool:
 # yet in Austin. We need to only test it here in San Antonio at the Canyon
 # Springs event."). Score entry is OFF for every event unless its id is in
 # the app setting `score_entry_events` (a JSON list or comma list of event
-# ids). Staff turn an event on; nothing turns one on by itself. Admin
+# ids). Staff may turn an event on; since v2.554.0 (Kerry 10/13) the job in
+# live_scoring_default.py also turns regular events on from 5 PM the day
+# before. Nothing turns one OFF by itself. Admin
 # PREVIEW use is unaffected; everything a manager or a player can reach
 # checks this.
 # ---------------------------------------------------------------------------

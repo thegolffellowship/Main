@@ -3,14 +3,15 @@ window.TGF_CHANGELOG = [
   {
     version: "2.554.0",
     date: "2026-10-13",
-    title: "Tee sheet email: running HIO pot, YOUR CARD pops strip, a public tee sheet page",
+    title: "Tee sheet email: running HIO pot, YOUR CARD pops strip, a public tee sheet page; Live Scoring on by default",
     changes: [
       "Kerry 10/13, on the test previews: \"The hole in one pot is not showing the total. Also, what about links for their live scoring and for the full tee sheet? Or a view of their scorecard to see where their pops are going. Or perhaps how their PHs are calculated for each game.\"",
       "Hole-in-One: the games card now shows the RUNNING pot (get_hio_pot, the GAMES tab banner's own reader), with tonight's field contribution beside it. Before, it showed only the day's contribution.",
       "YOUR CARD, inside the start card: the holes being played, with par and a dot on each hole where the player gets a pop. One row is for Individual Net and one for the team game (Team or Cart Net). Below it, the handicap chain in words: Index and tees to Playing Handicap, then the team game's allowance (and off-the-low when it applies) to its handicap, with 'no pops on par 3s' when that rule is on. Every number is the printed scorecard's (scorecards.build_scorecards, qr off so nothing is seeded); a player whose tee has no stroke index gets no strip, never a guess.",
       "New public page /member/teesheet/<event_id>: every group's start, players, carts and tees from the saved sheet. Names only, with no email, phone, handicap or money, and no PIN, like the rest of /member. Each player's email has a 'See the full tee sheet' button that opens on his own group (#g<group>).",
       "Live Scoring: the Keep score button appears only when Live Scoring is on for the event. The build and the staff preview now say so plainly when it is off, so it can be turned on before sending.",
-      "The template gains {teesheet_button}. The first A2 body (never approved or sent) is in the priors, so the live row updates, and Kerry's Approve & email click approves this version."
+      "The template gains {teesheet_button}. The first A2 body (never approved or sent) is in the priors, so the live row updates, and Kerry's Approve & email click approves this version.",
+      "LIVE SCORING ON BY DEFAULT (Kerry 10/13: \"Turn live scoring on for an event should be default after 5:00p Monday pairings are turned on and definitely prior to these emails being sent out.\"). New job live_scoring_auto (every 15 min): from 5:00 PM Central the day before an event, and all of event day, an event with saved pairings is added to score_entry_events and its rounds are seeded, so every group has its scoring link. Rounds re-sync to later pairing changes and never lose a score. The Email Players preview, the staff preview and the member send also switch the event on first. It never switches anything off. Skipped: Golf Genius era events, the Lone Star Cup, and events with no saved sheet. Dial live_scoring_auto (0/off stops the job). email_parser/live_scoring_default.py; test_live_scoring_default.py."
     ]
   },
   {
