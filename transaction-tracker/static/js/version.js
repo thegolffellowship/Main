@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.555.0";
+window.TGF_VERSION = "2.555.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.555.1",
+    date: "2026-10-13",
+    title: "Event-day email: send one player's actual message to staff as a test",
+    changes: [
+      "Kerry 10/13, checking the Apple Mail fix (Exchange 'rich-text format' set to Never): \"The preview looks fine but it did before too because it was in a container. Can you resend my actual player email?\" New bridge option scoring-event-day-email:<event_id>|test|<staff addr>|cid=<customer_id> (send_event_day_test): that player's exact subject and body, with no preview wrapper, to ONE staff address (@thegolffellowship.com or recap_draft_allow). It is not a member send: it writes no event_day_email_sends row and is logged to message_log as a test."
+    ]
+  },
   {
     version: "2.555.0",
     date: "2026-10-13",

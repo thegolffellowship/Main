@@ -268,6 +268,19 @@ with db._connect(DB) as conn:
     rows = conn.execute("SELECT customer_id, status FROM event_day_email_sends WHERE event_id = ?", (EV,)).fetchall()
 check("one 'sent' row per customer", len(rows) == 5 and all(x["status"] == "sent" for x in rows), [tuple(x) for x in rows])
 
+print("4b. One player's actual message as a staff test")
+SENT.clear()
+r = ede.send_event_day_test(EV, 880001, "pat@gmail.com", db_path=DB)
+check("a test to a non-staff address is refused", "error" in r and not SENT, r)
+r = ede.send_event_day_test(EV, 880001, "kerry@thegolffellowship.com", db_path=DB)
+check("the test is the player's exact message, unwrapped",
+      r.get("status") == "sent" and len(SENT) == 1 and SENT[0]["subject"] == by[880001]["subject"]
+      and "PREVIEW" not in SENT[0]["html_body"] and "YOUR START" in SENT[0]["html_body"], r)
+with db._connect(DB) as conn:
+    n = conn.execute("SELECT COUNT(*) FROM event_day_email_sends WHERE event_id = ?", (EV,)).fetchone()[0]
+check("…and it is not counted as the player's send", n == 5, n)
+check("a held player has no test", "held" in (ede.send_event_day_test(EV, 880005, "kerry@thegolffellowship.com", db_path=DB).get("error") or ""))
+
 print("5. The bridge")
 os.environ["DATABASE_PATH"] = DB
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

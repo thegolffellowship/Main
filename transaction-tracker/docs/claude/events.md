@@ -3189,6 +3189,12 @@ does, the member send refuses.**
 - **Bridges**: `scoring-event-day-email:<event_id>` (dry build: counts,
   ready list, held with reasons, one sample text, hash, approval);
   `scoring-event-day-email:<event_id>|preview[|<staff addr>]`.
+- **One player's actual message as a test** (v2.555.1):
+  `scoring-event-day-email:<event_id>|test|<staff addr>|cid=<id>`
+  (`send_event_day_test`): exact subject and body, unwrapped, to one staff
+  address. It writes no `event_day_email_sends` row. This is the way to check
+  how a real player's mail app renders it (the 10/13 winmail.dat / TNEF
+  fix).
 - **To approve**: Kerry reads a preview, then
   `scoring-setting-set:event_day_email_approved|<template_hash>`.
 - Test: `test_event_day_email.py` (Graph mocked).

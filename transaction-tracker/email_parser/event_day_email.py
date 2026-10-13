@@ -952,6 +952,53 @@ def send_event_day_preview(event_id: int, to_address=None, db_path=None, only=No
             "held": built["held"]}
 
 
+def send_event_day_test(event_id: int, customer_id: int, to_address: str, db_path=None) -> dict:
+    """ONE player's ACTUAL message (Kerry 10/13: "The preview looks fine but
+    it did before too because it was in a container. Can you resend my
+    actual player email?"): the exact subject and body that player gets, no
+    preview wrapper, to ONE staff address (recap_mail.staff_only). Not a
+    member send: no event_day_email_sends row, so the player's own send is
+    untouched. Logged to message_log as a test."""
+    from email_parser import database as db
+    from email_parser.recap_mail import staff_only, _addrs
+
+    def gs(k):
+        try:
+            return db.get_app_setting(k, db_path=db_path)
+        except Exception:
+            return None
+
+    to = _addrs(to_address)
+    if len(to) != 1:
+        return {"error": "one staff address, please"}
+    bad = staff_only(to, gs)
+    if bad:
+        return {"error": f"a test goes to TGF staff only; refused {bad}"}
+    _ensure_scoring(event_id, db_path)
+    built = build_event_day_emails(event_id, db_path=db_path)
+    if built.get("error"):
+        return built
+    m = next((x for x in built["messages"] if x["customer_id"] == int(customer_id)), None)
+    if not m:
+        held = next((h for h in built["held"] if h.get("customer_id") == int(customer_id)), None)
+        return {"error": f"no ready message for customer {customer_id}"
+                         + (f" (held: {held['reason']})" if held else "")}
+    creds = _creds()
+    if not creds:
+        return {"error": "Email credentials not configured on server"}
+    ok = _graph_send(creds, to[0], m["subject"], m["html"])
+    try:
+        db.log_message({"event_name": "event-day-test", "channel": "email",
+                        "recipient_name": f"test of {m['name']}", "recipient_address": to[0],
+                        "subject": m["subject"], "body_preview": f"event {event_id} cid {customer_id}",
+                        "status": "sent" if ok else "failed", "sent_by": "event_day_email"},
+                       db_path=db_path)
+    except Exception:
+        pass
+    return {"status": "sent" if ok else "failed", "to": to[0], "subject": m["subject"],
+            "player": m["name"]}
+
+
 def send_event_day_emails(event_id: int, confirm: bool = False, db_path=None) -> dict:
     """The MEMBER send. Refuses unless the approval stamp matches the
     current template AND confirm is True. Never twice per event+customer."""

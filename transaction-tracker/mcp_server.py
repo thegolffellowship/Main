@@ -6784,7 +6784,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _a = _r[0]
             return json.dumps(db.get_event_financial_summary(_a), indent=2, default=str)
         if cmd == "scoring-event-day-email":
-            # "<event_id>[|preview[|<staff addr>[|cids=1,2]]]" — CA #829. The dry build
+            # "<event_id>[|preview[|<staff addr>[|cids=1,2]]]" or
+            # "<event_id>|test|<staff addr>|cid=<id>" — CA #829. The dry build
             # sends nothing; |preview mails one combined preview to staff
             # (@thegolffellowship.com or recap_draft_allow) and refuses any
             # other address. The MEMBER send is deliberately not bridged:
@@ -6803,8 +6804,18 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None),
                     only=_only),
                     indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "test":
+                # "<event_id>|test|<staff addr>|cid=<id>" (Kerry 10/13): ONE
+                # player's actual message, no preview wrapper, to one STAFF
+                # address. Not a member send.
+                db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
+                _cid = next((x[4:] for x in _p[3:] if x.lower().startswith("cid=")), "")
+                if len(_p) < 3 or not _p[2] or not _cid.isdigit():
+                    return json.dumps({"error": "<event_id>|test|<staff addr>|cid=<customer_id>"})
+                return json.dumps(_ede.send_event_day_test(int(_p[0]), int(_cid), _p[2]),
+                                  indent=2, default=str)
             if len(_p) > 1 and _p[1]:
-                return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview"})
+                return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview or |test"})
             return json.dumps(_ede.summarize(_ede.build_event_day_emails(int(_p[0]))),
                               indent=2, default=str)
         if cmd == "scoring-hcp-cards":
