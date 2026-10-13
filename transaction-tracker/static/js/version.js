@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.561.1";
+window.TGF_VERSION = "2.561.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.561.2",
+    date: "2026-10-13",
+    title: "Live Scoring how-to page for the players' email",
+    changes: [
+      "static/img/live-scoring/how-to.html is the 10/13 Live Scoring how-to email as one page (the seven steps with their screenshots, plus Kerry's note that a par needs no tap: every score starts at par). Kerry opens it, copies it and pastes it into a new email from kerry@thegolffellowship.com; the images come along because they are served from the Tracker. Static page only; no code changed.",
+    ],
+  },
   {
     version: "2.561.1",
     date: "2026-10-13",
