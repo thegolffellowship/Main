@@ -512,24 +512,43 @@ def sibling_links(token: str) -> dict:
 
 
 REASONS = ("Schedule", "Weather", "Course or price", "Injury", "Other")
-REASONS_KEY = "event_invite_reasons:{event_id}"
 
 
 def record_reason(token: str, reason: str, db_path=None) -> bool:
-    """The optional one-tap reason on the Can't make it page (Kerry 10/13).
-    Kept per event, by customer_id, in an app setting; only listed reasons."""
+    """The optional one-tap reason on the Can't make it page (Kerry 10/13:
+    "track whatever people are willing to give us"). One row per event and
+    person in event_decline_reasons (migrations/0016); a later tap updates
+    it. Only the listed reasons are accepted."""
     from email_parser import database as db
     p = verify_token(token)
     if not p or reason not in REASONS:
         return False
-    key = REASONS_KEY.format(event_id=int(p["v"]))
+    conn = db.get_connection(db_path)
     try:
-        got = json.loads(_setting(key, db_path) or "{}")
-    except Exception:
-        got = {}
-    got[str(int(p["c"]))] = reason
-    db.set_app_setting(key, json.dumps(got), db_path=db_path)
+        conn.execute(
+            "INSERT INTO event_decline_reasons (event_id, customer_id, reason, source) "
+            "VALUES (?, ?, ?, 'invitation') ON CONFLICT(event_id, customer_id) DO UPDATE SET "
+            "reason = excluded.reason, updated_at = CURRENT_TIMESTAMP",
+            (int(p["v"]), int(p["c"]), reason))
+        conn.commit()
+    finally:
+        conn.close()
     return True
+
+
+def decline_reasons(event_id: int, db_path=None) -> dict:
+    """Counts by reason for one event, plus who gave which (customer_id)."""
+    from email_parser import database as db
+    conn = db.get_connection(db_path)
+    try:
+        rows = conn.execute("SELECT customer_id, reason FROM event_decline_reasons "
+                            "WHERE event_id = ? ORDER BY reason", (int(event_id),)).fetchall()
+    finally:
+        conn.close()
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[r[1]] = counts.get(r[1], 0) + 1
+    return {"counts": counts, "rows": [{"customer_id": r[0], "reason": r[1]} for r in rows]}
 
 
 # ---------------------------------------------------------------------------

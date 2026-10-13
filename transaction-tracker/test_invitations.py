@@ -189,7 +189,10 @@ with db._connect(DB) as conn:
     r = conn.execute("SELECT response FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()
 check("the page's own POST records NOT PLAYING", r and r[0] == "NOT PLAYING", r)
 check("a reason is kept, one tap", cl.post(f"/rsvp/{tok_out}/reason", data={"r": "Weather"}).status_code == 200
-      and json.loads(db.get_app_setting(f"event_invite_reasons:{EV}", db_path=DB))["770002"] == "Weather")
+      and inv.decline_reasons(EV, db_path=DB)["rows"] == [{"customer_id": 770002, "reason": "Weather"}])
+cl.post(f"/rsvp/{tok_out}/reason", data={"r": "Schedule"})
+check("a second tap updates the one row (event_decline_reasons)",
+      inv.decline_reasons(EV, db_path=DB)["counts"] == {"Schedule": 1})
 check("an unlisted reason is refused", cl.post(f"/rsvp/{tok_out}/reason", data={"r": "<b>x</b>"}).status_code == 400)
 mind = cl.get(f"/rsvp/{inv.make_token(770002, EV, 'in', date(2026, 12, 15))}")
 with db._connect(DB) as conn:

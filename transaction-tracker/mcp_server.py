@@ -6896,7 +6896,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_pl)
             return json.dumps({k: _pl[k] for k in ("event", "counts", "template_hash", "approved",
                                                    "already_sent")}
-                              | {"would_send": len(_pl["to_send"]),
+                              | {"decline_reasons": _inv.decline_reasons(int(_p[0]))["counts"],
+                                 "would_send": len(_pl["to_send"]),
                                  "sample": [{k: x[k] for k in ("customer_id", "name", "why")}
                                             for x in _pl["to_send"][:10]]}, indent=2, default=str)
         if cmd == "scoring-event-day-email":

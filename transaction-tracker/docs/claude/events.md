@@ -128,8 +128,9 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   an earlier Can't make it. **Can't make it** lands straight on "Thanks for
   letting us know" with **Changed my mind, I'm in** (-> registration),
   **Remove me from invitations** (-> straight to Done) and an optional one-tap
-  reason (`REASONS`, app setting `event_invite_reasons:<id>`, route
-  `/rsvp/<token>/reason`) (Kerry 10/13: "The sequence for Can't make it is too
+  reason (`REASONS`, table `event_decline_reasons` from migration 0016, one
+  row per event + customer_id, a later tap updates it; `decline_reasons(id)`
+  reads the counts; route `/rsvp/<token>/reason`) (Kerry 10/13: "The sequence for Can't make it is too
   long"). The page writes the answer itself (a script POST, or a button with
   scripts off); the bare GET never does, so a mail scanner can't answer. An answer is an `rsvps` row with email_uid
   `tracker:<event_id>:<customer_id>`, upserted (the latest answer wins).
