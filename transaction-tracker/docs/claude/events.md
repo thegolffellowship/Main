@@ -3007,6 +3007,12 @@ emailed to me."
   answers 409 `no_contact`, and the button prompts for the address and saves it
   (`/api/courses/<id>/print-contact`). Bridges: `scoring-course-contact`, and
   `scoring-print-pack-pdf:<id>|files|send|course`.
+- **One card per group** (v2.556.2, Kerry 10/13: "Scorecards should always be
+  per group unless I direct otherwise"). The pack's scorecards are grouped by
+  `print_pack.scorecard_grouping`: per group (`team`) by default, whatever the
+  net game is. Per cart only when app setting `print_pack_scorecard_grouping`
+  is "cart" or lists the event id. The net game's name, %, and dots on the
+  card are unchanged.
 - **Deploy:** `nixpacks.toml` installs `chromium` from Nix beside
   Python (`nixPkgs`), the WeasyPrint libraries via `nixLibs` (apt libs
   are invisible to the Nix Python — "cannot load library gobject-2.0-0"

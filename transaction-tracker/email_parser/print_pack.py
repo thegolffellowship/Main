@@ -79,6 +79,18 @@ def scorecards_in_pack(event_id: int, db_path=None) -> bool:
     return str(int(event_id)) in {t for t in re.split(r"[\s,\[\]\"']+", raw) if t}
 
 
+def scorecard_grouping(event_id: int, db_path=None) -> str:
+    """"team" (one card per group) unless Kerry directed per-cart cards:
+    app setting `print_pack_scorecard_grouping` = "cart" (every event) or
+    a comma/space list of event ids."""
+    from email_parser import database as db
+    raw = (db.get_app_setting("print_pack_scorecard_grouping", db_path) or "").strip().lower()
+    if raw == "cart":
+        return "cart"
+    ids = {t for t in re.split(r"[\s,\[\]\"']+", raw) if t}
+    return "cart" if str(int(event_id)) in ids else "team"
+
+
 # THE RULES OF PLAY sheet (Kerry 2026-10-13, his own print file: two
 # copies per Letter page with a cut line). A fixed PDF, not a template:
 # it is appended to every pack as it is, last in print order.
@@ -168,16 +180,19 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     # SCORECARDS IN THE PACK (Kerry 2026-09-29: "Include the scorecards in
     # the print pack now"), right after the cart signs. Which events is a
     # dial, `print_pack_scorecards`: "all", or event ids ("3304,3317").
-    # Defaults: 3-up, the grouping the engine's net game uses (Cart Net ->
-    # one card per cart), the event's holes, QR only per the score-entry
-    # dials, the saved GGID codes. A named gap does not print a guessed
-    # card: the part is the gap sheet, and `scorecards.gaps` says why.
+    # Defaults: 3-up, ONE CARD PER GROUP whatever the net game is (Kerry
+    # 2026-10-13: "Scorecards should always be per group unless I direct
+    # otherwise"; a Cart Net event used to print one card per cart), the
+    # event's holes, QR only per the score-entry dials, the saved GGID
+    # codes. Per cart only when app setting `print_pack_scorecard_grouping`
+    # names the event ("<id>,<id>") or is "cart" for all. A named gap does
+    # not print a guessed card: the part is the gap sheet, and
+    # `scorecards.gaps` says why.
     sc_info = None
     if htmls and (force_scorecards or scorecards_in_pack(int(event_id), db_path=db_path)):
         try:
             from email_parser.scorecards import build_scorecards
-            unit = (sheet_pack or {}).get("team_unit")
-            sc = build_scorecards(int(event_id), "3up", "cart" if unit == "cart" else "team",
+            sc = build_scorecards(int(event_id), "3up", scorecard_grouping(int(event_id), db_path=db_path),
                                   qr="on", allow_gaps=allow_gaps, db_path=db_path)
             if sc:
                 at = next((i + 1 for i, (sl, _) in enumerate(htmls) if sl == "cart-signs"),

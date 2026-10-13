@@ -103,6 +103,15 @@ check("no contact: refused, nothing sent", res.get("no_contact") and not _sent, 
 pp.send_print_pack_files = _orig
 check("clearing the contact", pp.set_course_print_contact(qid, "", db_path=DB)["contact"] is None)
 
+print("scorecards one card per GROUP unless directed (Kerry 10/13)")
+check("default: per group", pp.scorecard_grouping(3318, db_path=DB) == "team")
+db.set_app_setting("print_pack_scorecard_grouping", "3318", db_path=DB)
+check("per cart only for a named event", pp.scorecard_grouping(3318, db_path=DB) == "cart"
+      and pp.scorecard_grouping(3307, db_path=DB) == "team")
+db.set_app_setting("print_pack_scorecard_grouping", "", db_path=DB)
+check("the pack no longer reads the net game's unit for the grouping",
+      '"cart" if unit == "cart" else "team"' not in pk and "scorecard_grouping(int(event_id)" in pk)
+
 src = open("mcp_server.py", encoding="utf-8").read()
 check("the bridge takes |files and builds with the scorecards forced in",
       'parts[1].lower() == "files"' in src and "force_scorecards=True" in src)

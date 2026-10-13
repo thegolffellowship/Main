@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.556.1";
+window.TGF_VERSION = "2.556.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.556.2",
+    date: "2026-10-13",
+    title: "Print pack scorecards: one card per group, always",
+    changes: [
+      "Kerry 10/13: \"Why did Austin print scorecards per cart? Scorecards should always be per group unless I direct otherwise.\" The print pack (and the course files) chose one card per cart whenever the event's net game was Cart Net, so Forest Creek printed 8 cart cards instead of 4 group cards. Now every pack prints one card per group, and the net game is still named and dotted on the card as before. Per-cart cards happen only when Kerry directs it: app setting print_pack_scorecard_grouping = 'cart' for every event, or a list of event ids.",
+    ],
+  },
   {
     version: "2.556.1",
     date: "2026-10-13",
