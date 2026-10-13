@@ -1,6 +1,14 @@
 window.TGF_VERSION = "2.556.5";
 window.TGF_CHANGELOG = [
   {
+    version: "2.556.3",
+    date: "2026-10-13",
+    title: "No proximity page when no Closest to Pin is funded",
+    changes: [
+      "Kerry 10/13, on Forest Creek's course files: \"If there are no Closest to Pins for the event due to numbers, then don't send the page. That's kind of weird.\" With 13 entries the games matrix funds no CTP, and the pack still printed a 'No proximity markers to print' page and attached it as Proximity.pdf. Now the print pack and the course files leave the page out entirely. The reason is kept on the build result (skipped) for anyone checking. The Proximity report on the REPORTS tab still explains itself when opened.",
+    ],
+  },
+  {
     version: "2.556.5",
     date: "2026-10-13",
     title: "Health: the event-day email send has its own slow line (60 s)",

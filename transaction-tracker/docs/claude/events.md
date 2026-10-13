@@ -3013,6 +3013,11 @@ emailed to me."
   net game is. Per cart only when app setting `print_pack_scorecard_grouping`
   is "cart" or lists the event id. The net game's name, %, and dots on the
   card are unchanged.
+- **No CTP, no proximity page** (v2.556.3, Kerry 10/13: "If there are no Closest
+  to Pins for the event due to numbers, then don't send the page"). When
+  `event_proximity_report` has no `contests`, the pack and the course files
+  leave the part out; the build result lists it under `skipped` with the
+  report's own notes.
 - **Deploy:** `nixpacks.toml` installs `chromium` from Nix beside
   Python (`nixPkgs`), the WeasyPrint libraries via `nixLibs` (apt libs
   are invisible to the Nix Python — "cannot load library gobject-2.0-0"
