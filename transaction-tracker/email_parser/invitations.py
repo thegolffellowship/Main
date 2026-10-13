@@ -138,6 +138,21 @@ def rsvp_url(token: str) -> str:
 # Event + audience
 # ---------------------------------------------------------------------------
 
+CHAPTER_EVENTS = ("san antonio", "austin")
+BOTH_CHAPTERS = ("San Antonio", "Austin")
+
+
+def audience_chapters(chapter: str | None) -> list[str]:
+    """Which chapters' lists an event invites: its own, or both for a TGF
+    event (Kerry 10/13, the Fall Championship)."""
+    c = (chapter or "").strip()
+    if c.lower() in CHAPTER_EVENTS:
+        return [c]
+    if c.lower() == "tgf":
+        return list(BOTH_CHAPTERS)
+    return []
+
+
 def _event(conn, event_id: int) -> dict | None:
     r = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
     return dict(r) if r else None
@@ -179,8 +194,9 @@ def audience(event_id: int, db_path=None) -> dict:
         if not ev:
             return {"error": f"event {event_id} not found"}
         chapter = (ev.get("chapter") or "").strip()
-        if chapter.lower() not in ("san antonio", "austin"):
-            return {"error": f"invitations go to a chapter event; this one is '{chapter}'"}
+        chapters = audience_chapters(chapter)
+        if not chapters:
+            return {"error": f"invitations go to a chapter or TGF event; this one is '{chapter}'"}
         why: dict[int, set] = {}
 
         def add(cid, reason):
@@ -188,41 +204,44 @@ def audience(event_id: int, db_path=None) -> dict:
                 return
             why.setdefault(int(cid), set()).add(reason)
 
-        # 1. Active members of the chapter (home chapter by id, else the text).
-        ch = conn.execute("SELECT chapter_id FROM chapters WHERE lower(name) = lower(?)",
-                          (chapter,)).fetchone()
-        ch_id = ch[0] if ch else None
-        st = ",".join("?" * len(ACTIVE_STATUSES))
-        for r in conn.execute(
-                f"SELECT customer_id FROM customers WHERE current_player_status IN ({st}) "
-                "AND (home_chapter_id = ? OR (home_chapter_id IS NULL AND lower(chapter) = lower(?)))",
-                (*ACTIVE_STATUSES, ch_id, chapter)).fetchall():
-            add(r[0], "member")
-        # 2. Played this chapter in the last 12 months.
-        since = (date.fromisoformat(str(ev["event_date"])[:10]) - timedelta(days=LOOKBACK_DAYS)).isoformat()
-        for r in conn.execute(
-                "SELECT DISTINCT i.customer_id FROM items i JOIN events e "
-                "ON (i.event_id = e.id OR lower(i.item_name) = lower(e.item_name)) "
-                "WHERE i.customer_id IS NOT NULL AND lower(e.chapter) = lower(?) "
-                "AND substr(e.event_date, 1, 10) >= ? AND substr(e.event_date, 1, 10) < ? "
-                "AND lower(COALESCE(i.transaction_status, 'active')) NOT IN "
-                f"({','.join('?' * len(INACTIVE_ITEM))})",
-                (chapter, since, str(ev["event_date"])[:10], *INACTIVE_ITEM)).fetchall():
-            add(r[0], "played_12mo")
-        # 3. Lead opt-ins for the chapter (the invite-list CSV's own rule).
         lead_no_id = 0
-        try:
-            from email_parser.leads import get_lead_export_rows
-            for l in get_lead_export_rows(chapter, db_path=db_path):
-                r = conn.execute("SELECT customer_id FROM customer_emails "
-                                 "WHERE lower(email) = lower(?) LIMIT 1",
-                                 (l["email"],)).fetchone()
-                if r:
-                    add(r[0], "lead_optin")
-                else:
-                    lead_no_id += 1
-        except Exception:
-            logger.exception("invitations: lead opt-ins unreadable (left out)")
+        # A TGF (both-chapter) event invites both chapters' lists (Kerry 10/13:
+        # "Yes, invite both chapters to the Fall Championship").
+        for chapter in chapters:
+            # 1. Active members of the chapter (home chapter by id, else the text).
+            ch = conn.execute("SELECT chapter_id FROM chapters WHERE lower(name) = lower(?)",
+                              (chapter,)).fetchone()
+            ch_id = ch[0] if ch else None
+            st = ",".join("?" * len(ACTIVE_STATUSES))
+            for r in conn.execute(
+                    f"SELECT customer_id FROM customers WHERE current_player_status IN ({st}) "
+                    "AND (home_chapter_id = ? OR (home_chapter_id IS NULL AND lower(chapter) = lower(?)))",
+                    (*ACTIVE_STATUSES, ch_id, chapter)).fetchall():
+                add(r[0], "member")
+            # 2. Played this chapter in the last 12 months.
+            since = (date.fromisoformat(str(ev["event_date"])[:10]) - timedelta(days=LOOKBACK_DAYS)).isoformat()
+            for r in conn.execute(
+                    "SELECT DISTINCT i.customer_id FROM items i JOIN events e "
+                    "ON (i.event_id = e.id OR lower(i.item_name) = lower(e.item_name)) "
+                    "WHERE i.customer_id IS NOT NULL AND lower(e.chapter) = lower(?) "
+                    "AND substr(e.event_date, 1, 10) >= ? AND substr(e.event_date, 1, 10) < ? "
+                    "AND lower(COALESCE(i.transaction_status, 'active')) NOT IN "
+                    f"({','.join('?' * len(INACTIVE_ITEM))})",
+                    (chapter, since, str(ev["event_date"])[:10], *INACTIVE_ITEM)).fetchall():
+                add(r[0], "played_12mo")
+            # 3. Lead opt-ins for the chapter (the invite-list CSV's own rule).
+            try:
+                from email_parser.leads import get_lead_export_rows
+                for l in get_lead_export_rows(chapter, db_path=db_path):
+                    r = conn.execute("SELECT customer_id FROM customer_emails "
+                                     "WHERE lower(email) = lower(?) LIMIT 1",
+                                     (l["email"],)).fetchone()
+                    if r:
+                        add(r[0], "lead_optin")
+                    else:
+                        lead_no_id += 1
+            except Exception:
+                logger.exception("invitations: lead opt-ins unreadable (left out)")
 
         # Exclusions.
         out = {"opted_out": 0, "membership_remove": 0, "non_member": 0,
@@ -262,7 +281,8 @@ def audience(event_id: int, db_path=None) -> dict:
                            "email": email, "why": sorted(why[cid])})
         by = {k: sum(1 for p in people if k in p["why"]) for k in ("member", "played_12mo", "lead_optin")}
         return {"event": {"id": ev["id"], "name": ev.get("item_name"), "date": ev.get("event_date"),
-                          "course": ev.get("course"), "chapter": chapter},
+                          "course": ev.get("course"), "chapter": (ev.get("chapter") or "").strip(),
+                          "chapters": chapters},
                 "people": people, "counts": {"invited": len(people), "by_source": by,
                                              "excluded": out, "lead_optins_without_profile": lead_no_id}}
     finally:
@@ -287,6 +307,18 @@ def _fmt_time(t: str | None) -> str:
         return str(t)
 
 
+def _display_name(ev: dict) -> str:
+    """'s9.28 TPC Canyons' -> 'TPC Canyons'; a named event such as
+    's18.12 FALL CHAMPIONSHIP | Kissing Tree' -> 'Kissing Tree (Fall Championship)'."""
+    from email_parser.event_day_email import event_short_name
+    name = ev.get("item_name") or ""
+    if "|" in name:
+        left, right = (x.strip() for x in name.split("|", 1))
+        title = event_short_name(left, None).title()
+        return f"{right} ({title})" if right else title
+    return event_short_name(name, ev.get("course"))
+
+
 def _context(ev: dict, db_path=None) -> dict:
     from email_parser import database as db
     from email_parser.event_day_email import event_short_name
@@ -300,11 +332,15 @@ def _context(ev: dict, db_path=None) -> dict:
         sentence = f"{holes}, tee times from {t}."
     else:
         sentence = f"{holes}."
-    mgr = (db.get_chapter_managers(db_path=db_path) or {}).get(ev.get("chapter") or "", {})
+    mgrs = db.get_chapter_managers(db_path=db_path) or {}
+    chs = audience_chapters(ev.get("chapter"))
+    # A TGF event is signed by the San Antonio manager (Kerry).
+    mgr = mgrs.get(chs[0] if len(chs) == 1 else "San Antonio", {})
+    chapter_text = " and ".join(chs) if chs else (ev.get("chapter") or "")
     return {"day": d.strftime("%A"), "date_long": d.strftime("%A, %B %-d"),
-            "course": event_short_name(ev.get("item_name"), ev.get("course")),
+            "course": _display_name(ev),
             "start_sentence": sentence, "manager_name": mgr.get("name") or "TGF",
-            "manager_phone": mgr.get("phone") or "", "chapter": ev.get("chapter") or "",
+            "manager_phone": mgr.get("phone") or "", "chapter": chapter_text,
             "registration_url": (ev.get("registration_url") or "").strip(),
             "event_date": d}
 
@@ -503,6 +539,9 @@ def record_reason(token: str, reason: str, db_path=None) -> bool:
 # ---------------------------------------------------------------------------
 
 SEND_HOUR = 7
+# {event_id: "YYYY-MM-DD"}: send that event's invitation early (Kerry 10/13:
+# "I want it sent tomorrow morning along with the next two Tuesday events").
+EARLY_KEY = "event_invite_early"
 AUTO_DIAL = "event_invite_auto"
 
 
@@ -704,13 +743,22 @@ def auto_check(now: datetime | None = None, db_path=None) -> dict:
     try:
         evs = [dict(r) for r in conn.execute(
             "SELECT * FROM events WHERE COALESCE(status, 'active') = 'active' "
-            "AND substr(event_date, 1, 10) > ? AND lower(chapter) IN ('san antonio', 'austin')",
+            "AND substr(event_date, 1, 10) > ? AND lower(chapter) IN ('san antonio', 'austin', 'tgf')",
             (today,)).fetchall()]
     finally:
         conn.close()
+    try:
+        early = json.loads(_setting(EARLY_KEY, db_path) or "{}")
+    except Exception:
+        early = {}
     done = []
     for ev in evs:
-        for s in schedule(ev["event_date"]):
+        slots = schedule(ev["event_date"])
+        # An earlier invitation date set on Kerry's word (EARLY_KEY). The
+        # regular invitation date then reaches only people added since.
+        if early.get(str(ev["id"])):
+            slots = [{"slot": "invite", "kind": "invite", "date": early[str(ev["id"])]}] + slots
+        for s in slots:
             if s["date"] != today:
                 continue
             pl = plan(ev["id"], s["kind"], db_path, slot=s["slot"])

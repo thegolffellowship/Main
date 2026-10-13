@@ -210,6 +210,25 @@ check("on a reminder date it reminds the invitees with no answer", len(SENT) == 
       or len(SENT) == 0, (r, [s_["to_address"] for s_ in SENT]))
 r2 = inv.auto_check(_dt(2026, 12, 11, 7, 17), db_path=DB)
 check("…once per slot", all(x["sent"] == 0 for x in r2.get("ran", [])), r2)
+print("6d. Kerry 10/13: the Fall Championship invites both chapters, sent early")
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, "
+                 "start_time, course) VALUES (9399, 's18.99 FALL CHAMP | Champ Links', '2026-12-19', 'TGF', "
+                 "'active', '18-hole', 'Shotgun', '08:30', 'Champ Links GC')")
+    conn.commit()
+ta = inv.audience(9399, db_path=DB)
+tids = {p["customer_id"] for p in ta.get("people", [])}
+check("a TGF event invites both chapters' lists", 770001 in tids and 770007 in tids, ta.get("counts") or ta)
+evc = dict(db.get_connection(DB).execute("SELECT * FROM events WHERE id = 9399").fetchone())
+mc = inv.build_message(evc, {"customer_id": 770007, "first_name": "Gus"}, "invite", DB)
+check("…signed by a manager, footer names both chapters", not mc["held"] and "San Antonio and Austin" in mc["html"]
+      and "18 holes" in mc["html"], mc["held"])
+db.set_app_setting(inv.EARLY_KEY, json.dumps({"9399": "2026-11-20"}), db_path=DB)
+SENT.clear()
+inv.auto_check(_dt(2026, 11, 20, 7, 2), db_path=DB)
+check("an early invitation date set on Kerry's word sends that morning",
+      any(s_["to_address"] == "gus@example.test" and "Champ Links" in s_["subject"] for s_ in SENT),
+      [(s_["to_address"], s_["subject"]) for s_ in SENT])
 db.set_app_setting("event_invite_auto", "off", db_path=DB)
 
 print("7. The bridge")
