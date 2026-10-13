@@ -3086,9 +3086,25 @@ for now"). The Customer Communications lane owns its content and timing
   `_PRIOR_SYSTEM_TEMPLATE_BODIES`). The stamp no longer matches, so Kerry
   re-approves A2 with REPORTS > Email Players > Approve & email.
   Every send is per Kerry's OK.
-- Not built yet: a member-facing read-only tee sheet page (the draft's "See
-  the full tee sheet" button) and corrected emails after a pairing change
-  (needs a revision column on `event_day_email_sends`; rule 3b).
+- **v2.554.0 (Kerry 10/13, on the test previews):**
+  - The HIO line shows the RUNNING pot (`get_hio_pot`) with tonight's field
+    contribution beside it.
+  - **YOUR CARD** (`card_strip`, inside the start card): holes played, par,
+    a dot per pop for Individual Net and for the team game, then the handicap
+    chain in words (Index on <tees> → PH; team game allowance % and
+    off-the-low → its handicap; "no pops on par 3s" when that rule is on).
+    Read once per build from `scorecards.build_scorecards(qr="off",
+    allow_gaps=True)`, so it matches the printed card and seeds nothing; no
+    stroke index on the player's tee → no strip.
+  - **Public tee sheet** `/member/teesheet/<event_id>`
+    (`email_parser/member_teesheet.py`): groups, starts, players, carts, tee
+    names; no email, phone, handicap or money; no PIN. The email's
+    `{teesheet_button}` opens it at `#g<group_num>`.
+  - **Live Scoring**: the scoring button needs the event in Live Scoring with
+    its rounds seeded. When it isn't, the build returns `scoring_note` and the
+    staff preview prints it.
+- Not built yet: corrected emails after a pairing change (needs a revision
+  column on `event_day_email_sends`; rule 3b).
 
 **Email Players (v2.528.8, Kerry 2026-10-08, practice round):** an admin
 button on the REPORTS tab (the practice-round row; every single-round

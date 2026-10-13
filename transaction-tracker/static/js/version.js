@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.553.1";
+window.TGF_VERSION = "2.554.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.554.0",
+    date: "2026-10-13",
+    title: "Tee sheet email: running HIO pot, YOUR CARD pops strip, a public tee sheet page",
+    changes: [
+      "Kerry 10/13, on the test previews: \"The hole in one pot is not showing the total. Also, what about links for their live scoring and for the full tee sheet? Or a view of their scorecard to see where their pops are going. Or perhaps how their PHs are calculated for each game.\"",
+      "Hole-in-One: the games card now shows the RUNNING pot (get_hio_pot, the GAMES tab banner's own reader), with tonight's field contribution beside it. Before, it showed only the day's contribution.",
+      "YOUR CARD, inside the start card: the holes being played, with par and a dot on each hole where the player gets a pop. One row is for Individual Net and one for the team game (Team or Cart Net). Below it, the handicap chain in words: Index and tees to Playing Handicap, then the team game's allowance (and off-the-low when it applies) to its handicap, with 'no pops on par 3s' when that rule is on. Every number is the printed scorecard's (scorecards.build_scorecards, qr off so nothing is seeded); a player whose tee has no stroke index gets no strip, never a guess.",
+      "New public page /member/teesheet/<event_id>: every group's start, players, carts and tees from the saved sheet. Names only, with no email, phone, handicap or money, and no PIN, like the rest of /member. Each player's email has a 'See the full tee sheet' button that opens on his own group (#g<group>).",
+      "Live Scoring: the Keep score button appears only when Live Scoring is on for the event. The build and the staff preview now say so plainly when it is off, so it can be turned on before sending.",
+      "The template gains {teesheet_button}. The first A2 body (never approved or sent) is in the priors, so the live row updates, and Kerry's Approve & email click approves this version."
+    ]
+  },
   {
     version: "2.553.1",
     date: "2026-10-12",

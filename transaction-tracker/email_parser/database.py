@@ -4586,6 +4586,8 @@ def init_db(db_path: str | Path | None = None) -> None:
                 # hash of the wording he approved. The Message Players
                 # composer refuses it (its {…_block} tags are outside
                 # KNOWN_VARS) — this template only sends from that module.
+                # v2.554.0 adds {teesheet_button} (Kerry 10/13: "what about
+                # links for their live scoring and for the full tee sheet?").
                 # v2.553.0, Kerry 2026-10-12 picked design A2 ("A looks the
                 # best to me ... show a current games breakdown on a card
                 # like the Group Card", then "Perfect for now"): the cards
@@ -4597,6 +4599,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 "{spot_card}"
                 "{games_card}"
                 "{scoring_button}"
+                "{teesheet_button}"
                 "<p>Running late or can't make it? Text {manager_name} at "
                 "{manager_phone}. The sooner we know, the better the groups.</p>"
                 "<p>See you on the first tee,<br>{manager_name}<br>"
@@ -46658,6 +46661,17 @@ _PRIOR_SYSTEM_TEMPLATE_BODIES = {
         "email or text {manager_name} at {manager_phone} as soon as you "
         "can so we can adjust the groups.</p>"
         "<p>See you out there,<br>{manager_name}<br>"
+        "The Golf Fellowship</p>",
+        # v2.553.0 -> v2.554.0: the A2 body as first shipped (never
+        # approved or sent; production carried it with hash a4e0d8d6a641e28e).
+        "<p>Hi {first_name},</p>"
+        "<p>You're set for {event_title}. Here's your spot.</p>"
+        "{spot_card}"
+        "{games_card}"
+        "{scoring_button}"
+        "<p>Running late or can't make it? Text {manager_name} at "
+        "{manager_phone}. The sooner we know, the better the groups.</p>"
+        "<p>See you on the first tee,<br>{manager_name}<br>"
         "The Golf Fellowship</p>",
     },
     # v2.399.0: the payment link becomes a tappable button (Kerry

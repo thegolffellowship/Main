@@ -59,7 +59,7 @@ PREVIEW_SAMPLES = 3
 # Blocks that may be legitimately absent: each renders as a whole
 # paragraph or nothing, so its absence leaves no dangling words.
 OPTIONAL_VARS = {"cart_block", "games_block", "scoring_block",
-                 "games_card", "scoring_button"}
+                 "games_card", "scoring_button", "teesheet_button"}
 
 # The games tab reader (the Events page's own GAMES tab, run headless).
 # A module attribute so a test can hand in a fixture instead of Chromium.
@@ -308,7 +308,7 @@ def _cart_of(p: dict) -> str:
 
 
 def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
-              tee: dict | None, format_line: str) -> str:
+              tee: dict | None, format_line: str, card_html: str = "") -> str:
     """The orange START header, the group with initials and carts, then
     tees and format. Blinds are not people and are never listed."""
     my_cart = _cart_of(me)
@@ -359,6 +359,8 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
         f'<table {_T}>{"".join(rows)}</table></td></tr>'
         + (f'<tr><td style="border-top:1px solid {LINE};padding:10px 16px;"><table {_T}><tr>'
            f'{"".join(foot)}</tr></table></td></tr>' if foot else "")
+        + (f'<tr><td style="border-top:1px solid {LINE};padding:12px 16px 14px;">{card_html}</td></tr>'
+           if card_html else "")
         + "</table>")
 
 
@@ -495,9 +497,12 @@ def games_card(view: dict, cid: int | None, rsvp_only: bool, as_of: str, day: st
             f'</td></tr></table></td></tr>')
     hio = (f'<tr><td style="padding:14px 16px 16px;"><table {_T}><tr><td bgcolor="#FFF7ED" '
            f'style="background:#FFF7ED;border:1px dashed {ORANGE};border-radius:8px;padding:10px 12px;font-size:14px;">'
-           f'&#9971; <b>Hole-in-One Pot: {_e(view["hio"])}</b> <span style="color:{MUTED};">'
-           f'and growing until someone cashes it</span></td></tr></table></td></tr>'
-           if view.get("hio") else '<tr><td style="padding:0 0 12px;"></td></tr>')
+           f'&#9971; <b>Hole-in-One Pot: {_e(view.get("hio_total") or view["hio"])}</b>'
+           + (f' <span style="color:{MUTED};">{_e(day)}\'s field adds {_e(view["hio"])}</span>'
+              if view.get("hio_total") and view.get("hio") else
+              f' <span style="color:{MUTED};">and growing until someone cashes it</span>')
+           + '</td></tr></table></td></tr>'
+           if (view.get("hio") or view.get("hio_total")) else '<tr><td style="padding:0 0 12px;"></td></tr>')
     return (
         f'<table {_T} style="border:1px solid {LINE};border-radius:8px;margin:0 0 18px;">'
         f'<tr><td bgcolor="{INK}" style="background:{INK};border-radius:8px 8px 0 0;padding:14px 16px;color:#ffffff;">'
@@ -515,6 +520,65 @@ def scoring_button(url: str) -> str:
             f'style="background:{ORANGE};border-radius:999px;padding:12px;">'
             f'<a href="{_e(url)}" style="color:#ffffff;text-decoration:none;font:bold 15px Arial,sans-serif;'
             f'display:block;">Keep score on your phone</a></td></tr></table>')
+
+
+def _dots(n) -> str:
+    n = int(n or 0)
+    return ("&#9679;" * n) if n > 0 else "&nbsp;"
+
+
+def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: str | None) -> str:
+    """YOUR CARD (Kerry 10/13: "a view of their scorecard to see where their
+    pops are going ... how their PHs are calculated for each game"): the
+    holes played with par and the player's pops for Individual Net and for
+    the team game, plus the handicap chain in one line. Every value is the
+    PRINTED SCORECARD's (scorecards.build_scorecards: ruled_dots on the
+    player's own tee), so the email and the paper card cannot disagree."""
+    holes = list(grid.get("holes") or [])
+    if not holes or not row.get("si_by_hole"):
+        return ""
+    par = grid.get("par") or {}
+    ph_d, net_d = row.get("ph_dots") or {}, row.get("net_dots") or {}
+    net_short = "CART" if (net or {}).get("unit") == "cart" else "TEAM"
+    cell = 'align="center" style="padding:3px 0;font-size:12px;border-top:1px solid ' + LINE + ';"'
+    lab = f'style="padding:3px 6px 3px 0;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"'
+    head = "".join(f'<td align="center" style="padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in holes)
+    pars = "".join(f"<td {cell}>{par.get(h, '')}</td>" for h in holes)
+    ph_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(ph_d.get(h))}</span></td>' for h in holes)
+    net_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(net_d.get(h))}</span></td>' for h in holes)
+    grid_html = (
+        f'<table {_T} style="border:1px solid {LINE};border-radius:6px;">'
+        f'<tr><td bgcolor="{INK}" style="padding:3px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
+        f'<tr><td {lab}>PAR</td>{pars}</tr>'
+        f'<tr><td {lab}>NET</td>{ph_row}</tr>'
+        f'<tr><td {lab}>{net_short}</td>{net_row}</tr></table>')
+    idx = (dump or {}).get("index")
+    bits = []
+    if row.get("ph"):
+        src = (f"Index {idx:.1f}" if isinstance(idx, (int, float)) else "")
+        on = f" on the {tee_name}" if tee_name else ""
+        bits.append((f"{src}{on} gives you " if src else "")
+                    + f"a Playing Handicap of <b>{_e(row['ph'])}</b> for Individual Net.")
+    if row.get("net") and net:
+        pct = net.get("pct")
+        how = f"{pct}% of your handicap" if pct else "its own allowance"
+        if net.get("off_low"):
+            how += ", off the lowest in your " + ("cart" if net_short == "CART" else "group")
+        bits.append(f"{_e(net.get('name') or 'Team Net')} uses {how}: <b>{_e(row['net'])}</b>.")
+    if net and net.get("par3_suppressed"):
+        bits.append(f"No {net_short.lower()} pops on par 3s.")
+    return (f'<div style="{_EYEBROW}color:{MUTED};padding-bottom:8px;">YOUR CARD '
+            f'<span style="letter-spacing:0;font-weight:normal;">&#9679; = a pop on that hole</span></div>'
+            + grid_html
+            + (f'<div style="font-size:13px;color:#4B5563;padding-top:8px;line-height:1.45;">{" ".join(bits)}</div>'
+               if bits else ""))
+
+
+def teesheet_button(url: str) -> str:
+    return (f'<table {_T} style="margin:0 0 16px;"><tr><td align="center" '
+            f'style="border:2px solid {INK};border-radius:999px;padding:10px;">'
+            f'<a href="{_e(url)}" style="color:{INK};text-decoration:none;font:bold 15px Arial,sans-serif;'
+            f'display:block;">See the full tee sheet</a></td></tr></table>')
 
 
 def frame(inner: str, chapter_label: str, title: str) -> str:
@@ -588,6 +652,39 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                 except Exception as exc:
                     logger.exception("event-day email: games tab read failed (non-fatal)")
                     gview = {"ok": False, "why": f"games tab unreadable: {exc}"}
+        if gview.get("ok"):
+            try:
+                pot = float((db.get_hio_pot(db_path=db_path) or {}).get("pot") or 0)
+                if pot > 0:
+                    gview["hio_total"] = f"${pot:,.0f}" if pot == int(pot) else f"${pot:,.2f}"
+            except Exception:
+                logger.exception("event-day email: HIO pot unreadable (non-fatal)")
+        # YOUR CARD: the printed scorecard's own numbers, read once. qr=off
+        # so nothing is seeded; a gap leaves that player's strip out.
+        sc_rows, sc_dump, sc_grids, sc_net = {}, {}, {}, {}
+        if "{spot_card}" in tpl_text:
+            try:
+                from email_parser.scorecards import build_scorecards
+                sc = build_scorecards(int(event_id), qr="off", allow_gaps=True, db_path=db_path) or {}
+                sc_grids, sc_net = sc.get("grids") or {}, sc.get("net") or {}
+                for c in sc.get("cards") or []:
+                    for rr in c.get("rows") or []:
+                        if rr.get("customer_id"):
+                            sc_rows[int(rr["customer_id"])] = (rr, c.get("holes"))
+                for d in sc.get("dump") or []:
+                    if d.get("customer_id"):
+                        sc_dump[int(d["customer_id"])] = d
+            except Exception:
+                logger.exception("event-day email: scorecard read failed (non-fatal)")
+        scoring_note = None
+        if "{scoring_button}" in tpl_text and not links:
+            scoring_note = ("Live Scoring is not on for this event, so no player gets a "
+                            "Keep score button. Turn it on (Live Scoring page) before sending.")
+        try:
+            from email_parser.score_entry import _base_url
+            teesheet_url = f"{_base_url()}/member/teesheet/{int(event_id)}"
+        except Exception:
+            teesheet_url = ""
         tees = {str(t.get("band")): {"name": t.get("tee_name"), "color": t.get("color"),
                                      "ring": bool(t.get("ring") or t.get("ladies"))}
                 for t in pack.get("tee_legend") or [] if t.get("band") is not None}
@@ -678,8 +775,20 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             team = (gview.get("team_type") or "").replace("TEAM", "Team").replace("CART", "Cart")
             format_line = " \u00b7 ".join(x for x in (f"{holes} holes" if holes else "", team) if x)
             tee = tees.get(str(me.get("tee_choice"))) if me.get("tee_choice") else None
+            card_html = ""
+            hit_sc = sc_rows.get(cid)
+            if hit_sc:
+                rr, hk = hit_sc
+                grid = sc_grids.get(hk) or sc_grids.get(str(hk)) or {}
+                try:
+                    card_html = card_strip(rr, grid, sc_net, sc_dump.get(cid),
+                                           (tee or {}).get("name"))
+                except Exception:
+                    logger.exception("event-day email: card strip failed for cid %s", cid)
             spot = spot_card(g, me, start_headline=start_headline, start_sub=start_sub,
-                             tee=tee, format_line=format_line) if sl else ""
+                             tee=tee, format_line=format_line, card_html=card_html) if sl else ""
+            tbutton = (teesheet_button(f"{teesheet_url}#g{_e(g.get('group_num'))}")
+                       if teesheet_url and "{teesheet_button}" in tpl_text else "")
             gcard = games_card(gview, cid, bool(r.get("rsvp_only")), as_of, day) if gview.get("ok") else ""
             sbutton = scoring_button(short_score_url(url)) if url else ""
             first = nm.get("first_name") or (full.split()[0] if full else "")
@@ -696,6 +805,7 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                 "manager_phone": _e(manager.get("phone")),
                 "event_title": _e(title), "start_subject": _e(start_subject),
                 "spot_card": spot, "games_card": gcard, "scoring_button": sbutton,
+                "teesheet_button": tbutton,
             }
             subject = html_to_text(render_msg_template(tpl["subject"], vals_html))
             body = normalize_email_html(render_msg_template(tpl["html_body"], vals_html))
@@ -726,6 +836,7 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             (None if gview.get("ok") else f"games card omitted for every player: {gview.get('why')}")
             if "{games_card}" in tpl_text else
             (None if gctx.get("ok") else f"games block omitted for every player: {gctx.get('why')}")),
+        "scoring_note": scoring_note,
         "counts": {"roster": len(people), "ready": len(messages), "held": len(held)},
         "messages": messages,
         "held": held,
@@ -791,8 +902,9 @@ def send_event_day_preview(event_id: int, to_address=None, db_path=None, only=No
         f"Template hash <code>{_e(built['template_hash'])}</code> — "
         f"{'APPROVED' if built['approved'] else 'NOT approved: the member send is locked until app setting ' + APPROVAL_KEY + ' carries this hash'}.</p>",
     ]
-    if built.get("games_note"):
-        parts.append(f"<p><em>{_e(built['games_note'])}</em></p>")
+    for k in ("games_note", "scoring_note"):
+        if built.get(k):
+            parts.append(f"<p><em>{_e(built[k])}</em></p>")
     # `only` (customer_ids): the preview shows exactly those players' messages,
     # all of them (Kerry 10/8: "send me an email for me and my group").
     picked = ([m for m in built["messages"] if m["customer_id"] in set(only)] if only

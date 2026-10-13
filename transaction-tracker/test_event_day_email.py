@@ -138,7 +138,6 @@ check("Ann: INCLUDED + NET in, GROSS not bought",
       at.count("YOU'RE IN") == 2 and at.count("NOT BOUGHT") == 1, at)
 check("Bob (BOTH) is in all three", by.get(880002, {}).get("text", "").count("YOU'RE IN") == 3)
 check("Cal (none): included only", by.get(880003, {}).get("text", "").count("NOT BOUGHT") == 2)
-check("the HIO pot", "Hole-in-One Pot: $33" in at, at)
 check("a split bar sized by pot (cells add to 100%)",
       ann.get("html", "").count('height="12"') == 3, ann.get("html", "")[:200])
 check("email-safe: no <style>, <img>, <svg>, flex or grid in the body",
@@ -159,6 +158,39 @@ check("an unreadable games tab drops the card, never the start",
 b2 = ede.build_event_day_emails(EV2, db_path=DB)
 check("an unsaved sheet holds everybody", b2["counts"]["ready"] == 0
       and all("pairings not saved" in h["reason"] for h in b2["held"] if h.get("email")), b2["counts"])
+
+print("1d. Kerry 10/13: HIO total, live scoring, tee sheet, pops")
+check("the HIO line shows the RUNNING pot and what tonight adds",
+      "Hole-in-One Pot: $" in at and "Tuesday's field adds $33" in at, at)
+check("Live Scoring off: no Keep score button, and the build says so",
+      "Keep score on your phone" not in at and "Live Scoring is not on" in (b.get("scoring_note") or ""),
+      b.get("scoring_note"))
+check("a tee sheet button that lands on the player's group",
+      "See the full tee sheet" in at and "/member/teesheet/9101#g1" in ann.get("html", ""), ann.get("html", "")[-900:])
+strip = ede.card_strip(
+    {"ph": "6", "net": "5", "ph_dots": {11: 1, 13: 1, 18: 2}, "net_dots": {11: 1, 18: 1},
+     "si_by_hole": {h: h - 9 for h in range(10, 19)}},
+    {"holes": list(range(10, 19)), "par": {h: 4 for h in range(10, 19)}},
+    {"name": "Team Net", "pct": 85, "unit": "group", "off_low": False, "par3_suppressed": True},
+    {"index": 12.4}, "Gold Tees")
+st = ede.html_to_text(strip)
+check("YOUR CARD strip: holes, par, NET and TEAM pop rows",
+      all(x in st for x in ("YOUR CARD", "HOLE 10 11 12", "PAR 4 4", "NET", "TEAM"))
+      and strip.count("&#9679;") == 7, st)   # 6 pops + the legend dot
+check("…and the handicap chain in words",
+      "Index 12.4 on the Gold Tees gives you a Playing Handicap of 6 for Individual Net." in st
+      and "Team Net uses 85% of your handicap: 5." in st and "No team pops on par 3s." in st, st)
+check("no strip without stroke indexes (never guessed)",
+      ede.card_strip({"ph": "6", "si_by_hole": {}}, {"holes": [10]}, {}, None, None) == "")
+from email_parser import member_teesheet as mts
+td = mts.build_teesheet(EV, db_path=DB)
+page = mts.render_teesheet(td)
+check("the member tee sheet lists every group with its anchor and players",
+      'id="g1"' in page and 'id="g2"' in page and "Ann Able" in page and "Gus Gray" in page
+      and "Hole 1A \u00b7 8:00 AM" in page, page[:300])
+check("…and carries no email, phone or money",
+      "@" not in page.replace("@media", "") and "$" not in page, page)
+check("an event with no saved sheet says so", "not posted yet" in mts.render_teesheet(mts.build_teesheet(EV2, db_path=DB)))
 
 print("1c. A template still written the v1 way keeps working (Kerry may edit in the UI)")
 V1 = ("<p>Hi {first_name},</p><p><strong>Your start:</strong> {start_line}</p>"
@@ -260,6 +292,8 @@ os.environ.setdefault("ADMIN_PIN", "4242")
 import app as _app
 _cl = _app.app.test_client()
 check("the Email Players preview is admin only", _cl.get("/api/events/1/event-day-email").status_code in (401, 302, 403))
+check("the member tee sheet is public (no PIN) and 404s an unknown event",
+      _cl.get(f"/member/teesheet/{EV}").status_code == 200 and _cl.get("/member/teesheet/999999").status_code == 404)
 check("the Email Players send is admin only",
       _cl.post("/api/events/1/event-day-email/send", json={}).status_code in (401, 302, 403))
 

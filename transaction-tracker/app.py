@@ -13361,6 +13361,18 @@ def _lsc_practice_count(cup_event_id) -> int | None:
         return None
 
 
+@app.route("/member/teesheet/<int:event_id>")
+def member_teesheet(event_id):
+    """THE MEMBER TEE SHEET (Kerry 2026-10-13): public, read-only, names /
+    starts / carts / tees only. Linked from each player's event-day email
+    (#g<group> lands on his group). email_parser/member_teesheet.py."""
+    from email_parser.member_teesheet import build_teesheet, render_teesheet
+    data = build_teesheet(event_id)
+    if not data:
+        return "Event not found", 404
+    return render_teesheet(data)
+
+
 @app.route("/member/matchplay/<chapter_slug>")
 def member_matchplay(chapter_slug):
     """Chapter-specific shareable Match Play links (Kerry 2026-08-21:
