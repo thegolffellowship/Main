@@ -1,7 +1,7 @@
-window.TGF_VERSION = "2.556.5";
+window.TGF_VERSION = "2.556.6";
 window.TGF_CHANGELOG = [
   {
-    version: "2.556.3",
+    version: "2.556.6",
     date: "2026-10-13",
     title: "No proximity page when no Closest to Pin is funded",
     changes: [
