@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.556.4";
+window.TGF_VERSION = "2.556.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.556.5",
+    date: "2026-10-13",
+    title: "Health: the event-day email send has its own slow line (60 s)",
+    changes: [
+      "The staff bridge scoring-event-day-email sends one pairing email per roster player (or one test message) through Microsoft Graph and took 6.7 s at the median and 12 s at the slowest on 10/12, so its slow line was flagging a send as a fault every event day. The line is now 60 s instead of the 10 s bridge default. Monitoring only; nothing is sent or changed."
+    ]
+  },
   {
     version: "2.556.4",
     date: "2026-10-13",
