@@ -5,7 +5,9 @@ window.TGF_CHANGELOG = [
     date: "2026-10-12",
     title: "Pairings: a 1st Timer's or guest's Ambassador is on their own tees",
     changes: [
-      "Kerry 10/12: \"1st Timers/New Members/Guests to be placed with ambassadors on their own tees unless they've already played together.\" The Ambassador a 1st Timer or guest rides with must be on the same tee band. If no local Ambassador in the field is on that band, the nearest band any of them plays counts, and so does one they have already played with this season. The rule ranks in the 1st Timer tier, above the count rules. Whether New Members (1Y) also need an Ambassador waits on Kerry."
+      "Kerry 10/12: \"1st Timers/New Members/Guests to be placed with ambassadors on their own tees unless they've already played together.\" The Ambassador a 1st Timer or guest rides with must be on the same tee band. If no local Ambassador in the field is on that band, the nearest band any of them plays counts, and so does one they have already played with this season. The rule ranks in the 1st Timer tier, above the count rules. Whether New Members (1Y) also need an Ambassador waits on Kerry.",
+      "Kerry 10/12: \"A 1st year member gets an ambassador on same tees their first three events.\" A 1Y member with fewer than three rounds on file before the event (distinct round dates, every chapter) rides with a local Ambassador on their tees, by the same fit as a 1st Timer. From the fourth event they graduate to the First Year rules alone (never ride alone).",
+      "New bridge scoring-pairings-add-group:<event_id>|<a>;<b>[;...][|apply] appends one hand-built group to a saved sheet on the next free slot, with seats in the order given. Every name must be on the roster and not already seated. It refuses a started or past event, and it is a dry run unless |apply. Built for Kerry 10/12: \"Add Jeff Young and guest Ale along with Pat Youngs into new group.\""
     ]
   },
   {

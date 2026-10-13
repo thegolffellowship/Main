@@ -91,6 +91,7 @@ P = [  # name, tee, captain, ambassador, solo_back_ok, new_1y, guest, request
  ("Michele McCormick", "Forward", 0, 0, 0, 1, 0, None), ("Jeff Rideout", "50-64", 0, 0, 0, 0, 0, None),
  ("Steven Hunt", "50-64", 0, 0, 0, 1, 0, None), ("Luke Mazanec", "<50", 0, 1, 1, 0, 0, None)]
 NEW = {n for n, *_r in P if _r[4]}
+ALL_NAMES = [p[0] for p in P]
 PAIRS = {("Richard Palacios", "Larry Anthis"): 19, ("Jeff Rideout", "Luke Mazanec"): 2,
          ("Adam Baker", "Dan Stich"): 1, ("Richard Palacios", "Michelle DelCarmen"): 1}
 # The sheet Kerry saw on 10/12 (Espinosa already off): 4, 4, 3, 3, 3, 3.
@@ -131,6 +132,14 @@ with db._connect(DB) as c:
         elif not guest:
             c.execute("INSERT INTO customer_memberships (customer_id,started_at,expires_at,source) "
                       "VALUES (?,?,?,'manual')", (cid, "2019-02-01", "2027-02-01"))
+    # Rounds on file before 10/13, as the 10/12 audit counted them; Wade
+    # Lewis gets his later (the first-three-events test below).
+    PRIOR = {"Rob Burlingame": 14, "Justin Angelone": 4, "Jesse Saldana": 10,
+             "Reggie Johnson": 3, "Michele McCormick": 4, "Steven Hunt": 9}
+    for n, cnt in PRIOR.items():
+        for r in range(cnt):
+            c.execute("INSERT INTO scoring_rounds (customer_id,player_name,round_date,holes_played,gross,source) "
+                      "VALUES (?,?,?,9,40,'gg')", (900 + ALL_NAMES.index(n), n, f"2026-{1 + r % 9:02d}-{10 + r // 9:02d}"))
     db._ensure_pairing_tables(c)
     k = 0
     for (a, b), cnt in PAIRS.items():
@@ -279,6 +288,27 @@ amb_mate = [n for n in h1 if n != "Hector Hinojosa" and ambs(n)]
 check("Hector (65+) rides with a 50-64 Ambassador, the nearest tees in the field",
       amb_mate and BAND[amb_mate[0]] == 1, h1)
 
+print("a First Year member in their first three events rides with an Ambassador on their tees (Kerry 10/12)")
+ev3y = 4950
+build(ev3y)
+register(ev3y, ALL)
+# Wade Lewis (1Y, <50) has no rounds on file in this fixture: his first event.
+g3y, _n3y = gen(ev3y)
+cw = next(c for g in g3y for c in carts(g) if "Wade Lewis" in c)
+check("Wade Lewis (1Y, first three events, <50) rides with a <50 Ambassador",
+      any(ambs(n) and TEE[n] == "<50" for n in cw if n != "Wade Lewis"), cw)
+with db._connect(DB) as c:
+    for i in range(3):
+        c.execute("INSERT INTO scoring_rounds (customer_id,player_name,round_date,holes_played,gross,source) "
+                  "VALUES (?,?,?,9,40,'gg')", (900 + ALL.index("Wade Lewis"), "Wade Lewis", f"2026-0{4 + i}-10"))
+    c.commit()
+ev3z = 4960
+build(ev3z)
+register(ev3z, ALL)
+res3z = db.generate_event_pairings(ev3z, mode="random", db_path=DB)
+check("after three rounds on file he has graduated (no Ambassador needed, sheet still valid)",
+      len(res3z["9"]) == 5)
+
 print("guest exemptions")
 ev3 = 4100
 build(ev3)
@@ -386,6 +416,30 @@ check("bridge apply saves five groups and returns the audit with no hard flags",
       and appB["audit"]["summary"]["hard_flags"] == 0, appB.get("audit"))
 pastB = _json.loads(_ms._scoring_dispatch_inner("", "scoring-pairings-generate:4400"))
 check("bridge refuses a past event", "refused" in pastB, pastB)
+
+print("bridge scoring-pairings-add-group")
+evG = 4970
+build(evG)
+register(evG, ALL)
+seat_out = {"Hector Hinojosa", "Brian Thompson", "Wade Lewis"}
+base = [(lab, [n for n in ns if n not in seat_out]) for lab, ns in SHEET]
+db.save_event_pairings(evG, {"9": [{"group_num": i + 1, "slot_label": lab,
+                                    "players": [{"name": n, "cart_pos": j + 1} for j, n in enumerate(ns)]}
+                                   for i, (lab, ns) in enumerate(base)]}, db_path=DB)
+dG = _json.loads(_ms._scoring_dispatch_inner("", f"scoring-pairings-add-group:{evG}|Brian Thompson;Wade Lewis;Hector Hinojosa"))
+check("add-group dry run writes nothing", not dG["applied"]
+      and len(db.get_event_pairings(evG, db_path=DB)["9"]) == 6, dG)
+aG = _json.loads(_ms._scoring_dispatch_inner("", f"scoring-pairings-add-group:{evG}|Brian Thompson;Wade Lewis;Hector Hinojosa|apply"))
+afterG = db.get_event_pairings(evG, db_path=DB)["9"]
+labs = [g["slot_label"] for g in afterG]
+check("add-group appends a 7th group on an unused slot, seats in order",
+      aG["applied"] and len(afterG) == 7 and len(set(labs)) == 7
+      and [p["name"] for p in sorted(afterG[-1]["players"], key=lambda p: p["cart_pos"])]
+      == ["Brian Thompson", "Wade Lewis", "Hector Hinojosa"], labs)
+rG = _json.loads(_ms._scoring_dispatch_inner("", f"scoring-pairings-add-group:{evG}|Brian Thompson;Nobody Here"))
+check("add-group refuses a seated player and a name off the roster",
+      rG.get("refused", {}).get("already seated") == ["Brian Thompson"]
+      and rG["refused"].get("not on the roster") == ["Nobody Here"], rG)
 
 print()
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")

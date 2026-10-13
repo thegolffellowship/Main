@@ -58,9 +58,9 @@ Kerry, verbatim: "Only thing I'd like to add for rules is for 1st Timers/New Mem
 - If no local Ambassador in the field is on those tees, the nearest tees count.
 - An Ambassador they have already played with also counts.
 - It ranks in the 1st Timer tier, above count rules.
-- "New Members" are pending Kerry's confirmation.
+- **New Members (Kerry, 10/12, verbatim):** "A 1st year member gets an ambassador on same tees their first three events."
 
 ## Built and tested
 
-- Built in v2.551.0 (not live until Kerry says "Deploy").
+- Built in v2.551.0 to v2.553.1, live on Kerry's "Deploy".
 - Behaviour of record: `docs/claude/pairings.md`, "Rules 16-18".

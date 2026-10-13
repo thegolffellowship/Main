@@ -69730,7 +69730,29 @@ def generate_event_pairings(
         # Timers; the Ambassador that FITS is one on the player's own tee
         # band, else the nearest band any Ambassador in this field is on,
         # or anyone they have already played with this season.
-        need_amb_cart = _lg | {_pair_key_name(n) for n in first_timers}
+        # Kerry 2026-10-12: "A 1st year member gets an ambassador on same
+        # tees their first three events." Events = distinct round dates on
+        # file before this event, every chapter (the audit's count).
+        _ids_r = {p["customer"]: p.get("customer_id") for p in player_items
+                  if p.get("customer") and p.get("customer_id")}
+        _played: dict = {}
+        if _ids_r:
+            try:
+                with _connect(db_path) as _pc:
+                    _ph = ",".join("?" * len(_ids_r))
+                    for _r in _pc.execute(
+                            f"""SELECT customer_id, COUNT(DISTINCT substr(round_date, 1, 10)) AS n
+                                FROM scoring_rounds WHERE customer_id IN ({_ph})
+                                  AND substr(COALESCE(round_date, ''), 1, 10) < ?
+                                GROUP BY customer_id""",
+                            (*[int(v) for v in _ids_r.values()], str(ev.get("event_date") or "")[:10])):
+                        _played[int(_r["customer_id"])] = int(_r["n"])
+            except Exception:
+                logger.exception("played counts failed for event %s (non-fatal)", event_id)
+        early_new = {n for n in newbies
+                     if _ids_r.get(n) is not None and _played.get(int(_ids_r[n]), 0) < 3}
+        need_amb_cart = (_lg | {_pair_key_name(n) for n in first_timers}
+                         | {_pair_key_name(n) for n in early_new})
         _amb_names = [n for n in all_names if _pair_key_name(n) in _amb]
         amb_fit: dict = {}
         for n in all_names:
@@ -69877,7 +69899,7 @@ def generate_event_pairings(
                                         captains=captains, newbies=newbies,
                                         experience=experience,
                                         ambassadors=ambassadors,
-                                        first_timers=first_timers | lone_guests,
+                                        first_timers=first_timers | lone_guests | early_new,
                                         rode_before=rode_before,
                                         solo_streak=solo_streak,
                                         no_solo=no_solo,

@@ -2274,10 +2274,22 @@ Kerry 2026-10-12: "Deploy and then re-generate yourself and review it against ou
 
 Kerry, verbatim: "Only thing I'd like to add for rules is for 1st Timers/New Members/Guests to be placed with ambassadors on their own tees unless they've already played together. Hinojosa was the one I looked at here. It's a matter of building comfort and relatability in my mind."
 
-- **Who it applies to:** 1st Timers and unattached guests ride with an Ambassador who FITS (`amb_fit`). Whether "New Members" (1Y) also need an Ambassador is open for Kerry. His earlier ruling had the Ambassador rule drop when a player graduates to First Year.
+- **Who it applies to:** 1st Timers, unattached guests and 1Y members in their first three events ride with an Ambassador who FITS (`amb_fit`).
+  - Kerry, 10/12: "A 1st year member gets an ambassador on same tees their first three events."
+  - "Events" means distinct round dates in `scoring_rounds` before this event, every chapter. That is the audit's count.
+  - From the fourth event, only rule 16 (never alone) applies.
 - **An Ambassador fits when:**
   - they are on the same tee band (`_tee_band_rank`, in order <50, 50-64, 65+, Forward); or
   - no local Ambassador in the field is on that band, and this one is on the nearest band any of them plays; or
   - the two have already played together this season.
 - **Ranking:** composition counts it in the 1st Timer tier, above the count rules. In the seater, an Ambassador cart-mate who doesn't fit costs 35 and no Ambassador at all costs 40.
 - **The 10/13 case:** Hinojosa is 65+, and no 65+ Ambassador plays, so a 50-64 Ambassador (Vasquez, Anthis, Marroquin) fits. Niester and Mazanec (<50) do not.
+
+### Add a hand-built group (v2.553.1)
+
+- **Bridge:** `scoring-pairings-add-group:<event_id>|<a>;<b>[;...][|apply]` appends one group to the saved sheet.
+  - It takes the next free slot of the event's start setup.
+  - Seats go in the order given (1&2 ride together).
+- **Every name** must be on `_event_roster_rows` and not already seated.
+- **Refused:** a started or past event.
+- **Default:** a dry run. `|apply` saves and returns the audit.
