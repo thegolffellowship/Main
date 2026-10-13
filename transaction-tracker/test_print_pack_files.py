@@ -41,6 +41,38 @@ try:
     pp.split_print_pack(built); check("a page-count mismatch is refused", False)
 except ValueError:
     check("a page-count mismatch is refused", True)
+print("course files and the rules sheet (Kerry 10/13)")
+w = PdfWriter()
+for _ in range(9):
+    w.add_blank_page(width=300, height=300)
+buf = io.BytesIO(); w.write(buf)
+full = {"pdf": buf.getvalue(), "event": built["event"],
+        "parts": [{"slug": s_, "pages": 1} for s_ in
+                  ("starter-sheet", "cart-signs", "scorecards", "games-payouts",
+                   "divisions-flights", "proximity-markers")] + [{"slug": "rules-of-play", "pages": 3}]}
+cf = [f for f, _ in pp.split_print_pack(full, only=pp.COURSE_FILE_PARTS)]
+check("the course gets Starter Sheet, Cart Signs, Scorecards, Proximity, Rules of Play only",
+      [f.rsplit("-", 1)[1] for f in cf] == ["StarterSheet.pdf", "CartSigns.pdf", "Scorecards.pdf",
+                                            "Proximity.pdf", "RulesOfPlay.pdf"], cf)
+rp = [b for f, b in pp.split_print_pack(full, only=pp.COURSE_FILE_PARTS) if f.endswith("RulesOfPlay.pdf")][0]
+check("skipped reports still advance the page count (rules = its own 3 pages)",
+      len(PdfReader(io.BytesIO(rp)).pages) == 3)
+check("the full split still has all seven reports", len(pp.split_print_pack(full)) == 7)
+HERE = os.path.dirname(os.path.abspath(__file__))
+rules = pp._rules_sheet_bytes(os.path.join(HERE, "static"))
+check("the Rules of Play sheet ships in static/print", rules and rules[:4] == b"%PDF")
+pdf2, parts2 = pp._append_rules_sheet(files[0][1], [{"slug": "starter-sheet", "pages": 1}], rules)
+check("the rules sheet binds onto the end of the pack",
+      parts2[-1] == {"slug": "rules-of-play", "pages": len(PdfReader(io.BytesIO(rules)).pages)}
+      and len(PdfReader(io.BytesIO(pdf2)).pages) == 1 + parts2[-1]["pages"], parts2)
+check("no rules file: the pack is unchanged", pp._append_rules_sheet(b"x", [], None) == (b"x", []))
+pk = open(os.path.join(HERE, "email_parser", "print_pack.py"), encoding="utf-8").read()
+check("the course email defaults to the course's reports",
+      "split_print_pack(built, only=COURSE_FILE_PARTS)" in pk)
+ev_src = open(os.path.join(HERE, "templates", "events.html"), encoding="utf-8").read()
+check("Course Files button + route", "sendCourseFiles(" in ev_src and
+      '"/api/events/<int:event_id>/course-files/send"' in open(os.path.join(HERE, "app.py"), encoding="utf-8").read())
+
 src = open("mcp_server.py", encoding="utf-8").read()
 check("the bridge takes |files and builds with the scorecards forced in",
       'parts[1].lower() == "files"' in src and "force_scorecards=True" in src)

@@ -6083,6 +6083,32 @@ def api_send_print_pack(event_id):
     return jsonify(res), (200 if res.get("sent") else 502)
 
 
+@app.route("/api/events/<int:event_id>/course-files/send", methods=["POST"])
+@require_role("manager")
+def api_send_course_files(event_id):
+    """COURSE FILES (Kerry 2026-10-13: "Course email should include Starter
+    Sheet, Cart Signs, Scorecards, Proxies and Rules Sheets...not the other
+    stuff"). One email to the pack recipient (or `to`), one PDF per report,
+    ready to forward to the course. Leaves the pack's sent hash alone."""
+    from email_parser.print_pack import send_print_pack_files
+    data = request.get_json(silent=True) or {}
+    built = build_print_pack_for_event(event_id, force_scorecards=True)
+    if not built:
+        return jsonify({"error": "Event not found or nothing to print"}), 404
+    if built.get("error"):
+        return jsonify({"error": built["error"]}), 503
+    try:
+        res = send_print_pack_files(built, to_address=(data.get("to") or "").strip() or None)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 500
+    try:
+        log_agent_action(f"manager:{session.get('chapter') or session.get('role') or 'manager'}",
+                         "course-files-send", f"event {event_id}: {json.dumps(res, default=str)[:300]}")
+    except Exception:
+        pass
+    return jsonify(res), (200 if res.get("sent") else 502)
+
+
 @app.route("/events/<int:event_id>/games-payouts")
 @require_role("manager")
 def games_payouts_page(event_id):

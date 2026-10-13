@@ -2987,6 +2987,17 @@ emailed to me."
   `|files|send[|<to>]` mails them as separate attachments in one email
   (`send_print_pack_files`). It leaves the evening-before sent hash alone.
   Guard: `test_print_pack_files.py`.
+- **Course Files and the Rules of Play** (v2.556.0, Kerry 10/13: "Print packs
+  need to also include the scorecards and rules sheets" / "Course email should
+  include Starter Sheet, Cart Signs, Scorecards, Proxies and Rules Sheets…not
+  the other stuff"). Scorecards are in every pack by default
+  (`print_pack_scorecards` unset or "all"; "off" or an id list narrows it).
+  Kerry's Rules of Play sheet, a fixed PDF at `static/print/TGF_Rules_of_Play.pdf`,
+  is bound last in every pack (part `rules-of-play`; its hash is in the pack's
+  sha). The course email (`send_print_pack_files`, the `|files` bridge and the
+  PAIRINGS tab's **Course Files** button, `POST /api/events/<id>/course-files/send`)
+  carries only `COURSE_FILE_PARTS`: Starter Sheet, Cart Signs, Scorecards,
+  Proximity, Rules of Play. Games & Payouts and Divisions & Flights are left out.
 - **Deploy:** `nixpacks.toml` installs `chromium` from Nix beside
   Python (`nixPkgs`), the WeasyPrint libraries via `nixLibs` (apt libs
   are invisible to the Nix Python — "cannot load library gobject-2.0-0"

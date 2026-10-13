@@ -6125,7 +6125,8 @@
         // Kerry 2026-09-21: "there should be a button to SEND PACK" — the
         // bound PDF mailed now, on demand.
         if (!perRound && currentRole === "admin") h += emailPlayersBtn(ev.id);
-        if (!perRound) h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
+        if (!perRound) h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers, rules of play) now">&#x2709; Send Pack</button>`;
+        if (!perRound) h += `<button class="pairings-action-btn send-pack-btn" onclick="sendCourseFiles(${ev.id}, this)" title="Email the course's print files, one PDF each: starter sheet, cart signs, scorecards, proximity markers, rules of play">&#x2709; Course Files</button>`;
         h += '</div>';
         h += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">Each report opens in a new tab with its own Print and Download PDF buttons.</div>';
         h += '</div>';
@@ -7155,6 +7156,25 @@
         }
     }
     window.sendPrintPack = sendPrintPack;
+
+    // COURSE FILES (Kerry 2026-10-13): the course's reports only, one PDF each.
+    async function sendCourseFiles(evId, btn) {
+        if (!confirm("Email the course print files (starter sheet, cart signs, scorecards, proximity, rules) now?")) return;
+        const was = btn ? btn.textContent : "";
+        if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+        try {
+            const res = await fetch(`/api/events/${evId}/course-files/send`, {
+                method: "POST", headers: {"Content-Type": "application/json"}, body: "{}" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.sent) { alert(data.error || data.why || "The course files were not sent."); return; }
+            alert(`Course files sent to ${data.to}: ${(data.files || []).map(f => f.filename).join(", ")}.`);
+        } catch (err) {
+            alert("The course files were not sent.");
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = was; }
+        }
+    }
+    window.sendCourseFiles = sendCourseFiles;
 
     // ═══════════ EMAIL PLAYERS (Kerry 2026-10-08) ═══════════════════
     // "I need to be able to have a way to send all of tomorrow's info for

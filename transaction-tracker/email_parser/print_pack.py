@@ -6,8 +6,9 @@ emails me the PDF reports for an event? Or perhaps a bound PDF with all
 of them in one that I could print, rather than each separately?" —
 "Build the PDF routine and have it emailed to me."
 
-Parts, in print order: Starter Sheet, Cart Signs, Divisions & Flights,
-Proximity Markers — the same templates the browser prints, rendered
+Parts, in print order: Starter Sheet, Cart Signs, Scorecards, Games &
+Payouts, Divisions & Flights, Proximity Markers, then the Rules of Play
+sheet (a fixed PDF, static/print/TGF_Rules_of_Play.pdf, Kerry 10/13) — the same templates the browser prints, rendered
 server-side by WeasyPrint (paged-media CSS, the `@page` rules the
 templates already carry). The PDF engine is imported lazily so a deploy
 without it still boots; the route and the bridge then say so instead of
@@ -64,13 +65,50 @@ def _static_url_fetcher(static_dir: str):
 
 
 def scorecards_in_pack(event_id: int, db_path=None) -> bool:
-    """Does this event's pack carry scorecards? App setting
-    `print_pack_scorecards`: "all" or a comma/space list of event ids."""
+    """Does this event's pack carry scorecards? Yes, always (Kerry
+    2026-10-13: "Print packs need to also include the scorecards and rules
+    sheets"). App setting `print_pack_scorecards` can still narrow it:
+    "off" leaves them out everywhere, a comma/space list of event ids
+    includes only those; unset or "all" means every event."""
     from email_parser import database as db
     raw = (db.get_app_setting("print_pack_scorecards", db_path) or "").strip().lower()
-    if raw == "all":
+    if raw in ("", "all"):
         return True
+    if raw in ("off", "none", "0", "no"):
+        return False
     return str(int(event_id)) in {t for t in re.split(r"[\s,\[\]\"']+", raw) if t}
+
+
+# THE RULES OF PLAY sheet (Kerry 2026-10-13, his own print file: two
+# copies per Letter page with a cut line). A fixed PDF, not a template:
+# it is appended to every pack as it is, last in print order.
+RULES_SHEET_REL = "print/TGF_Rules_of_Play.pdf"
+
+
+def _rules_sheet_bytes(static_dir: str) -> bytes | None:
+    path = os.path.join(static_dir, RULES_SHEET_REL)
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        logger.warning("print pack: rules sheet missing at %s", path)
+        return None
+
+
+def _append_rules_sheet(pdf: bytes, parts: list, rules: bytes | None):
+    """Bind the Rules of Play pages onto the end of a rendered pack."""
+    if not rules:
+        return pdf, parts
+    import io
+    from pypdf import PdfReader, PdfWriter
+    w = PdfWriter()
+    for pg in PdfReader(io.BytesIO(pdf)).pages:
+        w.add_page(pg)
+    rr = PdfReader(io.BytesIO(rules))
+    for pg in rr.pages:
+        w.add_page(pg)
+    out = io.BytesIO(); w.write(out)
+    return out.getvalue(), list(parts) + [{"slug": "rules-of-play", "pages": len(rr.pages)}]
 
 
 def build_event_print_pack(render, event_id: int, static_dir: str,
@@ -173,7 +211,10 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             gs_info = {"error": "games & payouts failed to render; see the log"}
     if not htmls:
         return None
-    sha = hashlib.sha256("\n".join(_hash_view(h) for _, h in htmls).encode("utf-8")).hexdigest()[:16]
+    rules = _rules_sheet_bytes(static_dir)
+    sha = hashlib.sha256(("\n".join(_hash_view(h) for _, h in htmls)
+                          + "\nrules:" + (hashlib.sha256(rules).hexdigest() if rules else "-")
+                          ).encode("utf-8")).hexdigest()[:16]
     code = (ev.get("item_name") or f"event-{event_id}").replace("/", "-")
     # CHROMIUM FIRST (v2.465.8, Kerry 2026-09-18: "Formatting for your PDF
     # email is really bad compared to the PDF downloads on the Tracker").
@@ -196,6 +237,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
         except Exception as exc2:                  # engine absent on this deploy
             return {"error": f"PDF engine unavailable: {exc2}", "sha": sha, "engine_note": engine_note,
                     "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
+    pdf, parts = _append_rules_sheet(pdf, parts, rules)
     from email_parser.database import print_file_stub as _pfs
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
             "scorecards": sc_info, "games_sheet": gs_info,
@@ -447,15 +489,24 @@ def print_pack_email_body(built: dict) -> str:
 
 PART_FILE_NAMES = {"starter-sheet": "StarterSheet", "cart-signs": "CartSigns",
                    "scorecards": "Scorecards", "games-payouts": "GamesPayouts",
-                   "divisions-flights": "DivisionsFlights", "proximity-markers": "Proximity"}
+                   "divisions-flights": "DivisionsFlights", "proximity-markers": "Proximity",
+                   "rules-of-play": "RulesOfPlay"}
+
+# What the COURSE gets (Kerry 2026-10-13: "Course email should include
+# Starter Sheet, Cart Signs, Scorecards, Proxies and Rules Sheets...not the
+# other stuff"). Games & Payouts and Divisions & Flights stay in Kerry's
+# own pack; they are TGF's money sheets, not the course's.
+COURSE_FILE_PARTS = ("starter-sheet", "cart-signs", "scorecards",
+                     "proximity-markers", "rules-of-play")
 
 
-def split_print_pack(built: dict) -> list[tuple[str, bytes]]:
+def split_print_pack(built: dict, only=None) -> list[tuple[str, bytes]]:
     """The bound pack cut back into one PDF per report, by the page count
     each part printed (Kerry 2026-10-09: "Can you have the practice round
     reports sent to me in separate PDF files right now? I need to send to
     course for printing"). [(filename, pdf bytes)] in print order, named
-    <stub>-<Report>.pdf like the per-report downloads."""
+    <stub>-<Report>.pdf like the per-report downloads. ``only`` keeps just
+    those part slugs (COURSE_FILE_PARTS for the course email)."""
     import io
     from pypdf import PdfReader, PdfWriter
     from email_parser.database import print_file_stub as _pfs
@@ -465,6 +516,9 @@ def split_print_pack(built: dict) -> list[tuple[str, bytes]]:
     for part in built.get("parts") or []:
         n = int(part.get("pages") or 0)
         if n <= 0:
+            continue
+        if only is not None and part["slug"] not in only:
+            at += n
             continue
         w = PdfWriter()
         for pg in reader.pages[at:at + n]:
@@ -484,7 +538,7 @@ def send_print_pack_files(built: dict, to_address: str | None = None, db_path=No
     email. Does not touch the evening-before pack's sent hash. ``files``
     ([(name, bytes)]) sends those instead of splitting a bound pack."""
     from email_parser.fetcher import send_mail_graph
-    files = files if files is not None else split_print_pack(built)
+    files = files if files is not None else split_print_pack(built, only=COURSE_FILE_PARTS)
     to_address = to_address or print_pack_recipient(built.get("event"), db_path=db_path)
     creds = {k: os.getenv(k) for k in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID",
                                        "AZURE_CLIENT_SECRET", "EMAIL_ADDRESS")}

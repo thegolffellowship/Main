@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.555.1";
+window.TGF_VERSION = "2.556.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.556.0",
+    date: "2026-10-13",
+    title: "Print pack: scorecards and the Rules of Play in every pack; Course Files sends only the course's reports",
+    changes: [
+      "Kerry 10/13: \"Print packs need to also include the scorecards and rules sheets.\" Every event's pack now carries the scorecards by default (they had needed the print_pack_scorecards setting; it can still be set to 'off' or to a list of events). Kerry's own Rules of Play print sheet (two copies per page with a cut line) is bound onto the end of every pack. It is a fixed file, static/print/TGF_Rules_of_Play.pdf; replace that file to change the sheet.",
+      "Kerry 10/13: \"Course email should include Starter Sheet, Cart Signs, Scorecards, Proxies and Rules Sheets...not the other stuff.\" The separate-files email for the course now carries only those five, one PDF each. Games & Payouts and Divisions & Flights stay in Kerry's own pack. A new Course Files button beside Send Pack on the PAIRINGS tab sends it (POST /api/events/<id>/course-files/send), and the bridge scoring-print-pack-pdf:<id>|files does the same.",
+    ],
+  },
   {
     version: "2.555.1",
     date: "2026-10-13",
