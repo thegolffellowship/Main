@@ -1313,3 +1313,23 @@ Built additively on the Points Races board: the race chips, the navy LSC pill an
 - v2.557.1: section tabs are Bitter 700 12px, ls 1.5. No chevron on POINTS RACES. Landing with no race in the address = TGF and the first LIVE race of tfc, gross, monthly (the `live` flags in `PR_NAV`; flip them when a cup season opens). The stored last chapter no longer overrides it (Kerry 10/13).
 - v2.558.0: the tab is SEASON CONTESTS. Match Play per city is a race in each chapter (`PR_NAV.races.mp_austin` / `mp_sa`, field `mp` = the chapter Match Play loads). `prOpenMatchPlay(key)` moves `#pr-pickers` to the top of `#section-match-play`, shows that section and clicks its chapter tab; `prCloseMatchPlay()` moves the pickers back (marker `#pr-pickers-home`). The MATCH PLAY top tab is hidden, and #tab=mp links open it this way. The month picker is a segmented control (`.pr-mo-seg`, 3-letter months). Column headers are a black band with rounded top corners (the table is border-collapse: separate). Past Champions and Show All Players share `.pr-pc-row`.
 - Not built yet from CD #1638: the format meta text, Show all players on the title line, the signed-in YOU strip and avatar (gated on member logins), chapter search and regions (needs the region field).
+
+## OPEN CARD on the dots line — every match card (Kerry 10/13) — v2.558.2
+
+Kerry: "Can you move the OPEN CARD to same line as the dots for the hole
+results so we can reduce the vertical height? On mobile you can reduce OPEN
+CARD to OPEN. Do this for ALL Match Play events and matches, not just Lone
+Star cup." City Match Play (pools, knockout) and the Cup all build their card
+head in `mpMatchCard` (templates/contests.html), so the change is made there
+once. The head is the meta band, then the strip, then ONE `.mp-dots-line`
+row. On desktop that row is a three-column grid: the start-hole note on the
+left, the `.mp-hole-dots` centred, and the `.mp-toggle-hint` on the right.
+At 560px and under it has two columns: the dots, then the hint. A start-hole
+note drops to a second row, and an empty note takes no space. The label
+comes from `mpToggleHintHtml(open)`:
+- Desktop: OPEN CARD, or COLLAPSE CARD when open.
+- Phone: OPEN, or CLOSE when open.
+
+The live re-render of an open card keeps the close label. A card with no
+hole detail yet keeps its own toggle row, because it has no dots to share.
+Guard: `test_mp_card_dots_line.js`.

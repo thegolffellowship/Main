@@ -1488,6 +1488,27 @@
             font: 700 0.56rem/1 'Bitter', Georgia, serif; letter-spacing: 0.05em;
             text-transform: uppercase; color: var(--mp-accent); white-space: nowrap; flex: none;
         }
+        /* OPEN CARD rides the hole-dots line (Kerry 2026-10-13: "move the OPEN
+           CARD to same line as the dots ... reduce the vertical height").
+           Note left, dots centred, hint right; one row instead of two. */
+        .mpv2 .mp-dots-line {
+            display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+            gap: 0.5rem; padding: 0.5rem 0.7rem;
+        }
+        .mpv2 .mp-dots-line .mp-hole-dots { padding: 0; }
+        .mpv2 .mp-dots-line .mp-illus-note { justify-self: start; }
+        .mpv2 .mp-dots-line .mp-toggle-hint { justify-self: end; }
+        .mpv2 .mp-hint-short { display: none; }
+        @media (max-width: 560px) {
+            /* phone: "OPEN" / "CLOSE"; a start-hole note drops under the dots */
+            .mpv2 .mp-hint-long { display: none; }
+            .mpv2 .mp-hint-short { display: inline; }
+            .mpv2 .mp-dots-line { grid-template-columns: 1fr auto; gap: 0.25rem 0.4rem; }
+            .mpv2 .mp-dots-line .mp-hole-dots { grid-column: 1; grid-row: 1; }
+            .mpv2 .mp-dots-line .mp-toggle-hint { grid-column: 2; grid-row: 1; }
+            .mpv2 .mp-dots-line .mp-illus-note { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
+            .mpv2 .mp-dots-line .mp-illus-note:empty { display: none; }
+        }
         .mpv2 .mp-scorecard[hidden] { display: none; }
         .mpv2 .mp-scorecard { border-top: 1px solid var(--border); padding: 0.75rem 0.7rem; background: #FCFCFB; }
         .mpv2 .mp-sc-nines { display: flex; flex-wrap: wrap; gap: 0.9rem 1.1rem; }
@@ -6631,6 +6652,14 @@
     // Shared match card: clickable head (meta + strip + hole-dots + caption) and
     // a pre-rendered, hidden scorecard grid revealed on click. Used by both the
     // pool-match and knockout-slot renderers so every strip behaves identically.
+    // The open/collapse label on every match card. Phones show the short
+    // word (Kerry 2026-10-13: "On mobile you can reduce OPEN CARD to OPEN").
+    function mpToggleHintHtml(open) {
+        return open
+            ? '&#9652; <span class="mp-hint-long">collapse card</span><span class="mp-hint-short">close</span>'
+            : '&rsaquo; open<span class="mp-hint-long"> card</span>';
+    }
+
     function mpMatchCard(o, opts) {
         // Only ever render REAL Golf Genius hole detail — never a fabricated
         // placeholder. Without GG detail the card shows just the result strip
@@ -6649,7 +6678,7 @@
             // for each match and where pops will be")
             return `<div class="mp-match-card"${da}>
             <div class="mp-card-head mp-clickable" role="button" tabindex="0" aria-expanded="false" aria-label="Show where the strokes fall">
-                ${meta}${strip}<div class="mp-card-toggle"><span class="mp-illus-note"></span><span class="mp-toggle-hint">&rsaquo; open card</span></div>${opts.prov || ''}
+                ${meta}${strip}<div class="mp-card-toggle"><span class="mp-illus-note"></span><span class="mp-toggle-hint">${mpToggleHintHtml(false)}</span></div>${opts.prov || ''}
             </div>
             <div class="mp-scorecard" hidden>${opts.cardHtml}</div>
         </div>`;
@@ -6664,12 +6693,13 @@
         const note = gen.source === 'gg'
             ? (gen.startHole ? `Started on hole ${gen.startHole}.` : '')
             : 'Illustrative hole map — generated from the result; real scoring wires in from Golf Genius.';
-        const toggle = `<div class="mp-card-toggle">
-            <span class="mp-illus-note">${note}</span>
-            <span class="mp-toggle-hint">&rsaquo; open card</span></div>`;
+        // dots + note + OPEN CARD on ONE line (Kerry 2026-10-13)
+        const dotsLine = `<div class="mp-dots-line">
+            <span class="mp-illus-note">${note}</span>${dots}
+            <span class="mp-toggle-hint">${mpToggleHintHtml(false)}</span></div>`;
         return `<div class="mp-match-card"${da}>
             <div class="mp-card-head mp-clickable" role="button" tabindex="0" aria-expanded="false" aria-label="Show hole-by-hole scorecard">
-                ${meta}${strip}${dots}${toggle}${opts.prov || ''}
+                ${meta}${strip}${dotsLine}${opts.prov || ''}
             </div>
             <div class="mp-scorecard" hidden>${grid}</div>
         </div>`;
@@ -6981,7 +7011,12 @@
             const sc = fresh.querySelector('.mp-scorecard');
             const head = fresh.querySelector('.mp-card-head');
             if (sc) sc.hidden = false;
-            if (head) head.setAttribute('aria-expanded', 'true');
+            if (head) {
+                head.setAttribute('aria-expanded', 'true');
+                head.classList.add('open');
+                const hint = head.querySelector('.mp-toggle-hint');
+                if (hint) hint.innerHTML = mpToggleHintHtml(true);
+            }
         }
         card.replaceWith(fresh);
         // Decided semifinal → flow the winner into a pending one-sided
@@ -7237,7 +7272,7 @@
         head.classList.toggle('open', !open);
         head.setAttribute('aria-expanded', String(!open));
         const hint = head.querySelector('.mp-toggle-hint');
-        if (hint) hint.innerHTML = open ? '&rsaquo; open card' : '&#9652; collapse card';
+        if (hint) hint.innerHTML = mpToggleHintHtml(!open);
     }
 
     // One-time wiring: pill sub-tabs + delegated pool clicks + card expanders.

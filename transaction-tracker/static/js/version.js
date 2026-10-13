@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.558.1";
+window.TGF_VERSION = "2.558.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.558.2",
+    date: "2026-10-13",
+    title: "Match cards: OPEN CARD sits on the hole-dots line; OPEN on a phone",
+    changes: [
+      "Kerry 10/13: \"Can you move the OPEN CARD to same line as the dots for the hole results so we can reduce the vertical height? On mobile you can reduce OPEN CARD to OPEN. Do this for ALL Match Play events and matches, not just Lone Star cup.\" Every match card (City Match Play pools and knockout, and the Lone Star Cup) is built by one function, mpMatchCard. The dots, the start-hole note and the OPEN CARD label now share one row: on desktop the note is on the left, the dots are centred and OPEN CARD is on the right. The card loses a whole row. On a phone (560px and under) the label reads OPEN, or CLOSE when the card is open. All 18 dots stay on one line with OPEN at the right end, and a start-hole note, if any, drops under them.",
+      "A live re-render of an open card used to keep the card open but put the label back to OPEN CARD. It now shows the close label. Guard: test_mp_card_dots_line.js.",
+    ],
+  },
   {
     version: "2.558.1",
     date: "2026-10-13",
