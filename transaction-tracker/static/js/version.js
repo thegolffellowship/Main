@@ -1,6 +1,13 @@
-window.TGF_VERSION = "2.559.2";
+window.TGF_VERSION = "2.559.3";
 window.TGF_CHANGELOG = [
   {
+    version: "2.559.3",
+    date: "2026-10-13",
+    title: "SCORING tab for managers",
+    changes: [
+      "Kerry 10/13: \"Can you make the SCORING tab available to Managers under each event?\" Chapter managers now see the SCORING tab on any event with live scoring on. It shows each group's scoring link (copy) and QR, holes in, signatures and card checks. The QR route opens to managers, still gated per event. Seeding or re-seeding groups and closing a round stay admin-only (CA #843), and their buttons are hidden for managers.",
+    ],
+  },  {
     version: "2.559.2",
     date: "2026-10-13",
     title: "Golf Genius points intake switched OFF while the Tracker computes points blind",

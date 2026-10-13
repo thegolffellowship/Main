@@ -947,6 +947,9 @@ check("...but seeding stays admin-only", mgr.post("/api/score-entry/events/900/s
 check("...and the page hides the seed button from a manager",
       b'id="seed"' not in mgr.get("/events/900/live-scoring").data
       and b'id="seed"' in client.get("/events/900/live-scoring").data)
+# Kerry 2026-10-13: the SCORING tab is open to managers, so a group's QR is too (still gated per event)
+check("a manager is not refused a group's QR by role (the SCORING tab, Kerry 10/13)",
+      mgr.get(f"/api/score-entry/groups/{hgid}/qr.svg").status_code not in (401, 403))
 ovm = mgr.get("/api/score-entry/events/900/admin").get_json()
 rm = next(r for r in ovm["rounds"] if r["round_id"] == sr)["manager"]
 check("the panel read carries the contests, flags, HIO claims, players and log",

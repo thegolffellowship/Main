@@ -12784,11 +12784,14 @@ def api_se_close(round_id):
 
 
 @app.route("/api/score-entry/groups/<int:group_id>/qr.svg")
-@require_role("admin")
+@require_role("manager")
 def api_se_group_qr(group_id):
-    """The group's scoring link as a QR code, for the PAIRINGS panel (CA
-    #782). The same link the Live Scoring page copies; admin only, so it
-    works for the dry run while score_entry_qr (the cart signs) stays off."""
+    """The group's scoring link as a QR code, for the PAIRINGS / SCORING
+    panel (CA #782). The same link the Live Scoring page copies. Managers
+    too since Kerry 2026-10-13, on an event with score entry on."""
+    gate = _se_event_gate("group", group_id)
+    if gate:
+        return gate
     from email_parser.score_entry import group_link, qr_svg_file
     url = group_link(group_id)
     svg = qr_svg_file(url) if url else None
