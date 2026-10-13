@@ -267,6 +267,18 @@ check("Hector rides with a LOCAL (San Antonio) Ambassador, not Mazanec (Austin l
 check("no fallback note when the chapter has its list", not any("No local Ambassador" in x for x in notesL), notesL)
 amb.chapter_ambassadors = _real_reader
 
+print("Ambassador on the guest's own tees (Kerry 10/12)")
+TEE = {n: r[0] for n, *r in P}
+BAND = {n: db._tee_band_rank(t) for n, t in TEE.items()}
+check("tee bands rank <50 < 50-64 < 65+ < Forward",
+      [db._tee_band_rank(t) for t in ("<50", "50-64", "65+", "Forward")] == [0, 1, 2, 3])
+h1 = next(c for g in groups for c in carts(g) if "Hector Hinojosa" in c)
+amb_mate = [n for n in h1 if n != "Hector Hinojosa" and ambs(n)]
+# Hector is 65+; no 65+ Ambassador plays, so the nearest band (50-64:
+# Vasquez, Anthis, Marroquin) fits; Niester and Mazanec (<50) do not.
+check("Hector (65+) rides with a 50-64 Ambassador, the nearest tees in the field",
+      amb_mate and BAND[amb_mate[0]] == 1, h1)
+
 print("guest exemptions")
 ev3 = 4100
 build(ev3)

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.553.0";
+window.TGF_VERSION = "2.553.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.553.1",
+    date: "2026-10-12",
+    title: "Pairings: a 1st Timer's or guest's Ambassador is on their own tees",
+    changes: [
+      "Kerry 10/12: \"1st Timers/New Members/Guests to be placed with ambassadors on their own tees unless they've already played together.\" The Ambassador a 1st Timer or guest rides with must be on the same tee band. If no local Ambassador in the field is on that band, the nearest band any of them plays counts, and so does one they have already played with this season. The rule ranks in the 1st Timer tier, above the count rules. Whether New Members (1Y) also need an Ambassador waits on Kerry."
+    ]
+  },
   {
     version: "2.553.0",
     date: "2026-10-12",

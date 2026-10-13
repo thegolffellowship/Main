@@ -50,6 +50,16 @@ Kerry, verbatim: "If you're talking about only local chapter ambassadors being p
 
 - The Ambassador for a 1st Timer, a New Member or a Guest is one on the event chapter's own list.
 
+## R-K: the Ambassador is on the player's own tees (Kerry, 10/12)
+
+Kerry, verbatim: "Only thing I'd like to add for rules is for 1st Timers/New Members/Guests to be placed with ambassadors on their own tees unless they've already played together. Hinojosa was the one I looked at here. It's a matter of building comfort and relatability in my mind."
+
+- The Ambassador should be on the same tees as the player.
+- If no local Ambassador in the field is on those tees, the nearest tees count.
+- An Ambassador they have already played with also counts.
+- It ranks in the 1st Timer tier, above count rules.
+- "New Members" are pending Kerry's confirmation.
+
 ## Built and tested
 
 - Built in v2.551.0 (not live until Kerry says "Deploy").

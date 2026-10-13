@@ -69723,7 +69723,30 @@ def generate_event_pairings(
                        and host_of_all.get(_pair_key_name(n)) not in _here
                        and not _find_partner_name(partner_map.get(n), all_names, n)}
         _lg = {_pair_key_name(n) for n in lone_guests}
-        need_amb_cart = _lg
+        # Kerry 2026-10-12: "1st Timers/New Members/Guests to be placed with
+        # ambassadors on their own tees unless they've already played
+        # together ... It's a matter of building comfort and relatability."
+        # The cart-level Ambassador rule covers unattached guests and 1st
+        # Timers; the Ambassador that FITS is one on the player's own tee
+        # band, else the nearest band any Ambassador in this field is on,
+        # or anyone they have already played with this season.
+        need_amb_cart = _lg | {_pair_key_name(n) for n in first_timers}
+        _amb_names = [n for n in all_names if _pair_key_name(n) in _amb]
+        amb_fit: dict = {}
+        for n in all_names:
+            k = _pair_key_name(n)
+            if k not in need_amb_cart or k in _amb:
+                continue
+            rn = _tee_band_rank(tee_map.get(n))
+            dists = {}
+            for a in _amb_names:
+                if a == n:
+                    continue
+                ra = _tee_band_rank(tee_map.get(a))
+                dists[a] = 0 if rn is None or ra is None else abs(rn - ra)
+            best = min(dists.values()) if dists else 0
+            amb_fit[k] = {_pair_key_name(a) for a, d in dists.items()
+                          if d == best or _pair_count(pair_counts, n, a) > 0}
 
         def _rule_misses(g) -> tuple:
             """(lone back, no leader, 1st Timer without Ambassador, a first
@@ -69731,7 +69754,7 @@ def generate_event_pairings(
             Ambassador) for one group."""
             ks = [_pair_key_name(n) for n in g]
             solo_miss, guest_miss = _group_seat_misses(
-                g, partner_adj, _amb, need_amb_cart, no_solo)
+                g, partner_adj, _amb, need_amb_cart, no_solo, amb_fit)
             return (1 if _lone_back_offender(g, tee_map, _sok) else 0,
                     1 if len(g) >= 2 and not any(k in _lead for k in ks) else 0,
                     1 if any(k in _ft for k in ks) and not any(k in _amb for k in ks) else 0,
@@ -69761,9 +69784,10 @@ def generate_event_pairings(
                               + ": a first year player rides alone (no other sheet "
                               "keeps the requests, matches and locks).")
                 if _m[4]:
-                    n4.append(", ".join(n for n in g if _pair_key_name(n) in _lg)
-                              + ": guest without an Ambassador in the cart (no "
-                              "Ambassador free; requests, matches and locks kept).")
+                    n4.append(", ".join(n for n in g if _pair_key_name(n) in need_amb_cart)
+                              + ": no Ambassador on their tees (or one they have played "
+                              "with) free to ride with them; requests, matches and "
+                              "locks kept.")
             if improve:
                 # The fixes swap by cheapest history but never re-optimise;
                 # on 10/5 that left Baker + Rideout together a 4th time. A
@@ -69828,8 +69852,8 @@ def generate_event_pairings(
                 # So their misses (terms 2 and 3) compare FIRST; repeat
                 # counts only break ties among sheets that miss them equally.
                 _m = [_rule_misses(g) for g in cand]
-                score = (sum(m[2] + m[3] for m in _m),
-                         sum(m[0] + m[1] + m[4] for m in _m) * _repeat_cost(1)
+                score = (sum(m[2] + m[3] + m[4] for m in _m),
+                         sum(m[0] + m[1] for m in _m) * _repeat_cost(1)
                          + sum(_group_score(g, pair_counts) for g in cand))
                 if best_score is None or score < best_score:
                     best_groups, best_score, best_notes = cand, score, cand_notes
@@ -69856,7 +69880,8 @@ def generate_event_pairings(
                                         first_timers=first_timers | lone_guests,
                                         rode_before=rode_before,
                                         solo_streak=solo_streak,
-                                        no_solo=no_solo)
+                                        no_solo=no_solo,
+                                        amb_fit=amb_fit)
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -70327,8 +70352,28 @@ def _pair_first_timers_with_ambassadors(groups: list[list[str]], ambassadors: se
     return groups, notes
 
 
+def _tee_band_rank(tee) -> int | None:
+    """Order of the TGF tee bands, back to front: <50, 50-64, 65+, Forward.
+    The distance between two ranks is how far apart two players' tees are
+    (Kerry 2026-10-12, Ambassadors on the guest's own tees). None when the
+    tee is unknown, which never counts against a pairing."""
+    t = str(tee or "").strip().lower()
+    if not t:
+        return None
+    if "forward" in t or t.startswith("fwd"):
+        return 3
+    if "65" in t:
+        return 2
+    if "50-64" in t or ("50" in t and "64" in t):
+        return 1
+    if _is_back_tee(tee) or "<50" in t or "under 50" in t:
+        return 0
+    return None
+
+
 def _group_seat_misses(names: list[str], partner_adj: set, ambassadors: set,
-                       need_amb_cart: set, no_solo: set) -> tuple[int, int]:
+                       need_amb_cart: set, no_solo: set,
+                       amb_fit: dict | None = None) -> tuple[int, int]:
     """Composition check for Kerry's 2026-10-12 rules, over EVERY seating of
     the group that keeps requested partners in one cart (the seater's own
     carts: seats 1&2, 3&4, the odd seat out rides alone):
@@ -70341,6 +70386,11 @@ def _group_seat_misses(names: list[str], partner_adj: set, ambassadors: set,
         seating gives every guest in `need_amb_cart` an Ambassador in their
         cart (Kerry's case was Hector Hinojosa riding with a non-Ambassador
         while the group's Ambassador rode with a requested partner).
+
+    `amb_fit` {needy key: Ambassador keys that fit} narrows the Ambassador
+    to one on the player's own tees, or the nearest tees in the field, or
+    one they have already played with (Kerry 2026-10-12: "placed with
+    ambassadors on their own tees unless they've already played together").
 
     Keys are `_pair_key_name` keys. Groups are at most five players, so the
     brute force is exact. When no seating can keep every request (a chain
@@ -70365,7 +70415,7 @@ def _group_seat_misses(names: list[str], partner_adj: set, ambassadors: set,
     perms = [p for p in permutations(ks) if _keeps_requests(p)] or list(permutations(ks))
     solo_ok = not want_solo or any(p[-1] not in no_solo for p in perms)
     amb_ok = not want_amb or any(
-        all(any(_cart(j) == _cart(i) and p[j] in ambassadors
+        all(any(_cart(j) == _cart(i) and p[j] in (amb_fit or {}).get(p[i], ambassadors)
                 for j in range(len(p)) if j != i)
             for i in range(len(p)) if p[i] in need_amb_cart and p[i] not in ambassadors)
         for p in perms)
@@ -70433,7 +70483,8 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                          first_timers: set | None = None,
                          rode_before: set | None = None,
                          solo_streak: dict | None = None,
-                         no_solo: set | None = None) -> list[str]:
+                         no_solo: set | None = None,
+                         amb_fit: dict | None = None) -> list[str]:
     """Seat order for a settled group — foursomes are already decided;
     this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
     (Kerry's cart-pair ruling).
@@ -70542,10 +70593,17 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
         # ambassador among equals).
         for i in range(len(perm)):
             if keys[perm[i]] in first_timers and keys[perm[i]] not in ambassadors:
+                fit = (amb_fit or {}).get(keys[perm[i]], ambassadors)
                 if any(keys[perm[k]] in ambassadors for k in range(len(perm)) if k != i) and \
                    not any(_cart(k) == _cart(i) and keys[perm[k]] in ambassadors
                            for k in range(len(perm)) if k != i):
                     cost += 40
+                elif any(keys[perm[k]] in fit for k in range(len(perm)) if k != i) and \
+                     not any(_cart(k) == _cart(i) and keys[perm[k]] in fit
+                             for k in range(len(perm)) if k != i):
+                    # an Ambassador rides with them, but not the one on their
+                    # own tees (Kerry 2026-10-12): above the count terms
+                    cost += 35
         if best_cost is None or cost < best_cost:
             best, best_cost = list(perm), cost
         if best_cost == 0:

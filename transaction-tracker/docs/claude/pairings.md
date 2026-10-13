@@ -2269,3 +2269,15 @@ Kerry 2026-10-12: "Deploy and then re-generate yourself and review it against ou
 - **`|apply`:** saves the sheet, writes an action-log row, and returns `event_pairing_audit` on the saved result.
 - **Refused:** an event that has started (`_event_started`) or that is dated before today (Central).
 - **Guard:** the bridge checks in `test_pairings_rules_1012.py`.
+
+### 18a — the Ambassador is on the player's own tees (Kerry 2026-10-12, v2.553.1)
+
+Kerry, verbatim: "Only thing I'd like to add for rules is for 1st Timers/New Members/Guests to be placed with ambassadors on their own tees unless they've already played together. Hinojosa was the one I looked at here. It's a matter of building comfort and relatability in my mind."
+
+- **Who it applies to:** 1st Timers and unattached guests ride with an Ambassador who FITS (`amb_fit`). Whether "New Members" (1Y) also need an Ambassador is open for Kerry. His earlier ruling had the Ambassador rule drop when a player graduates to First Year.
+- **An Ambassador fits when:**
+  - they are on the same tee band (`_tee_band_rank`, in order <50, 50-64, 65+, Forward); or
+  - no local Ambassador in the field is on that band, and this one is on the nearest band any of them plays; or
+  - the two have already played together this season.
+- **Ranking:** composition counts it in the 1st Timer tier, above the count rules. In the seater, an Ambassador cart-mate who doesn't fit costs 35 and no Ambassador at all costs 40.
+- **The 10/13 case:** Hinojosa is 65+, and no 65+ Ambassador plays, so a 50-64 Ambassador (Vasquez, Anthis, Marroquin) fits. Niester and Mazanec (<50) do not.
