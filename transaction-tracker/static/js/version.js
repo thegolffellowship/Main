@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.555.2";
+window.TGF_VERSION = "2.555.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.555.3",
+    date: "2026-10-13",
+    title: "Backups: player photos and card photos now go off-site with the nightly backup",
+    changes: [
+      "CoS #1604 (ops, no schema): the database was backed up off-site (OneDrive nightly, Litestream to R2), but the files beside it were not. Player photos (player_photos/, named by customer_id) and the scorekeepers' card photos (se_photos/) lived only on the Railway volume; Litestream copies SQLite files only. The 3:15 AM backup job now also archives those two folders into one tar.gz in the same OneDrive backup folder (sub-folder files/), through the same Microsoft Graph credentials, only when their content changed since the last upload (a content hash is kept in app setting files_backup_hash), keeping the newest 8. The archive is read back and checked file by file before it uploads. The 5:00 digest names a MEDIUM finding (files_backup_stale) if last night's upload did not happen, and carries a FILES BACKUP line. Read or test it with bridge scoring-files-backup (status), scoring-files-backup:dry (build and check, upload nothing). A new file store on the volume goes in backups.FILE_STORES. Guard test_files_backup.py."
+    ]
+  },
   {
     version: "2.555.2",
     date: "2026-10-13",
