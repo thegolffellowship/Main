@@ -35,12 +35,13 @@ r = c.get("/member/live-scoring")
 html = r.get_data(as_text=True)
 check("public page answers 200 with no login", r.status_code == 200, r.status_code)
 imgs = re.findall(r'/static/img/live-scoring/([\w-]+\.jpg)\?v=', html)
-check("ten steps, ten screenshots", len(imgs) == 10, imgs)
+check("eleven steps, thirteen pictures (step 1 shows the three ways in)", len(imgs) == 13, imgs)
 folder = os.path.join(appmod.app.static_folder, "img", "live-scoring")
 missing = [i for i in imgs if not os.path.exists(os.path.join(folder, i))]
 check("every screenshot the page names exists", not missing, missing)
 sizes = set()
-for i in imgs:
+phones = [i for i in imgs if i not in ("00-cart-sign.jpg", "00-scorecard.jpg")]
+for i in phones:
     with open(os.path.join(folder, i), "rb") as fh:
         b = fh.read()
     j = 2
@@ -53,8 +54,10 @@ check("every screenshot is the same full phone screen, 780x1688", sizes == {(780
 check("the par note: a par needs no tap", "Made par? Don't tap anything." in html)
 check("the Take over warning is on the page", "Don't tap Take over." in html)
 check("every step prints its text (a key named copy would print dict.copy)",
-      html.count('<p class="copy">') == 10 and "built-in method" not in html
-      and "Tap <b>open your group's scorecard</b>" in html)
+      html.count('<p class="copy">') == 11 and "built-in method" not in html
+      and "Tap <b>Keep score on your phone</b>" in html)
+check("the three ways in: cart sign, scorecard, pairing email",
+      all(f"{n}.jpg?v=" in html for n in ("00-cart-sign", "00-scorecard", "00-email")))
 check("no email address or phone number on the public page",
       not re.search(r"[\w.+-]+@[\w-]+\.\w+|\(\d{3}\) \d{3}-\d{4}", html))
 print(f"\n{len(FAILURES)} failure(s)")

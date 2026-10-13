@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.562.1";
+window.TGF_VERSION = "2.562.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.2",
+    date: "2026-10-13",
+    title: "Live Scoring how-to: a first step on how to get to your scorecard",
+    changes: [
+      "New step 1 on /member/live-scoring, 'Get to your group's scorecard' (Kerry 2026-10-13: 'Probably need an intro of how a player would access the live scoring link. 3 ways currently: The cart sign, the scorecard, and the email with the link'). Each of the three ways in has its own picture with the spot circled in red: the QR code on the cart sign, the QR code at the top of the paper scorecard, and the Keep score on your phone button in the pairing email. The pictures are the real cart sign, scorecard and email layouts rendered from the Tracker's own templates with sample names. The guide is now eleven steps.",
+      "The old step 1 said to tap 'open your group's scorecard' in the email, which was the pre-A2 wording; the email's button reads Keep score on your phone. That step is now 'Score this group'.",
+    ],
+  },
   {
     version: "2.562.1",
     date: "2026-10-13",

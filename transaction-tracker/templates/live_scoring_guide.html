@@ -54,6 +54,14 @@
        is the same size whatever the step shows (Kerry 2026-10-13) */
     .phone img { display: block; width: 100%; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; border-radius: 29px; }
 
+    /* step 1's three ways in: the paper ones full width, the email in a phone */
+    .way { margin: 0 0 22px; }
+    .way figcaption { font-size: 15px; line-height: 1.45; margin: 0 0 8px; display: flex; gap: 10px; align-items: baseline; }
+    .way .wn { flex: 0 0 24px; height: 24px; border-radius: 50%; background: var(--ink); color: #FFFFFF;
+               font: 700 13px/24px Bitter, Georgia, serif; text-align: center; }
+    .paper { display: block; width: 100%; border: 1px solid var(--line); border-radius: 8px;
+             box-shadow: 0 6px 18px rgba(0,0,0,.10); background: #FFFFFF; }
+
     /* list mode: every step on one page */
     .deck.list { display: block; overflow: visible; }
     .deck.list .slide { padding-bottom: 28px; border-bottom: 1px solid var(--line); }
@@ -73,8 +81,15 @@
 </head>
 <body>
 {% set steps = [
-  {"img": "01-open", "title": "Open your group's scorecard",
-   "text": "Tap <b>open your group's scorecard</b> in your pairing email, or scan the QR code on your cart sign. The scorekeeper taps <b>SCORE THIS GROUP</b>. Everyone else can tap <b>FOLLOW THE LEADERBOARD</b> to watch the field live. Following changes nothing.",
+  {"title": "Get to your group's scorecard",
+   "text": "There are three ways in, and they all open the same scorecard for your group. Use whichever is handiest.",
+   "ways": [
+     {"img": "00-cart-sign", "kind": "paper", "cap": "<b>Your cart sign.</b> Point your phone's camera at the QR code in the corner and tap the link that pops up."},
+     {"img": "00-scorecard", "kind": "paper", "cap": "<b>Your paper scorecard.</b> The same QR code is at the top of the card."},
+     {"img": "00-email", "kind": "phone", "cap": "<b>Your pairing email.</b> Tap <b>Keep score on your phone</b>."},
+   ]},
+  {"img": "01-open", "title": "Score this group",
+   "text": "The scorekeeper taps <b>SCORE THIS GROUP</b>. Everyone else can tap <b>FOLLOW THE LEADERBOARD</b> to watch the field live. Following changes nothing.",
    "tip": "One phone keeps score for the group. One person keeps the paper card as usual."},
   {"img": "02-name", "title": "Tap your name",
    "text": "The first person to start keeps score for the group. Every player's playing handicap is already loaded from the starter sheet. Nothing to set up."},
@@ -116,7 +131,17 @@
         <h2>{{ s.title }}</h2>
         <p class="copy">{{ s["text"]|safe }}</p>
         {% if s.tip %}<p class="tip">{{ s.tip|safe }}</p>{% endif %}
+        {% if s.ways %}
+        {% for w in s.ways %}
+        <figure class="way">
+          <figcaption><span class="wn">{{ loop.index }}</span><span>{{ w.cap|safe }}</span></figcaption>
+          {% if w.kind == "phone" %}<div class="phone"><img src="/static/img/live-scoring/{{ w.img }}.jpg?v={{ img_v }}" alt="Pairing email" loading="lazy"></div>
+          {% else %}<img class="paper" src="/static/img/live-scoring/{{ w.img }}.jpg?v={{ img_v }}" alt="{{ w.img[3:]|replace('-', ' ') }}" loading="eager">{% endif %}
+        </figure>
+        {% endfor %}
+        {% else %}
         <div class="phone"><img src="/static/img/live-scoring/{{ s.img }}.jpg?v={{ img_v }}" alt="{{ s.title }}" loading="{{ 'eager' if loop.index <= 2 else 'lazy' }}"></div>
+        {% endif %}
       </div>
     </section>
     {% endfor %}

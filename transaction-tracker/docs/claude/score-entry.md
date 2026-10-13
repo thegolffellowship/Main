@@ -1159,3 +1159,12 @@ that step and replace its file under the same name. Guard
 `test_live_scoring_guide.py`. Known friction it documents: a non-scorekeeper
 signs via SCORE THIS GROUP, their name, then Follow along, next to Take over
 (Closeout #1739).
+
+Every phone screenshot is one full screen, 780 x 1688, so every phone frame
+is the same size (v2.562.1, the test checks it). Step 1 (v2.562.2) shows the
+three ways in, each circled in red: the cart sign's QR (`00-cart-sign.jpg`),
+the paper scorecard's QR (`00-scorecard.jpg`), and the pairing email's Keep
+score on your phone button (`00-email.jpg`). They were rendered from
+`cart_signs.html`, `scorecards.html` and `event_day_email.spot_card` /
+`scoring_button` with sample names. Re-render them when any of those three
+layouts changes.
