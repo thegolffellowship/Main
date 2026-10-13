@@ -48,9 +48,12 @@ console.log('== nav wraps instead of overflowing on mid-width desktops ==');
 const css = fs.readFileSync(path.join(__dirname, 'static/css/shell.css'), 'utf8');
 const wrap = css.match(/@media \(min-width: 561px\) and \(max-width: 1479px\) \{[\s\S]*?\n\}/);
 ck('two-row rule spans 561px to 1479px', !!wrap);
-ck('header wraps in that band', !!wrap && /header\.shell-nav \{[^}]*flex-wrap: wrap/.test(wrap[0]));
+ck('header wraps in that band (admin nav)', !!wrap && /header\.shell-nav:not\(\.shell-member\) \{[^}]*flex-wrap: wrap/.test(wrap[0]));
 ck('links take their own full row', !!wrap && /\.shell-nav-links[^{]*\{[^}]*order: 3;[^}]*flex: 1 1 100%/.test(wrap[0]));
-ck('member tabs wrap the same way', !!wrap && /\.shell-member \.shell-member-tabs/.test(wrap[0]));
+// the MEMBER header keeps one row down to 860px (Kerry 2026-10-13: "shouldn't be wrapping to second line so soon")
+const mwrap = css.match(/@media \(min-width: 561px\) and \(max-width: 859px\) \{[\s\S]*?\n\}/);
+ck('member tabs wrap only from 859px down', !!mwrap && /\.shell-member \.shell-member-tabs/.test(mwrap[0])
+   && !/\.shell-member \.shell-member-tabs/.test(wrap ? wrap[0] : ''));
 ck('drawer + mobile bar start at 560px', /@media \(max-width: 560px\) \{\s*header\.shell-nav/.test(css));
 ck('shell.js moves ops to the sheet at the same number',
    /matchMedia\("\(max-width: 560px\)"\)/.test(fs.readFileSync(path.join(__dirname, 'static/js/shell.js'), 'utf8')));

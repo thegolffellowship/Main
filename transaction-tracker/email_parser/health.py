@@ -80,6 +80,16 @@ def _replication_status(db_path, fresh: bool = False) -> dict:
         return {"configured": False, "error": f"{type(e).__name__}: {e}"[:200]}
 
 
+def _files_backup(db_path) -> dict:
+    """The files behind the database (player photos, card photos) and
+    whether their newest content has gone off-site (backups.py)."""
+    try:
+        from .backups import files_backup_status
+        return files_backup_status(db_path)
+    except Exception as e:  # noqa: BLE001 — the report never fails on its own extras
+        return {"error": str(e)[:120], "in_sync": True, "files": 0}
+
+
 def _archive_status(db_path) -> dict:
     """The GG raw archive's own file (gg_archive.py) — mode, bytes, rows."""
     try:
@@ -263,6 +273,8 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "hcp_cache": _hcp_cache_stats(),
         "provider_alerts": _provider_alerts(db_path),
         "replication": _replication_status(db_path, fresh=record_size),
+        "files_backup": _files_backup(db_path),
+        "scheduled": bool(record_size),
         "expense_unpromoted": _expense_unpromoted(db_path),
         "sample_count": sum(r["count"] for k in summary for r in summary[k]),
     }
@@ -437,6 +449,15 @@ def find(report: dict) -> list[dict]:
                 out.append({"severity": "medium", "key": "replication_archive_lag",
                             "text": f"the GG archive replica is {int(arc['lag_s'])} s behind (limit 3600 s)"})
 
+    fb = report.get("files_backup") or {}
+    # Only the scheduled 5:00 digest judges this: it runs after the 3:15 AM
+    # backup, so "not in sync" then means last night's upload failed.
+    if report.get("scheduled") and fb.get("files") and not fb.get("in_sync"):
+        out.append({"severity": "medium", "key": "files_backup_stale",
+                    "text": f"{fb['files']} file(s) on the volume (player photos, card photos) "
+                            f"changed and last night's backup did not upload them — "
+                            f"run scoring-files-backup to see why (CoS #1604)"})
+
     out.sort(key=lambda f: sev[f["severity"]])
     return out
 
@@ -525,6 +546,10 @@ def render_markdown(report: dict) -> str:
                         (rep.get("error") or "no generation in the replica yet")))
     else:
         L.append("**REPLICATION** not configured")
+    fb = report.get("files_backup") or {}
+    if fb.get("files"):
+        L.append(f"**FILES BACKUP** {fb['files']} photo file(s), {fb['bytes']/1024:.0f} KB beside the database: "
+                 + ("off-site copy is current" if fb.get("in_sync") else "NOT yet off-site"))
     hc = report["hcp_cache"]
     L.append(f"**HANDICAP CACHE** since boot: {hc['hits']} hits / {hc['misses']} misses"
              + (f" ({hc['hit_rate']*100:.0f}%)" if hc.get("hit_rate") is not None else ""))

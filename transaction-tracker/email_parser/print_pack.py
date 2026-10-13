@@ -140,6 +140,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     if not ev:
         return None
     htmls: list[tuple[str, str]] = []
+    skipped_parts: list[dict] = []
     sheet_pack = None
     _no_games = db.event_games_off(ev)
     for slug, template, builder, key in PRINT_PACK_PARTS:
@@ -147,6 +148,13 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             continue   # no games at this event: no game sheets (Kerry 10/8)
         ctx = getattr(db, builder)(int(event_id), db_path=db_path)
         if not ctx:
+            continue
+        if slug == "proximity-markers" and not ctx.get("contests"):
+            # No CTP funded at this count: no page at all, in the pack or the
+            # course files (Kerry 2026-10-13: "If there are no Closest to Pins
+            # for the event due to numbers, then don't send the page").
+            skipped_parts.append({"slug": slug, "why": "; ".join(ctx.get("notes") or [])
+                                  or "no closest-to-pin contests"})
             continue
         if slug == "starter-sheet":
             sheet_pack = ctx
@@ -255,7 +263,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     pdf, parts = _append_rules_sheet(pdf, parts, rules)
     from email_parser.database import print_file_stub as _pfs
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
-            "scorecards": sc_info, "games_sheet": gs_info,
+            "scorecards": sc_info, "games_sheet": gs_info, "skipped": skipped_parts,
             "engine_note": engine_note, "pack": sheet_pack,
             "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
             # <stub>-PrintPack.pdf, the report file-name convention (Kerry 9/29).

@@ -1,5 +1,79 @@
-window.TGF_VERSION = "2.556.2";
+window.TGF_VERSION = "2.558.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.558.1",
+    date: "2026-10-13",
+    title: "Every leaderboard: bought in = white, not bought in = soft grey",
+    changes: [
+      "Kerry 10/13, on the Lone Star Cup skins board: \"For all leaderboard views everywhere, adopt the new standards we set with the grey for those not bought in and no color for those who are.\" The Events leaderboard and every board built on it (the Lone Star Cup skins, the scorer's board) drop the green bought-in rows. A bought-in row is plain white, and a not-bought-in row is the same soft grey #EEEEEC with muted text the Season Contests boards use. The legend chips and HOW IT WORKS text say white / grey. New tokens --buyin-row and --buyin-nobuy in dashboard.css; green (--buyin-green) stays for badges and chips only. test_events_board.js now fails any green leaderboard row.",
+    ],
+  },
+  {
+    version: "2.558.0",
+    date: "2026-10-13",
+    title: "SEASON CONTESTS: Match Play joins the race picker; black column headers; Bitter on every button",
+    changes: [
+      "Kerry 10/13: \"Let's roll MATCH PLAY for each city into the POINTS RACES tab, but change POINTS RACES to SEASON CONTESTS.\" The tab now reads SEASON CONTESTS. Each chapter's race menu lists its Match Play (Austin Match Play, San Antonio Match Play, both FINAL for 2026). Picking one shows the Match Play board under the same chapter and race pickers, with one HOW IT WORKS button, and Match Play's own chapter control hidden (season stays). The MATCH PLAY tab is gone from the bar. Its section and every #tab=mp link still work, and they now land inside SEASON CONTESTS. The address carries ?race=austin-match-play-2026 like any other race.",
+      "Kerry 10/13: \"Can you make the MONTHLY buttons connected toggles rather than separate buttons, to save space?\" The month picker is one connected segmented control, and months are always 3 letters (MAR, APR ... OCT).",
+      "Kerry 10/13: \"Can we make the column headers our TGF Black with white text and rounded top corners? And reduce vertical padding.\" Standings column headers are a #1B1B1B band with white Bitter labels, 8px rounded top corners and about half the old height. The (PROJECTED) eyebrow stays orange.",
+      "Kerry 10/13: \"maybe Show All Players could fit on same line as Past Champions.\" On the Fellowship Cup and Players Cup boards they now share one row.",
+      "Kerry 10/13: \"All nav bar links should be bitters always. Buttons too.\" One app-wide rule in dashboard.css makes every button, .btn, tab link and the ENTER EVENTS & CONTESTS banner Bitter.",
+      "Kerry 10/13, on the phone view: \"This is too many rows above the leaderboard. How can you condense or combine?\" On a phone the area above the board is down from seven rows to two. Row 1 holds the chapter (short name: TGF / Austin / SA), the race picker, and HOW IT WORKS as an (i) disc. The FINAL tag is dropped there, because the champion banner or the LIVE pill carries the status. Row 2 holds the LIVE pill, Past Champions and Show All Players. On Monthly the month strip fits the width and the 'October · In progress' pill folds into the OCT dot.",
+    ],
+  },
+  {
+    version: "2.557.1",
+    date: "2026-10-13",
+    title: "Leaderboard: Bitter section tabs, no POINTS RACES chevron, lands on the biggest live TGF race",
+    changes: [
+      "Kerry 10/13: \"Didn't it say all nav bars were supposed to be Bitters?\" The section tabs (EVENTS / POINTS RACES / LONE STAR CUP / MATCH PLAY) are now Bitter 700 12px with 1.5px letter spacing, as CD #1638 draws them.",
+      "Kerry 10/13: \"Remove the chevron on the POINTS RACES.\" Gone on every screen size; the race and chapter pickers are the menu.",
+      "Kerry 10/13: \"By default, land on the biggest current TGF Wide event. Right now that's simply October Points. When in season it would be The Fellowship Cup then the Players Cup then the current monthly.\" With no race in the address, every visitor lands on TGF · All chapters and the first LIVE race in that order. Today that is Monthly. The last chapter a visitor chose no longer overrides the landing.",
+      "Kerry 10/13: \"TOP NAV of PLAYERS LEADERBOARD HANDICAPS shouldn't be wrapping to second line so soon. Should stay up top.\" The member header (logo, the three tabs, ENTER EVENTS & CONTESTS) now stays on one row down to 860px wide. It used to drop the tabs to a second row anywhere under 1480px, a width set for the admin nav. The admin nav is unchanged.",
+    ],
+  },
+  {
+    version: "2.557.0",
+    date: "2026-10-13",
+    title: "Leaderboard top as Claude Design drew it; every chapter's races in the TGF race menu",
+    changes: [
+      "Kerry 10/13: \"the top part is not how CD designed it.\" The POINTS RACES top now follows CD #1638. The race-chip row is gone; it stays in the page, hidden, so every deep link and old code path still works. LONE STAR CUP is a normal tab with a navy star, no longer a pill. The race picker is the page title. HOW IT WORKS sits at the right of the title line (Kerry: \"Keep the HOW IT WORKS button instead of changing it to RULES\"), with space above the champion banner. On a phone the POINTS RACES tab no longer opens the old race list, because the pickers are the menu.",
+      "Kerry 10/13: \"For the All Chapters view, add sections for the Austin contests and San Antonio contests. Once it's over 4 chapters, we'll limit that to just the TGF All Chapter contests.\" With TGF selected, the race menu lists the TGF races, then an Austin section and a San Antonio section. Above 4 chapters (PR_NAV_ALL_CHAPTERS_MAX) it shows the TGF races only, with the footer pointing to the chapter switch. A chapter view still shows TGF plus that chapter.",
+      "Kerry 10/13: \"move Monthly below The Players Cup.\" TGF races now read The Fellowship Cup, The Players Cup, Monthly.",
+    ],
+  },
+  {
+    version: "2.556.6",
+    date: "2026-10-13",
+    title: "No proximity page when no Closest to Pin is funded",
+    changes: [
+      "Kerry 10/13, on Forest Creek's course files: \"If there are no Closest to Pins for the event due to numbers, then don't send the page. That's kind of weird.\" With 13 entries the games matrix funds no CTP, and the pack still printed a 'No proximity markers to print' page and attached it as Proximity.pdf. Now the print pack and the course files leave the page out entirely. The reason is kept on the build result (skipped) for anyone checking. The Proximity report on the REPORTS tab still explains itself when opened.",
+    ],
+  },
+  {
+    version: "2.556.5",
+    date: "2026-10-13",
+    title: "Health: the event-day email send has its own slow line (60 s)",
+    changes: [
+      "The staff bridge scoring-event-day-email sends one pairing email per roster player (or one test message) through Microsoft Graph and took 6.7 s at the median and 12 s at the slowest on 10/12, so its slow line was flagging a send as a fault every event day. The line is now 60 s instead of the 10 s bridge default. Monitoring only; nothing is sent or changed."
+    ]
+  },
+  {
+    version: "2.556.4",
+    date: "2026-10-13",
+    title: "Backups: player photos and card photos now go off-site with the nightly backup",
+    changes: [
+      "CoS #1604 (ops, no schema): the database was backed up off-site (OneDrive nightly, Litestream to R2), but the files beside it were not. Player photos (player_photos/, named by customer_id) and the scorekeepers' card photos (se_photos/) lived only on the Railway volume; Litestream copies SQLite files only. The 3:15 AM backup job now also archives those two folders into one tar.gz in the same OneDrive backup folder (sub-folder files/), through the same Microsoft Graph credentials, only when their content changed since the last upload (a content hash is kept in app setting files_backup_hash), keeping the newest 8. The archive is read back and checked file by file before it uploads. The 5:00 digest names a MEDIUM finding (files_backup_stale) if last night's upload did not happen, and carries a FILES BACKUP line. Read or test it with bridge scoring-files-backup (status), scoring-files-backup:dry (build and check, upload nothing). A new file store on the volume goes in backups.FILE_STORES. Guard test_files_backup.py."
+    ]
+  },
+  {
+    version: "2.556.3",
+    date: "2026-10-13",
+    title: "Player Spotlight: an open during the warmer's refresh no longer rebuilds the Cup piece itself",
+    changes: [
+      "Three Spotlight opens took about 10.9 s on 10/9 and 10/10 (digest #1567; the Fellowship Cup piece alone is ~8.3 s). Cause: every 90 s the warmer expires the shared entries and then spends ~10 s rebuilding them, and an open that landed inside that window rebuilt the same entries on its own thread. While the warmer is mid-rebuild, every other thread now serves the entry it just expired (at most about 2.5 minutes old) and builds nothing. Nothing is cached longer, no figure changes, and a restart still starts cold until the first warmer tick. Guard in test_perf.py (a page open during a held-open rebuild returns in under 2 s)."
+    ]
+  },
   {
     version: "2.556.2",
     date: "2026-10-13",

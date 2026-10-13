@@ -263,17 +263,29 @@ header.shell-nav {
    nine links ≈850px + Admin/Two Man Tour/Log Out ≈340px), so the header
    wraps: row 1 = brand + right-hand pills, row 2 = the links, which
    wrap again inside their own row when the window is narrower still.
-   Above 1480px nothing changes. The member shell wraps the same way
-   (brand + CTA on row 1, the three tabs on row 2). */
+   Above 1480px nothing changes. The member shell keeps one row down to
+   860px (Kerry 10/13), see below. */
 @media (min-width: 561px) and (max-width: 1479px) {
-    header.shell-nav { flex-wrap: wrap; row-gap: 2px; padding: 8px 20px 6px; }
-    .shell-nav .shell-brand, .shell-nav-right, .shell-cta-pill { flex: 0 0 auto; }
-    .shell-nav-right, .shell-cta-pill { margin-left: auto; }
-    .shell-nav-links, .shell-member .shell-member-tabs {
+    header.shell-nav:not(.shell-member) { flex-wrap: wrap; row-gap: 2px; padding: 8px 20px 6px; }
+    .shell-nav .shell-brand, .shell-nav-right { flex: 0 0 auto; }
+    .shell-nav-right { margin-left: auto; }
+    .shell-nav-links {
         order: 3; flex: 1 1 100%; margin-left: 0;
         flex-wrap: wrap; gap: 4px 20px; padding: 4px 0 2px;
     }
-    .shell-member .shell-member-tabs { gap: 4px 24px; }
+}
+/* The MEMBER shell (brand + three tabs + CTA, about 760px) stays on ONE row
+   down to 860px (Kerry 2026-10-13: "TOP NAV of PLAYERS LEADERBOARD HANDICAPS
+   shouldn't be wrapping to second line so soon. Should stay up top"); only
+   below that do the tabs drop to their own row. */
+@media (min-width: 561px) and (max-width: 859px) {
+    header.shell-nav.shell-member { flex-wrap: wrap; row-gap: 2px; padding: 8px 20px 6px; }
+    .shell-member .shell-brand, .shell-member .shell-cta-pill { flex: 0 0 auto; }
+    .shell-member .shell-cta-pill { margin-left: auto; }
+    .shell-member .shell-member-tabs {
+        order: 3; flex: 1 1 100%; margin-left: 0;
+        flex-wrap: wrap; gap: 4px 24px; padding: 4px 0 2px;
+    }
 }
 
 /* ── Responsive: mobile bar ──────────────────────────────────── */

@@ -33,10 +33,13 @@ live database. Run it after the first backup, then periodically.
 from __future__ import annotations
 
 import gzip
+import hashlib
+import io
 import logging
 import os
 import shutil
 import sqlite3
+import tarfile
 import tempfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -511,7 +514,155 @@ def backup_status(db_path: str | Path | None = None) -> dict:
     out["last_success"] = last_ok.get("finished_at") if last_ok else None
     out["healthy"] = bool(last_ok) and (out["runs"][0].get("status") == "ok"
                                         if out["runs"] else False)
+    try:
+        out["files"] = files_backup_status(db_path)
+    except Exception as e:  # noqa: BLE001
+        out["files"] = {"error": str(e)[:200]}
     return out
+
+
+# ── FILES BEHIND THE DATABASE (CoS #1604, Kerry 2026-10-11) ───────────
+# The database is not the only thing on the volume. Photos are files, not
+# rows: the player photos Kerry sends (`player_photos/`, h-<customer_id>.jpg
+# and t-<low>-<high>.jpg) and the scorekeepers' paper-card photos
+# (`se_photos/`) live beside the DB, and Litestream replicates SQLite files
+# only. A volume loss would have taken them with it. This archives those
+# directories as one tar.gz into the SAME OneDrive backup folder (sub-folder
+# `files/`), the same Graph credentials, once per CHANGE (a content hash is
+# kept in app setting `files_backup_hash`), so a quiet night uploads nothing.
+# The repo's data/player_photos/ seed is a second copy of the first 42.
+FILES_PREFIX = "trackerfiles_"
+FILES_SUFFIX = ".tar.gz"
+FILES_SUBFOLDER = "files"
+KEEP_FILES_BACKUPS = 8
+_HASH_KEY = "files_backup_hash"
+# Directory name beside the DB -> why it matters. Add a NEW file store here.
+FILE_STORES = {
+    "player_photos": "player headshots and team shots (customer_id file names)",
+    "se_photos": "photos of the paper cards (score entry, Check the card)",
+}
+
+
+def file_store_manifest(db_path=None) -> dict:
+    """What is on the volume beside the DB: per store, each file's relative
+    name, size and sha256, and one hash over all of it. Pure local read."""
+    from . import database as db
+    base = Path(str(db_path or db.DB_PATH)).parent
+    stores, h, total_files, total_bytes = {}, hashlib.sha256(), 0, 0
+    for name in sorted(FILE_STORES):
+        d = base / name
+        files = []
+        if d.is_dir():
+            for f in sorted(p for p in d.rglob("*") if p.is_file()):
+                digest = hashlib.sha256(f.read_bytes()).hexdigest()
+                rel = f.relative_to(base).as_posix()
+                size = f.stat().st_size
+                files.append({"path": rel, "bytes": size, "sha256": digest})
+                h.update(f"{rel}\0{digest}\0".encode())
+                total_files += 1
+                total_bytes += size
+        stores[name] = {"exists": d.is_dir(), "files": len(files),
+                        "bytes": sum(x["bytes"] for x in files), "list": files}
+    return {"stores": stores, "files": total_files, "bytes": total_bytes,
+            "hash": h.hexdigest()[:32]}
+
+
+def build_files_archive(dest: str | Path, db_path=None) -> dict:
+    """Write the file stores into one tar.gz (names relative to the volume),
+    then read it back and check every member against the manifest."""
+    from . import database as db
+    base = Path(str(db_path or db.DB_PATH)).parent
+    man = file_store_manifest(db_path)
+    with tarfile.open(dest, "w:gz", compresslevel=6) as tar:
+        for st in man["stores"].values():
+            for f in st["list"]:
+                tar.add(base / f["path"], arcname=f["path"], recursive=False)
+    want = {f["path"]: f["sha256"] for st in man["stores"].values() for f in st["list"]}
+    got = {}
+    with tarfile.open(dest, "r:gz") as tar:
+        for m in tar.getmembers():
+            if m.isfile():
+                got[m.name] = hashlib.sha256(tar.extractfile(m).read()).hexdigest()
+    if got != want:
+        raise RuntimeError("files archive failed its read-back check "
+                           f"({len(got)} of {len(want)} members match)")
+    return {"files": man["files"], "bytes_raw": man["bytes"], "hash": man["hash"],
+            "bytes_gz": Path(dest).stat().st_size}
+
+
+def list_remote_file_backups(token: str, user: str, folder: str) -> list[dict]:
+    r = requests.get(
+        f"{GRAPH_BASE}/users/{user}/drive/root:/{folder}:/children"
+        "?$select=name,size,lastModifiedDateTime&$top=200",
+        headers={"Authorization": f"Bearer {token}"}, timeout=60)
+    if r.status_code == 404:
+        return []
+    r.raise_for_status()
+    return [f for f in r.json().get("value", [])
+            if f.get("name", "").startswith(FILES_PREFIX)]
+
+
+def run_files_backup(db_path: str | Path | None = None, dry_run: bool = False,
+                     force: bool = False) -> dict:
+    """Archive the file stores and upload them when their content changed
+    since the last upload. Never raises (the nightly job must not stop)."""
+    from . import database as db
+    res: dict = {"ok": False}
+    tmpdir = tempfile.mkdtemp(prefix="tgf-files-backup-")
+    try:
+        man = file_store_manifest(db_path)
+        res.update({"files": man["files"], "bytes_raw": man["bytes"], "hash": man["hash"],
+                    "stores": {k: {"files": v["files"], "bytes": v["bytes"]}
+                               for k, v in man["stores"].items()}})
+        if man["files"] == 0:
+            res.update({"ok": True, "skipped": "no files in the stores yet"})
+            return res
+        last = db.get_app_setting(_HASH_KEY, db_path=db_path) if db_path else db.get_app_setting(_HASH_KEY)
+        if not force and last == man["hash"]:
+            res.update({"ok": True, "skipped": "unchanged since the last upload"})
+            return res
+        name = f"{FILES_PREFIX}{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}{FILES_SUFFIX}"
+        gz = Path(tmpdir) / name
+        res.update(build_files_archive(gz, db_path=db_path))
+        res["name"] = name
+        if dry_run:
+            res.update({"ok": True, "dry_run": True, "uploaded": False})
+            return res
+        creds = _graph_creds()
+        if not creds:
+            raise RuntimeError("Graph credentials missing (AZURE_* / EMAIL_ADDRESS)")
+        token = _token(creds)
+        if not token:
+            raise RuntimeError("could not acquire a Graph token")
+        folder = f"{_folder(db_path)}/{FILES_SUBFOLDER}"
+        _ensure_folder(token, creds["user"], folder)
+        _upload(token, creds["user"], folder, name, gz)
+        db.set_app_setting(_HASH_KEY, man["hash"], db_path=db_path) if db_path else db.set_app_setting(_HASH_KEY, man["hash"])
+        res.update({"uploaded": True, "folder": folder, "ok": True})
+        remote = sorted(f["name"] for f in list_remote_file_backups(token, creds["user"], folder))
+        doomed = remote[:-KEEP_FILES_BACKUPS] if len(remote) > KEEP_FILES_BACKUPS else []
+        res["pruned"] = sum(1 for n in doomed if _delete_remote(token, creds["user"], folder, n))
+        res["remote_total"] = len(remote) - res["pruned"]
+        return res
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Files backup FAILED")
+        res["error"] = str(e)[:300]     # no email: the 5:00 digest names an out-of-sync store
+        return res
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def files_backup_status(db_path=None) -> dict:
+    """For the health digest and the status bridge: what is on the volume,
+    and whether the newest content has gone off-site."""
+    from . import database as db
+    man = file_store_manifest(db_path)
+    last = (db.get_app_setting(_HASH_KEY, db_path=db_path) if db_path
+            else db.get_app_setting(_HASH_KEY))
+    return {"files": man["files"], "bytes": man["bytes"], "hash": man["hash"],
+            "stores": {k: {"files": v["files"], "bytes": v["bytes"]} for k, v in man["stores"].items()},
+            "uploaded_hash": last,
+            "in_sync": man["files"] == 0 or last == man["hash"]}
 
 
 # ── DOC MIRROR TO ONEDRIVE (Kerry 2026-09-03) ────────────────────────

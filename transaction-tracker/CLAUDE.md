@@ -571,7 +571,7 @@ headers, and a payout **category color map**. **Typography rule
 (RATIFIED, Kerry 2026-07-09, mailbox #44; EXCEPTION Kerry 2026-10-12: names and money in every STANDINGS are Bitter, money larger and right-aligned on the name row): Bitter serif only for
 headings, nav/CTA labels, eyebrows, and large stat numerals; dense data
 (table cells, list rows, numeric columns) is system sans with
-tabular-nums — be judicious with Bitter.** `templates/tgf.html` is the
+tabular-nums — be judicious with Bitter.** **Every nav link and every button is Bitter, app-wide (Kerry 2026-10-13: "All nav bar links should be bitters always. Buttons too")**: one rule at the top of `.btn` in dashboard.css covers `button`, `.btn`, `.tab-nav a`, `.sub-tab`, `.top-tab`, `.contest-cta`. `templates/tgf.html` is the
 Phase 1 reference implementation (dark nav, sub-tab pill convention, and
 the GOLFERS "Command Ledger": dark leaderboard rail + golfer winnings
 detail with collapsible chapter bands). Tokens live in `dashboard.css`
@@ -654,8 +654,10 @@ that are NOT layout-mode switches (640px scorecard/points density, 700/720/
 760px grid collapses, 900px split panes) are cosmetic and stay as they are.
 Because the desktop layout now runs down to 561px, `shell.css` wraps the
 header into two rows between 561px and 1479px (brand + right-hand pills on
-row 1, links on row 2; member shell: brand + CTA, then the three tabs) —
-above 1480px the single row is unchanged.
+row 1, links on row 2) —
+above 1480px the single row is unchanged. The MEMBER shell (brand + three
+tabs + CTA) stays on one row down to 860px and wraps only 561–859px (Kerry
+2026-10-13).
 
 ## Handicap identity: `customer_id` (v2.459.0)
 
@@ -705,7 +707,7 @@ use). Chapter semantic layer: `--chapter-austin #BF5700` (white text),
 `--chapter-sa #D3DDE4` (dark text, alt `--chapter-sa-alt #8FA8B8`),
 `--chapter-national #374151` — applied to the Events/Handicaps chapter pills.
 PWA `theme-color` metas + manifest are TGF orange. Do not reintroduce royal
-blue for interactive/CTA states. **BOUGHT IN (Kerry 2026-10-12, v2.547.0: on the POINTS RACES and FELLOWSHIP CUP boards a bought-in row is now plain WHITE and a NOT-bought-in row a soft grey `#EEEEEC` with muted text and a BUY IN pill while the race is not final — the green below still rules the Events leaderboard and badges). It was one green app-wide
+blue for interactive/CTA states. **BOUGHT IN ROWS, EVERY LEADERBOARD (Kerry 2026-10-13, v2.558.1: "For all leaderboard views everywhere, adopt the new standards we set with the grey for those not bought in and no color for those who are"): a bought-in row is plain WHITE (`--buyin-row`) and a NOT-bought-in row soft grey `--buyin-nobuy` #EEEEEC with `--buyin-nobuy-text` #6B7280 — Season Contests, the Events leaderboard, the Lone Star Cup skins, every board. Green (`--buyin-green`, below) survives only on badges/chips, never as a row colour; `test_events_board.js` guards it. It was one green app-wide
 (v2.395.0, Kerry 2026-09-13: "Same green as points race but ins for
 events"):** `--buyin-green #bbf7d0` / `--buyin-green-text #15803D` /
 `--buyin-grey #FAFAFA`. Green means bought in and nothing else (the
