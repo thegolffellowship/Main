@@ -63,6 +63,12 @@
     --buyin-green: #bbf7d0;
     --buyin-green-text: #15803D;
     --buyin-grey: #FAFAFA;
+    /* BOUGHT-IN ROWS on every leaderboard (Kerry 2026-10-13: "For all leaderboard views everywhere, adopt the new
+       standards we set with the grey for those not bought in and no color for those who are"): a bought-in row is
+       plain white, a not-bought-in row a soft grey with muted text. --buyin-green stays for badges and chips. */
+    --buyin-row: #FFFFFF;
+    --buyin-nobuy: #EEEEEC;
+    --buyin-nobuy-text: #6B7280;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

@@ -650,9 +650,10 @@
            2026-09-13): green row = bought into THAT game, light grey =
            did not. Backgrounds only — the inline win tints on the score
            cells still paint over the top, which is the point. */
-        .evlb-ovr tr.evlb-plr.bought td { background: var(--buyin-green, #bbf7d0); }
-        .evlb-ovr tr.evlb-plr.nobuy td { background: var(--buyin-grey, #FAFAFA); color: #9CA3AF; }
-        .evlb-ovr tr.evlb-plr.nobuy td.nm { color: #6B7280; }
+        /* bought in = plain white, not bought in = soft grey + muted text, on every board (Kerry 2026-10-13) */
+        .evlb-ovr tr.evlb-plr.bought td { background: var(--buyin-row, #FFFFFF); }
+        .evlb-ovr tr.evlb-plr.nobuy td { background: var(--buyin-nobuy, #EEEEEC); color: var(--buyin-nobuy-text, #6B7280); }
+        .evlb-ovr tr.evlb-plr.nobuy td.nm { color: var(--buyin-nobuy-text, #6B7280); }
         /* MVP badges under the name on OVERALL (Kerry 2026-09-14) —
            the Player Spotlight's .spt-badge shape (8px uppercase Bitter
            pill) in the ratified payout-category colours. */
@@ -3926,7 +3927,7 @@
         else if (what[game]) out.push(sec("This tab", what[game]));
         if (!noGames) out.push(sec("Colors",
             `Money winners are colour-coded by FLIGHT: ${[1, 2, 3].map(f => `<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`).join(" ")}. `
-            + `On the Net, Gross, Skins and MVP/Points tabs a <span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">green</span> row bought into that game and a <span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">grey</span> row did not; non-buyers are placed in the flight their handicap would have flighted them. Show All Players brings the non-buyers back onto a Net or Gross board.`));
+            + `On the Net, Gross, Skins and MVP/Points tabs a <span class="lg" style="background:var(--buyin-row,#FFFFFF);color:#1B1B1B;border:1px solid #E5E7EB;">white</span> row bought into that game and a <span class="lg" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">grey</span> row did not; non-buyers are placed in the flight their handicap would have flighted them. Show All Players brings the non-buyers back onto a Net or Gross board.`));
         out.push(sec("Tapping", "Tap a player for their scorecard, or a team for its best-ball card. Tap a column header to sort and re-rank. Dots in the corner of a hole are the strokes received there. Hole by hole and Handicaps add those columns."));
         const ev = d.event || {};
         out.push(sec("Where the scores come from", ev.score_source === "entry"
@@ -4727,8 +4728,8 @@
             if ((!game || game === "points") && ovRows.some(r => r.win_mvp || r.mvp))
                 chips.push(`<span class="lg w-mvp">Pts</span> MVP`);
             if (EVLB_BUYIN_GAMES.includes(game))
-                chips.push(`<span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">bought in</span>`,
-                           `<span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">not in</span>`);
+                chips.push(`<span class="lg" style="background:var(--buyin-row,#FFFFFF);color:#1B1B1B;border:1px solid #E5E7EB;">bought in</span>`,
+                           `<span class="lg" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">not in</span>`);
             return chips.length ? `<p class="evlb-legend">${chips.join(" ")}</p>` : "";
         };
         const ovLegend = evlbLegendFor(null);

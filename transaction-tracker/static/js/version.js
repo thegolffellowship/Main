@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.558.0";
+window.TGF_VERSION = "2.558.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.558.1",
+    date: "2026-10-13",
+    title: "Every leaderboard: bought in = white, not bought in = soft grey",
+    changes: [
+      "Kerry 10/13, on the Lone Star Cup skins board: \"For all leaderboard views everywhere, adopt the new standards we set with the grey for those not bought in and no color for those who are.\" The Events leaderboard and every board built on it (the Lone Star Cup skins, the scorer's board) drop the green bought-in rows. A bought-in row is plain white, and a not-bought-in row is the same soft grey #EEEEEC with muted text the Season Contests boards use. The legend chips and HOW IT WORKS text say white / grey. New tokens --buyin-row and --buyin-nobuy in dashboard.css; green (--buyin-green) stays for badges and chips only. test_events_board.js now fails any green leaderboard row.",
+    ],
+  },
   {
     version: "2.558.0",
     date: "2026-10-13",
