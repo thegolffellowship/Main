@@ -1141,3 +1141,5 @@ on by itself" rule for regular events. `email_parser/live_scoring_default.py`:
 - Managers get the read (`/api/score-entry/events/<id>/admin`, already manager), the copy-link buttons and each group's QR. `/api/score-entry/groups/<id>/qr.svg` is now manager, behind `_se_event_gate("group", ...)`.
 - Seed / Update-from-pairings (`/seed`) and Close round stay ADMIN (CA #843); the panel hides those buttons for non-admins.
 - Guard: `test_score_entry.py`.
+
+- **v2.559.7, EVENTS list before the first score (Kerry 2026-10-13: "They should show starting when tee times are generated").** `get_events_leaderboard` lists a score-entry event in entry mode (live today or later) as soon as its groups have seated players, even with no score posted (`_entry_mode_overlay` returned `{}`). Field = distinct seated customer_ids across non-preview rounds; money and ranks stay hidden until the field is complete. Guard `test_events_list_pre_score.py`.

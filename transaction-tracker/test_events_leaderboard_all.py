@@ -49,8 +49,8 @@ html = open("templates/contests.html", encoding="utf-8").read()
 check("the EVENTS tab: manager-only on the staff page, a plain tab on /member (v2.523.4, #1146-1), no BETA badge (Kerry 2026-10-08)",
       '{% if member_mode %}<button class="top-tab" data-top="events">' in html
       and '<button class="top-tab manager-only" data-top="events"' in html and 'class="evlb-beta">BETA' not in html)
-check("every board carries the short Unofficial / GG-official line (Kerry 10/8: less text)",
-      'Unofficial &middot; Golf Genius is the official scorer' in html and 'Money shown as computed, not as paid.' not in html)
+check("no board says Golf Genius is the official scorer; the Tracker is official now (Kerry 10/13)",
+      'Golf Genius is the official scorer' not in html and 'Money shown as computed, not as paid.' not in html)
 check("legends are chips, not prose (Kerry 10/8: \"Nobody is going to read all that\")",
       'Money winners color-code by FLIGHT: ${' not in html and 'Tap a player for their scorecard.</p>' in html)
 check("the solo board drops the GG line on an event GG never scores (or with no posted score yet)",
