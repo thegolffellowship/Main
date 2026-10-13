@@ -1019,6 +1019,7 @@ members today." His "Go" was given in the Tracker Build session on 10/3.
   `_board_read_ok` (app.py): manager sessions see everything, a scorer's
   group link narrows to his own event, everyone else reads every event.
   Payloads are PII-free (names, scores, computed money).
+- v2.559.7 (Kerry 2026-10-13: "it needs to be official now"): the Unofficial / GG-official line is REMOVED from the EVENTS leaderboard; the Tracker is the official scorer. The record below is history.
 - While Golf Genius is the official scorer every board shows "Unofficial —
   Golf Genius is the official scorer[ through <date>]. Money shown as
   computed, not as paid." The date is the `gg_official_through` setting.

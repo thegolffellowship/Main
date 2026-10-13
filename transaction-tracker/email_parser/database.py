@@ -14318,6 +14318,23 @@ def get_events_leaderboard(chapter: str | None = None,
         for _eid in _live_ids:
             _tees = _entry_mode_overlay(conn, _eid, db_path)
             try:
+                if _tees == {}:
+                    # Live day, groups seeded, nobody has scored yet: list it anyway (Kerry 10/13: "Tonight's events
+                    # not showing yet. They should show starting when tee times are generated"). The field is the
+                    # players seated in its score-entry groups; no scores means no money and no ranks yet.
+                    _ev0 = conn.execute("SELECT id, item_name, event_date, course, chapter, format "
+                                        "FROM events WHERE id = ?", (_eid,)).fetchone()
+                    try:
+                        from email_parser import entry_publish as _ep0
+                        _rd0 = _se.get_entered_scores(int(_eid), db_path=db_path)
+                        _seat0 = {p.get("customer_id") for r in (_rd0.get("rounds") or [])
+                                  if not _ep0._is_preview(r) for p in (r.get("players") or [])}
+                        _seat0.discard(None)
+                    except Exception:
+                        _seat0 = set()
+                    if _ev0 and _seat0:
+                        rows.append({**dict(_ev0), "field": len(_seat0), "live_entry": True})
+                    continue
                 if not _tees:
                     continue
                 _ev = conn.execute(

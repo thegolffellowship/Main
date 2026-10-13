@@ -10,6 +10,16 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.559.7",
+    date: "2026-10-13",
+    title: "Tonight's events listed before the first score; the Tracker is the official scorer",
+    changes: [
+      "Kerry 10/13: \"Tonight's events not showing yet. They should show starting when tee times are generated.\" The EVENTS leaderboard listed a live-scoring event only once someone had posted a score. An event that is live today (or later) with score-entry groups seated is now listed straight away, with its field taken from the seated players; no money and no ranks show until scores come in, as before.",
+      "Kerry 10/13: \"it needs to be official now. Not Golf Genius is the official scorer.\" The \"Unofficial · Golf Genius is the official scorer\" line is removed from the EVENTS leaderboard (list and every board).",
+      "Guards: test_events_list_pre_score.py (new); test_board_entry_mode.py and test_events_leaderboard_all.py updated to the new rulings.",
+    ],
+  },
+  {
     version: "2.559.6",
     date: "2026-10-13",
     title: "Payouts without Golf Genius: Team/CART Net, CTP and multi-flight games from the Tracker",
