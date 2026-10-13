@@ -30,6 +30,10 @@ logging.disable(logging.WARNING)
 import app as _appmod                                            # noqa: E402,F401
 from email_parser import database as db                          # noqa: E402
 from email_parser.timezone_utils import today_central_str        # noqa: E402
+# These checks are about the refresh WINDOW, so they run with the GG points
+# intake switched on (it is off by default since Kerry 10/13, CoS #1693-1).
+import email_parser.gg_untether as _ggu                           # noqa: E402
+_ggu.gg_points_intake_on = lambda *a, **k: True
 
 F = []
 def check(label, cond, detail=""):

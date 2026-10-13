@@ -8793,6 +8793,11 @@ def refresh_points_race_standings(race_key: str,
     if not race:
         raise ValueError(
             f"Unknown race {race_key!r} — known: {sorted(_GG_POINTS_RACES)}")
+    # This overwrites the LIVE standings, so it obeys the GG points intake
+    # switch (Kerry 10/13, CoS #1693-1): off = refused, snapshot kept.
+    from email_parser.gg_untether import gg_points_intake_on, POINTS_PAUSED
+    if not gg_points_intake_on(db_path):
+        raise RuntimeError(POINTS_PAUSED)
 
     from golf_genius_sync import fetch_season_points_race
     standings = fetch_season_points_race(
@@ -10658,6 +10663,13 @@ def get_points_race_standings(race_key: str,
             if not event_since:
                 stale = False
 
+    # GG points intake OFF (Kerry 10/13, CoS #1693-1): serve the saved
+    # snapshot, no refresh, no error banner.
+    from email_parser.gg_untether import gg_points_intake_on
+    intake_paused = not gg_points_intake_on(db_path)
+    if intake_paused:
+        force_refresh = stale = False
+
     queued_refresh = False
     if (force_refresh or stale) and no_network:
         # ...and with NO snapshot at all the read still does not wait:
@@ -11016,6 +11028,7 @@ def get_points_race_standings(race_key: str,
         "projected_payouts": projected_payouts,
         "fetched_at": fetched_at,
         "gg_error": gg_error,
+        "intake_paused": intake_paused,
         "flights": (
             [{"label": lbl, "range": _flight_range_text(lo, hi)}
              for lbl, lo, hi in race["flights"]]
@@ -20264,6 +20277,13 @@ def refresh_monthly_points_snapshot(db_path: str | Path = DB_PATH) -> dict:
     Called by the daily scheduler job, the Refresh button (?force=1),
     and the boot-time bootstrap when no snapshot exists yet.
     """
+    # GG points intake OFF (Kerry 10/13, CoS #1693-1): keep the saved
+    # snapshot; the daily job, the boot bootstrap and Refresh pull nothing.
+    from email_parser.gg_untether import gg_points_intake_on, POINTS_PAUSED
+    if not gg_points_intake_on(db_path):
+        data = load_gg_snapshot("monthly_points", db_path) or {"months": [], "errors": []}
+        data["intake_paused"] = POINTS_PAUSED
+        return data
     data = get_monthly_points(db_path)
     data["fetched_at"] = save_gg_snapshot("monthly_points", data, db_path)
     return data

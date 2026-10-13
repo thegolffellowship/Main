@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.558.2";
+window.TGF_VERSION = "2.558.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.558.3",
+    date: "2026-10-13",
+    title: "Golf Genius points intake switched OFF while the Tracker computes points blind",
+    changes: [
+      "Kerry 10/13 (CoS #1693-1): \"Can we generate points on our side first for last Tuesday? Then I'll run Golf Genius for you to check it against. However, you'll need to turn off the GG connector that automates bringing them in. I want to make sure we're calculating them correctly.\" Nothing in the Tracker could turn the GG points pull off: a points board refreshed itself from Golf Genius whenever its snapshot went stale after an event, the daily job refreshed the monthly points, and each row expansion called GG live. New app setting gg_points_intake, OFF unless it reads 'on'. While off, every points board serves its saved snapshot (everything through 9/29) with no error banner; the monthly snapshot is kept; the row expansion returns no GG detail (the player's own cards still show); and a refresh that would overwrite the live standings is refused. Nothing is deleted. Manual, read-only captures that write elsewhere (the points ledger) still run, so Kerry's GG comparison pull works on his word. Guard: test_gg_points_intake.py; the refresh-window tests now run with the switch on.",
+    ],
+  },
   {
     version: "2.558.2",
     date: "2026-10-13",

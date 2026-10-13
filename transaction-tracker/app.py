@@ -13199,6 +13199,12 @@ def api_season_contest_points_race_detail():
     if not card.isdigit():
         return jsonify({"error": "card must be a numeric member_card_id"}), 400
 
+    # GG points intake OFF (Kerry 10/13, CoS #1693-1): the row expansion
+    # stops calling Golf Genius; the page still shows the player's cards.
+    from email_parser.gg_untether import gg_points_intake_on, POINTS_PAUSED
+    if not gg_points_intake_on():
+        return jsonify({"tables": [], "paused": True, "note": POINTS_PAUSED})
+
     now = time.time()
     cached = _points_detail_cache.get((race_key, card))
     if cached and now - cached[0] < _POINTS_DETAIL_CACHE_TTL:

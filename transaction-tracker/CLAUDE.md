@@ -819,6 +819,17 @@ unless `AUTO_LIVE_POLL=1`. Events before it keep their GG walks (the 10/6 points
 Golf Genius path must call the same rule. Move the date only on Kerry's word.
 Guard `test_gg_untether.py`.
 
+**Golf Genius POINTS intake is OFF (Kerry 2026-10-13, CoS #1693-1):** "you'll need
+to turn off the GG connector that automates bringing them in. I want to make sure
+we're calculating them correctly." App setting `gg_points_intake` (off unless it
+reads `on`, `gg_untether.gg_points_intake_on`). While off, a points board serves
+its saved snapshot and never refreshes, the monthly-points job keeps its snapshot,
+the row-expansion proxy (`/api/season-contests/points-race/detail`) makes no GG
+call, and `refresh_points_race_standings` (which overwrites live standings)
+refuses. Manual read-only captures that write elsewhere (`points_ledger`) still
+run, for Kerry's GG comparison. Turn it on only on Kerry's word. Guard
+`test_gg_points_intake.py`.
+
 ## No-push window during live events (CA #829, 2026-09-28, standing rule)
 
 Every push to `main` restarts the Tracker and drops requests in flight

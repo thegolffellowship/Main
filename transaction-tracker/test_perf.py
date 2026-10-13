@@ -224,6 +224,9 @@ conn.close()
 # no_network never waits — even with no snapshot at all
 called = {"sync": 0, "queued": 0}
 _orig_refresh, _orig_queue = db.refresh_points_race_standings, db._queue_points_refresh
+import email_parser.gg_untether as _ggu   # GG points intake on for this check (off by default, Kerry 10/13)
+_orig_intake = _ggu.gg_points_intake_on
+_ggu.gg_points_intake_on = lambda *a, **k: True
 db.refresh_points_race_standings = lambda *a, **k: called.__setitem__("sync", called["sync"] + 1)
 db._queue_points_refresh = lambda *a, **k: (called.__setitem__("queued", called["queued"] + 1), True)[1]
 try:
@@ -231,6 +234,7 @@ try:
     res = db.get_points_race_standings(race, db_path=tmp, no_network=True)
 finally:
     db.refresh_points_race_standings, db._queue_points_refresh = _orig_refresh, _orig_queue
+    _ggu.gg_points_intake_on = _orig_intake
 check("get_points_race_standings(no_network=True) with NO snapshot queues the refresh and does not fetch inline",
       called == {"sync": 0, "queued": 1} and res.get("refresh_queued") is True, str((called, res.get("refresh_queued"))))
 

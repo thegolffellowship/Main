@@ -75,3 +75,33 @@ def rsvps_untethered(db_path=None) -> bool:
         return (get_app_setting(RSVP_SETTING, db_path=db_path) or "").strip() == "1"
     except Exception:
         return False
+
+
+# ── Golf Genius POINTS intake (Kerry 2026-10-13, via CoS #1693-1) ────────
+# "Can we generate points on our side first for last Tuesday? Then I'll run
+# Golf Genius for you to check it against. However, you'll need to turn off
+# the GG connector that automates bringing them in. I want to make sure we're
+# calculating them correctly."
+#
+# OFF unless app setting gg_points_intake = "on". While off, nothing pulls
+# Golf Genius season or monthly points AUTOMATICALLY: a board read never
+# refreshes (it serves the saved snapshot), the daily monthly-points job keeps
+# its saved snapshot, the row-expansion proxy stops calling GG, and a lane's
+# refresh that would overwrite the live standings is refused. Manual,
+# read-only captures that write somewhere else (points_ledger, the
+# scoring-points-detail bridge) still run, because Kerry runs GG on his word
+# to check the Tracker against it. Nothing is deleted.
+POINTS_SETTING = "gg_points_intake"
+
+POINTS_PAUSED = ("Golf Genius points intake is OFF (Kerry 10/13: \"you'll need to turn off the "
+                 "GG connector that automates bringing them in\"). The standings keep their "
+                 "saved snapshot; set app setting gg_points_intake=on only on Kerry's word.")
+
+
+def gg_points_intake_on(db_path=None) -> bool:
+    try:
+        from email_parser.database import get_app_setting
+        v = (get_app_setting(POINTS_SETTING, db_path=db_path) or "").strip().lower()
+    except Exception:
+        v = ""
+    return v == "on"
