@@ -1,7 +1,7 @@
-window.TGF_VERSION = "2.558.3";
+window.TGF_VERSION = "2.559.2";
 window.TGF_CHANGELOG = [
   {
-    version: "2.558.3",
+    version: "2.559.2",
     date: "2026-10-13",
     title: "Golf Genius points intake switched OFF while the Tracker computes points blind",
     changes: [
@@ -9,12 +9,20 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
-    version: "2.558.2",
+    version: "2.559.1",
     date: "2026-10-13",
     title: "Match cards: OPEN CARD sits on the hole-dots line; OPEN on a phone",
     changes: [
       "Kerry 10/13: \"Can you move the OPEN CARD to same line as the dots for the hole results so we can reduce the vertical height? On mobile you can reduce OPEN CARD to OPEN. Do this for ALL Match Play events and matches, not just Lone Star cup.\" Every match card (City Match Play pools and knockout, and the Lone Star Cup) is built by one function, mpMatchCard. The dots, the start-hole note and the OPEN CARD label now share one row: on desktop the note is on the left, the dots are centred and OPEN CARD is on the right. The card loses a whole row. On a phone (560px and under) the label reads OPEN, or CLOSE when the card is open. All 18 dots stay on one line with OPEN at the right end, and the start-hole note stays on that line as 'Start 10' (Kerry 10/13: \"The Started on hole x should be on the same line as well\").",
       "A live re-render of an open card used to keep the card open but put the label back to OPEN CARD. It now shows the close label. Guard: test_mp_card_dots_line.js.",
+    ],
+  },
+  {
+    version: "2.559.0",
+    date: "2026-10-13",
+    title: "Event-day email: re-issue after a start change (UPDATED START)",
+    changes: [
+      "Kerry 10/13, after the Quarry's start holes moved to 10-15 (Back 9, 4:30 PM shotgun): \"Re-issue to players\", then \"Approved to send yourself\" and \"Send it - GO\". The member send goes once per event and player, so a start change had no way back to the players. New send_event_day_reissue (event_day_email.py) sends the same approved message to every ready player with \"UPDATED START: \" before the subject and an orange notice at the top of the panel (\"Your starting hole has changed. You now start on Hole N. This replaces the earlier email. Your group and cart are the same.\"). It needs the template stamp, a mailbox post carrying Kerry's word (customer_query._kerry_ok, unchanged) and confirm; without confirm it is a dry run. Once per player per sheet state (app setting event_day_reissue:<event>:<hash of the start lines>); event_day_email_sends is untouched; every message is logged. Bridge scoring-event-day-email:<id>|reissue|<post id>[|confirm]. test_event_day_email.py section 4c.",
     ],
   },
   {
