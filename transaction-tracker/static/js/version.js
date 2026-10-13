@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.561.2";
+window.TGF_VERSION = "2.561.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.561.3",
+    date: "2026-10-13",
+    title: "Live Scoring how-to page with its own link: /member/live-scoring",
+    changes: [
+      "New public page /member/live-scoring (Kerry 2026-10-13: 'a slideshow or directions directly on the Tracker that has its own link that we can send out. So it's fully vetted, locked and can be updated at any point'). Ten steps, one per slide with Next / back and swipe, or All on one page: open the group's scorecard, tap your name, enter each hole (made par? don't tap anything, every score starts at par), closest to the pin, check the card, fix a number, photo and submit, the scorekeeper signs, everyone else follows along (never Take over) and signs. #step-N links open a given step.",
+      "The screenshots are the real scoring screens at iPhone size (390 x 844 at 3x) with the real Bitter font, taken on a test copy with sample names, never a live group. Every word and image lives in the steps list at the top of templates/live_scoring_guide.html; replace a picture by its file name in static/img/live-scoring/. Guard test_live_scoring_guide.py.",
+      "Replaces the one-off how-to.html email page from 2.561.2.",
+    ],
+  },
   {
     version: "2.561.2",
     date: "2026-10-13",

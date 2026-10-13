@@ -13559,6 +13559,21 @@ def member_teesheet(event_id):
     return render_teesheet(data)
 
 
+@app.route("/member/live-scoring")
+def member_live_scoring_guide():
+    """LIVE SCORING HOW-TO (Kerry 2026-10-13: "a slideshow or directions
+    directly on the Tracker that has its own link that we can send out. So
+    it's fully vetted, locked and can be updated at any point"). Public, no
+    PII; the steps and their phone screenshots live in
+    templates/live_scoring_guide.html and static/img/live-scoring/."""
+    folder = os.path.join(app.static_folder, "img", "live-scoring")
+    try:
+        img_v = int(max(os.path.getmtime(os.path.join(folder, f)) for f in os.listdir(folder)))
+    except (OSError, ValueError):
+        img_v = 0
+    return render_template("live_scoring_guide.html", img_v=img_v)
+
+
 @app.route("/member/matchplay/<chapter_slug>")
 def member_matchplay(chapter_slug):
     """Chapter-specific shareable Match Play links (Kerry 2026-08-21:

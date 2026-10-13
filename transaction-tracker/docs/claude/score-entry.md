@@ -1143,3 +1143,19 @@ on by itself" rule for regular events. `email_parser/live_scoring_default.py`:
 - Guard: `test_score_entry.py`.
 
 - **v2.559.7, EVENTS list before the first score (Kerry 2026-10-13: "They should show starting when tee times are generated").** `get_events_leaderboard` lists a score-entry event in entry mode (live today or later) as soon as its groups have seated players, even with no score posted (`_entry_mode_overlay` returned `{}`). Field = distinct seated customer_ids across non-preview rounds; money and ranks stay hidden until the field is complete. Guard `test_events_list_pre_score.py`.
+
+## The players' how-to page (v2.561.3, Kerry 2026-10-13)
+
+`/member/live-scoring` is the public, vetted how-to for players: ten steps,
+one per slide (Next / back, swipe, `#step-N` deep links) or all on one page.
+Kerry: "a slideshow or directions directly on the Tracker that has its own
+link that we can send out. So it's fully vetted, locked and can be updated
+at any point", "with literal screenshots from a phone that shows correct
+fonts". Every word and picture lives in the `steps` list at the top of
+`templates/live_scoring_guide.html`; the screenshots are files in
+`static/img/live-scoring/` (iPhone size, 390 x 844 at 3x, real Bitter, taken
+on a test copy with sample names). When a scoring screen changes, re-shoot
+that step and replace its file under the same name. Guard
+`test_live_scoring_guide.py`. Known friction it documents: a non-scorekeeper
+signs via SCORE THIS GROUP, their name, then Follow along, next to Take over
+(Closeout #1739).
