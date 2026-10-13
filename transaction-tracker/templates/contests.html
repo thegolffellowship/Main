@@ -1824,6 +1824,7 @@
         #pr-table-container .enrollment-table thead tr:first-child th:first-child { border-top-left-radius: 8px; }
         #pr-table-container .enrollment-table thead tr:first-child th:last-child { border-top-right-radius: 8px; }
         /* Past Champions and Show All Players share one line (Kerry 2026-10-13) */
+        .mp-champ-plaque { margin: 12px 0 4px; }
         .pr-pc-row { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 0.7rem; }
         .pr-pc-row > .past-champs { flex: 1 1 auto; margin: 0; min-width: 0; }
         .pr-pc-row > .pr-buy-legend { margin: 0 0 0 auto; align-self: center; flex: none; }
@@ -6080,7 +6081,34 @@
             <h2 class="mp-header-title">City Match Play &mdash; ${escapeHtml(cmpState.chapter)} ${escapeHtml(cmpState.season)}</h2>
             ${sub ? `<div class="mp-header-sub">${escapeHtml(sub)}</div>` : ''}
             ${warn}
+            <div id="mp-champ-slot"></div>
         </div>`;
+        mpRenderChampBanner();
+    }
+
+    // CHAMPION BANNER on City Match Play (Kerry 2026-10-13: "We also need a top banner for the champion on City Match
+    // Play"): the same plaque as the cups, at the top of the board. The champion is the recorded winner of the Final;
+    // their customer_id comes from the bracket (winner_id, else the bracket row that seats them, by its player/opponent
+    // id) and the headshot index swaps the trophy for their photo. No photo on file, the trophy stays.
+    function mpRenderChampBanner() {
+        const slot = $("mp-champ-slot");
+        if (!slot) return;
+        const rows = cmpState.bracket || [];
+        const fin = rows.filter(r => r.round === "final" && r.winner_name);
+        if (!fin.length) { slot.innerHTML = ""; return; }
+        const name = fin[0].winner_name;
+        let cid = fin.map(r => r.winner_id).find(Boolean) || null;
+        if (!cid) {
+            for (const r of rows) {
+                if (r.player_name === name && r.player_id) { cid = r.player_id; break; }
+                if (r.opponent_name === name && r.opponent_id) { cid = r.opponent_id; break; }
+            }
+        }
+        slot.innerHTML = `<div class="tgf-champ-plaque mp-champ-plaque" data-head="1" data-cids="${cid || ""}">`
+            + `<div class="tgf-champ-trophy"></div><div class="tgf-champ-text">`
+            + `<div class="tgf-champ-eyebrow">${escapeHtml(cmpState.season)} ${escapeHtml(cmpState.chapter)} Match Play Champion</div>`
+            + `<div class="tgf-champ-name">${escapeHtml(name)}</div></div></div>`;
+        if (cid && typeof fcChampPhotoLoad === "function") fcChampPhotoLoad();
     }
 
     // ── POOLS panel: per-pool standings list + note + (manager) editor ──
@@ -8352,6 +8380,7 @@
     function cmpRenderBracket() {
         const container = $("cmp-bracket-container");
         const bracket = cmpState.bracket || [];
+        mpRenderChampBanner();   // the top banner follows the bracket (Kerry 10/13)
         // Feed the par registry so knockout scorecards (including live
         // re-renders that only know the event name) can show a Par row.
         bracket.forEach(r => mpRegisterPars(r.event_name, r.hole_pars));

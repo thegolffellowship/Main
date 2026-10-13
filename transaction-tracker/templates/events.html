@@ -3646,7 +3646,8 @@
                     badgesHtml += `<span class="game-stat-badge ${mobileFlightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="5" title="Divisions &amp; Flights — the ratified flighting and payout rules, dry run">FLIGHTS</span>`;
                 }
                 badgesHtml += `<span class="game-stat-badge ${mobileReportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="6" title="Print reports">REPORTS</span>`;
-                if (currentRole === "admin" && seEventOn(ev.id)) badgesHtml += `<span class="game-stat-badge ${mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
+                // SCORING for managers too (Kerry 2026-10-13: "make the SCORING tab available to Managers under each event")
+                if ((currentRole === "admin" || currentRole === "manager") && seEventOn(ev.id)) badgesHtml += `<span class="game-stat-badge ${mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
                 if (currentRole === 'admin') {
                     badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
                     badgesHtml += `<span class="game-stat-badge fin-badge-admin ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
@@ -7324,7 +7325,7 @@
         rounds.forEach((r) => { seeded[String(r.holes)] = r.status === 'open' ? 'open' : (seeded[String(r.holes)] || 'closed'); });
         let seed = '';
         ["9", "18"].forEach((h) => {
-            if (!has[h] || seeded[h] === 'closed') return;
+            if (!has[h] || seeded[h] === 'closed' || currentRole !== 'admin') return;   // seeding stays admin-only (CA #843)
             seed += seeded[h]
                 ? `<button class="pairings-action-btn" data-se-seed="${h}" data-se-ev="${evId}" title="Re-read the saved pairings: groups and handicaps update, scores are kept">&#x21BB; Update ${h}-hole groups from pairings</button> `
                 : `<button class="pairings-action-btn" data-se-seed="${h}" data-se-ev="${evId}" style="background:var(--green);color:#fff;border-color:var(--green);">Seed ${h}-hole score entry</button> `;
@@ -7338,7 +7339,7 @@
             body += `<div class="se-pp-round"><div class="se-pp-rh"><b>${escapeHtml(r.label || 'Round')}</b>`
                 + `<span class="se-pp-st ${r.status === 'open' ? 'open' : 'closed'}">${escapeHtml(r.status)}</span>`
                 + `<span class="se-pp-muted">${r.holes} holes · ${r.groups.length} groups · ${inn} finished${r.matches ? ' · match play' : ''}</span>`
-                + (r.status === 'open' ? `<button class="pairings-action-btn" data-se-close="${r.round_id}" data-se-ev="${evId}" style="margin-left:auto;color:var(--red);">Close round</button>` : '')
+                + (r.status === 'open' && currentRole === 'admin' ? `<button class="pairings-action-btn" data-se-close="${r.round_id}" data-se-ev="${evId}" style="margin-left:auto;color:var(--red);">Close round</button>` : '')
                 + `</div>${r.groups.map((g) => `<div class="se-pp-g">
                     <span class="n">G${g.group_num != null ? g.group_num : ''}</span>
                     <span class="p">${g.players.map((p) => escapeHtml(p.name) + (p.signed ? ' &#10003;' : '')).join(', ')}</span>
@@ -9240,7 +9241,7 @@
         // SCORE ENTRY (Kerry 2026-10-06: "Move the SCORE ENTRY section to
         // it's own toggle after REPORTS and before PAYOUTS. Too much going on
         // on that PAIRINGS view"). Same audience as the old panel.
-        if (currentRole === "admin" && seEventOn(ev.id)) {
+        if ((currentRole === "admin" || currentRole === "manager") && seEventOn(ev.id)) {   // managers too (Kerry 10/13)
             html += `<span class="game-stat-badge ${scoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
         }
         if (currentRole === 'admin') {

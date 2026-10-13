@@ -1,6 +1,21 @@
-window.TGF_VERSION = "2.559.2";
+window.TGF_VERSION = "2.559.4";
 window.TGF_CHANGELOG = [
   {
+    version: "2.559.4",
+    date: "2026-10-13",
+    title: "City Match Play champion banner",
+    changes: [
+      "Kerry 10/13: \"We also need a top banner for the champion on City Match Play. We have a photo for Luke, but not currently for Derek Chandler.\" Once a chapter's Final has a recorded winner, the top of the City Match Play board shows the same champion plaque as the cups: \"2026 {Chapter} Match Play Champion\" and the name. The champion's headshot replaces the trophy when one is on file (Luke Youngs); with none on file the trophy stays (Derek Chandler, until his photo is uploaded). The customer id comes from the Final's winner_id, else from the bracket row that seats the winner, because Austin's Final rows carry no ids. No winner, no banner.",
+    ],
+  },
+  {
+    version: "2.559.3",
+    date: "2026-10-13",
+    title: "SCORING tab for managers",
+    changes: [
+      "Kerry 10/13: \"Can you make the SCORING tab available to Managers under each event?\" Chapter managers now see the SCORING tab on any event with live scoring on. It shows each group's scoring link (copy) and QR, holes in, signatures and card checks. The QR route opens to managers, still gated per event. Seeding or re-seeding groups and closing a round stay admin-only (CA #843), and their buttons are hidden for managers.",
+    ],
+  },  {
     version: "2.559.2",
     date: "2026-10-13",
     title: "Golf Genius points intake switched OFF while the Tracker computes points blind",

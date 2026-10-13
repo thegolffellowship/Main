@@ -1334,3 +1334,4 @@ comes from `mpToggleHintHtml(open)`:
 The live re-render of an open card keeps the close label. A card with no
 hole detail yet keeps its own toggle row, because it has no dots to share.
 Guard: `test_mp_card_dots_line.js`.
+- v2.559.4: City Match Play champion banner. `mpRenderChampBanner()` fills `#mp-champ-slot` (in the `mpRenderHeader` card) with a `.tgf-champ-plaque.mp-champ-plaque[data-head][data-cids]` once a `round === 'final'` row has a `winner_name`. It is called from `mpRenderHeader` and `cmpRenderBracket`, because the bracket can load after the header. The cid is the Final's `winner_id`, else the `player_id`/`opponent_id` of any bracket row seating that name (Austin's Final rows carry no ids). `fcChampPhotoLoad()` then swaps the trophy for the headshot; with no headshot on file the trophy stays.

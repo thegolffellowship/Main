@@ -1132,3 +1132,12 @@ on by itself" rule for regular events. `email_parser/live_scoring_default.py`:
 - Early seeding is safe: rounds re-sync to later pairing saves (the pairings
   fingerprint) and re-seeding never touches a score.
 - Guard: `test_live_scoring_default.py`.
+
+
+## SCORING tab for managers (v2.559.3, Kerry 2026-10-13)
+
+"Can you make the SCORING tab available to Managers under each event?"
+- The Events page's SCORING tab (`data-toggle-games="7"`) shows for admin AND manager on any event in `score_entry_events`.
+- Managers get the read (`/api/score-entry/events/<id>/admin`, already manager), the copy-link buttons and each group's QR. `/api/score-entry/groups/<id>/qr.svg` is now manager, behind `_se_event_gate("group", ...)`.
+- Seed / Update-from-pairings (`/seed`) and Close round stay ADMIN (CA #843); the panel hides those buttons for non-admins.
+- Guard: `test_score_entry.py`.

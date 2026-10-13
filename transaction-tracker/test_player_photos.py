@@ -112,6 +112,10 @@ check("each cup plaque carries its race and champion ids, and one function appli
 check("the NET boards' city champion and each month's winner wear their headshot (data-head plaques filled from the h index)",
       'data-head="1" data-cids=' in src and "function fcApplyHeadshots" in src and "fcHeadIdx = (j && j.h)" in src
       and "Points ${mWin.length > 1" in src and "monthPlaque" in src)
+check("City Match Play: the Final's winner gets a top champion plaque, cid from winner_id or the bracket row seating them (Kerry 10/13)",
+      "function mpRenderChampBanner()" in src and '<div id="mp-champ-slot"></div>' in src
+      and 'r.round === "final" && r.winner_name' in src and "r.player_name === name && r.player_id" in src
+      and src.count("mpRenderChampBanner();") >= 2 and 'class="tgf-champ-plaque mp-champ-plaque" data-head="1" data-cids=' in src)
 check("the top tabs read EVENTS | SEASON CONTESTS | LONE STAR CUP; Match Play lives inside Season Contests (Kerry 10/13)",
       src.index('<button class="top-tab active" data-top="points-race">Season Contests</button>') < src.index('<button class="top-tab" data-top="lone-star-cup">')
       < src.index('<button class="top-tab" data-top="match-play" style="display:none;">'))
