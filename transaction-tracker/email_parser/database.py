@@ -46757,6 +46757,9 @@ def get_chapter_managers(db_path: str | Path | None = None) -> dict:
                         out[chapter] = {
                             "name": str(val.get("name") or "").strip(),
                             "phone": str(val.get("phone") or "").strip(),
+                            # v2.555.0: where the pairings-approval prompt goes
+                            # (pairings_approval.manager_for); optional.
+                            "email": str(val.get("email") or "").strip(),
                             "customer_id": (int(val["customer_id"])
                                             if str(val.get("customer_id") or "").isdigit()
                                             else out.get(chapter, {}).get("customer_id")),

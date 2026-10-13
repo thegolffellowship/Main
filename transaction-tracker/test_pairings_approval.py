@@ -1,0 +1,147 @@
+"""MANAGER APPROVES THE PAIRINGS, THEN THE PLAYER EMAILS GO (Kerry
+2026-10-13). Graph is mocked: nothing leaves.
+
+Run: python3 test_pairings_approval.py
+"""
+import os, sys, io, contextlib, logging, tempfile
+from datetime import datetime, timedelta
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+DB = tempfile.mktemp(suffix=".db")
+os.environ["DATABASE_PATH"] = DB
+logging.disable(logging.CRITICAL)
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    from email_parser import database as db
+    from email_parser import event_day_email as ede
+    from email_parser import pairings_approval as pa
+    from email_parser import fetcher
+    db.init_db(DB)
+
+F = []
+def check(label, cond, detail=""):
+    print(f"  {'PASS' if cond else 'FAIL'}  {label}" + ("" if cond else f"  {detail}"))
+    if not cond:
+        F.append(label)
+
+SENT = []
+fetcher.send_mail_graph = lambda **kw: SENT.append(kw) or True
+for k, v in (("AZURE_TENANT_ID", "t"), ("AZURE_CLIENT_ID", "c"), ("AZURE_CLIENT_SECRET", "s"),
+             ("EMAIL_ADDRESS", "tracker@example.test")):
+    os.environ[k] = v
+ede._read_games_tab = lambda eid: {"error": "no Chromium in a test"}
+
+SA, AUS = 9301, 9302
+with db._connect(DB) as conn:
+    for eid, name, ch in ((SA, "s9.60 SA TUESDAY", "San Antonio"), (AUS, "a9.60 AUS TUESDAY", "Austin")):
+        conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, "
+                     "start_time, course) VALUES (?, ?, '2026-10-20', ?, 'active', '9-hole', 'Shotgun', "
+                     "'16:30', 'Test GC')", (eid, name, ch))
+    conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (31, 'Robert', 'Straiton')")
+    conn.execute("INSERT INTO customer_emails (customer_id, email, is_primary) VALUES (31, 'robert@example.test', 1)")
+    for cid, fn, ln in ((990101, "Ann", "Able"), (990102, "Bob", "Baker")):
+        conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (?, ?, ?)", (cid, fn, ln))
+        conn.execute("INSERT INTO customer_emails (customer_id, email, is_primary) VALUES (?, ?, 1)",
+                     (cid, f"{fn.lower()}@example.test"))
+        for eid, name in ((SA, "s9.60 SA TUESDAY"), (AUS, "a9.60 AUS TUESDAY")):
+            conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, side_games, "
+                         "transaction_status, order_date, order_id, email_uid, merchant) VALUES "
+                         "(?, ?, ?, ?, '9', 'NONE', 'active', '2026-10-01', ?, ?, 'GoDaddy')",
+                         (f"{fn} {ln}", cid, name, eid, f"R{cid}{eid}", f"m-{cid}-{eid}"))
+    conn.commit()
+SHEET = {"9": [{"group_num": 1, "slot_label": "1A", "players": [
+    {"name": "Ann Able", "cart_pos": 1, "customer_id": 990101},
+    {"name": "Bob Baker", "cart_pos": 2, "customer_id": 990102}]}]}
+for eid in (SA, AUS):
+    db.save_event_pairings(eid, SHEET, db_path=DB)
+db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
+
+print("1. Who approves")
+check("San Antonio's prompt goes to Kerry's TGF address",
+      pa.manager_for("San Antonio", DB)["email"] == "kerry@thegolffellowship.com")
+check("Austin's goes to Robert's own email (his customer row)",
+      pa.manager_for("Austin", DB)["email"] == "robert@example.test", pa.manager_for("Austin", DB))
+check("admin may approve anything", pa.may_approve("admin", None, "Austin") is None)
+check("the Austin manager may approve Austin", pa.may_approve("manager", "Austin", "Austin") is None)
+check("…but not San Antonio", pa.may_approve("manager", "Austin", "San Antonio") is not None)
+check("a view-only login may not", pa.may_approve("view-only", None, "Austin") is not None)
+
+print("2. The prompt")
+mon_5_05 = datetime(2026, 10, 19, 17, 5)
+SENT.clear()
+r = pa.prompt_check(mon_5_05, DB)
+check("Monday 5:05 PM: one prompt per event, to its manager",
+      sorted(s["to_address"] for s in SENT) == ["kerry@thegolffellowship.com", "robert@example.test"], r)
+p = next((s for s in SENT if s["to_address"] == "robert@example.test"), {})
+check("…naming the event, the player count and the review link (login)",
+      "a9.60 AUS TUESDAY" in p.get("subject", "") and "2 players" in p.get("html_body", "")
+      and f"/events/{AUS}/approve-pairings" in p.get("html_body", "")
+      and "log in" in p.get("html_body", ""), p.get("html_body", "")[:400])
+check("…with the groups and a sample player email",
+      "Ann Able" in p.get("html_body", "") and "Sample player email" in p.get("html_body", ""))
+check("no player was emailed by the prompt",
+      not any(s["to_address"].endswith("@example.test") and s["to_address"] != "robert@example.test" for s in SENT))
+SENT.clear()
+pa.prompt_check(mon_5_05 + timedelta(minutes=15), DB)
+check("the same sheet is never prompted twice", not SENT)
+db.save_event_pairings(AUS, {"9": [{"group_num": 1, "slot_label": "1A", "players": [
+    {"name": "Bob Baker", "cart_pos": 1, "customer_id": 990102},
+    {"name": "Ann Able", "cart_pos": 2, "customer_id": 990101}]}]}, db_path=DB)
+r2 = pa.prompt_check(mon_5_05 + timedelta(minutes=20), DB)
+check("a changed sheet waits out the hour before a fresh prompt",
+      not SENT and "hour" in (r2["events"][AUS].get("skipped") or ""), r2["events"].get(AUS))
+st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
+pa.prompt_check(mon_5_05 + timedelta(minutes=80), DB)
+check("…then re-prompts for the new sheet", [s["to_address"] for s in SENT] == ["robert@example.test"])
+
+print("3. Approve")
+fp = pa.sheet_fingerprint(AUS, DB)
+SENT.clear()
+r = pa.approve_and_send(AUS, fp, role="manager", session_chapter="San Antonio", approved_by="x", db_path=DB)
+check("the other chapter's manager is refused", r.get("code") == 403 and not SENT, r)
+r = pa.approve_and_send(AUS, "stale", role="manager", session_chapter="Austin", approved_by="x", db_path=DB)
+check("an old sheet's approval is refused (409, with the new fingerprint)",
+      r.get("code") == 409 and r.get("fingerprint") == fp and not SENT, r)
+r = pa.approve_and_send(AUS, fp, role="manager", session_chapter="Austin",
+                        approved_by="manager (Austin)", db_path=DB)
+check("Robert's approval emails both players",
+      r.get("counts", {}).get("sent") == 2
+      and sorted(s["to_address"] for s in SENT) == ["ann@example.test", "bob@example.test"], r.get("counts"))
+check("…and records who approved which sheet",
+      pa.event_state(AUS, DB).get("approved_fp") == fp
+      and pa.event_state(AUS, DB).get("approved_by") == "manager (Austin)")
+SENT.clear()
+r = pa.approve_and_send(AUS, fp, role="admin", session_chapter=None, approved_by="admin", db_path=DB)
+check("a second approval sends nothing twice", r.get("counts", {}).get("sent") == 0 and not SENT, r.get("counts"))
+db.save_event_pairings(AUS, SHEET, db_path=DB)
+st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
+SENT.clear()
+r = pa.prompt_check(mon_5_05 + timedelta(hours=3), DB)
+check("once the emails went, no more prompts", not any(s["to_address"] == "robert@example.test" for s in SENT)
+      and "already sent" in (r["events"][AUS].get("skipped") or ""), r["events"].get(AUS))
+db.set_app_setting(ede.APPROVAL_KEY, "", db_path=DB)
+r = pa.approve_and_send(SA, pa.sheet_fingerprint(SA, DB), role="admin", session_chapter=None,
+                        approved_by="admin", db_path=DB)
+check("unapproved wording: approving the sheet still sends nothing", "refused" in r, r)
+db.set_app_setting(pa.DIAL, "0", db_path=DB)
+check("dial off: no prompts", pa.prompt_check(mon_5_05, DB) == {"status": "off"})
+
+print("4. The routes: log in first")
+os.environ.setdefault("SECRET_KEY", "test-secret")
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    import app as _app
+cl = _app.app.test_client()
+check("the review page asks for a login", cl.get(f"/events/{AUS}/approve-pairings",
+                                                 headers={"Accept": "text/html"}).status_code == 401)
+check("the approve API refuses without a login", cl.post(f"/api/events/{AUS}/approve-pairings", json={}).status_code == 401)
+with cl.session_transaction() as s:
+    s["role"] = "manager"; s["chapter"] = "San Antonio"; s["authenticated"] = True
+check("a San Antonio manager cannot open an Austin approval", cl.get(f"/events/{AUS}/approve-pairings").status_code == 403)
+with cl.session_transaction() as s:
+    s["chapter"] = "Austin"
+page = cl.get(f"/events/{AUS}/approve-pairings")
+check("the Austin manager sees the review with the emails-sent state",
+      page.status_code == 200 and b"Player emails sent" in page.data, page.status_code)
+
+try: os.unlink(DB)
+except OSError: pass
+print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")
+sys.exit(1 if F else 0)

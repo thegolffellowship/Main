@@ -2154,6 +2154,31 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── PAIRINGS APPROVAL PROMPT (Kerry 2026-10-13: the manager reviews and
+    #    approves the automated pairings, which sends the player emails).
+    #    Every 15 min from :05 (so the 5:00 PM auto-generate has saved):
+    #    each due event's chapter manager gets ONE prompt per sheet (a
+    #    changed sheet re-prompts at most hourly; none once emails went).
+    #    Dial `pairings_approval_prompt` (0/off stops it).
+    #    email_parser/pairings_approval.py.
+    def pairings_approval_prompt_job():
+        from email_parser.pairings_approval import prompt_check
+        try:
+            res = prompt_check()
+            sent = {k: v for k, v in (res.get("events") or {}).items() if v.get("status") == "sent"}
+            if sent:
+                logger.info("Pairings approval prompts: %s", sent)
+        except Exception:
+            logger.exception("Pairings approval prompt failed (non-fatal)")
+    scheduler.add_job(
+        pairings_approval_prompt_job,
+        "cron", minute="5-59/15",
+        timezone="US/Central",
+        id="pairings_approval_prompt",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -5938,6 +5963,43 @@ def auto_generate_pairings_job():
             logger.info("pairings auto-generate: %s", res)
     except Exception:
         logger.exception("pairings auto-generate failed")
+
+
+@app.route("/events/<int:event_id>/approve-pairings")
+@require_role("manager")
+def approve_pairings_page(event_id):
+    """MANAGER APPROVES THE PAIRINGS (Kerry 2026-10-13: "the manager needs to
+    receive a prompt to review and approve the pairings which would then
+    automatically send these emails" / "Make the manager log in first.").
+    The review: groups, hard rule flags, who gets no email, a sample, and
+    one Approve button. email_parser/pairings_approval.py."""
+    from email_parser.pairings_approval import review, render_page, may_approve
+    rv = review(event_id)
+    if rv.get("error"):
+        return rv["error"], 404
+    why = may_approve(session.get("role"), session.get("chapter"), rv["event"]["chapter"])
+    if why:
+        return why, 403
+    return render_page(rv)
+
+
+@app.route("/api/events/<int:event_id>/approve-pairings", methods=["POST"])
+@require_role("manager")
+def api_approve_pairings(event_id):
+    """Approve the saved sheet (its fingerprint must match) and email every
+    player their event-day email. Manager of the event's chapter, or admin."""
+    from email_parser.pairings_approval import approve_and_send
+    body = request.get_json(silent=True) or {}
+    who = session.get("role") or "?"
+    if session.get("chapter"):
+        who = f"{who} ({session.get('chapter')})"
+    res = approve_and_send(event_id, str(body.get("fingerprint") or ""),
+                           role=session.get("role"), session_chapter=session.get("chapter"),
+                           approved_by=who)
+    code = res.pop("code", None) if isinstance(res, dict) else None
+    if res.get("refused"):
+        return jsonify(res), 409
+    return jsonify(res), (code or (500 if res.get("error") else 200))
 
 
 @app.route("/api/events/<int:event_id>/event-day-email")

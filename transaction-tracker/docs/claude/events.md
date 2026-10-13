@@ -3103,6 +3103,27 @@ for now"). The Customer Communications lane owns its content and timing
   - **Live Scoring**: the scoring button needs the event in Live Scoring with
     its rounds seeded. When it isn't, the build returns `scoring_note` and the
     staff preview prints it.
+- **MANAGER APPROVAL SENDS IT (v2.555.0, Kerry 2026-10-13):** "for now they
+  should[n']t go out until the manager approves the automated pairings ... a
+  prompt to review and approve the pairings which would then automatically
+  send these emails" / "Make the manager log in first."
+  `email_parser/pairings_approval.py`:
+  - `prompt_check` (job `pairings_approval_prompt`, every 15 min from :05,
+    for the same due window as Live Scoring) switches Live Scoring on and
+    mails the chapter manager (`manager_for`: SA/TGF → kerry@; otherwise the
+    dial `email`, else the manager's `customer_id` email) ONE prompt per
+    sheet fingerprint. A changed sheet re-prompts at most hourly; there are
+    no prompts once player emails went.
+  - `/events/<id>/approve-pairings` (manager login, own chapter; admin any)
+    shows groups, hard audit flags, held players, a sample, and the button.
+    `POST /api/events/<id>/approve-pairings {fingerprint}` refuses a stale
+    sheet (409 + the current fingerprint), records `approved_fp/by/at`, and
+    runs `send_event_day_emails(confirm=True)`. The wording stamp is still
+    required.
+  - State: app setting `pairings_approval`. Dial `pairings_approval_prompt`.
+    Guard `test_pairings_approval.py`.
+  - The ultimate goal (Kerry): send right after generation, with no approval
+    step. Not yet.
 - Not built yet: corrected emails after a pairing change (needs a revision
   column on `event_day_email_sends`; rule 3b).
 

@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.554.0";
+window.TGF_VERSION = "2.555.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.555.0",
+    date: "2026-10-13",
+    title: "Manager approves the pairings, which sends the player emails",
+    changes: [
+      "Kerry 10/13: \"I'm thinking those emails go out ultimately right after the pairings are generated. But for now they should t go out until the manager approves the automated pairings. So the manager needs to receive a prompt to review and approve the pairings which would then automatically send these emails.\" and \"Make the manager log in first.\"",
+      "After the 5 PM auto-generate, job pairings_approval_prompt (every 15 min from :05) emails the chapter's manager ONE 'Pairings ready to approve' message per sheet: the groups, any hard pairing-rule flags, who would get no email and why, a sample player email, and a link to the review page. San Antonio and national events go to kerry@thegolffellowship.com. Austin goes to Robert's own email; the chapter_managers dial can set an email per chapter.",
+      "The review page /events/<id>/approve-pairings requires a LOGIN. Managers can open only their own chapter's events; admins can open any. Its one button, 'Approve pairings & email N players', records who approved which sheet (a fingerprint) and sends every player the event-day email, once each.",
+      "If the sheet changes after the prompt, the old approval is refused and the page reloads to the new one; a fresh prompt goes out at most hourly. Once the emails have gone, no more prompts. Kerry still approves the email wording once (event_day_email_approved); until he does, approving a sheet sends nothing.",
+      "State is kept in app setting pairings_approval; there is no new table. Dial pairings_approval_prompt (0/off stops the prompts). email_parser/pairings_approval.py; test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.554.0",
     date: "2026-10-13",
