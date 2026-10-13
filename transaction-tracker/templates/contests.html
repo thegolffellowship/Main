@@ -5297,6 +5297,9 @@
             ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
+            // A new tab opens at the top, not at the old tab's scroll depth (Kerry 10/13: "When we click to new
+            // pages, they should all start at the top, not part way down")
+            if (!wasActive) window.scrollTo(0, 0);
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
             if (top === "events") evlbLoad();
@@ -8516,15 +8519,8 @@
                     </span>
                 </div>` : '';
 
-            // ── Champion card: when the Final has a recorded winner ──
-            const finalMatch = (slotMap['final:0'] || {});
-            const finalMatch2 = (slotMap['final:1'] || {});
-            const champ = finalMatch.winner_name || finalMatch2.winner_name || null;
-            const champHtml = champ ? `
-                <div class="mp-champ">
-                    <div class="mp-champ-label">Champion</div>
-                    <div class="mp-champ-name">${escapeHtml(champ)}</div>
-                </div>` : '';
+            // The champion shows in the top banner only (mpRenderChampBanner); the small Champion box in the
+            // knockout panel is gone (Kerry 10/13: "Remove the small Champion box in Knockout").
 
             // ── D-MP-08 · Consolation (3rd place) block ──
             // Gate strictly on enrolled field size: hasConsolation = fieldN >= 6.
@@ -8661,7 +8657,7 @@
             container.innerHTML =
                 legendHtml +
                 `<div class="bracket-tree">${html || '<p style="color:var(--text-muted);">No bracket data yet.</p>'}</div>` +
-                champHtml + consolationHtml + nextInHtml;
+                consolationHtml + nextInHtml;
 
             // Live-poll any in-progress bracket card against Golf Genius.
             mpStartBracketLive(container);
