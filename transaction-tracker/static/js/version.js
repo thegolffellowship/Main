@@ -1,5 +1,23 @@
-window.TGF_VERSION = "2.556.5";
+window.TGF_VERSION = "2.557.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.557.0",
+    date: "2026-10-13",
+    title: "Leaderboard top as Claude Design drew it; every chapter's races in the TGF race menu",
+    changes: [
+      "Kerry 10/13: \"the top part is not how CD designed it.\" The POINTS RACES top now follows CD #1638. The race-chip row is gone; it stays in the page, hidden, so every deep link and old code path still works. LONE STAR CUP is a normal tab with a navy star, no longer a pill. The race picker is the page title. HOW IT WORKS sits at the right of the title line (Kerry: \"Keep the HOW IT WORKS button instead of changing it to RULES\"), with space above the champion banner. On a phone the POINTS RACES tab no longer opens the old race list, because the pickers are the menu.",
+      "Kerry 10/13: \"For the All Chapters view, add sections for the Austin contests and San Antonio contests. Once it's over 4 chapters, we'll limit that to just the TGF All Chapter contests.\" With TGF selected, the race menu lists the TGF races, then an Austin section and a San Antonio section. Above 4 chapters (PR_NAV_ALL_CHAPTERS_MAX) it shows the TGF races only, with the footer pointing to the chapter switch. A chapter view still shows TGF plus that chapter.",
+      "Kerry 10/13: \"move Monthly below The Players Cup.\" TGF races now read The Fellowship Cup, The Players Cup, Monthly.",
+    ],
+  },
+  {
+    version: "2.556.6",
+    date: "2026-10-13",
+    title: "No proximity page when no Closest to Pin is funded",
+    changes: [
+      "Kerry 10/13, on Forest Creek's course files: \"If there are no Closest to Pins for the event due to numbers, then don't send the page. That's kind of weird.\" With 13 entries the games matrix funds no CTP, and the pack still printed a 'No proximity markers to print' page and attached it as Proximity.pdf. Now the print pack and the course files leave the page out entirely. The reason is kept on the build result (skipped) for anyone checking. The Proximity report on the REPORTS tab still explains itself when opened.",
+    ],
+  },
   {
     version: "2.556.5",
     date: "2026-10-13",

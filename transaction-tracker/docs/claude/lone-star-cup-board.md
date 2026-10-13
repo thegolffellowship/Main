@@ -1303,3 +1303,11 @@ Crop offsets (v2.549.0/.1): the `sq` badge crop is top-anchored for most photos;
 ## Chapter / race pickers + address (v2.552.0, Kerry 2026-10-12, CD #1638)
 
 Built additively on the Points Races board: the race chips, the navy LSC pill and HOW IT WORKS are unchanged. `#pr-pickers` (above the title row) holds a chapter button and a race button with a LIVE/FINAL tag; menus on desktop, bottom sheets at <=560px. Config is the `PR_NAV` table in contests.html (chapters TGF / Austin #BF5700 / San Antonio #4B6274; per-race slug + live flag). Picking a race clicks the matching `.sub-tab[data-pr]`, so every existing handler runs. The address is `?chapter=<id>&race=<slug>#race=<key>`; old `#race=` / `#tab=` / `?player=` links still resolve. Landing with no race in the address = TGF Monthly (or the last chapter chosen, localStorage `tgf_pr_chapter`); revert by defaulting to `fall_sa` in the initial-hash block.
+
+**v2.557.0 (Kerry 2026-10-13: "the top part is not how CD designed it"):** the top now follows CD #1638 instead of sitting beside the old one.
+- The race-chip row is hidden with `.pr-race-row { display:none }`. It stays in the DOM because the pickers click the chips.
+- LONE STAR CUP is a normal tab with a navy star; the 10/7 navy pill is retired.
+- The race picker is the title (`#pr-standings-title` is hidden). HOW IT WORKS stays as named (Kerry overruled CD's RULES) at the right of the picker row, with 14px above the champion banner.
+- On phones the POINTS RACES tab no longer opens the old race menu.
+- Race menu with TGF selected: the TGF races (Fellowship Cup, Players Cup, Monthly, in that order), then one section per chapter while there are `PR_NAV_ALL_CHAPTERS_MAX` (4) chapters or fewer; above that, TGF races only plus the chapter-switch footer. This is Kerry's rule, overriding CD §3's "never list another chapter's races".
+- Not built yet from CD #1638: the format meta text, Show all players on the title line, the signed-in YOU strip and avatar (gated on member logins), chapter search and regions (needs the region field).
