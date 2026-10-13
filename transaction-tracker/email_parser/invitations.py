@@ -448,7 +448,49 @@ def click_in(token: str, db_path=None) -> dict:
         db.set_app_setting(key, json.dumps(clicks), db_path=db_path)
     except Exception:
         logger.exception("invitations: could not note the I'm in click")
+    # "Changed my mind, I'm in" (Kerry 10/13): an earlier Can't make it no
+    # longer stands, so reminders reach them again until they register.
+    try:
+        conn = db.get_connection(db_path)
+        try:
+            conn.execute("DELETE FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
+                         (f"{UID_PREFIX}{int(p['v'])}:{int(p['c'])}",))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("invitations: could not clear the earlier no")
     return {"ok": True, "redirect": url}
+
+
+def sibling_links(token: str) -> dict:
+    """The other buttons for the same person and event: {in, out, unsub}."""
+    p = verify_token(token)
+    if not p:
+        return {}
+    exp = (datetime.utcfromtimestamp(int(p["x"])) - timedelta(days=1)).date()
+    return {a: rsvp_url(make_token(int(p["c"]), int(p["v"]), a, exp)) for a in ACTIONS}
+
+
+REASONS = ("Schedule", "Weather", "Course or price", "Injury", "Other")
+REASONS_KEY = "event_invite_reasons:{event_id}"
+
+
+def record_reason(token: str, reason: str, db_path=None) -> bool:
+    """The optional one-tap reason on the Can't make it page (Kerry 10/13).
+    Kept per event, by customer_id, in an app setting; only listed reasons."""
+    from email_parser import database as db
+    p = verify_token(token)
+    if not p or reason not in REASONS:
+        return False
+    key = REASONS_KEY.format(event_id=int(p["v"]))
+    try:
+        got = json.loads(_setting(key, db_path) or "{}")
+    except Exception:
+        got = {}
+    got[str(int(p["c"]))] = reason
+    db.set_app_setting(key, json.dumps(got), db_path=db_path)
+    return True
 
 
 # ---------------------------------------------------------------------------

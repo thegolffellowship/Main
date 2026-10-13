@@ -124,10 +124,14 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
 - **Links** `/rsvp/<token>` (signed, `make_token`/`verify_token`, expire the
   day after the event; no login). **I'm in** redirects to the event's
   `registration_url` and notes the click (`event_invite_clicks:<id>`), never
-  an RSVP (Kerry: "go straight to the event registration page"); with no
-  registration link it shows the confirm page. **Can't make it** / **Stop
-  event invitations**: GET shows a confirm page and records nothing; the POST
-  records. An answer is an `rsvps` row with email_uid
+  an RSVP (Kerry: "go straight to the event registration page"), and clears
+  an earlier Can't make it. **Can't make it** lands straight on "Thanks for
+  letting us know" with **Changed my mind, I'm in** (-> registration),
+  **Remove me from invitations** (-> straight to Done) and an optional one-tap
+  reason (`REASONS`, app setting `event_invite_reasons:<id>`, route
+  `/rsvp/<token>/reason`) (Kerry 10/13: "The sequence for Can't make it is too
+  long"). The page writes the answer itself (a script POST, or a button with
+  scripts off); the bare GET never does, so a mail scanner can't answer. An answer is an `rsvps` row with email_uid
   `tracker:<event_id>:<customer_id>`, upserted (the latest answer wins).
 - **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
   tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.

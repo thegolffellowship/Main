@@ -4856,45 +4856,69 @@ def api_send_membership_notice(term_id):
 def public_event_rsvp(token):
     """TRACKER RSVP from an event invitation (Kerry 2026-10-13, Tracker-only
     RSVPs). No login: the token is signed (email_parser/invitations.py).
-    GET shows a confirm page and records NOTHING, so a mail scanner that
-    pre-fetches the link can never answer for a player; the answer is
-    recorded on the page's POST."""
+
+    Kerry 10/13: one tap. I'm in -> the event's registration page. Can't make
+    it -> straight to "Thanks for letting us know", with Changed my mind,
+    I'm in (-> registration), Remove me from invitations, and an optional
+    one-tap reason. Remove me -> straight to Done. The answer is written by
+    the page itself (a POST from the page's script, or its button when
+    scripts are off), never by the bare GET, so a mail scanner that only
+    fetches the link does not answer for a player."""
     import html as _h
     from email_parser import invitations as _inv
     if request.method == "POST":
         res = _inv.record_answer(token)
         if not res.get("ok"):
             return _public_page("RSVP link", f"<h2>{_h.escape(res['error'])}</h2>"), 400
-        if res["action"] == "unsub":
-            return _public_page("Invitations", "<h2>Done. You won't get event invitations "
-                                "from us any more.</h2><p>Changed your mind? Reply to any "
-                                "TGF email and we'll put you back on.</p>")
-        ev = res.get("event") or {}
-        reg = ev.get("registration_url") or ""
-        if res["action"] == "in":
-            body = ("<h2>You're in. Thanks!</h2><p>You're on the list for "
-                    f"{_h.escape(ev.get('name') or 'the event')}. Pairings go out the day before.</p>"
-                    + (f'<p><a href="{_h.escape(reg)}">Register and pay now</a></p>' if reg else ""))
-        else:
-            body = "<h2>Thanks for letting us know.</h2><p>We'll miss you this week. See you next time.</p>"
-        return _public_page("RSVP", body)
-    # Kerry 10/13: "go straight to the event registration page if they click
-    # I'm In". The click is noted; paying is what puts them on the roster.
-    _go = _inv.click_in(token)
-    if _go.get("ok"):
-        return redirect(_go["redirect"])
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"ok": True})
+    else:
+        # "go straight to the event registration page if they click I'm In"
+        _go = _inv.click_in(token)
+        if _go.get("ok"):
+            return redirect(_go["redirect"])
     info = _inv.describe_token(token)
     if not info.get("ok"):
         return _public_page("RSVP link", f"<h2>{_h.escape(info['error'])}</h2>"), 400
-    label = {"in": "Yes, I'm in", "out": "I can't make it",
-             "unsub": "Stop event invitations"}[info["action"]]
-    color = {"in": "#15803D", "out": "#4B5563", "unsub": "#b91c1c"}[info["action"]]
-    body = (f"<h2>{_h.escape(info['course'])}</h2><p>{_h.escape(info['date_long'])}. "
-            f"{_h.escape(info['start_sentence'])}</p>"
-            f'<form method="post"><button type="submit" style="background:{color};color:#fff;'
-            'border:0;border-radius:999px;padding:14px 28px;font:bold 18px Georgia,serif;">'
-            f"{_h.escape(label)}</button></form>")
+    links = _inv.sibling_links(token)
+    done = request.method == "POST"
+    record = ("" if done else
+              "<script>fetch(location.href,{method:'POST',headers:{'X-Requested-With':'fetch'}})"
+              "</script><noscript><form method='post'><button type='submit' "
+              "style='margin-top:8px'>Confirm</button></form></noscript>")
+    btn = ("display:inline-block;border-radius:999px;padding:12px 22px;margin:6px 6px 0 0;"
+           "font:bold 16px Georgia,serif;text-decoration:none;")
+    if info["action"] == "unsub":
+        body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
+                "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>" + record)
+        return _public_page("Invitations", body)
+    if info["action"] == "in":           # no registration link on the event
+        body = (f"<h2>You're in. Thanks!</h2><p>{_h.escape(info['course'])}, "
+                f"{_h.escape(info['date_long'])}. {_h.escape(info['start_sentence'])}</p>" + record)
+        return _public_page("RSVP", body)
+    reasons = "".join(
+        f"<form method='post' action='/rsvp/{_h.escape(token)}/reason' style='display:inline'>"
+        f"<button name='r' value='{_h.escape(r)}' style='border:1px solid #D1D5DB;background:#fff;"
+        f"border-radius:999px;padding:6px 12px;margin:4px 4px 0 0;font-size:14px'>{_h.escape(r)}"
+        "</button></form>" for r in _inv.REASONS)
+    body = (f"<h2>Thanks for letting us know.</h2><p>We'll miss you at {_h.escape(info['course'])} "
+            f"on {_h.escape(info['date_long'])}.</p>"
+            f'<a href="{_h.escape(links.get("in", ""))}" style="{btn}background:#15803D;color:#fff;">'
+            "Changed my mind, I'm in</a>"
+            f'<a href="{_h.escape(links.get("unsub", ""))}" style="{btn}background:#E5E7EB;color:#1B1B1B;">'
+            "Remove me from invitations</a>"
+            "<p style='margin-top:22px;color:#6B7280;font-size:14px'>Mind sharing why? (optional)</p>"
+            + reasons + record)
     return _public_page("RSVP", body)
+
+
+@app.route("/rsvp/<token>/reason", methods=["POST"])
+def public_event_rsvp_reason(token):
+    """The optional one-tap reason on the Can't make it page (Kerry 10/13)."""
+    from email_parser import invitations as _inv
+    ok = _inv.record_reason(token, (request.form.get("r") or "").strip())
+    return _public_page("RSVP", "<h2>Thanks, noted.</h2><p>See you next time.</p>"
+                        if ok else "<h2>That link has expired.</h2>"), (200 if ok else 400)
 
 
 @app.route("/m/roster/<token>")

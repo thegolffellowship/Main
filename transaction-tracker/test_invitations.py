@@ -178,6 +178,26 @@ check("I'm in goes straight to the registration page and records no RSVP",
       rg.status_code == 302 and rg.headers["Location"] == "https://shop.example.test/e" and n == 0,
       (rg.status_code, rg.headers.get("Location"), n))
 check("…the click is noted", "770002" in json.loads(db.get_app_setting(f"event_invite_clicks:{EV}", db_path=DB) or "{}"))
+print("6c. Kerry 10/13: Can't make it is one tap, with change-my-mind, remove and a reason")
+tok_out = inv.make_token(770002, EV, "out", date(2026, 12, 15))
+pg = cl.get(f"/rsvp/{tok_out}").get_data(as_text=True)
+check("Can't make it lands on Thanks, with I'm in, Remove me and the optional reasons",
+      "Thanks for letting us know" in pg and "Changed my mind" in pg and "Remove me from invitations" in pg
+      and "Mind sharing why" in pg, pg[:200])
+cl.post(f"/rsvp/{tok_out}", headers={"X-Requested-With": "fetch"})
+with db._connect(DB) as conn:
+    r = conn.execute("SELECT response FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()
+check("the page's own POST records NOT PLAYING", r and r[0] == "NOT PLAYING", r)
+check("a reason is kept, one tap", cl.post(f"/rsvp/{tok_out}/reason", data={"r": "Weather"}).status_code == 200
+      and json.loads(db.get_app_setting(f"event_invite_reasons:{EV}", db_path=DB))["770002"] == "Weather")
+check("an unlisted reason is refused", cl.post(f"/rsvp/{tok_out}/reason", data={"r": "<b>x</b>"}).status_code == 400)
+mind = cl.get(f"/rsvp/{inv.make_token(770002, EV, 'in', date(2026, 12, 15))}")
+with db._connect(DB) as conn:
+    r = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()[0]
+check("Changed my mind goes to registration and clears the earlier no", mind.status_code == 302 and r == 0, (mind.status_code, r))
+pu = cl.get(f"/rsvp/{inv.make_token(770001, EV, 'unsub', date(2026, 12, 15))}").get_data(as_text=True)
+check("Remove me lands straight on Done", "You won't get event invitations" in pu)
+
 from datetime import datetime as _dt
 check("the 7 AM job does nothing until event_invite_auto is on",
       "skipped" in inv.auto_check(_dt(2026, 12, 9, 7, 5), db_path=DB))
