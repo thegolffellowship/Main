@@ -6110,16 +6110,17 @@ def api_send_course_files(event_id):
     To the course's print contact, Kerry's pack recipients on CC, one PDF
     per report. No contact on file -> 409 `no_contact` with the course_id,
     and the page asks for it. Leaves the pack's sent hash alone."""
-    from email_parser.print_pack import send_course_files, course_contact_for_event
+    from email_parser.print_pack import send_course_files
     from email_parser.database import get_all_events
     ev = next((e for e in get_all_events() if e["id"] == event_id), None)
     if not ev:
         return jsonify({"error": "Event not found"}), 404
-    if not course_contact_for_event(ev):
-        from email_parser.print_pack import _event_course_id
-        return jsonify({"sent": False, "no_contact": True, "course_id": _event_course_id(ev),
+    from email_parser.print_pack import course_recipients_for_event
+    _rec = course_recipients_for_event(ev)
+    if not _rec.get("ok"):
+        return jsonify({"sent": False, "no_contact": True, "course_id": _rec.get("course_id"),
                         "course": ev.get("course"),
-                        "why": f"no course contact on file for {ev.get('course') or 'this course'}"}), 409
+                        "why": f"{_rec.get('why')} ({ev.get('course') or 'this course'})"}), 409
     built = build_print_pack_for_event(event_id, force_scorecards=True)
     if not built:
         return jsonify({"error": "Event not found or nothing to print"}), 404
@@ -6137,22 +6138,34 @@ def api_send_course_files(event_id):
     return jsonify(res), (200 if res.get("sent") else 502)
 
 
-@app.route("/api/courses/<int:course_id>/print-contact", methods=["GET", "POST"])
+@app.route("/api/courses/<int:course_id>/staff", methods=["GET", "POST"])
 @require_role("manager")
-def api_course_print_contact(course_id):
-    """The course's print contact (Kerry 2026-10-13), where Course Files go."""
-    from email_parser.print_pack import course_print_contacts, set_course_print_contact
+def api_course_staff(course_id):
+    """COURSE STAFF (migration 0014, Kerry 10/13 "Deploy now" #1737): the
+    people at a course and their roles. GET for managers (event setup shows
+    them); POST for admins only (add a person, change a role, set the
+    primary, deactivate). The primary TGF contact gets the Course Files."""
+    from email_parser import course_staff as cs
+    from email_parser.database import _connect
     if request.method == "GET":
-        return jsonify({"course_id": course_id, "contact": course_print_contacts().get(str(course_id))})
-    data = request.get_json(silent=True) or {}
-    res = set_course_print_contact(course_id, data.get("email") or "")
-    if res.get("ok"):
-        try:
-            log_agent_action(f"manager:{session.get('chapter') or session.get('role') or 'manager'}",
-                             "course-print-contact", f"course {course_id}: {res.get('contact')!r}")
-        except Exception:
-            pass
-    return jsonify(res), (200 if res.get("ok") else 400)
+        with _connect() as conn:
+            staff = cs.for_course(conn, course_id,
+                                  include_inactive=session.get("role") == "admin")
+            rec = cs.print_recipients(conn, course_id)
+        return jsonify({"course_id": course_id, "staff": staff, "roles": list(cs.ROLES),
+                        "role_labels": cs.ROLE_LABELS,
+                        "print_to": rec.get("to"), "print_cc": rec.get("cc") or [],
+                        "print_why": None if rec.get("ok") else rec.get("why")})
+    if session.get("role") != "admin":
+        return jsonify({"error": "Admin access required."}), 403
+    d = request.get_json(silent=True) or {}
+    res = cs.save_staff(course_id, name=d.get("name") or "", email=d.get("email") or "",
+                        phone=d.get("phone") or "", role=d.get("role") or "tgf_contact",
+                        is_primary=bool(d.get("is_primary")), notes=d.get("notes") or "",
+                        customer_id=d.get("customer_id") or None,
+                        active=d.get("active", True) not in (False, 0, "0", "false"),
+                        apply=True, set_by="admin")
+    return jsonify(res), (200 if res.get("applied") else 400)
 
 
 @app.route("/events/<int:event_id>/games-payouts")

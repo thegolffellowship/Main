@@ -424,25 +424,11 @@ def print_pack_recipient(ev: dict | None = None, db_path=None) -> str | None:
 
 
 # THE COURSE CONTACT (Kerry 2026-10-13: "Set it up to send straight to
-# course contact"). Per COURSE, keyed by course_id: app setting
-# `course_print_contacts` = {"<course_id>": "addr[, addr]"}. The Course
-# Files email goes To the course contact with Kerry's pack recipients on
-# CC; an event whose course has no contact on file is refused, never sent
-# to a guessed address.
-COURSE_CONTACTS_KEY = "course_print_contacts"
-_EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[A-Za-z]{2,}$")
-
-
-def course_print_contacts(db_path=None) -> dict:
-    import json
-    from email_parser import database as db
-    try:
-        raw = json.loads(db.get_app_setting(COURSE_CONTACTS_KEY, db_path) or "{}")
-    except (ValueError, TypeError):
-        return {}
-    return {str(k): str(v) for k, v in (raw or {}).items() if v}
-
-
+# course contact"). Since v2.561.0 it is read from `course_staff` (migration
+# 0014, #1699/#1701): To the course's primary TGF contact, CC its other TGF
+# contacts plus Kerry's pack recipients. The interim app setting
+# `course_print_contacts` is retired. An event whose course has no primary
+# TGF contact is refused, never sent to a guessed address.
 def _event_course_id(ev: dict | None, db_path=None) -> int | None:
     if not ev:
         return None
@@ -454,45 +440,39 @@ def _event_course_id(ev: dict | None, db_path=None) -> int | None:
     return int(row["course_id"]) if row and row["course_id"] else None
 
 
-def course_contact_for_event(ev: dict | None, db_path=None) -> str | None:
-    cid = _event_course_id(ev, db_path)
-    return course_print_contacts(db_path).get(str(cid)) if cid else None
-
-
-def set_course_print_contact(course_id: int, addresses: str, db_path=None) -> dict:
-    """Save (or clear, with "") one course's print contact."""
-    import json
+def course_recipients_for_event(ev: dict | None, db_path=None) -> dict:
+    """{ok, to, cc[], why, course_id} from course_staff (the one reader)."""
     from email_parser import database as db
-    addrs = [a.strip() for a in re.split(r"[,;\s]+", addresses or "") if a.strip()]
-    bad = [a for a in addrs if not _EMAIL_RE.match(a)]
-    if bad:
-        return {"ok": False, "error": f"not an email address: {', '.join(bad)}"}
+    from email_parser import course_staff as cs
+    cid = _event_course_id(ev, db_path)
+    if not cid:
+        return {"ok": False, "course_id": None, "why": "this event has no course linked"}
     with db._connect(db_path) as conn:
-        row = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?",
-                           (int(course_id),)).fetchone()
-    if not row:
-        return {"ok": False, "error": f"course {course_id} not found"}
-    cur = course_print_contacts(db_path)
-    if addrs:
-        cur[str(int(course_id))] = ", ".join(addrs)
-    else:
-        cur.pop(str(int(course_id)), None)
-    db.set_app_setting(COURSE_CONTACTS_KEY, json.dumps(cur, sort_keys=True), db_path=db_path)
-    return {"ok": True, "course_id": int(course_id), "course": row["name"],
-            "contact": cur.get(str(int(course_id)))}
+        res = cs.print_recipients(conn, cid)
+    return {**res, "course_id": cid}
+
+
+def course_contact_for_event(ev: dict | None, db_path=None) -> str | None:
+    r = course_recipients_for_event(ev, db_path)
+    return r.get("to") if r.get("ok") else None
 
 
 def send_course_files(built: dict, db_path=None) -> dict:
-    """Course Files straight to the course contact, Kerry on CC."""
+    """Course Files to the course's primary TGF contact; its other TGF
+    contacts and Kerry's pack recipients on CC."""
     ev = built.get("event") or {}
-    to = course_contact_for_event(ev, db_path)
-    cid = _event_course_id(ev, db_path)
-    if not to:
-        return {"sent": False, "no_contact": True, "course_id": cid, "course": ev.get("course"),
-                "why": f"no course contact on file for {ev.get('course') or 'this course'}"}
-    return send_print_pack_files(built, to_address=to, db_path=db_path,
-                                 cc_address=print_pack_recipient(ev, db_path=db_path),
-                                 for_course=True)
+    rec = course_recipients_for_event(ev, db_path)
+    if not rec.get("ok"):
+        return {"sent": False, "no_contact": True, "course_id": rec.get("course_id"),
+                "course": ev.get("course"),
+                "why": f"{rec.get('why')} ({ev.get('course') or 'this course'})"}
+    cc = list(rec.get("cc") or [])
+    for a in (print_pack_recipient(ev, db_path=db_path) or "").split(","):
+        a = a.strip()
+        if a and a.lower() not in {x.lower() for x in cc} and a.lower() != rec["to"].lower():
+            cc.append(a)
+    return send_print_pack_files(built, to_address=rec["to"], db_path=db_path,
+                                 cc_address=", ".join(cc) or None, for_course=True)
 
 
 def _esc(v) -> str:

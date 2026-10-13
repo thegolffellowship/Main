@@ -83,25 +83,26 @@ with db._connect(DB) as c:
     qid = c.execute("SELECT course_id FROM courses WHERE name='The Quarry Golf Club'").fetchone()[0]
     c.commit()
 check("no contact: nothing to send to", pp.course_contact_for_event({"id": 1, "course_id": qid}, db_path=DB) is None)
-check("a bad address is refused", not pp.set_course_print_contact(qid, "not-an-email", db_path=DB)["ok"])
-check("an unknown course is refused", not pp.set_course_print_contact(999999, "a@b.com", db_path=DB)["ok"])
-r = pp.set_course_print_contact(qid, "proshop@quarry.com; events@quarry.com", db_path=DB)
-check("saved per course_id", r["ok"] and r["contact"] == "proshop@quarry.com, events@quarry.com", r)
-check("the event resolves its course's contact",
-      pp.course_contact_for_event({"id": 1, "course_id": qid}, db_path=DB) == "proshop@quarry.com, events@quarry.com")
+from email_parser import course_staff as cs                   # noqa: E402
+cs.save_staff(qid, name="Pro Shop", email="proshop@quarry.com", role="tgf_contact", is_primary=True, apply=True, db_path=DB)
+cs.save_staff(qid, name="Event Desk", email="events@quarry.com", role="tgf_contact", apply=True, db_path=DB)
+check("the event resolves its course's primary TGF contact (course_staff, v2.561.0)",
+      pp.course_contact_for_event({"id": 1, "course_id": qid}, db_path=DB) == "proshop@quarry.com")
 _sent = {}
 _orig = pp.send_print_pack_files
 pp.send_print_pack_files = lambda b, **k: _sent.update(k) or {"sent": True, "to": k.get("to_address")}
 os.environ.setdefault("PRINT_PACK_EMAIL_TO", "kerry@thegolffellowship.com")
 res = pp.send_course_files({"event": {"id": 1, "course_id": qid, "chapter": "San Antonio"}}, db_path=DB)
-check("To the course contact, Kerry on CC, course wording",
-      _sent.get("to_address") == "proshop@quarry.com, events@quarry.com"
+check("To the primary, the other TGF contact and Kerry on CC, course wording",
+      _sent.get("to_address") == "proshop@quarry.com"
+      and "events@quarry.com" in (_sent.get("cc_address") or "")
       and "kerry@thegolffellowship.com" in (_sent.get("cc_address") or "") and _sent.get("for_course") is True, _sent)
 _sent.clear()
 res = pp.send_course_files({"event": {"id": 2, "course_id": None, "course": "Nowhere"}}, db_path=DB)
 check("no contact: refused, nothing sent", res.get("no_contact") and not _sent, res)
 pp.send_print_pack_files = _orig
-check("clearing the contact", pp.set_course_print_contact(qid, "", db_path=DB)["contact"] is None)
+check("the interim course_print_contacts setting is retired", "course_print_contacts(" not in pk
+      and "def set_course_print_contact" not in pk)
 
 print("scorecards one card per GROUP unless directed (Kerry 10/13)")
 check("default: per group", pp.scorecard_grouping(3318, db_path=DB) == "team")

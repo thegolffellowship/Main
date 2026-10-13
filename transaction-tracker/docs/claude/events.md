@@ -3032,14 +3032,30 @@ emailed to me."
   carries only `COURSE_FILE_PARTS`: Starter Sheet, Cart Signs, Scorecards,
   Proximity, Rules of Play. Games & Payouts and Divisions & Flights are left out.
 - **Straight to the course contact** (v2.556.1, Kerry 10/13: "Set it up to send
-  straight to course contact"). Course Files goes To the course's print contact,
-  with `print_pack_recipient` (Kerry, plus the chapter extras) on CC.
-  The contact is kept per course in app setting `course_print_contacts`
-  (`{"<course_id>": "a@x, b@y"}`; `print_pack.set_course_print_contact`, which
-  validates the addresses and the course). With no contact on file the route
-  answers 409 `no_contact`, and the button prompts for the address and saves it
-  (`/api/courses/<id>/print-contact`). Bridges: `scoring-course-contact`, and
+  straight to course contact"; **from v2.562.0 read from `course_staff`**).
+  Course Files go To the course's PRIMARY active `tgf_contact`
+  (`course_staff.print_recipients`), CC its other active TGF contacts plus
+  `print_pack_recipient` (Kerry and the chapter extras). With no primary on file
+  the route answers 409 `no_contact` and the button points the admin to the
+  Courses page (`/courses?course=<id>`). The interim `course_print_contacts`
+  setting and the `scoring-course-contact` bridge are retired. Bridge:
   `scoring-print-pack-pdf:<id>|files|send|course`.
+- **COURSE STAFF** (v2.562.0, migration 0014, Kerry 10/13 "Deploy now" #1737;
+  shape #1699, db-claude #1701). `course_staff` holds one row per person per
+  role per course (`tgf_contact`, `general_manager`, `head_golf_professional`,
+  `assistant_general_manager`, `golf_shop`, `food_beverage`, `billing`), keyed
+  by `customer_id`; the email comes from `customer_emails`. One primary per role
+  per course among active rows (partial unique index). Deactivate, never delete.
+  `email_parser/course_staff.py`: `for_course` (the one reader),
+  `print_recipients`, `save_staff` (the one writer: admin UI, or a bridge citing
+  Kerry's OK post; dry run default; a new primary demotes the old), `non_member_ids`
+  (the one "not a member audience" predicate: course contact / sponsor / vendor
+  only, never bought or registered; Brevo sync, the pairings roster and
+  `query_customers` read it), `seed_quarry`. Routes `GET /api/courses/<id>/staff`
+  (manager) and `POST` (admin). UI: the Courses page's **Contacts** panel, and the
+  read-only contacts box under Course in Add/Edit Event. Bridges
+  `scoring-course-staff`, `scoring-course-staff-set`, `scoring-course-staff-seed`.
+  Guard `test_course_staff.py`.
 - **One card per group** (v2.556.2, Kerry 10/13: "Scorecards should always be
   per group unless I direct otherwise"). The pack's scorecards are grouped by
   `print_pack.scorecard_grouping`: per group (`team`) by default, whatever the

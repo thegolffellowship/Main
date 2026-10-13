@@ -6585,20 +6585,40 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if isinstance(_out.get("page_size"), int) and isinstance(_out.get("page_count"), int):
                 _out["pages_bytes"] = _out["page_size"] * _out["page_count"]
             return json.dumps(_out, indent=2, default=str)
-        if cmd == "scoring-course-contact":
-            # "" lists every course print contact; "<course_id>" reads one;
-            # "<course_id>|<email[, email]>|apply" saves it ("" clears).
-            # Where Course Files go (Kerry 10/13: "send straight to course contact").
-            from email_parser.print_pack import course_print_contacts, set_course_print_contact
-            _p = [x.strip() for x in (arg or "").split("|")]
-            if not _p[0]:
-                return json.dumps(course_print_contacts(), indent=2)
-            if len(_p) < 3 or _p[2].lower() != "apply":
-                return json.dumps({"course_id": int(_p[0]), "contact": course_print_contacts().get(_p[0]),
-                                   "dry_run": len(_p) > 1, "would_set": _p[1] if len(_p) > 1 else None})
-            res = set_course_print_contact(int(_p[0]), _p[1])
-            db.log_agent_action("mcp-claude", "course-print-contact", f"course {_p[0]}: {res}")
+        if cmd == "scoring-course-staff":
+            # COURSE STAFF (migration 0014, #1699/#1701). Read-only:
+            # "<course_id>" lists the people, roles and who gets Course Files.
+            from email_parser import course_staff as _cs
+            with db._connect() as _c:
+                _cid = int((arg or "").strip())
+                return json.dumps({"course_id": _cid,
+                                   "staff": _cs.for_course(_c, _cid, include_inactive=True),
+                                   "print": _cs.print_recipients(_c, _cid)}, indent=2, default=str)
+        if cmd == "scoring-course-staff-set":
+            # "<course_id>|<json>|<kerry_ok_post>[|apply]": json keys name, email,
+            # phone, role, is_primary, notes, customer_id, active. Dry run by default;
+            # refused unless the post carries Kerry's word.
+            from email_parser import course_staff as _cs
+            _p = (arg or "").split("|")
+            if len(_p) < 3:
+                return json.dumps({"error": "usage: <course_id>|<json>|<kerry_ok_post>[|apply]"})
+            _d = json.loads(_p[1] or "{}")
+            res = _cs.save_staff(int(_p[0]), name=_d.get("name") or "", email=_d.get("email") or "",
+                                 phone=_d.get("phone") or "", role=_d.get("role") or "tgf_contact",
+                                 is_primary=bool(_d.get("is_primary")), notes=_d.get("notes") or "",
+                                 customer_id=_d.get("customer_id"), active=_d.get("active", True) is not False,
+                                 apply=len(_p) > 3 and _p[3].strip().lower() == "apply",
+                                 set_by="mcp-claude", kerry_ok_post=_p[2].strip())
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-course-staff-seed":
+            # "<course_id>|<kerry_ok_post>[|apply]": The Quarry's people (#1699).
+            from email_parser import course_staff as _cs
+            _p = (arg or "").split("|")
+            if len(_p) < 2:
+                return json.dumps({"error": "usage: <course_id>|<kerry_ok_post>[|apply]"})
+            return json.dumps(_cs.seed_quarry(int(_p[0]), kerry_ok_post=_p[1].strip(),
+                                              apply=len(_p) > 2 and _p[2].strip().lower() == "apply"),
+                              indent=2, default=str)
         if cmd == "scoring-role-flags":
             # The live AMB / CAPT / BACK chips (#1090-3). Read-only.
             from email_parser.cos_reads import role_flags as _rf

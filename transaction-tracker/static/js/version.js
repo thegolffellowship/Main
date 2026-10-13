@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.561.3";
+window.TGF_VERSION = "2.562.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.0",
+    date: "2026-10-13",
+    title: "Course contacts: who works at each course, and who gets the Course Files",
+    changes: [
+      "Kerry 10/13: \"where do I see the course contacts in the event creator/editor? How can i add new ones and assign who should receive the print emails?\", then \"Deploy now\" (rule 3b, #1737). New table course_staff (migration 0014, shape #1699, db-claude PASS with changes #1701): one row per person per role per course, every person a customer_id, the email read from customer_emails. Roles: TGF contact, general manager, head golf professional, assistant GM, golf shop, food & beverage, billing. One primary per role per course, enforced by the database. Rows are deactivated, never deleted.",
+      "COURSES page (admin): a Contacts button on every course opens its people. Add a contact (name, email, phone, role, primary), Make primary, Remove (kept in history) and Restore. It says who the Course Files go to. /courses?course=<id> opens straight to one course.",
+      "EVENT SETUP: picking a course in Add Event or Edit Event shows its contacts and who the Course Files go to, read-only, with a Manage contacts link for the admin.",
+      "COURSE FILES now go To the course's primary TGF contact, CC its other TGF contacts plus Kerry. With no primary on file the send is refused and the admin is pointed at the Courses page. The interim app setting course_print_contacts (v2.556.1) and its bridge scoring-course-contact are retired.",
+      "NOT A MEMBER (#1701-b): a person whose only roles are course contact, sponsor or vendor, and who has never bought or registered, is never pushed to Brevo, never on a pairings roster and never in query_customers (course_staff.non_member_ids, which folds in the vendor list). A course contact who also plays with TGF stays a member.",
+      "Bridges: scoring-course-staff:<course_id> (read), scoring-course-staff-set (Kerry's OK post, dry run default), scoring-course-staff-seed (The Quarry's four people, dry run first). Merge safety: course_staff.customer_id is in _CUSTOMER_FK_COLUMNS. Guard test_course_staff.py; test_print_pack_files.py updated.",
+    ],
+  },
   {
     version: "2.561.3",
     date: "2026-10-13",

@@ -7178,6 +7178,7 @@ _CUSTOMER_FK_COLUMNS: tuple[tuple[str, str], ...] = (
     ("gg_points_standings", "customer_id"),
     ("scoring_rounds", "customer_id"),
     ("event_mvps", "customer_id"),
+    ("course_staff", "customer_id"),          # migration 0014 (#1701: merge safety)
 )
 
 # Junction tables where UPDATE OR IGNORE can skip a source row because the
@@ -7190,6 +7191,7 @@ _FK_LEFTOVER_DELETE_OK: set[tuple[str, str]] = {
     ("customer_roles", "customer_id"),        # UNIQUE(customer_id, role_type)
     ("customer_memberships", "customer_id"),  # UNIQUE(customer_id, started_at)
     ("customer_aliases", "customer_id"),      # unique idx (customer_id, alias_type, alias_value)
+    ("course_staff", "customer_id"),          # UNIQUE(course_id, customer_id, role)
 }
 
 
@@ -69097,13 +69099,14 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
         ev_year = None
     out: list[dict] = []
     keys: set = set()
-    _vendors = vendor_customer_ids(conn)
+    from email_parser.course_staff import non_member_ids as _non_member_ids
+    _vendors = _non_member_ids(conn)
     for r in rows:
         d = dict(r)
         if not (d.get("customer") or "").strip():
             continue
         if d.get("customer_id") is not None and int(d["customer_id"]) in _vendors:
-            continue  # a vendor profile is never a player (#1075-3)
+            continue  # a vendor / course-contact profile is never a player (#1075-3, #1701-b)
         d["name"] = d["customer"]
         d["rsvp_only"] = (d.get("transaction_status") or "active") == "rsvp_only"
         # A row saved without a tee (RSVP Only, a comp, an order form that

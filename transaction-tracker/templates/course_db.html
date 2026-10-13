@@ -57,6 +57,15 @@
         .crs-saved { color: #16A34A; font-weight: 700; font-size: 12px; }
         tr.crs-archived td { opacity: .55; }
         .crs-tees { font-size: 11.5px; color: var(--text-muted); }
+        .crs-staff-btn { margin-left: 4px; }
+        .crs-staff-row > td { background: #FAFAFA; white-space: normal; }
+        .crs-staff { padding: 6px 4px 10px; }
+        .crs-staff-files { font-size: 13px; margin-bottom: 6px; }
+        .crs-staff-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 8px; }
+        .crs-staff-table th { text-align: left; font-size: 11px; color: #6B7280; font-weight: 600; }
+        .crs-staff-table td, .crs-staff-table th { padding: 4px 6px; border-bottom: 1px solid #EEE; }
+        .crs-staff-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .crs-staff-add input, .crs-staff-add select { font-size: 12.5px; padding: 4px 6px; }
         @media (max-width: 560px) {
             .crs-wrap { padding: 0.5rem 0.5rem 2rem; }
             .crs-hide-mobile { display: none; }
@@ -186,8 +195,10 @@
                     </select></td>
                     <td class="crs-num crs-hide-mobile">${c.n_tees ?? 0}</td>
                     <td class="crs-num crs-hide-mobile">${c.n_rounds ?? 0}</td>
-                    <td><button class="crs-save">Save</button></td>
-                </tr>`).join("");
+                    <td style="white-space:nowrap;"><button class="crs-save">Save</button>
+                        <button class="crs-staff-btn" title="People at this course, their roles, and who gets the Course Files">Contacts</button></td>
+                </tr>
+                <tr class="crs-staff-row" data-staff-for="${c.course_id}" style="display:none;"><td colspan="9"><div class="crs-staff"></div></td></tr>`).join("");
             bind();
         }
 
@@ -225,11 +236,90 @@
             });
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
+        // COURSE CONTACTS (Kerry 2026-10-13, migration 0014): each course's people
+        // and roles. The PRIMARY TGF contact gets the Course Files email; the
+        // other TGF contacts are CC'd. Rows are deactivated, never deleted.
+        let ROLES = [], ROLE_LABELS = {};
+        async function openStaff(courseId) {
+            const row = document.querySelector(`tr[data-staff-for="${courseId}"]`);
+            if (!row) return;
+            row.style.display = "";
+            const box = row.querySelector(".crs-staff");
+            box.innerHTML = '<div style="color:#94a3b8;padding:6px 0;">Loading contacts…</div>';
+            const res = await fetch(`/api/courses/${courseId}/staff`);
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) { box.innerHTML = `<div style="color:#b91c1c;">${esc(d.error || "Could not load contacts.")}</div>`; return; }
+            ROLES = d.roles || ROLES; ROLE_LABELS = d.role_labels || ROLE_LABELS;
+            const roleOpts = sel => ROLES.map(r => `<option value="${r}"${r === sel ? " selected" : ""}>${esc(ROLE_LABELS[r] || r)}</option>`).join("");
+            const rows = (d.staff || []).map(st => `
+                <tr class="${st.active ? "" : "crs-archived"}" data-sid="${st.course_staff_id}" data-cid="${st.customer_id}" data-role="${st.role}">
+                    <td>${esc(st.name)}</td>
+                    <td>${esc(st.role_label)}</td>
+                    <td>${esc(st.email || "—")}</td>
+                    <td style="text-align:center;">${st.is_primary ? "<b style='color:#E87C3E;'>PRIMARY</b>" : (st.active ? '<button class="cs-make-primary">Make primary</button>' : "")}</td>
+                    <td>${st.active ? '<button class="cs-deactivate">Remove</button>' : '<button class="cs-reactivate">Restore</button>'}</td>
+                </tr>`).join("");
+            const files = d.print_to
+                ? `Course Files go to <b>${esc(d.print_to)}</b>${(d.print_cc || []).length ? ", cc " + esc(d.print_cc.join(", ")) : ""} (and you).`
+                : `<span style="color:#b45309;">Course Files can't be sent yet: ${esc(d.print_why || "no primary TGF contact")}.</span>`;
+            box.innerHTML = `
+                <div class="crs-staff-files">${files}</div>
+                <table class="crs-staff-table"><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Primary</th><th></th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="5" style="color:#94a3b8;">No contacts on file yet.</td></tr>'}</tbody></table>
+                <div class="crs-staff-add">
+                    <input class="cs-name" placeholder="First Last">
+                    <input class="cs-email" type="email" placeholder="email">
+                    <input class="cs-phone" placeholder="phone (optional)">
+                    <select class="cs-role">${roleOpts("tgf_contact")}</select>
+                    <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="cs-primary"> primary</label>
+                    <button class="cs-add">Add contact</button>
+                </div>
+                <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">The primary TGF contact gets the Course Files; other TGF contacts are CC'd. One person can hold several roles (add them once per role). Course contacts never get member emails.</div>`;
+            const post = async body => {
+                const r = await fetch(`/api/courses/${courseId}/staff`, { method: "POST",
+                    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) { alert(j.refused || j.error || "Not saved."); return false; }
+                return true;
+            };
+            box.querySelector(".cs-add").addEventListener("click", async () => {
+                const name = box.querySelector(".cs-name").value.trim();
+                const email = box.querySelector(".cs-email").value.trim();
+                if (!name) { alert("Enter the person's first and last name."); return; }
+                if (await post({ name, email, phone: box.querySelector(".cs-phone").value.trim(),
+                                 role: box.querySelector(".cs-role").value,
+                                 is_primary: box.querySelector(".cs-primary").checked })) openStaff(courseId);
+            });
+            box.querySelectorAll("tr[data-sid]").forEach(tr => {
+                const base = { customer_id: parseInt(tr.dataset.cid), role: tr.dataset.role };
+                const on = (sel, body, ask) => { const b = tr.querySelector(sel); if (b) b.addEventListener("click", async () => {
+                    if (ask && !confirm(ask)) return;
+                    if (await post({ ...base, ...body })) openStaff(courseId); }); };
+                on(".cs-make-primary", { is_primary: true });
+                on(".cs-deactivate", { active: false }, "Remove this contact from the course? (Kept in history; Restore brings it back.)");
+                on(".cs-reactivate", { active: true });
+            });
+        }
+
+        document.addEventListener("click", e => {
+            const b = e.target.closest(".crs-staff-btn");
+            if (!b) return;
+            const id = b.closest("tr[data-id]").dataset.id;
+            const row = document.querySelector(`tr[data-staff-for="${id}"]`);
+            if (row && row.style.display === "") row.style.display = "none";
+            else openStaff(id);
+        });
+
+        document.addEventListener("DOMContentLoaded", async () => {
             if (typeof initAuth === "function") initAuth();
             $("crs-search").addEventListener("input", render);
             $("crs-show-archived").addEventListener("change", render);
-            load();
+            await load();
+            const want = new URLSearchParams(location.search).get("course");
+            if (want && document.querySelector(`tr[data-id="${want}"]`)) {
+                openStaff(want);
+                document.querySelector(`tr[data-id="${want}"]`).scrollIntoView({ block: "center" });
+            }
         });
     })();
     </script>
