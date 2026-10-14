@@ -13,6 +13,14 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.565.7",
+    date: "2026-10-14",
+    title: "San Antonio picker dot is #8FA8B8",
+    changes: [
+      "Kerry 10/14: the San Antonio dot in the chapter picker now uses the Brand Messaging Standards v1.6 San Antonio color #8FA8B8 (was #4B6274). The Lone Star Cup card colors are unchanged."
+    ]
+  },
+  {
     version: "2.565.6",
     date: "2026-10-14",
     title: "Can't make it: season report by chapter, and a collapsed list on the phone",
