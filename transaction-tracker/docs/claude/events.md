@@ -162,7 +162,13 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   **Where the reasons show (Kerry 10/14):** EVENTS → ROSTER → Not Playing:
   the counts head the list and each card carries its reason chip; an answer
   to our invitation is badged TGF (GG = a Golf Genius RSVP). Fields `source`
-  and `decline_reason` on every RSVP read (`_tag_tracker_rsvp`).
+  and `decline_reason` on every RSVP read (`_tag_tracker_rsvp`). On the phone
+  the same list sits collapsed at the end of the ROSTER ("Can't make it (N)",
+  `renderNotPlayingSection(list, true)`). **Season report** (Kerry 10/14): the
+  RSVP Log page's Can't make it card, by the event's chapter (TGF events =
+  Combined), reasons + "no reason" + a By event table, from
+  `season_decline_report(year)`, `GET /api/invitations/declines` (manager+),
+  bridge `scoring-event-invite:declines[|year]`. Only STANDING answers count.
   Research behind it (CAN-SPAM, Gmail/Yahoo/Outlook bulk rules, why no
   RFC 8058 header through Graph): mailbox #1792/#1793. Footer postal address:
   on HOLD for Kerry's virtual mailbox (#1795).

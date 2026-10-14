@@ -6931,6 +6931,11 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # The member send needs the wording stamp, Kerry's word on the
             # mailbox and |confirm; dry run otherwise.
             _p = [x.strip() for x in (arg or "").split("|")]
+            if _p[0].lower() == "declines":
+                # "declines[|<year>]": the season Can't make it report by chapter (read-only)
+                from email_parser import invitations as _inv
+                _y = _p[1] if len(_p) > 1 and _p[1].isdigit() else None
+                return json.dumps(_inv.season_decline_report(int(_y) if _y else None), indent=2, default=str)
             if not _p[0].isdigit():
                 return json.dumps({"error": "<event_id>[|preview[|addr]|send|<post>[|reminder][|confirm]]"})
             from email_parser import invitations as _inv

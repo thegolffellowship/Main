@@ -682,6 +682,58 @@ def decline_reasons(event_id: int, db_path=None) -> dict:
     return {"counts": counts, "rows": [{"customer_id": r[0], "reason": r[1]} for r in rows]}
 
 
+def season_decline_report(year: int | None = None, db_path=None) -> dict:
+    """Kerry 10/14: "Yes, add the season-wide view by chapter". Every
+    standing Can't make it to our invitations (a Tracker NOT PLAYING row; a
+    player who later registered or changed their mind is no longer one) in a
+    calendar year, with the reason they picked if any, grouped by the event's
+    chapter (a combined TGF event is "Combined"). Read-only."""
+    from email_parser import database as db
+    from email_parser.timezone_utils import today_central
+    year = int(year or today_central().year)
+    conn = db.get_connection(db_path)
+    try:
+        answers = conn.execute(
+            "SELECT email_uid, customer_id FROM rsvps "
+            "WHERE substr(email_uid, 1, 8) = 'tracker:' AND response = 'NOT PLAYING'").fetchall()
+        reasons = {(int(r[0]), int(r[1])): r[2] for r in conn.execute(
+            "SELECT event_id, customer_id, reason FROM event_decline_reasons").fetchall()}
+        events = {int(r[0]): r for r in conn.execute(
+            "SELECT id, item_name, event_date, chapter FROM events "
+            "WHERE substr(event_date, 1, 4) = ?", (str(year),)).fetchall()}
+        rows = []
+        for uid, cid in answers:
+            try:
+                eid = int(str(uid).split(":")[1])
+            except (IndexError, ValueError):
+                continue
+            e = events.get(eid)
+            if e:
+                rows.append((eid, e[1], e[2], e[3], cid, reasons.get((eid, int(cid or 0)))))
+        rows.sort(key=lambda x: (str(x[2] or ""), x[1] or ""))
+    finally:
+        conn.close()
+    chapters: dict = {}
+    for eid, name, edate, chap, cid, reason in rows:
+        c = (chap or "").strip()
+        label = "Combined" if c.lower() in ("tgf", "") else c
+        ch = chapters.setdefault(label, {"declines": 0, "no_reason": 0, "reasons": {}, "events": {}})
+        ev = ch["events"].setdefault(eid, {"event_id": eid, "event": name,
+                                           "date": str(edate or "")[:10],
+                                           "declines": 0, "no_reason": 0, "reasons": {}})
+        for bucket in (ch, ev):
+            bucket["declines"] += 1
+            if reason:
+                bucket["reasons"][reason] = bucket["reasons"].get(reason, 0) + 1
+            else:
+                bucket["no_reason"] += 1
+    for ch in chapters.values():
+        ch["events"] = list(ch["events"].values())
+    order = {"San Antonio": 0, "Austin": 1, "Combined": 9}
+    return {"year": year, "reasons": list(REASONS),
+            "chapters": dict(sorted(chapters.items(), key=lambda kv: (order.get(kv[0], 5), kv[0])))}
+
+
 # ---------------------------------------------------------------------------
 # The schedule (Kerry 10/13): 7:00 AM Central.
 #   Tuesday (and any weekday) event: Wednesday, Friday and Sunday before.

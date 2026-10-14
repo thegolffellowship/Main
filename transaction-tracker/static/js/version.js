@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.565.5";
+window.TGF_VERSION = "2.565.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.565.6",
+    date: "2026-10-14",
+    title: "Can't make it: season report by chapter, and a collapsed list on the phone",
+    changes: [
+      "Kerry 10/14: \"Yes, add the season-wide view by chapter\". The RSVP Log page opens with a Can't make it card for the season: San Antonio, Austin and Combined events, each with how many said Can't make it, the reasons they picked (and how many gave none), and a By event table. GET /api/invitations/declines (manager+), bridge scoring-event-invite:declines[|year]; invitations.season_decline_report. A player who later registered or changed their mind no longer counts.",
+      "Kerry 10/14: \"add a mobile view of can't make its/declines … collapsed on landing\". Each event's ROSTER on the phone now ends with a collapsed Can't make it (N) line; tap it for the reason counts and the players. Desktop and phone share one list and one renderer (notPlayingRsvpsFor / renderNotPlayingSection in events.html).",
+    ],
+  },
   {
     version: "2.565.5",
     date: "2026-10-14",

@@ -213,6 +213,11 @@ check("Kerry 10/14: the ROSTER's RSVP read carries the reason and the TGF source
       _one and _one[0].get("decline_reason") == "Schedule" and _one[0].get("source") == "tracker", _one)
 _nm = dict(db.get_connection(DB).execute("SELECT item_name FROM events WHERE id = ?", (EV,)).fetchone())["item_name"]
 _b = [x for x in db.get_all_rsvps_bulk(db_path=DB)["rsvps"].get(_nm, []) if x.get("customer_id") == 770002]
+_rep = inv.season_decline_report(2026, db_path=DB)
+_sa = _rep["chapters"].get("San Antonio") or {}
+check("Kerry 10/14: the season report counts the Can't make it by chapter, with reasons",
+      _sa.get("declines", 0) >= 1 and _sa.get("reasons", {}).get("Schedule", 0) >= 1
+      and any(e["event_id"] == EV for e in _sa.get("events", [])), _rep)
 check("…the bulk read too", _b and _b[0].get("decline_reason") == "Schedule", _b)
 check("an unlisted reason is refused", cl.post(f"/rsvp/{tok_out}/reason", data={"r": "<b>x</b>"}).status_code == 400)
 mind = cl.get(f"/rsvp/{inv.make_token(770002, EV, 'in', date(2026, 12, 15))}")

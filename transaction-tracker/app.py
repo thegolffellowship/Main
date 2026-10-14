@@ -4979,6 +4979,16 @@ def public_event_rsvp(token):
     return _public_page("RSVP", body)
 
 
+@app.route("/api/invitations/declines")
+@require_role("manager")
+def api_invitation_declines():
+    """Season-wide Can't make it answers + reasons by chapter (Kerry 10/14),
+    the RSVP Log's report card. ?year=YYYY, default this year."""
+    from email_parser import invitations as _inv
+    y = request.args.get("year", "")
+    return jsonify(_inv.season_decline_report(int(y) if y.isdigit() else None))
+
+
 @app.route("/rsvp/<token>/reason", methods=["POST"])
 def public_event_rsvp_reason(token):
     """The optional one-tap reason on the Can't make it page (Kerry 10/13)."""
