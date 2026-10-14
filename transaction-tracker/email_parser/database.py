@@ -14992,6 +14992,34 @@ def get_event_leaderboard(event_name: str,
             if fr["customer_id"] is not None:
                 flights.setdefault(fr["game"], {})[
                     int(fr["customer_id"])] = fr["flight_label"]
+        # An event Golf Genius does not score has no GG flights: its flights
+        # are the Tracker's own flight board, the same SELECTION the payouts
+        # are paid on (Kerry 10/13: "It doesn't look like flights are
+        # showing where they should on the leaderboard").
+        if not flights:
+            try:
+                _fb = event_flights_board(ev["id"], db_path=db_path)
+            except Exception:
+                logger.exception("Non-fatal: flight board unavailable for %s", ev["id"])
+                _fb = None
+            for _entry in (_fb or {}).get("games") or []:
+                if not _entry.get("active"):
+                    continue
+                _sel = _entry.get("selection") or {}
+                _fls = _sel.get("flights") or []
+                if len(_fls) < 2:
+                    continue          # one flight is no flight
+                for _f in _fls:
+                    # Same shape as Golf Genius's labels, so the board's
+                    # boundary reader (_label_bounds) places non-buyers.
+                    _band = (_f.get("band") or "").replace(" · custom", "").strip()
+                    _lab = (f"Flight {_f.get('flight_no')} (HCP {_band})"
+                            if _band and _band != "All handicaps"
+                            else f"Flight {_f.get('flight_no')}")
+                    for _m in _f.get("members") or []:
+                        if _m.get("customer_id") is not None:
+                            flights.setdefault(_entry["game"], {})[
+                                int(_m["customer_id"])] = _lab
 
         # recorded money, per customer, with the shared friendly bits
         won: dict = {}

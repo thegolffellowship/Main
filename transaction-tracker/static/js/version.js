@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.562.6";
+window.TGF_VERSION = "2.562.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.7",
+    date: "2026-10-13",
+    title: "EVENTS board: flights from the Tracker's own flight board",
+    changes: [
+      "Kerry 10/13: \"It doesn't look like flights are showing where they should on the leaderboard.\" The NET, GROSS and SKINS boards were sectioned by flight only from Golf Genius's flight lists, and an event Golf Genius doesn't score has none. So the whole field showed as one list, while the payouts were paid by flight (Ind Net F1 / F2, Skins F1 / F2).",
+      "When Golf Genius has no flights for an event, the board now reads the event's own flight board: the same selection the payouts use. Each game is sectioned \"Flight 1 (HCP <12.0)\" / \"Flight 2 (HCP 12.0+)\". A game with a single flight shows no sections. A non-buyer is placed by their handicap index against the stated line, as before. Golf Genius flights still win where they exist. Guard: test_board_engine_flights.py.",
+    ],
+  },
   {
     version: "2.562.6",
     date: "2026-10-13",
