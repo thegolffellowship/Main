@@ -393,6 +393,25 @@ now produce his layout, so lessons 62–64 are built in, not remembered):
     names its race (`#race=fall_sa`), a player link his Spotlight, an Up
     Next line that event's own store page.
 
+69. **The recap fills itself; no blanks, ever (Kerry 2026-10-13: "I really
+    don't want to be held hostage by manual information entry like where
+    everyone went afterward", then "Yes, start next Tuesday").** From
+    Tue 10/20:
+    - FELLOWSHIP: the spot is the event's `fellowship_spot` (Edit Event);
+      the count is the number of players whose order said FELLOWSHIP YES
+      ("12 planned to join us at <spot>"). No spot on the event: the
+      FELLOWSHIP section is left out, never a blank.
+    - UP NEXT: the start time comes from the event row (shotgun or first
+      tee). No time on the row: print the date and course without one.
+    - Any other line with no data is dropped, not blanked. A recap draft
+      goes out complete.
+    - The manager's after-event prompt (where you went, how many, photos)
+      is the next build, specced the week of 10/13
+      (`docs/claude/manager-fellowship-prompt.md`). Its answers, when they
+      arrive before the send, replace the planned spot and count.
+    - Points lines link each race to the player's row:
+      `/member/contests#race=<fall_sa|fall_austin|monthly>&player=<cid>`.
+
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
 acquisition source per first-timer, links for every proper noun, both
