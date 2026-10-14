@@ -12469,10 +12469,15 @@ def api_se_ctp():
     cid = b.get("customer_id")
     by = b.get("claimed_by")
     try:
+        kw = {}
+        if "seen_holder" in b:      # Kerry 10/13: a stale screen never overwrites a claim
+            kw["seen_holder"] = int(b["seen_holder"]) if b["seen_holder"] else None
         res = claim_ctp(gid, str(b.get("device_id") or ""), int(b["hole"]),
-                        int(cid) if cid else None, claimed_by=int(by) if by else None)
+                        int(cid) if cid else None, claimed_by=int(by) if by else None, **kw)
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "hole is required"}), 400
+    if res.get("stale"):
+        return jsonify(res), 409
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 

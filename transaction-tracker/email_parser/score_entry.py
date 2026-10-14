@@ -289,7 +289,10 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
                                              "name": cur["display_name"],
                                              "group_num": cur["group_num"],
                                              "by_manager": cur["kind"] == "manager"}
-                                            if cur else None)})
+                                            if cur else None),
+                                 # Kerry 10/13: a takeover waits for the manager's Confirm
+                                 "needs_confirm": ctp_takeover(conn, r["round_id"], hole),
+                                 "history": ctp_history(conn, r["round_id"], hole)})
             flags = [dict(x) for x in conn.execute(
                 "SELECT f.id, f.group_id, g.group_num, f.customer_id, f.hole_number AS hole, "
                 "f.note, f.at, p.proposed_gross AS proposed FROM se_card_flags f "
@@ -3023,8 +3026,44 @@ def _ctp_current(conn, round_id: int, hole: int):
         "ORDER BY c.id DESC LIMIT 1", (round_id, hole)).fetchone()
 
 
+_UNSET = object()
+
+
+def ctp_history(conn, round_id: int, hole: int) -> list[dict]:
+    """Every answer on one contest hole, oldest first: who claimed it (or "no
+    one closer"), from which group, when, and whether it was a manager
+    ruling. For the manager's confirm step (Kerry 10/13)."""
+    return [dict(r) for r in conn.execute(
+        "SELECT c.id, c.kind, c.customer_id, p.display_name AS name, g.group_num, c.at "
+        "FROM se_ctp_claims c LEFT JOIN se_players p ON p.round_id = c.round_id "
+        "AND p.customer_id = c.customer_id LEFT JOIN se_groups g ON g.id = c.group_id "
+        "WHERE c.round_id = ? AND c.hole_number = ? ORDER BY c.id", (round_id, int(hole)))]
+
+
+def ctp_takeover(conn, round_id: int, hole: int) -> dict | None:
+    """CTP VERIFICATION (Kerry 2026-10-13, after hole 16 at The Quarry went to
+    Dan Stich when Pat Youngs was closer: "We need to add a verification
+    step"). A hole NEEDS THE MANAGER'S CONFIRMATION when its current holder
+    came from a phone claim that took it away from a player in ANOTHER group
+    (a manager ruling counts as confirmed). Returns {from, to} or None."""
+    claims = [c for c in ctp_history(conn, round_id, hole) if c["kind"] in ("claim", "manager")]
+    if not claims or claims[-1]["kind"] != "claim":
+        return None
+    cur = claims[-1]
+    for prev in reversed(claims[:-1]):
+        if prev["customer_id"] == cur["customer_id"]:
+            continue
+        if prev.get("group_num") == cur.get("group_num") and prev["kind"] == "claim":
+            continue      # the same group changing its own answer is not a takeover
+        return {"from": {"customer_id": prev["customer_id"], "name": prev["name"],
+                         "group_num": prev["group_num"]},
+                "to": {"customer_id": cur["customer_id"], "name": cur["name"],
+                       "group_num": cur["group_num"], "at": cur["at"]}}
+    return None
+
+
 def claim_ctp(group_id: int, device_id: str, hole: int, customer_id: int | None,
-              claimed_by: int | None = None, db_path=None) -> dict:
+              claimed_by: int | None = None, db_path=None, seen_holder=_UNSET) -> dict:
     """The scorekeeper answers "Did anyone in your group get closer?" with a
     player (claim) or None ("No one closer"). Only on the round's CTP /
     Longest Putt holes (ctp_contests); lock holder only."""
@@ -3047,6 +3086,18 @@ def claim_ctp(group_id: int, device_id: str, hole: int, customer_id: int | None,
                 (group_id, customer_id)).fetchone():
             conn.rollback()
             return {"error": "that person is not in this group"}
+        # A STALE SCREEN NEVER OVERWRITES A CLAIM (Kerry 10/13): the phone sends
+        # the holder it showed. If another group has claimed since, nothing is
+        # written and the phone asks again against the current holder. Old
+        # phones that send no seen_holder are taken as before.
+        if seen_holder is not _UNSET:
+            cur = _ctp_current(conn, g["round_id"], int(hole))
+            now_cid = cur["customer_id"] if cur else None
+            if (now_cid or None) != (int(seen_holder) if seen_holder else None):
+                conn.rollback()
+                return {"stale": True,
+                        "holder": ({"customer_id": now_cid, "name": cur["display_name"],
+                                    "group_num": cur["group_num"]} if cur else None)}
         conn.execute(
             "INSERT INTO se_ctp_claims (round_id, group_id, hole_number, customer_id, kind, "
             "claimed_by_customer_id, device_id, at) VALUES (?,?,?,?,?,?,?,?)",
@@ -3431,7 +3482,8 @@ def event_ctp_holders(event_id: int, db_path=None) -> list[dict]:
                 cur = _ctp_current(conn, rid, int(hole))
                 out.append({"round_id": rid, "hole": int(hole), "kind": kind,
                             "customer_id": cur["customer_id"] if cur else None,
-                            "name": cur["display_name"] if cur else None})
+                            "name": cur["display_name"] if cur else None,
+                            "needs_confirm": ctp_takeover(conn, rid, int(hole))})
     return out
 
 

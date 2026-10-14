@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.562.4";
+window.TGF_VERSION = "2.562.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.5",
+    date: "2026-10-13",
+    title: "Closest to Pin verification",
+    changes: [
+      "Kerry 10/13: \"Closest to Pin in 16 was actually Pat Youngs. Dan thought it was closest in their group. We need to add a verification step\", then \"Yes, build all three\".",
+      "1. A stale screen never overwrites a claim. The phone sends the holder it showed. If another group claimed the hole since, nothing is saved and the phone asks again: \"Pat Youngs (Group 6) claimed this hole while you were playing it. Check their marker.\"",
+      "2. The question names the marker to beat: \"Is anyone in your group closer than Pat Youngs's marker?\" (buttons: the players, or \"No one closer than Pat Youngs\"). The note under it says to pick only someone closer than the marker, not just the closest in your group.",
+      "3. The manager confirms a takeover before it is paid. When a phone claim takes a hole from a player in another group, the Live Scoring page shows \"Confirm hole 16: Dan Stich (Group 3) took it from Pat Youngs (Group 6)\" with a Confirm button, beside the hole's full claim history. To pick someone else, use the existing Settle. Until it is confirmed, Record Payouts skips that hole with a note, and the EVENTS board shows it \"to be confirmed\" with no dollar. No new tables: it reads the claims already stored.",
+    ],
+  },
   {
     version: "2.562.4",
     date: "2026-10-13",

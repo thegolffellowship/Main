@@ -95,6 +95,22 @@ check("Team Net 1st pays the leaderboard's winning team, blind included ($23 x 4
 ctp = by.get("ctp") or []
 check("CTP pays the phone-claimed holder by customer_id", len(ctp) == 1 and ctp[0]["customer_id"] == 501
       and ctp[0]["amount"] == 23 and "hole 12" in ctp[0]["description"], ctp)
+
+# CTP VERIFICATION (Kerry 10/13): a takeover the manager has not confirmed is not paid
+se.event_ctp_holders = lambda event_id, db_path=None: [
+    {"round_id": 1, "hole": 12, "kind": "ctp", "customer_id": 501, "name": "Jesse Saldana"},
+    {"round_id": 1, "hole": 16, "kind": "ctp", "customer_id": 298, "name": "Dan Stich",
+     "needs_confirm": {"from": {"customer_id": 136, "name": "Pat Youngs", "group_num": 6},
+                       "to": {"customer_id": 298, "name": "Dan Stich", "group_num": 3}}}]
+a2 = db.assemble_event_game_payouts("s9.27 The Quarry", db_path=DB)
+ctp2 = [r for r in a2["rows"] if r.get("category") == "ctp"]
+check("an unconfirmed takeover is not paid; the confirmed hole still is",
+      [r["customer_id"] for r in ctp2] == [501], ctp2)
+check("...and the note says confirm it on the Live Scoring page",
+      any("hole 16" in n and "confirm it on the Live Scoring page" in n for n in a2["notes"]), a2["notes"])
+se.event_ctp_holders = lambda event_id, db_path=None: [
+    {"round_id": 1, "hole": 12, "kind": "ctp", "customer_id": 501, "name": "Jesse Saldana"},
+    {"round_id": 1, "hole": 16, "kind": "ctp", "customer_id": None, "name": None}]
 check("an unclaimed CTP hole is named, not paid", any("hole 16: nobody holds it" in n for n in a["notes"]), a["notes"])
 net = by.get("individual_net") or []
 check("Ind Net comes from the engine on the flight board, per flight",

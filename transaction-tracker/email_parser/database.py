@@ -59168,11 +59168,13 @@ def _entry_ctp_proxies(conn, ev: dict, db_path=None) -> list:
         if not lp and vals:
             amt = vals[min(ctp_i, len(vals) - 1)]
             ctp_i += 1
+        pending = bool(h.get("needs_confirm"))     # a takeover the manager has not confirmed
         out.append({"game": h["kind"], "label": "Longest Putt" if lp else "Closest to Pin",
                     "player": nm or h.get("name") or "No winner",
                     "customer_id": h.get("customer_id"),
-                    "detail": f"Hole {h['hole']}",
-                    "purse": amt if h.get("customer_id") else None})
+                    "detail": f"Hole {h['hole']}" + (" · to be confirmed" if pending else ""),
+                    "pending": pending,
+                    "purse": amt if h.get("customer_id") and not pending else None})
     return out
 
 
@@ -59216,6 +59218,14 @@ def _tracker_team_and_ctp_rows(ev: dict, notes: list, db_path=None) -> list:
         label = "Longest Putt" if h["kind"] == "longest_putt" else "CTP"
         if not h.get("customer_id"):
             notes.append(f"{label} hole {h['hole']}: nobody holds it — not paid")
+            continue
+        # CTP VERIFICATION (Kerry 10/13): a claim that took the hole from another
+        # group is not paid until the manager confirms it on Live Scoring.
+        nc = h.get("needs_confirm")
+        if nc:
+            notes.append(f"{label} hole {h['hole']}: {nc['to'].get('name')} (group {nc['to'].get('group_num')}) "
+                         f"took it from {nc['from'].get('name')} (group {nc['from'].get('group_num')}) — "
+                         f"confirm it on the Live Scoring page first; not paid")
             continue
         nm = None
         try:

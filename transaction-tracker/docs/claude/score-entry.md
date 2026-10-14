@@ -1168,3 +1168,10 @@ score on your phone button (`00-email.jpg`). They were rendered from
 `cart_signs.html`, `scorecards.html` and `event_day_email.spot_card` /
 `scoring_button` with sample names. Re-render them when any of those three
 layouts changes.
+
+- **CTP VERIFICATION (v2.562.5, Kerry 2026-10-13, "Yes, build all three after close-out").** At The Quarry, hole 16 went to Dan Stich (group 3) when Pat Youngs (group 6) was closer.
+  1. **A stale screen never overwrites a claim.** The phone sends `seen_holder` (the holder it showed) with every CTP answer. If another group has claimed since, `claim_ctp` writes nothing and returns `{stale, holder}` (HTTP 409). The phone shows "X (Group N) claimed this hole while you were playing it" and asks again. A request without `seen_holder` (an old phone) is taken as before.
+  2. **The question names the marker:** "Is anyone in your group closer than X's marker?" / "No one closer than X". The copy says not to pick the closest in your own group.
+  3. **The manager confirms takeovers.** `ctp_takeover(conn, round, hole)` is set when the current holder came from a phone claim that took the hole from a player in another group. A change within the same group, or a manager ruling, is not a takeover. The Live Scoring manager panel shows a "Confirm <name>" button (a manager ruling on the same player) and the hole's claim history (`ctp_history`). `event_ctp_holders` carries `needs_confirm`. Record Payouts (`_tracker_team_and_ctp_rows`) skips an unconfirmed hole with a note, and the EVENTS board shows it as "to be confirmed" with no dollar.
+  4. No schema: everything is read from `se_ctp_claims`.
+  5. Guards: test_score_entry.py, test_untethered_payouts.py, test_board_phone_ctp.py.

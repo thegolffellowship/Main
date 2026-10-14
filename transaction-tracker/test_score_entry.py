@@ -642,6 +642,31 @@ se.claim_ctp(sg2, "sk2", 2, 104)
 check("a closer claim takes over", se.get_group_card(sg)["ctp"]["2"]["holder_customer_id"] == 104)
 se.rule_ctp(sr, 2, 102)
 check("a manager ruling settles it", se.get_group_card(sg)["ctp"]["2"]["holder_customer_id"] == 102)
+# CTP VERIFICATION (Kerry 10/13: hole 16 at The Quarry went to the wrong player)
+_r6 = se.claim_ctp(sg, "sk", 6, 102, claimed_by=101, seen_holder=None)
+check("a first claim on an empty hole is taken", _r6.get("ok"), _r6)
+_st = se.claim_ctp(sg2, "sk2", 6, 104, seen_holder=None)
+check("a STALE screen (it showed no holder) cannot overwrite a claim: refused, holder named",
+      _st.get("stale") and _st["holder"]["customer_id"] == 102 and _st["holder"]["group_num"] == 1, _st)
+check("nothing was written by the stale claim",
+      se.get_group_card(sg)["ctp"]["6"]["holder_customer_id"] == 102)
+check("a claim that saw the current holder is taken",
+      se.claim_ctp(sg2, "sk2", 6, 104, seen_holder=102).get("ok"))
+_conn6 = se._conn(None)
+_tk = se.ctp_takeover(_conn6, sr, 6)
+check("taking a hole from another group needs the manager's confirmation",
+      _tk and _tk["from"]["customer_id"] == 102 and _tk["to"]["customer_id"] == 104
+      and _tk["from"]["group_num"] == 1 and _tk["to"]["group_num"] == 2, _tk)
+check("the claim history lists every answer in order",
+      [h["customer_id"] for h in se.ctp_history(_conn6, sr, 6)] == [102, 104])
+_conn6.close()
+_h6 = [h for h in se.event_ctp_holders(900) if h["hole"] == 6 and h["round_id"] == sr]
+check("the payouts' holder list carries the confirm flag", _h6 and _h6[0]["needs_confirm"], _h6)
+se.rule_ctp(sr, 6, 104)
+_conn6 = se._conn(None)
+check("the manager's Confirm (a ruling on the same player) clears it", se.ctp_takeover(_conn6, sr, 6) is None)
+_conn6.close()
+check("an old phone with no seen_holder is taken as before", se.claim_ctp(sg2, "sk2", 6, 103).get("ok"))
 # CA #829: CTP holes come from the games matrix via the proximity rule
 from email_parser import database as _dbm
 _real_prox = _dbm.event_proximity_report
