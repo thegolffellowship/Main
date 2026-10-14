@@ -289,6 +289,14 @@ def closeout_final_check(event: str | int, db_path=None, _read: dict | None = No
             if no_pops:
                 blocking.append(f"{len(no_pops)} entered card(s) carry a playing handicap but no strokes on any "
                                 f"hole (handicaps and MVP would score them as scratch): {', '.join(sorted(no_pops))}")
+            # The engine (payouts, points) and the saved cards must agree on
+            # every player (Kerry 10/14, after s9.27's Dan Stich).
+            from email_parser import card_parity as _cp
+            _par = _cp.engine_card_parity(eid, db_path=db_path)
+            out["card_parity"] = {"checked": _par.get("checked"), "ok": _par.get("ok"),
+                                  "mismatches": _par.get("mismatches") or []}
+            if _cp.blocking_reason(_par):
+                blocking.append(_cp.blocking_reason(_par))
             if not payouts:
                 blocking.append("no payouts computed for the event")
         # A card with no tee has no rating/slope/par/stroke index: the handicap

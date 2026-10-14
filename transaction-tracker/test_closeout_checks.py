@@ -67,6 +67,12 @@ c = sqlite3.connect(tmp)
 for cid in (401, 402, 403, 404, 405):
     c.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, holes_played, gross, source, tee_id) "
               "VALUES (?, ?, 771, '2026-10-13', 9, 36, 'entry', 1)", (cid, " ".join(people[cid])))
+# The card's tee, with its holes: the engine-vs-card check (Kerry 10/14)
+# needs par and stroke index to build the engine's card.
+c.execute("INSERT OR IGNORE INTO courses (course_id, name) VALUES (1, 'Future Links')")
+c.execute("INSERT OR IGNORE INTO course_tees (tee_id, course_id, tee_name) VALUES (1, 1, 'White')")
+for _h in range(1, 10):
+    c.execute("INSERT OR IGNORE INTO course_tee_holes (tee_id, hole_number, par, stroke_index) VALUES (1, ?, 4, ?)", (_h, _h))
 c.execute("INSERT INTO tgf_events (id, code, name, event_date, events_id) VALUES (91, 's9.40', 's9.40 Future Links', '2026-10-13', 771)")
 c.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description) VALUES (91, 401, 'Individual Net', 20, 'x')")
 c.commit(); c.close()

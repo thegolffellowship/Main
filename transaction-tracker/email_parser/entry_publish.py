@@ -643,6 +643,17 @@ def _publish(event_id: int, round_id, apply: bool, db_path, provisional: bool = 
             db.recompute_computed_mvps(ev["item_name"], db_path=db_path)
         except Exception:
             logger.warning("MVP recompute after entry publish failed", exc_info=True)
+        # Every publish: the engine against the saved cards, every player
+        # (Kerry 10/14). A difference raises one COO item now, and the
+        # payout writer and the points rebuild refuse until it is fixed.
+        try:
+            from email_parser import card_parity as _cp
+            _par = _cp.engine_card_parity(event_id, db_path=db_path)
+            out["card_parity"] = {"ok": _par.get("ok"), "checked": _par.get("checked"),
+                                  "mismatches": _par.get("mismatches") or []}
+            _cp.alarm(_par, db_path=db_path)
+        except Exception:
+            logger.warning("card parity after entry publish failed", exc_info=True)
     return out
 
 

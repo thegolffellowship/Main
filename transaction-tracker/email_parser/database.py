@@ -26869,20 +26869,30 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
         for r in rounds:
             cid = r["customer_id"]
             scores, received = {}, {}
-            # ENTERED cards are gross only: G-0 stores strokes_received = 0
-            # as a placeholder ("the formula layer derives pops from the
-            # playing handicap"). Taken as given, those zeros make net ==
-            # gross — rehearsal 9/28, 3309 Flight 1 went to the low GROSS.
-            # So an entry card's dots are always DERIVED, never read.
+            # ONE SOURCE FOR STROKES (Kerry 10/14, after s9.27): the engine
+            # reads the strokes saved on the card, the same ones the card,
+            # the handicap post and the MVP read. It used to work them out a
+            # second time, and on 10/13 that second calculation used the
+            # wrong tee's indexes for Dan Stich (net 41, card 38).
+            # The one exception: an entered card published before CA #865
+            # carries placeholder zeros (rehearsal 9/28, net == gross). A
+            # playing handicap of 1+ with no stroke on any hole is that
+            # case, and only then are the strokes derived.
             entered = (r.get("source") or "") == "entry"
+            stored = {}
             for h in conn.execute(
                     "SELECT hole_number, strokes, strokes_received "
                     "FROM scoring_holes WHERE scoring_round_id = ?",
                     (r["id"],)).fetchall():
                 if h["strokes"] is not None:
                     scores[int(h["hole_number"])] = h["strokes"]
-                if h["strokes_received"] is not None and not entered:
-                    received[int(h["hole_number"])] = h["strokes_received"]
+                if h["strokes_received"] is not None:
+                    stored[int(h["hole_number"])] = h["strokes_received"]
+            placeholder = (entered and r["playing_handicap"] is not None
+                           and abs(float(r["playing_handicap"])) >= 1
+                           and not any(stored.values()))
+            if not placeholder:
+                received = stored
             # Each player's strokes fall on HIS tee's stroke index (USGA;
             # Kerry 2026-10-06): a women's tee carries its own.
             own_si = {}
@@ -60344,6 +60354,16 @@ def record_event_game_payouts(event_name: str, payouts: list,
     """
     if not payouts:
         return {"error": "No payouts provided"}
+    # No money is recorded while the engine and the saved scorecards
+    # disagree on any player (Kerry 10/14, after s9.27). Checked here, in
+    # the one writer, so every path that records (auto payouts, the bridge,
+    # the closeout) is held the same way. Entered cards only.
+    from email_parser import card_parity as _cp
+    _par = _cp.engine_card_parity(event_name, db_path=db_path)
+    _why = _cp.blocking_reason(_par)
+    if _why:
+        _cp.alarm(_par, db_path=db_path)
+        return {"error": _why, "parity": _par["mismatches"]}
     with _connect(db_path) as conn:
         ev = conn.execute(
             "SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",

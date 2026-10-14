@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.563.6";
+window.TGF_VERSION = "2.564.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.564.0",
+    date: "2026-10-14",
+    title: "Payouts and points read the strokes saved on the card, and wait if anything disagrees",
+    changes: [
+      "Kerry 10/14 (\"Yes, build both before next Tuesday\"), after s9.27: the saved scorecards were right and the payout engine was wrong for Dan Stich, because the engine worked out his strokes a second time on the wrong tee. ONE SOURCE: event_engine_state now hands the engine the strokes saved on each card, the same ones the card, the handicap post and the MVP read. The only exception is an entered card from before CA #865 that carries placeholder zeros (a handicap of 1+ and no stroke anywhere); its strokes are still worked out, and the new check flags it.",
+      "THE CHECK (email_parser/card_parity.py): for every entered player, the strokes saved on each hole are compared with the rule worked out independently (his own tee, the nine he played, handicap_calc.ruled_dots), and the engine's card is compared with the saved card hole by hole, gross and net. Any difference holds the money and the points: record_event_game_payouts refuses (every path: auto payouts, the bridge, the closeout), closeout_final_check lists it as blocking, and the points rebuild leaves the event out and refuses to apply. Every publish runs it and a difference raises one HIGH COO item, SCORING HOLD, naming each player and hole. Golf Genius-era cards carry GG's own strokes and are not checked.",
+      "Read-only bridge scoring-card-parity:<event name or id>. Guard test_card_parity.py replays the 10/13 card (Blue-tee player on a Gold-tee night) through both fixes; test_closeout_checks.py's fixture now gives its tee real holes.",
+    ],
+  },
   {
     version: "2.563.6",
     date: "2026-10-13",

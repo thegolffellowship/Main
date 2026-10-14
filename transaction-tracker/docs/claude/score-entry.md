@@ -1122,6 +1122,39 @@ se_game_handicaps basis text.
   when it differs from the field's. The phone card's own-tee pops are Track
   A's v2.525.6 (`_si_by_band`).
 
+## One source for strokes, and the engine-vs-card check (v2.564.0, Kerry 2026-10-14)
+
+Kerry 10/14: "Yes, build both before next Tuesday." After s9.27 (10/13) the
+saved cards were right and the payout engine was wrong for Dan Stich (net
+41 vs 38): the engine worked out his strokes a second time, on the wrong
+tee's 18-hole indexes (fixed the same night in v2.563.4, `test_own_tee_nine.py`).
+
+- **One source.** `database.event_engine_state` hands the engine the strokes
+  SAVED on every card (`scoring_holes.strokes_received`), entered cards
+  included, so payouts and points read the same strokes as the card, the
+  handicap post and the MVP. The one exception: an entered card from before
+  CA #865 with placeholder zeros (playing handicap 1+ and no stroke on any
+  hole) is still derived, and the check below flags it.
+- **The check.** `email_parser/card_parity.py` `engine_card_parity(event)`,
+  every ENTERED card (GG-era cards carry GG's own dots and are skipped):
+  (1) the saved strokes against the rule worked out independently (his own
+  tee, the nine he played, `handicap_calc.ruled_dots`); (2) the engine's
+  card (`event_engine_state` + `build_cards`) against the saved card, hole
+  by hole, gross and net. A card with no holes saved is skipped; a tee with
+  no stroke index for a played hole is itself a mismatch.
+- **What a difference holds.** `record_event_game_payouts` refuses (the one
+  writer: auto payouts, `scoring-record-payouts`, the closeout);
+  `closeout_final_check` lists it as blocking (`card_parity` in its output);
+  `tracker_points.event_lines` leaves the event out with a `HELD ` warning and
+  `rebuild` / `rebuild_monthly` refuse to apply (`refused`), so standings stay
+  as they were rather than lose the event's points. Every publish
+  (`entry_publish._publish`, applied + changed) runs it and raises one HIGH
+  COO item, `SCORING HOLD: engine vs scorecard — <event>`, deduped while open.
+- Auto payouts records a refusal and waits for the next card change; after a
+  fix that is not a card change (tee data), run `scoring-record-payouts:<event>`.
+- Read-only bridge `scoring-card-parity:<event name or id>`. Guard
+  `test_card_parity.py`.
+
 ## Finding 0: entry mode, the board reads entered scores only (CoS #1333, 2026-10-07)
 
 Kerry (#1313): "audit actual tracker entered scores ... without any importing

@@ -100,6 +100,14 @@ def _home_chapter(conn, cid, fallback: str) -> str:
     return p.get("chapter") or fallback
 
 
+HELD_PREFIX = "HELD "
+
+
+def held_events(warnings: list) -> list:
+    """The warnings that hold the points (engine vs card mismatch)."""
+    return [w for w in warnings or [] if str(w).startswith(HELD_PREFIX)]
+
+
 def event_lines(db_path=None, through: str | None = None) -> tuple[list, list]:
     """Every Tracker points line from the cutover on: [{customer_id,
     player_name, chapter (race chapter), date, event_id, code, nine,
@@ -141,6 +149,14 @@ def event_lines(db_path=None, through: str | None = None) -> tuple[list, list]:
             st = db.event_engine_state(ev["item_name"], db_path=db_path)
             if st.get("error"):
                 warnings.append(f"{ev['item_name']}: {st['error']}")
+                continue
+            # No points from an event whose engine and saved cards disagree
+            # (Kerry 10/14, after s9.27). The event is left out and the
+            # rebuild refuses to apply until it is fixed (HELD_PREFIX).
+            from .card_parity import engine_card_parity, blocking_reason
+            held = blocking_reason(engine_card_parity(ev["id"], db_path=db_path, state=st))
+            if held:
+                warnings.append(f"{HELD_PREFIX}{ev['item_name']}: {held}")
                 continue
             formulas = (db.get_championship_formulas(db_path=db_path)
                         if st["meta"].get("championship") else db.get_scoring_formulas(db_path))
@@ -363,6 +379,13 @@ def rebuild(db_path=None, apply: bool = False) -> dict:
     lines, warnings = event_lines(db_path=db_path)
     out = {"apply": apply, "races": {}, "monthly": {}, "warnings": warnings,
            "lines": len(lines)}
+    held = held_events(warnings)
+    if held and apply:
+        # Writing standings without a held event would drop its points from
+        # every player; keep the standings as they are until it is fixed.
+        out["refused"] = held
+        apply = False
+        out["apply"] = False
     for rk in TRACKER_RACES:
         built = build_race(rk, db_path=db_path, tracker_lines=lines)
         with db._connect(db_path) as conn:
@@ -392,9 +415,12 @@ def rebuild_monthly(db_path=None, apply: bool = False, tracker_lines: list | Non
     from . import database as db
     from .timezone_utils import today_central
     lines = tracker_lines
-    if lines is None:
-        lines, _ = event_lines(db_path=db_path)
     out: dict = {}
+    if lines is None:
+        lines, _w = event_lines(db_path=db_path)
+        if held_events(_w) and apply:
+            out["refused"] = held_events(_w)
+            apply = False
     t = today_central()
     start = cutover()[:7]
     keys = []
