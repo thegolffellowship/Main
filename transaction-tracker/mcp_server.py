@@ -1844,7 +1844,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
       scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
-      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
+      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
@@ -6931,6 +6931,11 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # The member send needs the wording stamp, Kerry's word on the
             # mailbox and |confirm; dry run otherwise.
             _p = [x.strip() for x in (arg or "").split("|")]
+            if _p[0].lower() == "declines":
+                # "declines[|<year>]": the season Can't make it report by chapter (read-only)
+                from email_parser import invitations as _inv
+                _y = _p[1] if len(_p) > 1 and _p[1].isdigit() else None
+                return json.dumps(_inv.season_decline_report(int(_y) if _y else None), indent=2, default=str)
             if not _p[0].isdigit():
                 return json.dumps({"error": "<event_id>[|preview[|addr]|send|<post>[|reminder][|confirm]]"})
             from email_parser import invitations as _inv
@@ -6940,6 +6945,18 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
                 _addr = _p[2] if len(_p) > 2 and "@" in _p[2] else None
                 return json.dumps(_inv.send_preview(int(_p[0]), _addr, _kind), indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "restore":
+                # "0|restore|<kerry-ok post id>|<cid,cid,...>[|confirm]" (Kerry
+                # 10/14): undo answers a person did not give (mail scanners,
+                # preview taps): back on invitations, their Tracker NOT
+                # PLAYING rows and decline reasons on upcoming events removed.
+                db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
+                if len(_p) < 4 or not _p[2].lstrip("#").isdigit():
+                    return json.dumps({"error": "0|restore|<kerry-ok post id>|<cid,cid>[|confirm]"})
+                return json.dumps(_inv.restore_answers(
+                    [c for c in _p[3].split(",") if c.strip().isdigit()],
+                    int(_p[2].lstrip("#")),
+                    confirm=("confirm" in [x.lower() for x in _p[4:]])), indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "send":
                 db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
                 if len(_p) < 3 or not _p[2].lstrip("#").isdigit():

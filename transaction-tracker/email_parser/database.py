@@ -39095,6 +39095,31 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
         return _rsvps_for_event(conn, event_name)
 
 
+def _tag_tracker_rsvp(rsvp: dict, reasons: dict) -> None:
+    """A Tracker invitation answer (email_uid 'tracker:<event>:<cid>') says so
+    (`source`) and carries the player's optional decline reason (Kerry 10/14:
+    the reasons show on the ROSTER's Not Playing list)."""
+    uid = str(rsvp.get("email_uid") or "")
+    rsvp["source"] = "tracker" if uid.startswith("tracker:") else "gg"
+    if rsvp["source"] == "tracker":
+        parts = uid.split(":")
+        try:
+            rsvp["decline_reason"] = reasons.get((int(parts[1]), int(parts[2])))
+        except (IndexError, ValueError):
+            rsvp["decline_reason"] = None
+
+
+def _decline_reason_map(conn, event_id=None) -> dict:
+    """{(event_id, customer_id): reason} from event_decline_reasons (migration 0016)."""
+    try:
+        sql = "SELECT event_id, customer_id, reason FROM event_decline_reasons"
+        rows = (conn.execute(sql + " WHERE event_id = ?", (int(event_id),)) if event_id
+                else conn.execute(sql)).fetchall()
+    except Exception:
+        return {}
+    return {(int(r[0]), int(r[1])): r[2] for r in rows}
+
+
 def _rsvps_for_event(conn: sqlite3.Connection, event_name: str,
                      tracker_only: bool = False) -> list[dict]:
     """Body of get_rsvps_for_event on a caller-supplied connection, so the
@@ -39122,8 +39147,10 @@ def _rsvps_for_event(conn: sqlite3.Connection, event_name: str,
     # (authoritative for RSVP-only players who never bought a ticket);
     # fall back to items.customer by email; last fall back to player_name.
     results = []
+    reasons = _decline_reason_map(conn)
     for r in rows:
         rsvp = dict(r)
+        _tag_tracker_rsvp(rsvp, reasons)
         rsvp["resolved_name"] = rsvp.get("player_name")
         rsvp["has_player_card"] = False
         rsvp["customer_status"] = None
@@ -39243,8 +39270,10 @@ def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
                     cust_status_map[c["customer_id"]] = status_label[c["current_player_status"]]
 
         rsvps_by_event = {}
+        reasons = _decline_reason_map(conn)
         for r in rows:
             rsvp = dict(r)
+            _tag_tracker_rsvp(rsvp, reasons)
             email = (rsvp.get("player_email") or "").strip().lower()
             cid = rsvp.get("customer_id")
             rsvp["resolved_name"] = (

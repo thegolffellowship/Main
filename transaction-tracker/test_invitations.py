@@ -17,6 +17,7 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
     from email_parser import invitations as inv
     from email_parser import fetcher
     db.init_db(DB)
+inv.BURST_S = 0   # off until 6g: earlier sections tap buttons back to back
 
 F = []
 def check(label, cond, detail=""):
@@ -100,6 +101,10 @@ r = inv.send_preview(EV, "pat@gmail.com", db_path=DB)
 check("a preview to a non-staff address is refused", "error" in r and not SENT, r)
 r = inv.send_preview(EV, "kerry@thegolffellowship.com", db_path=DB)
 check("a staff preview sends one message", r.get("status") == "sent" and len(SENT) == 1, r)
+db.set_app_setting(inv.PREVIEW_CID_KEY, "770001", db_path=DB)
+SENT.clear(); inv.send_preview(EV, "kerry@thegolffellowship.com", db_path=DB)
+check("Kerry 10/14: the preview is the staff member's own invitation (setting), not a member's",
+      "Hi Ann" in SENT[0]["body"] if "body" in SENT[0] else any("Ann" in str(v) for v in SENT[0].values()), list(SENT[0].keys()))
 SENT.clear()
 r = inv.send(EV, ok_post, confirm=True, db_path=DB)
 check("no send until the wording carries Kerry's stamp", "refused" in r and not SENT, r)
@@ -202,13 +207,94 @@ check("a reason is kept, one tap", cl.post(f"/rsvp/{tok_out}/reason", data={"r":
 cl.post(f"/rsvp/{tok_out}/reason", data={"r": "Schedule"})
 check("a second tap updates the one row (event_decline_reasons)",
       inv.decline_reasons(EV, db_path=DB)["counts"] == {"Schedule": 1})
+_one = [x for x in db.get_rsvps_for_event(dict(db.get_connection(DB).execute("SELECT item_name FROM events WHERE id = ?", (EV,)).fetchone())["item_name"], db_path=DB)
+        if x.get("customer_id") == 770002]
+check("Kerry 10/14: the ROSTER's RSVP read carries the reason and the TGF source",
+      _one and _one[0].get("decline_reason") == "Schedule" and _one[0].get("source") == "tracker", _one)
+_nm = dict(db.get_connection(DB).execute("SELECT item_name FROM events WHERE id = ?", (EV,)).fetchone())["item_name"]
+_b = [x for x in db.get_all_rsvps_bulk(db_path=DB)["rsvps"].get(_nm, []) if x.get("customer_id") == 770002]
+_rep = inv.season_decline_report(2026, db_path=DB)
+_sa = _rep["chapters"].get("San Antonio") or {}
+check("Kerry 10/14: the season report counts the Can't make it by chapter, with reasons",
+      _sa.get("declines", 0) >= 1 and _sa.get("reasons", {}).get("Schedule", 0) >= 1
+      and any(e["event_id"] == EV for e in _sa.get("events", [])), _rep)
+check("…the bulk read too", _b and _b[0].get("decline_reason") == "Schedule", _b)
 check("an unlisted reason is refused", cl.post(f"/rsvp/{tok_out}/reason", data={"r": "<b>x</b>"}).status_code == 400)
 mind = cl.get(f"/rsvp/{inv.make_token(770002, EV, 'in', date(2026, 12, 15))}")
 with db._connect(DB) as conn:
     r = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()[0]
 check("Changed my mind goes to registration and clears the earlier no", mind.status_code == 302 and r == 0, (mind.status_code, r))
-pu = cl.get(f"/rsvp/{inv.make_token(770001, EV, 'unsub', date(2026, 12, 15))}").get_data(as_text=True)
-check("Remove me lands straight on Done", "You won't get event invitations" in pu)
+tok_un = inv.make_token(770001, EV, 'unsub', date(2026, 12, 15))
+pu = cl.get(f"/rsvp/{tok_un}").get_data(as_text=True)
+check("Kerry 10/14: Remove me asks first and saves nothing by itself (mail scanners)",
+      "Yes, remove me" in pu and "fetch(" not in pu and 770001 not in inv._opted_out(DB), pu[:300])
+pu2 = cl.post(f"/rsvp/{tok_un}").get_data(as_text=True)
+check("…its button removes them and shows Done",
+      "You won't get event invitations" in pu2 and 770001 in inv._opted_out(DB))
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps(sorted(inv._opted_out(DB) - {770001})), db_path=DB)
+print("6f. Kerry 10/14: restore answers a person did not give")
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps([770002]), db_path=DB)
+cl.post(f"/rsvp/{inv.make_token(770002, EV, 'out', date(2026, 12, 15))}", headers={"X-Requested-With": "fetch"})
+inv.record_reason(inv.make_token(770002, EV, 'out', date(2026, 12, 15)), "Weather", db_path=DB)
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('kerry', 't', 'Yes, restore them')")
+    kpost = conn.execute("SELECT max(id) FROM platform_dialogue").fetchone()[0]
+    conn.commit()
+dry = inv.restore_answers([770002], kpost, db_path=DB)
+check("restore dry run changes nothing", dry.get("dry_run") and 770002 in inv._opted_out(DB)
+      and len(dry["not_playing_rows_removed"]) == 1 and len(dry["decline_reasons_removed"]) == 1, dry)
+check("restore refuses without Kerry's word", "refused" in inv.restore_answers([770002], 999999, True, db_path=DB))
+done_ = inv.restore_answers([770002], kpost, confirm=True, db_path=DB)
+with db._connect(DB) as conn:
+    left = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()[0]
+check("restore puts them back on, clears the no and the reason", done_.get("applied")
+      and 770002 not in inv._opted_out(DB) and left == 0
+      and all(x["customer_id"] != 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), done_)
+print("6g. Kerry 10/14: the scanner filter (2-minute grace, burst rule)")
+inv.BURST_S = 30   # the earlier sections tap buttons back to back on purpose
+import time as _time
+def _np(cid):
+    with db._connect(DB) as conn:
+        return conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
+                            (f"tracker:{EV}:{cid}",)).fetchone()[0]
+now_ = int(_time.time())
+fresh = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), sent_at=now_) for a in inv.ACTIONS}
+cl.post(f"/rsvp/{fresh['out']}", headers={"X-Requested-With": "fetch"})
+check("a Can't make it within 2 minutes of the send records nothing", _np(770003) == 0)
+pu = cl.post(f"/rsvp/{fresh['unsub']}").get_data(as_text=True)
+check("…a Remove me within 2 minutes is not done and asks again", 770003 not in inv._opted_out(DB)
+      and "once more" in pu and "won't get" not in pu, pu[:200])
+old = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), sent_at=now_ - 600) for a in inv.ACTIONS}
+cl.post(f"/rsvp/{old['out']}", headers={"X-Requested-With": "fetch"})
+check("ten minutes after the send, Can't make it records", _np(770003) == 1)
+g = cl.get(f"/rsvp/{old['in']}")
+clicks = json.loads(db.get_app_setting(inv.CLICKS_KEY.format(event_id=EV), db_path=DB) or "{}")
+check("burst: I'm in seconds after Can't make it undoes both (a scanner hits every button)",
+      g.status_code == 302 and _np(770003) == 0 and "770003" not in clicks, (_np(770003), clicks.get("770003")))
+cl.get(f"/rsvp/{old['in']}")
+cl.post(f"/rsvp/{old['out']}", headers={"X-Requested-With": "fetch"})
+check("burst the other way: Can't make it seconds after I'm in records nothing", _np(770003) == 0)
+cl.post(f"/rsvp/{old['unsub']}")
+check("…but Remove me right after Can't make it still works (a person does that)",
+      770003 in inv._opted_out(DB))
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps(sorted(inv._opted_out(DB) - {770003})), db_path=DB)
+db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), "{}", db_path=DB)
+print("6e. Kerry 10/14: preview buttons record nothing")
+pv = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), preview=True) for a in inv.ACTIONS}
+cl.post(f"/rsvp/{pv['out']}", headers={"X-Requested-With": "fetch"})
+cl.post(f"/rsvp/{pv['unsub']}")
+cl.post(f"/rsvp/{pv['out']}/reason", data={"r": "Weather"})
+gin = cl.get(f"/rsvp/{pv['in']}")
+with db._connect(DB) as conn:
+    r = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770003",)).fetchone()[0]
+clicks = json.loads(db.get_app_setting(inv.CLICKS_KEY.format(event_id=EV), db_path=DB) or "{}")
+check("a preview tap writes no RSVP, opt-out, reason or click", r == 0
+      and 770003 not in inv._opted_out(DB) and "770003" not in clicks
+      and all(x["customer_id"] != 770003 for x in inv.decline_reasons(EV, db_path=DB)["rows"]),
+      (r, clicks))
+check("…and I'm in still opens the registration page", gin.status_code == 302)
+check("…and its sibling buttons stay preview links",
+      all(inv.verify_token(u.rsplit("/", 1)[-1]).get("p") for u in inv.sibling_links(pv["out"]).values()))
 
 from datetime import datetime as _dt
 check("the 7 AM job does nothing until event_invite_auto is on",

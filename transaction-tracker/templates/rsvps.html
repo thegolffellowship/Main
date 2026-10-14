@@ -164,6 +164,12 @@
         {% endif %}
     <div class="sub-tabs"><nav class="segmented-control"><a class="seg-option" href="/transactions">Transactions</a><a class="seg-option active" href="/rsvps">RSVP Log</a></nav></div>
 
+        <!-- CAN'T MAKE IT, SEASON (Kerry 10/14: "Yes, add the season-wide view by chapter") -->
+        <details id="decline-report" class="decline-report" open style="margin:0 0 0.9rem;border:1px solid var(--border);border-radius:10px;background:#fff;padding:0.6rem 0.8rem;display:none;">
+            <summary style="cursor:pointer;font-family:Bitter,Georgia,serif;font-weight:700;">Can't make it, <span id="decline-year"></span> season</summary>
+            <div id="decline-body" style="margin-top:0.5rem;font-size:0.85rem;"></div>
+        </details>
+
         <!-- Controls -->
         <section class="controls" style="margin-bottom: 0.75rem;">
             <input type="text" id="rsvp-search" class="search-box" placeholder="Search by player name, event, email...">
@@ -981,6 +987,41 @@
     }
 
     initHandlers();
+    // Season Can't make it report (Kerry 10/14): standing "Can't make it"
+    // answers to our invitations, by the event's chapter, with the reason each
+    // player picked. Manager and admin only (the API refuses the rest).
+    async function loadDeclineReport() {
+        const box = document.getElementById("decline-report");
+        try {
+            const res = await fetch("/api/invitations/declines");
+            if (!res.ok) return;
+            const d = await res.json();
+            const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+            const chip = (k, n) => `<span style="display:inline-block;border:1px solid var(--border);border-radius:999px;padding:0.05rem 0.55rem;margin:0.15rem 0.25rem 0 0;white-space:nowrap;">${esc(k)} <strong>${n}</strong></span>`;
+            const reasonChips = b => Object.entries(b.reasons).sort((x, y) => y[1] - x[1]).map(([k, n]) => chip(k, n)).join("")
+                + (b.no_reason ? chip("No reason given", b.no_reason) : "");
+            document.getElementById("decline-year").textContent = d.year;
+            const chs = Object.entries(d.chapters || {});
+            let html = "";
+            if (!chs.length) html = `<div style="color:var(--text-muted);font-style:italic;">No Can't make it answers yet this season.</div>`;
+            chs.forEach(([name, ch]) => {
+                html += `<div style="margin:0.4rem 0 0.7rem;">`;
+                html += `<div style="font-weight:700;">${esc(name)} <span style="color:var(--text-muted);font-weight:400;">${ch.declines} can't make it</span></div>`;
+                html += `<div>${reasonChips(ch)}</div>`;
+                html += `<details style="margin-top:0.3rem;"><summary style="cursor:pointer;color:var(--link);">By event (${ch.events.length})</summary>`;
+                html += `<div style="overflow-x:auto;"><table style="width:100%;margin-top:0.3rem;font-size:0.8rem;"><thead><tr><th style="text-align:left;">Event</th><th>Date</th><th>Can't make it</th><th style="text-align:left;">Reasons</th></tr></thead><tbody>`;
+                ch.events.forEach(ev => {
+                    const rs = Object.entries(ev.reasons).sort((x, y) => y[1] - x[1]).map(([k, n]) => `${esc(k)} ${n}`).join(" · ");
+                    html += `<tr><td>${esc(ev.event)}</td><td style="text-align:center;">${esc(ev.date)}</td><td style="text-align:center;">${ev.declines}</td><td style="white-space:normal;">${rs || ""}${ev.no_reason ? `${rs ? " · " : ""}<span style="color:var(--text-muted);">none ${ev.no_reason}</span>` : ""}</td></tr>`;
+                });
+                html += `</tbody></table></div></details></div>`;
+            });
+            document.getElementById("decline-body").innerHTML = html;
+            box.style.display = "";
+        } catch (e) { /* the report is optional; the RSVP log still works */ }
+    }
+    loadDeclineReport();
+
     initAuth();
     </script>
 </body>

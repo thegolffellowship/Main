@@ -3358,6 +3358,70 @@
         });
     }
 
+    // NOT PLAYING (Kerry 10/14): who said they can't make it, with the reason
+    // they picked on the invitation's Can't make it page. ONE list and ONE
+    // renderer for the desktop ROSTER (open) and the phone card (collapsed).
+    // Anyone who has since registered is left out; one card per person.
+    function notPlayingRsvpsFor(registrants, rsvps) {
+        const INACTIVE = ["credited", "refunded", "transferred", "wd"];
+        const active = (registrants || []).filter(r => !INACTIVE.includes(r.transaction_status));
+        const regEmails = new Set(active.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
+        const regNames = new Set(active.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
+        const seen = new Set();
+        return (rsvps || []).filter(r => {
+            if (r.response !== 'NOT PLAYING') return false;
+            const email = (r.player_email || '').toLowerCase();
+            if (email && regEmails.has(email)) return false;
+            const resolved = (r.resolved_name || '').toLowerCase();
+            const first = (r.player_name || '').toLowerCase();
+            if (resolved && regNames.has(resolved)) return false;
+            if (!resolved && first && [...regNames].some(n => n.startsWith(first))) return false;
+            const key = email || resolved || first;
+            if (key && seen.has(key)) return false;
+            if (key) seen.add(key);
+            return true;
+        });
+    }
+
+    function renderNotPlayingSection(notPlayingRsvps, collapsed) {
+        if (!notPlayingRsvps.length) return '';
+        let html = '';
+        const reasonCounts = {};
+        notPlayingRsvps.forEach(r => { if (r.decline_reason) reasonCounts[r.decline_reason] = (reasonCounts[r.decline_reason] || 0) + 1; });
+        const reasonKeys = Object.keys(reasonCounts).sort((a, b) => reasonCounts[b] - reasonCounts[a]);
+        const given = reasonKeys.reduce((t, k) => t + reasonCounts[k], 0);
+        const reasonLine = reasonKeys.length
+            ? reasonKeys.map(k => `<strong>${escapeHtml(k)}</strong> ${reasonCounts[k]}`).join(' · ')
+              + ` <span style="opacity:.8">(${notPlayingRsvps.length - given} gave none)</span>`
+            : '';
+        if (collapsed) {
+            html += `<details class="rsvp-section rsvp-not-playing-section rsvp-np-mobile" style="margin-top:0.6rem;">`;
+            html += `<summary style="cursor:pointer;color:var(--red);font-weight:700;font-size:0.9rem;padding:0.35rem 0;">Can't make it (${notPlayingRsvps.length})</summary>`;
+        } else {
+            html += '<div class="rsvp-section rsvp-not-playing-section">';
+            html += `<h4 style="color:var(--red);">Not Playing (${notPlayingRsvps.length})</h4>`;
+        }
+        if (reasonLine) {
+            html += `<div class="rsvp-decline-reasons" style="font-size:0.8rem;color:var(--text-muted);margin:-0.2rem 0 0.4rem;">Reasons given: ${reasonLine}</div>`;
+        }
+        html += '<div class="rsvp-player-list">';
+        notPlayingRsvps.forEach(r => {
+            const fullName = (r.resolved_name || r.player_name || '').trim();
+            const labelName = fullName || 'Unknown';
+            html += `<div class="rsvp-player-card rsvp-cancelled-card">`;
+            html += `<span class="rsvp-badge rsvp-not-playing" title="${r.source === 'tracker' ? 'Answered our email invitation' : 'Golf Genius RSVP'}">${r.source === 'tracker' ? 'TGF' : 'GG'}</span> `;
+            html += fullName
+                ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(fullName)}"><strong>${escapeHtml(displayName(labelName, r.customer_status))}</strong></a>`
+                : `<strong>${escapeHtml(labelName)}</strong>`;
+            if (r.decline_reason) {
+                html += ` <span class="rsvp-reason-chip" style="font-size:0.72rem;border:1px solid var(--border);border-radius:999px;padding:0 0.45rem;color:var(--text-muted);white-space:nowrap;">${escapeHtml(r.decline_reason)}</span>`;
+            }
+            html += `</div>`;
+        });
+        html += collapsed ? '</div></details>' : '</div></div>';
+        return html;
+    }
+
     function renderRegistrantsMobile(registrants, ev) {
         // One-off finance kick for the mobile path too — same lazy
         // fetch + re-render as the desktop detail panel.
@@ -3794,7 +3858,8 @@
                         </div>
                     </div>
                     ${filteredRegs.length ? renderRegistrantsMobile(filteredRegs, ev) : '<div style="color:var(--text-muted); font-style:italic; font-size:0.85rem;">No registrations.</div>'}
-                    ${mobileInactiveHtml}`;
+                    ${mobileInactiveHtml}
+                    ${renderNotPlayingSection(notPlayingRsvpsFor(getRegistrants(ev.item_name), allRsvps[ev.item_name] || []), true)}`;
                 }
             }
 
@@ -9185,22 +9250,7 @@
         const regEmails = new Set(activeRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
         const regNames = new Set(activeRegs.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
         // NOT PLAYING: exclude anyone who has since registered (active transaction), and dedup by email/name
-        const notPlayingRsvps = (() => {
-            const seen = new Set();
-            return rsvps.filter(r => {
-                if (r.response !== 'NOT PLAYING') return false;
-                const email = (r.player_email || '').toLowerCase();
-                if (email && regEmails.has(email)) return false;
-                const resolved = (r.resolved_name || '').toLowerCase();
-                const first = (r.player_name || '').toLowerCase();
-                if (resolved && regNames.has(resolved)) return false;
-                if (!resolved && first && [...regNames].some(n => n.startsWith(first))) return false;
-                const key = email || resolved || first;
-                if (key && seen.has(key)) return false;
-                if (key) seen.add(key);
-                return true;
-            });
-        })();
+        const notPlayingRsvps = notPlayingRsvpsFor(registrants, rsvps);
         const activeItemIds = new Set(activeRegs.map(r => r.id));
         // Build a map of item_id → email for verifying RSVP matches
         const itemEmailMap = {};
@@ -10091,22 +10141,7 @@
         // RSVP sections — only show if RSVPs exist for this event
         if (rsvps.length) {
             // NOT PLAYING RSVPs
-            if (notPlayingRsvps.length) {
-                html += '<div class="rsvp-section rsvp-not-playing-section">';
-                html += `<h4 style="color:var(--red);">Not Playing (${notPlayingRsvps.length})</h4>`;
-                html += '<div class="rsvp-player-list">';
-                notPlayingRsvps.forEach(r => {
-                    const fullName = (r.resolved_name || r.player_name || '').trim();
-                    const labelName = fullName || 'Unknown';
-                    html += `<div class="rsvp-player-card rsvp-cancelled-card">`;
-                    html += `<span class="rsvp-badge rsvp-not-playing">GG</span> `;
-                    html += fullName
-                        ? `<a class="cell-link" href="/customers?name=${encodeURIComponent(fullName)}"><strong>${escapeHtml(displayName(labelName, r.customer_status))}</strong></a>`
-                        : `<strong>${escapeHtml(labelName)}</strong>`;
-                    html += `</div>`;
-                });
-                html += '</div></div>';
-            }
+            html += renderNotPlayingSection(notPlayingRsvps, false);
         }
 
         // ---- MESSAGE HISTORY ----

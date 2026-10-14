@@ -1,5 +1,42 @@
-window.TGF_VERSION = "2.565.2";
+window.TGF_VERSION = "2.565.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.565.6",
+    date: "2026-10-14",
+    title: "Can't make it: season report by chapter, and a collapsed list on the phone",
+    changes: [
+      "Kerry 10/14: \"Yes, add the season-wide view by chapter\". The RSVP Log page opens with a Can't make it card for the season: San Antonio, Austin and Combined events, each with how many said Can't make it, the reasons they picked (and how many gave none), and a By event table. GET /api/invitations/declines (manager+), bridge scoring-event-invite:declines[|year]; invitations.season_decline_report. A player who later registered or changed their mind no longer counts.",
+      "Kerry 10/14: \"add a mobile view of can't make its/declines … collapsed on landing\". Each event's ROSTER on the phone now ends with a collapsed Can't make it (N) line; tap it for the reason counts and the players. Desktop and phone share one list and one renderer (notPlayingRsvpsFor / renderNotPlayingSection in events.html).",
+    ],
+  },
+  {
+    version: "2.565.5",
+    date: "2026-10-14",
+    title: "ROSTER: decline reasons on the Not Playing list",
+    changes: [
+      "Kerry 10/14: \"Where can I see a report on schedule decline reasons? Can that show in ROSTER under EVENTS\". The ROSTER's Not Playing list now opens with the counts (\"Reasons given: Schedule 2 · Weather 1 (3 gave none)\"), and each player's card shows the reason they picked on the invitation's Can't make it page. An answer to our own email invitation is badged TGF instead of GG. The RSVP reads (get_rsvps_for_event, get_all_rsvps_bulk) carry source and decline_reason from event_decline_reasons.",
+    ],
+  },
+  {
+    version: "2.565.4",
+    date: "2026-10-14",
+    title: "Invitations: mail-scanner filter on every button; previews show Kerry's own invite",
+    changes: [
+      "Kerry 10/14: \"yes on the scanner filter\" (CoS #1793/#1794). Security scanners (Defender, Mimecast, Proofpoint, Barracuda) open every link when an email arrives. A tap on I'm in, Can't make it or Remove me is now ignored when it comes within 2 minutes of the email going out, and a tap on I'm in or Can't make it is ignored when the other button of the same email was hit within 30 seconds (no person does that); a burst also undoes the earlier tap. Nothing a scanner does can now mark anyone NOT PLAYING, cut their reminders or take them off invitations.",
+      "Remove me gets the 2-minute grace only (a person goes Can't make it then Remove me in seconds), and a Remove me tap inside the grace asks again rather than saying Done. The I'm in click log keeps the latest click time.",
+      "The staff preview now shows a staff member's own invitation (app setting event_invite_preview_cid, default Kerry), never a member's. test_invitations.py section 6g.",
+    ],
+  },
+  {
+    version: "2.565.3",
+    date: "2026-10-14",
+    title: "Invitations: Remove me needs a real tap; preview buttons record nothing",
+    changes: [
+      "Kerry 10/14: \"Yes, restore them and ship the fix\". Within minutes of the first 7 AM send, mail scanners that run page scripts opened every button, and the Remove me page, which saved itself, took seven members off invitations (Tanner Chalfant, Chris Kelm, Chris Best, Gus Vasquez, Eric Taft, Derek Chandler, Mark Parker). The Remove me page now asks \"Remove you from event invitations?\" and only its Yes, remove me button saves.",
+      "Staff preview links carry a preview mark: they open the same pages and record nothing. Taps on the 10/13 preview had answered for its sample person, Todd McConahy.",
+      "New restore_answers (bridge scoring-event-invite 0|restore|<Kerry-OK post>|<ids>[|confirm], dry run by default) puts people back on invitations and removes the Tracker NOT PLAYING rows and decline reasons they did not give on upcoming events, so their reminders go out. Can't make it still saves from the page as Kerry ruled. test_invitations.py.",
+    ],
+  },
   {
     version: "2.565.2",
     date: "2026-10-14",
