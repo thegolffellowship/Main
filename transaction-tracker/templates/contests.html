@@ -625,6 +625,9 @@
         .evlb-nm-stack > span { font-weight: 700; letter-spacing: .01em; }
         .evlb-holes th.nm { color: #fff; }
         .evlb-holes tr.mute td { color: #9CA3AF; }
+        .evlb-blind { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+            background: #FEF3C7; color: #92400E; font: 700 10px/1.4 -apple-system, "Helvetica Neue", sans-serif;
+            letter-spacing: .04em; vertical-align: middle; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
             border-top: 2px solid #1B1B1B; }
         /* POPS — strokes received on the hole, house standard: dots
@@ -4180,6 +4183,15 @@
     //    These live out here rather than inside evlbEventHtml so the
     //    headless guard runs the REAL mapping, not a copy of it — a
     //    duplicated copy is exactly what went stale before.
+    // A blind slot arrives as "Bl[Robert Straiton]" (the GG convention) with
+    // blind: true; the board names the player and says "(blind)".
+    function evlbIsBlind(x) {
+        return !!(x && (x.blind || /^Bl\[/.test(x.player_name || "")));
+    }
+    function evlbTeamMemberName(x) {
+        const nm = String((x && x.player_name) || "").replace(/^Bl\[(.*)\]$/, "$1");
+        return evlbIsBlind(x) ? nm + " (blind)" : nm;
+    }
     function evlbOvOf(ovIx, x, note) {
         const base = x && ovIx[String(x.scoring_round_id)];
         if (!base) return null;
@@ -4297,7 +4309,11 @@
             && (r.win_skins
                 || ((d.skin_cells || {})[String(r.scoring_round_id)] || []).length > 0);
         const shM = (!game || game === "points") && r.win_mvp;
-        const money = evlbGameMoney(r, game);
+        // On the TEAM tab a row's Won is what that SLOT earned from this
+        // team (Kerry 10/13: a blind on two winning teams takes the higher
+        // and nothing from the lower), not the player's whole Team Net money.
+        const money = (game === "team" && r._teamWon !== undefined)
+            ? (r._teamWon || 0) : evlbGameMoney(r, game);
         const skinHoles = shS
             ? (((d.skin_cells || {})[String(r.scoring_round_id)]) || []) : [];
         const skC = evlbFlightColor(r.skins_flight);
@@ -4362,7 +4378,7 @@
             // the row's name for sorting and lookups
             `<td class="nm">${Array.isArray(r._name_lines) && r._name_lines.length
                 ? `<span class="evlb-nm-stack" title="${escapeHtml(r.player_name)}">${r._name_lines.map(x => `<span>${escapeHtml(x)}</span>`).join("")}</span>`
-                : escapeHtml(r.player_name)}${evlbTeeDot(d, r, "right")}` +
+                : escapeHtml(r.player_name)}${r._blind ? ' <span class="evlb-blind" title="Blind draw: this player\'s card fills an open slot on this team">BLIND</span>' : ""}${evlbTeeDot(d, r, "right")}` +
             (game ? "" : evlbMvpBadges(r)) +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
@@ -4719,7 +4735,7 @@
         const ovTeamWins = (d.teams || []).filter(t => t.purse != null && t.purse > 0)
             .map(t => `<div class="evlb-winline team"><span class="cat">TEAM NET</span>` +
                 `<span class="who">${t.position ? escapeHtml(t.position) + " · " : ""}` +
-                `${t.players.map(p => escapeHtml(p.player_name)).join(" · ")}` +
+                `${t.players.map(p => escapeHtml(evlbTeamMemberName(p))).join(" · ")}` +
                 `${t.gg_total != null ? ` · <b>${t.gg_total}</b>` : ""}</span>` +
                 `<span class="amt">$${Number(t.purse).toFixed(2)}</span></div>`);
         const ovProxWins = (d.proxies || [])
@@ -4836,8 +4852,12 @@
                 // of the band carries the per-hole score, the total and
                 // the purse, so those numbers are stated ONCE
                 sections: (d.teams || []).map(t => ({
+                    // BLINDS NAMED PLAINLY (Kerry 10/13: "What we're not
+                    // doing a good job on the team leaderboard is showing
+                    // who the blinds are"): "Robert Straiton (blind)", never
+                    // the raw "Bl[...]" key.
                     label: `${t.position ? t.position + " · " : ""}` +
-                        `${t.players.map(p => p.player_name).join(" · ")}`,
+                        `${t.players.map(evlbTeamMemberName).join(" · ")}`,
                     // PH on this tab is the TEAM handicap (Kerry
                     // 2026-09-15: "For team/cart net, PH should show
                     // their team/cart net handicap for that game, not
@@ -4846,9 +4866,12 @@
                     // shared row renderer stays one function.
                     rows: (t.players || []).map(x => {
                         const base = ovOf(x);
-                        return (base && x.team_hcp != null)
-                            ? Object.assign({}, base, { _teamHcp: x.team_hcp })
-                            : base;
+                        if (!base) return base;
+                        const extra = {};
+                        if (x.team_hcp != null) extra._teamHcp = x.team_hcp;
+                        if (evlbIsBlind(x)) extra._blind = true;
+                        if ("team_won" in x) extra._teamWon = x.team_won;
+                        return Object.keys(extra).length ? Object.assign({}, base, extra) : base;
                     }).filter(Boolean),
                 })).filter(sec => sec.rows.length),
                 sort: "keep",
@@ -4867,7 +4890,7 @@
                 : `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions and purses are the recorded Golf Genius result (the money of record). The total shown is our best-ball reconstruction from each player's own card — the official Team Net game plays a 75% off-lowest allowance, so the two can differ.</div>`) +
               d.teams.map((t, ti) => {
                 const names = t.players.map(p =>
-                    escapeHtml(p.player_name) + evlbTeeDot(d, p)).join(" &middot; ");
+                    escapeHtml(evlbTeamMemberName(p)) + evlbTeeDot(d, p)).join(" &middot; ");
                 const win = !d._moneyHeld && /^T?1$/.test(t.position || "");   // no winner tint mid-round
                 // GG's posted board total is the score of record; a team
                 // GG didn't post (shouldn't happen on a walked board)
@@ -4974,7 +4997,7 @@
         const netOf = (rid, n) => evlbNetOf(d, rid, n, t);
         const mins = evlbTeamMins(d, t);
         const rows = t.players.map(p =>
-            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}${evlbTeeDot(d, p, "right")}</td>` +
+            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(evlbTeamMemberName(p).replace(/ \(blind\)$/, ""))}${evlbIsBlind(p) ? ' <span class="evlb-blind">BLIND</span>' : ""}${evlbTeeDot(d, p, "right")}</td>` +
             cols.map(n => {
                 const v = netOf(p.scoring_round_id, n);
                 if (v == null) return '<td class="h"></td>';

@@ -14551,6 +14551,64 @@ def _entry_mode_overlay(conn, event_id: int, db_path=None) -> dict | None:
     return tee_by_rid
 
 
+def team_slot_money(teams: list, won: dict) -> None:
+    """Fill each team member's ``team_won`` (dollars, None when nothing) and
+    each team's ``purse`` from the GAMES money (Kerry 2026-10-13: "In the
+    case where a blind helps their team win and they are on another team
+    that wins the person takes the higher total and doesn't get any of the
+    lower. The lower is divided equally amongst the rest of the team.").
+
+    The payouts already follow that rule; this reads them back per SLOT:
+      - a blind's take on the team it filled is its Team Net money, unless
+        that money is explained by its own team (an own-team mate earned the
+        same share), in which case it took the other, higher slot;
+      - a real member's take is their Team Net money less what they took as
+        a blind elsewhere;
+      - the purse is the sum of the slots.
+    ``won`` is {customer_id: [{category, cents, ...}]}. Mutates in place."""
+    def _tn_cents(cid):
+        return sum(w["cents"] for w in won.get(int(cid), [])
+                   if w["category"] == "team_net") if cid is not None else 0
+
+    def _is_blind(m):
+        return bool(m.get("blind")) or str(m.get("player_name") or "").startswith("Bl[")
+
+    real_team: dict = {}
+    for ti, t in enumerate(teams):
+        for m in t["players"]:
+            if m.get("customer_id") is not None and not _is_blind(m):
+                real_team[int(m["customer_id"])] = ti
+    blind_take: dict = {}
+    for ti, t in enumerate(teams):
+        for m in t["players"]:
+            if not _is_blind(m) or m.get("customer_id") is None:
+                continue
+            cid = int(m["customer_id"])
+            total = _tn_cents(cid)
+            own = real_team.get(cid)
+            mates = ([_tn_cents(x["customer_id"]) for x in teams[own]["players"]
+                      if x.get("customer_id") is not None and not _is_blind(x)
+                      and int(x["customer_id"]) != cid]
+                     if own is not None else [])
+            from_own = total > 0 and any(c == total for c in mates)
+            blind_take[(ti, cid)] = 0 if from_own else total
+    for ti, t in enumerate(teams):
+        purse = 0
+        for m in t["players"]:
+            cid = m.get("customer_id")
+            if cid is None:
+                m["team_won"] = None
+                continue
+            if _is_blind(m):
+                take = blind_take.get((ti, int(cid)), 0)
+            else:
+                take = max(0, _tn_cents(cid) - sum(
+                    v for (tj, c), v in blind_take.items() if c == int(cid) and tj != ti))
+            m["team_won"] = round(take / 100.0, 2) if take else None
+            purse += take
+        t["purse"] = round(purse / 100.0, 2) if purse else None
+
+
 def get_event_leaderboard(event_name: str,
                           db_path: str | Path = DB_PATH) -> dict | None:
     """One event's combined boards for the EVENTS leaderboard tab."""
@@ -15821,22 +15879,23 @@ def get_event_leaderboard(event_name: str,
             t["position"] = (("T" if tied else "") + str(_rank)
                              if t["total_net"] is not None else "")
             t["official"] = False
-    # A Tracker-scored event's team purse is what its GAMES money pays the
-    # team (recorded payouts, else the board preview, both in `won`), not a
-    # Golf Genius row (Kerry 2026-10-13: "All leaderboards should be
-    # generated based on GAMES").
-    # Teams split their purse equally, a blind slot included, and a blind
-    # may also play in another group, so the purse is read off the team's
-    # REAL members: each one's Team Net share times the team's slots.
+    # TEAM MONEY, SLOT BY SLOT, FROM THE GAMES MONEY (Kerry 2026-10-13:
+    # "GAMES and FLIGHTS and PAIRINGS in events dictates all items for
+    # leaderboards. In the case where a blind helps their team win and they
+    # are on another team that wins the person takes the higher total and
+    # doesn't get any of the lower. The lower is divided equally amongst the
+    # rest of the team."). The payouts already follow that rule; this reads
+    # them back per SLOT so the board shows what each team actually pays:
+    #   - a blind's take on the team it filled is its Team Net money unless
+    #     that money is explained by its own team (an own-team mate earned
+    #     the same share), in which case it took the other, higher slot;
+    #   - a real member's take is their Team Net money less what they took
+    #     as a blind elsewhere;
+    #   - the team purse is the sum of its slots.
+    # Each member carries team_won (dollars, None when nothing) and the
+    # team carries purse. A GG-era event keeps the purse GG recorded.
     if not _gg_era:
-        for t in teams:
-            real = [p for p in t["players"]
-                    if p.get("customer_id") is not None and not p.get("blind")
-                    and not str(p.get("player_name") or "").startswith("Bl[")]
-            shares = [sum(w["cents"] for w in won.get(int(p["customer_id"]), [])
-                          if w["category"] == "team_net") for p in real]
-            t["purse"] = (round(min(shares) * len(t["players"]) / 100.0, 2)
-                          if shares and min(shares) > 0 else None)
+        team_slot_money(teams, won)
 
     # ── skins winning cells (outright low GROSS on a hole WITHIN the
     # flight — the engine's rule) for the GG-style hole-by-hole grid ──
