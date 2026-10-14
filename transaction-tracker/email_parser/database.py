@@ -14400,6 +14400,18 @@ def get_events_leaderboard(chapter: str | None = None,
                    WHERE LOWER(TRIM(te.code)) = ?""",
                 ((r["item_name"] or "").strip().lower(),)).fetchone()
             r["pot"] = pot["t"] if pot else 0
+            # NOTHING RECORDED YET: the pot is the GAMES money the board shows
+            # (Kerry 2026-10-13: "Why aren't total pots being shown"), until
+            # the payouts are recorded.
+            if not r["pot"]:
+                try:
+                    from email_parser import auto_payouts as _apx
+                    _pvp = _apx.preview_for(r["id"], db_path)
+                    if _pvp and _pvp.get("total"):
+                        r["pot"] = round(float(_pvp["total"]), 2)
+                        r["pot_final"] = bool(_pvp.get("final"))
+                except Exception:
+                    logger.exception("events list: money preview failed for %s", r.get("item_name"))
             # Was this event scored by Golf Genius? (Kerry 10/8: GG is for
             # past events only.) The "Golf Genius is the official scorer"
             # line shows only for an event that has GG rows.
@@ -14446,7 +14458,7 @@ def get_events_leaderboard(chapter: str | None = None,
             r["players_pending"] = len(_fc["pending"])
             try:
                 from email_parser import auto_payouts as _apx
-                _pv = _apx.preview_for(r["id"], db_path) if r.get("live_entry") else None
+                _pv = _apx.preview_for(r["id"], db_path)
             except Exception:
                 _pv = None
             if not _fc["complete"]:

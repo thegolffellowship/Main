@@ -143,6 +143,9 @@ check("the preview carries the rows, not final, with a final time",
       pv and pv["final"] is False and pv["final_at"] and len(pv["rows"]) == 1, pv)
 check("a team split gets its customer_id from the field", pv and pv["rows"][0]["customer_id"] == 301, pv)
 check("cards published provisionally", n_rounds() == 2)
+_ev_list = {e["id"]: e for e in (db.get_events_leaderboard(db_path=DB) or {}).get("events") or []}
+check("the events list shows the pot from the GAMES money before anything is recorded",
+      (_ev_list.get(EV) or {}).get("pot") == 23.0, _ev_list.get(EV))
 check("nothing recorded before final", not CALLS, CALLS)
 again = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
 check("no re-run while unchanged and not yet final", again["state"] == "unchanged", again)

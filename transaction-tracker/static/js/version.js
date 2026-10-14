@@ -1,11 +1,54 @@
-window.TGF_VERSION = "2.563.1";
+window.TGF_VERSION = "2.563.6";
 window.TGF_CHANGELOG = [
   {
-    version: "2.563.1",
+    version: "2.563.6",
     date: "2026-10-13",
     title: "Invitations: members get their own chapter's events and combined events only",
     changes: [
       "Kerry 10/13: \"Austin members should not be getting invites to SA only events…only combined events and their own events.\" The audience now leaves out anyone whose home chapter is another chapter (home_chapter_id, else customers.chapter) from a single-chapter event, whatever brought them in (playing that chapter, a lead opt-in). Combined TGF events still invite both lists. People with no home chapter are unchanged. New exclusion count other_chapter; test_invitations.py.",
+    ],
+  },
+  {
+    version: "2.563.5",
+    date: "2026-10-13",
+    title: "One event's results have their own link: /member/results/<event id>",
+    changes: [
+      "Kerry 10/13: 'if you provide links I want it to open up that event like for full results, not just go to all events. Links need to go to specific locations.' /member/results/<event id> opens the member Events results with that event expanded and pinned to the top. Its board loads at once, so a recap's FULL EVENT RESULTS lands on that night's results. An unknown id falls back to the full list. The bare /member/results still lands on every event.",
+      "Recap rule of record (event-recaps.md lesson 68): every link goes to the specific place. The 10/13 drafts now link /member/results/3307 and /member/results/3318. Guard test_events_leaderboard_all.py.",
+    ],
+  },
+  {
+    version: "2.563.4",
+    date: "2026-10-13",
+    title: "Payout engine: a player on another tee gets all his strokes on the nine played",
+    changes: [
+      "Found in the s9.27 closeout cross-check (Kerry 10/13: 'cross check results with games, flights and pairings ... to make sure it's correct and record it'). For a player on a different tee from the event's most-played tee, the payout engine handed the stroke allocator his tee's full 18-hole stroke-index map on a nine-hole round, so his strokes were spread over holes nobody played. Dan Stich (Blues, PH 6) got only 3 of his 6 strokes: net 41 instead of 38, and he dropped out of the Individual Net Flight 2 tie with Justin Angelone and Rob Burlingame. Austin's Bryce Doggett (Whites, 35 net) dropped out of the tie for Individual Net 2nd the same way.",
+      "The engine now gives the allocator only the holes played, from the player's own tee, so a nine collapses to 1-9 exactly as the event's card does (Kerry's CA #771 ruling). Stored cards, handicaps, MVP and points were never affected: they read the dots entry publish stores, which were already right. Only the engine's Individual Net / Individual Gross ranking derived its own. Team and Cart Net already used the nine's indexes. Guard test_own_tee_nine.py.",
+    ],
+  },
+  {
+    version: "2.563.3",
+    date: "2026-10-13",
+    title: "Scoring page: the dark bar never shrinks",
+    changes: [
+      "Kerry 10/13, scoring from the Mail app: \"the formatting ... in the top bar is smooshed\", then \"That dark bar is getting reduced again. We've had that problem before.\" When a hole card was taller than the screen (an in-app browser with its toolbar), the page shrank the dark bar to 26 px with a 24 px logo to make room. The bar now stays its full size with the 64 px logo on every screen. The room comes out of the card instead, only when it would not fit: the -/+ buttons go from 44 to 38 px, rows close up, the group strip and the Check-the-card cells get a little shorter, and the hole number is 22 px. Both screens still fit a 390x660 phone without scrolling.",
+      "Guards: test_score_entry_ui.py now fails if a tight card shrinks the bar or its logo. test_scorer_nav.py is updated to the 10/13 ruling that the leaderboard no longer says Golf Genius is the official scorer.",
+    ],
+  },
+  {
+    version: "2.563.2",
+    date: "2026-10-13",
+    title: "EVENTS list: the pot shows before the payouts are recorded",
+    changes: [
+      "Kerry 10/13: \"Why aren't total pots being shown.\" The events list's POT added up only RECORDED payouts, so a Tracker-scored event read $0.00 until someone pressed Record Payouts (auto-record is off for 10/13). Now, while nothing is recorded, the pot is the GAMES money the event board already shows (the auto-payouts preview); once payouts are recorded it reads them as before. Guard: test_auto_payouts.py.",
+    ],
+  },
+  {
+    version: "2.563.1",
+    date: "2026-10-13",
+    title: "LEADERBOARD: no more \"Refresh from Golf Genius\"",
+    changes: [
+      "Kerry 10/13: \"Refresh from Golf Genius should be gone now.\" The Tracker computes the Fall races and the Monthly points itself (points_source = tracker), so the button above every points race and the Refresh pill on the Monthly board are removed. The boards still load and update on their own.",
     ],
   },
   {

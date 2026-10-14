@@ -2670,7 +2670,8 @@
                         <!-- starts hidden: the landing race is a Fall NET (chip is for the
      season cups/city races; race clicks + deep links toggle it) -->
                         <span id="pr-phase-chip" style="margin-left:auto;display:none;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
-                        <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
+                        <!-- "Refresh from Golf Genius" removed (Kerry 2026-10-13: "Refresh from
+                             Golf Genius should be gone now"). The Tracker computes the races. -->
                     </div>
                     <!-- Mobile: everything between the race name and the
                          table folds behind one slim chip (Kerry 2026-08-01,
@@ -2927,6 +2928,7 @@
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
     {% if evlb_landing %}<script>window.EVLB_LANDING = true;</script>{% endif %}
+    {% if evlb_open %}<script>window.EVLB_OPEN = {{ evlb_open|tojson }};</script>{% endif %}
     {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
     {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }}; window.SOLO_T = {{ (SOLO_T or "")|tojson }};{% if SOLO_CUP %} window.SOLO_CUP = {{ SOLO_CUP|tojson }}; window.lscSel = window.SOLO_CUP;{% endif %}</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
@@ -3810,6 +3812,15 @@
                     evlbPinToTop(el);
                 });
             });
+            // ONE EVENT'S LINK (/member/results/<id>, Kerry 2026-10-13: "Links
+            // need to go to specific locations"): open that event, which loads
+            // its board and pins it to the top through the toggle above.
+            if (window.EVLB_OPEN && !window.SOLO_EVENT) {
+                const want = String(window.EVLB_OPEN).toLowerCase();
+                const el = [...box.querySelectorAll("details.evlb-ev")]
+                    .find(x => (x.dataset.ev || "").toLowerCase() === want);
+                if (el) el.open = true;
+            }
             // THE SCORER'S BOARD (Kerry 2026-10-02: "The leaderboard that they
             // would go to would be JUST for that event"): the other events
             // leave the page and his opens by itself.
@@ -9344,12 +9355,9 @@
         return ` <span title="${escapeHtml(ch)}" style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:0.6rem;font-weight:700;letter-spacing:0.04em;background:${bg};color:${fg};vertical-align:1px;">${label}</span>`;
     }
 
-    $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
 
     async function prLoadStandings(force = false) {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
-        // monthly swaps the header refresh button for an inline one
-        $("pr-refresh-btn").style.display = kind === "monthly" ? "none" : "";
         // Fall boards are LIVE (2026-09-01): they load through the normal
         // standings path below via PR_RACE_BY_TAB. prRenderFallPreview
         // stays only as the fallback when the board can't be read.
@@ -10782,10 +10790,6 @@
             : "";
         cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
-                <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
-                    style="display:${userRole === "admin" || userRole === "manager" ? "" : "none"};padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;
-                           border:1px solid var(--border);border-radius:999px;background:var(--surface);
-                           color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
                 ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}
             </div>${statusChip}${monthPlaque}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">

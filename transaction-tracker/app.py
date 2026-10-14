@@ -13749,6 +13749,23 @@ def member_results():
                            evlb_landing=True)
 
 
+@app.route("/member/results/<int:event_id>")
+def member_results_event(event_id):
+    """ONE event's results (Kerry 2026-10-13: "if you provide links I want it
+    to open up that event like for full results, not just go to all events.
+    Links need to go to specific locations"). The same member Events page,
+    with that event opened and pinned to the top. An unknown id lands on the
+    full list rather than an error, so an old link still goes somewhere."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT item_name FROM events WHERE id = ?",
+                           (event_id,)).fetchone()
+    if not row:
+        return redirect("/member/results")
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           evlb_landing=True, evlb_open=row["item_name"])
+
+
 @app.route("/member/handicaps")
 def member_handicaps():
     return render_template("handicaps.html", member_mode=True)
