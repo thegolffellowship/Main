@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.563.1";
+window.TGF_VERSION = "2.563.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.563.2",
+    date: "2026-10-13",
+    title: "EVENTS list: the pot shows before the payouts are recorded",
+    changes: [
+      "Kerry 10/13: \"Why aren't total pots being shown.\" The events list's POT added up only RECORDED payouts, so a Tracker-scored event read $0.00 until someone pressed Record Payouts (auto-record is off for 10/13). Now, while nothing is recorded, the pot is the GAMES money the event board already shows (the auto-payouts preview); once payouts are recorded it reads them as before. Guard: test_auto_payouts.py.",
+    ],
+  },
   {
     version: "2.563.1",
     date: "2026-10-13",
