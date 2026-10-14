@@ -5390,6 +5390,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # events; ":apply" records; "|<event_id>" names one event.
             from email_parser.auto_payouts import run as _ap_run
             _bits = [b.strip() for b in (arg or "").split("|") if b.strip()]
+            # "hold|<event_id>|<reason>" / "release|<event_id>": the
+            # verifier's or Kerry's hold on one event (CoS #1797).
+            if _bits and _bits[0].lower() in ("hold", "release", "holds"):
+                from email_parser import auto_payouts as _ap
+                if _bits[0].lower() == "holds":
+                    return json.dumps(_ap.holds(), indent=2)
+                if len(_bits) < 2 or not _bits[1].isdigit():
+                    return json.dumps({"error": "usage: scoring-auto-payouts:hold|<event_id>|<reason> "
+                                                "or release|<event_id>"})
+                if _bits[0].lower() == "release":
+                    return json.dumps(_ap.release(int(_bits[1]), by="mcp-claude"), indent=2)
+                return json.dumps(_ap.hold(int(_bits[1]), "|".join(_bits[2:]), by="mcp-claude"),
+                                  indent=2)
             _apply = "apply" in _bits
             _eid = next((int(b) for b in _bits if b.isdigit()), None)
             return json.dumps(_ap_run(apply=_apply, event_id=_eid), indent=2, default=str)
