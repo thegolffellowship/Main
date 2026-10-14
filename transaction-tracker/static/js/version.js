@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.563.0";
+window.TGF_VERSION = "2.563.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.563.1",
+    date: "2026-10-13",
+    title: "LEADERBOARD: no more \"Refresh from Golf Genius\"",
+    changes: [
+      "Kerry 10/13: \"Refresh from Golf Genius should be gone now.\" The Tracker computes the Fall races and the Monthly points itself (points_source = tracker), so the button above every points race and the Refresh pill on the Monthly board are removed. The boards still load and update on their own.",
+    ],
+  },
   {
     version: "2.563.0",
     date: "2026-10-13",
