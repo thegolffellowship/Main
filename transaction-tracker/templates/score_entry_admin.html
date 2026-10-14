@@ -118,14 +118,36 @@
                   <td>${g.players.map((p) => `<div><span class="nm">${esc(p.name)}</span>${p.signed ? ' <span class="ok" title="Signed">&#10003;</span>' : ""}</div>`).join("")}</td>
                   <td>${g.holes_in} / ${g.holes}</td>
                   <td>${g.scorer ? '<span class="nm">' + esc(g.scorer) + "</span>" : '<span class="muted">no one yet</span>'}</td>
-                  <td>${g.card_check ? '<span class="ok">Submitted</span>' + (g.card_check.has_photo ? ` · <a href="/api/score-entry/checks/${g.card_check.check_id}/photo.jpg" target="_blank">photo</a>` : " · no photo") : g.attested ? '<span class="ok">Attested</span>' : '<span class="muted">open</span>'}</td>
+                  <td>${g.card_check ? '<span class="ok">Submitted</span>' + (g.card_check.has_photo ? ` · <a href="/api/score-entry/checks/${g.card_check.check_id}/photo.jpg" target="_blank">photo</a>` : " · no photo") : g.attested ? '<span class="ok">Attested</span>' : '<span class="muted">open</span>'}${finalCell(g)}</td>
                   <td><div class="row-actions"><a class="btn go" href="${g.url}" target="_blank" rel="noopener">Open</a>
                       <button class="btn" data-copy="${esc(g.url)}">Copy link</button></div></td>
                 </tr>`).join("")}</tbody></table></div>
               ${mgrPanel(r)}
             </div>`).join("");
     }
+    // FINAL CARDS (Kerry 10/13: "15 minutes after last score entered by
+    // each scorer"). Unlock reopens it for the scorer; it is final again 15
+    // minutes after the later of the unlock and the next score.
+    function finalCell(g) {
+        if (g.final) return `<div><b>Final</b> <button class="btn" style="padding:2px 10px;font-size:12px" data-unlock="${g.group_id}">Unlock</button></div>`;
+        if (g.final_at) return `<div class="muted" style="font-size:12px">Final at ${esc(new Date(g.final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}))}</div>`;
+        return "";
+    }
     // THE MANAGER PANEL (CA #843): exactly four actions, each logged with who did it.
+    // CTP VERIFICATION (Kerry 10/13, hole 16 at The Quarry: "We need to add a
+    // verification step"). A claim that took the hole from another group waits
+    // for the manager: Confirm keeps it, or pick the right player and Settle.
+    // Payouts skip the hole until then. The full claim history sits underneath.
+    function ctpVerify(r, c) {
+        const nc = c.needs_confirm;
+        const hist = (c.history || []).map((h) => `<li>${esc((h.at || "").slice(11, 16))} · Group ${h.group_num != null ? h.group_num : "?"}: ${
+            h.kind === "none" ? "no one closer" : esc(h.name || "#" + h.customer_id) + (h.kind === "manager" ? " (manager)" : "")}</li>`).join("");
+        return (nc ? `<div class="mgr-row" style="background:#FEF3C7;border-radius:8px;padding:8px 10px;">
+              <span class="lbl"><b>Confirm hole ${c.hole}:</b> ${esc(nc.to.name || "")} (Group ${nc.to.group_num}) took it from
+                ${esc(nc.from.name || "")} (Group ${nc.from.group_num}). Not paid until confirmed.</span>
+              <button class="btn go" data-ctp-confirm="${r.round_id}:${c.hole}:${nc.to.customer_id}">Confirm ${esc(nc.to.name || "")}</button></div>` : "")
+            + (hist ? `<details class="mgr-row" style="font-size:12.5px;"><summary>Claim history · hole ${c.hole}</summary><ul style="margin:4px 0 0 18px;padding:0;">${hist}</ul></details>` : "");
+    }
     function mgrPanel(r) {
         const m = r.manager;
         if (!m) return "";
@@ -134,7 +156,8 @@
               <span class="lbl"><b>${c.kind === "longest_putt" ? "Longest putt" : "Closest to the pin"} · hole ${c.hole}</b><br>
                 <span class="muted">${c.holder ? esc(c.holder.name) + (c.holder.group_num != null ? " · Group " + c.holder.group_num : "") + (c.holder.by_manager ? " (settled by a manager)" : "") : "No one yet"}</span></span>
               <select data-ctp-sel="${r.round_id}:${c.hole}"><option value="">Pick the winner…</option>${opts(c.holder && c.holder.customer_id)}</select>
-              <button class="btn" data-ctp-set="${r.round_id}:${c.hole}">Settle</button></div>`).join("")
+              <button class="btn" data-ctp-set="${r.round_id}:${c.hole}">Settle</button></div>
+              ${ctpVerify(r, c)}`).join("")
             : `<div class="mgr-row muted">No closest-to-the-pin or longest-putt holes in play${m.contest_source === "matrix" ? " at this field size" : ""}.</div>`;
         const hio = m.hio.length ? m.hio.map((h) => `<div class="mgr-row">
               <span class="lbl"><b>${esc(h.name || "#" + h.customer_id)}</b> · hole ${h.hole}<br><span class="muted">${esc(h.status)}${h.eligible ? "" : " · not eligible for the pot"}</span></span>
@@ -187,6 +210,19 @@
             if (confirm("Start this preview over? Its scores are kept on record, and a fresh card with a new link opens.")) {
                 post(`/api/score-entry/rounds/${rs.dataset.restart}/restart-preview`, {});
             }
+            return;
+        }
+        const ul = e.target.closest("[data-unlock]");
+        if (ul) {
+            if (confirm("Unlock this card? The scorer can change scores again. It's final again 15 minutes after the last change, and the payouts update.")) {
+                post(`/api/score-entry/groups/${ul.dataset.unlock}/unlock`, {});
+            }
+            return;
+        }
+        const cc = e.target.closest("[data-ctp-confirm]");
+        if (cc) {
+            const [rid, hole, cid] = cc.dataset.ctpConfirm.split(":");
+            post(`/api/score-entry/rounds/${rid}/ctp`, {hole: Number(hole), customer_id: Number(cid)});
             return;
         }
         const cs = e.target.closest("[data-ctp-set]");

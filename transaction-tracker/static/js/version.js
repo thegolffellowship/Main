@@ -13,6 +13,56 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.562.7",
+    date: "2026-10-13",
+    title: "EVENTS board: every leaderboard from GAMES; Golf Genius is history only",
+    changes: [
+      "Kerry 10/13: \"It doesn't look like flights are showing where they should on the leaderboard\", then \"All leaderboards should be generated based on GAMES. Golf Genius doesn't have anything to do with anything now except for historical records.\"",
+      "FLIGHTS. For an event on or after the untether date, the NET, GROSS and SKINS boards are sectioned by the event's own flight board. That is the same selection the GAMES money is paid on: \"Flight 1 (HCP <12.0)\" / \"Flight 2 (HCP 12.0+)\". A one-flight game shows no sections. Before this, they read only Golf Genius flight lists, which a Tracker event doesn't have, so the whole field showed as one list while the payouts were paid by flight. A non-buyer is placed by their handicap index against the stated line, as before.",
+      "NO GOLF GENIUS ON A TRACKER EVENT. The board for such an event never reads a Golf Genius flight, team result or proxy, even one that was stored. Closest to Pin always comes from the phone claims (a manager ruling included). Each team's purse is its GAMES money: each real member's Team Net share times the team's slots, a blind included. Events played before the untether keep the Golf Genius record they were played under. Guards: test_board_engine_flights.py, test_board_phone_ctp.py.",
+      "TEAM BOARD: BLINDS AND TEAM MONEY (Kerry 10/13: \"What we're not doing a good job on the team leaderboard is showing who the blinds are\", and the rule: \"In the case where a blind helps their team win and they are on another team that wins the person takes the higher total and doesn't get any of the lower. The lower is divided equally amongst the rest of the team. In Stu's case he wins the full amount of $26. While Robert and Luke split the $52 for first.\"). A blind is named plainly in the team header (\"Stu Kirksey · Robert Straiton (blind)\", never \"Bl[...]\") and carries a BLIND tag on its row and in the team card. Each row's Won on the TEAM tab is what that slot earned from THIS team: Straiton shows $26 on his own cart and nothing on Kirksey's. Each team's purse is the sum of its slots ($52 / $26 at Forest Creek; $46 on the SA team McCormick filled as a blind). The payouts already follow the rule; the board now reads it back (team_slot_money, guard test_team_slot_money.py).",
+    ],
+  },
+  {
+    version: "2.562.6",
+    date: "2026-10-13",
+    title: "Prize money shows the moment the field is in; final 15 minutes after the last score",
+    changes: [
+      "Kerry 10/13: \"Payouts need to auto calculate and populate based on GAMES tabs immediately after scores are all in\"; \"15 minutes after last score entered by each scorer because scorer may not finalize how they should\"; \"When last hole score is entered by last player in field, won Columns should unhide and amounts should show but non-final until 15 minutes have passed\".",
+      "THE MONEY SHOWS AT ONCE. When the last hole of the last player in the field is entered, the EVENTS board's WON column appears within a minute. It shows the amounts the GAMES tab's Record Payouts would pay, under a note: \"Winnings are not final yet. Every score is in. The money below is final at 8:24 PM, 15 minutes after the last score, unless a score changes.\" The events list reads \"not final\" until then. The old 10-minute hold no longer applies to a Tracker-scored event.",
+      "A CARD IS FINAL 15 MINUTES AFTER ITS LAST SCORE. Once every hole of every player in a group has a score, the card locks 15 minutes after the group's last saved score. No submit or signature is needed (a scorer may never press Submit). A phone change after that is refused, kept on record for the manager, and the phone says to ask the manager. The phone shows \"Card locks and is final at 8:24 PM\", then \"This card is final\". The Live Scoring page shows each group's final time, and a final card has an Unlock button. An unlocked card is final again 15 minutes after the later of the unlock and its next score. The minutes are a dial (app setting se_card_lock_minutes).",
+      "THE MONEY RECORDS ITSELF. Every minute, for each Tracker-scored event of the last three days: once the field is in, the complete cards are published and the money is computed for the board. Once every card is final, the payouts are recorded, filling the PAYOUTS tab with no button press. They are recorded again whenever the cards change (an unlocked card, a Closest to Pin ruling). A payout already paid is never touched, and an event with hand-entered payouts is left alone. The recording step has its own dial, app setting auto_payouts_record, and it is OFF to start. On 10/13 the money is display only and the manager records it by hand (CoS #1760/#1761, Kerry: \"Go with your conditions\"). It turns on from 10/20 once a dry run matches the hand-recorded rows to the cent. Dial: app setting auto_payouts (off stops the whole job). Bridge scoring-auto-payouts[:apply][|<event_id>], a dry run by default.",
+      "Why the WON column was empty on 10/13: we are off Golf Genius, so nothing recorded payouts until close-out. Individual Net, Skins and Individual Gross also waited for player signatures, and most cards were never signed. Guard: test_auto_payouts.py.",
+    ],
+  },
+  {
+    version: "2.562.5",
+    date: "2026-10-13",
+    title: "Closest to Pin verification",
+    changes: [
+      "Kerry 10/13: \"Closest to Pin in 16 was actually Pat Youngs. Dan thought it was closest in their group. We need to add a verification step\", then \"Yes, build all three\".",
+      "1. A stale screen never overwrites a claim. The phone sends the holder it showed. If another group claimed the hole since, nothing is saved and the phone asks again: \"Pat Youngs (Group 6) claimed this hole while you were playing it. Check their marker.\"",
+      "2. The question names the marker to beat: \"Is anyone in your group closer than Pat Youngs's marker?\" (buttons: the players, or \"No one closer than Pat Youngs\"). The note under it says to pick only someone closer than the marker, not just the closest in your group.",
+      "3. The manager confirms a takeover before it is paid. When a phone claim takes a hole from a player in another group, the Live Scoring page shows \"Confirm hole 16: Dan Stich (Group 3) took it from Pat Youngs (Group 6)\" with a Confirm button, beside the hole's full claim history. To pick someone else, use the existing Settle. Until it is confirmed, Record Payouts skips that hole with a note, and the EVENTS board shows it \"to be confirmed\" with no dollar. No new tables: it reads the claims already stored.",
+    ],
+  },
+  {
+    version: "2.562.4",
+    date: "2026-10-13",
+    title: "EVENTS board: Closest to Pin winners from the phones",
+    changes: [
+      "Kerry 10/13: \"Why aren't closest to pins showing?\" The EVENTS leaderboard's Closest to Pin rows (the winner strips under OVERALL and the PROXIES tab) were read only from Golf Genius results, so an event Golf Genius does not score showed none, even with winners claimed on the phones (The Quarry: Adam Baker on 12, Dan Stich on 16). With no Golf Genius CTP rows, the board now reads the phone claims (a manager ruling included): the same holders Record Payouts uses, by customer_id with the customer's own name, the hole in the detail and the matrix's CTP amount for the field. Money still waits for the field like every other dollar on the board. A hole nobody holds reads \"No winner\". Guard test_board_phone_ctp.py.",
+    ],
+  },
+  {
+    version: "2.562.3",
+    date: "2026-10-13",
+    title: "Manage contacts opens a window in the event editor",
+    changes: [
+      "Kerry 10/13: \"Manage Contacts link in the Quarry event didn't take me to a manage contacts modal or page.\" The link in Add/Edit Event used to open the Courses page in a new tab, which does nothing useful in the installed app. It now opens a Contacts window over the event editor, where you can add a contact, make one primary, or remove and restore one. Closing it refreshes the contacts box under Course. The Courses page and this window share one panel (static/js/course-staff.js), so they can never drift. Guard test_course_staff.py.",
+    ],
+  },
+  {
     version: "2.562.2",
     date: "2026-10-13",
     title: "Live Scoring how-to: a first step on how to get to your scorecard",

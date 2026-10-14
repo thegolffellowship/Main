@@ -324,6 +324,18 @@ toward full automation (see governing docs).
   `share_group` / `group_pot` / `exact_share_cents` for it). Anything
   else is still a mismatch.
 
+**A blind on TWO winning teams takes the higher (Kerry RATIFIED 2026-10-13,
+verbatim):** "In the case where a blind helps their team win and they are on
+another team that wins the person takes the higher total and doesn't get any of
+the lower. The lower is divided equally amongst the rest of the team. In Stu's
+case he wins the full amount of $26. While Robert and Luke split the $52 for
+first." (a9.27 Forest Creek: Straiton was on the 1st-place cart and the blind on
+Kirksey's 2nd-place cart, so Kirksey $26, Straiton $26, L. Youngs $26.) The
+board reads it back per slot with `database.team_slot_money` (`team_won` per
+member, `purse` per team); guard `test_team_slot_money.py`. Also Kerry, same
+night: "GAMES and FLIGHTS and PAIRINGS in events dictates all items for
+leaderboards."
+
 **Blind-draw partners ARE PAID (Kerry RATIFIED 2026-07-13).** When a
 team is completed with a blind draw, GG renders that slot as
 `Bl[LAST, First]` in the team name and pays it a full equal share of

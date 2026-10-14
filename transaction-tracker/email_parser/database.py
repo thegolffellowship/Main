@@ -14444,9 +14444,17 @@ def get_events_leaderboard(chapter: str | None = None,
                     _fc = {**_fc, "complete": False, "pending": _fc["pending"] + _wt}
             r["field_complete"] = _fc["complete"]
             r["players_pending"] = len(_fc["pending"])
+            try:
+                from email_parser import auto_payouts as _apx
+                _pv = _apx.preview_for(r["id"], db_path) if r.get("live_entry") else None
+            except Exception:
+                _pv = None
             if not _fc["complete"]:
                 r["money_visible"] = False
                 r["money_reason"] = "scores"
+            elif _pv:
+                # the field is in: money shows now, final or not (Kerry 10/13)
+                r["money_final"] = bool(_pv.get("final"))
             elif r["last_score_at"] and _money_hold > 0:
                 try:
                     _rt = datetime.strptime(str(r["last_score_at"])[:19],
@@ -14541,6 +14549,64 @@ def _entry_mode_overlay(conn, event_id: int, db_path=None) -> dict | None:
                 "strokes_received) VALUES (?,?,?,?)",
                 (rid, int(h), int(g), int(r["strokes_received"].get(h, 0) or 0)))
     return tee_by_rid
+
+
+def team_slot_money(teams: list, won: dict) -> None:
+    """Fill each team member's ``team_won`` (dollars, None when nothing) and
+    each team's ``purse`` from the GAMES money (Kerry 2026-10-13: "In the
+    case where a blind helps their team win and they are on another team
+    that wins the person takes the higher total and doesn't get any of the
+    lower. The lower is divided equally amongst the rest of the team.").
+
+    The payouts already follow that rule; this reads them back per SLOT:
+      - a blind's take on the team it filled is its Team Net money, unless
+        that money is explained by its own team (an own-team mate earned the
+        same share), in which case it took the other, higher slot;
+      - a real member's take is their Team Net money less what they took as
+        a blind elsewhere;
+      - the purse is the sum of the slots.
+    ``won`` is {customer_id: [{category, cents, ...}]}. Mutates in place."""
+    def _tn_cents(cid):
+        return sum(w["cents"] for w in won.get(int(cid), [])
+                   if w["category"] == "team_net") if cid is not None else 0
+
+    def _is_blind(m):
+        return bool(m.get("blind")) or str(m.get("player_name") or "").startswith("Bl[")
+
+    real_team: dict = {}
+    for ti, t in enumerate(teams):
+        for m in t["players"]:
+            if m.get("customer_id") is not None and not _is_blind(m):
+                real_team[int(m["customer_id"])] = ti
+    blind_take: dict = {}
+    for ti, t in enumerate(teams):
+        for m in t["players"]:
+            if not _is_blind(m) or m.get("customer_id") is None:
+                continue
+            cid = int(m["customer_id"])
+            total = _tn_cents(cid)
+            own = real_team.get(cid)
+            mates = ([_tn_cents(x["customer_id"]) for x in teams[own]["players"]
+                      if x.get("customer_id") is not None and not _is_blind(x)
+                      and int(x["customer_id"]) != cid]
+                     if own is not None else [])
+            from_own = total > 0 and any(c == total for c in mates)
+            blind_take[(ti, cid)] = 0 if from_own else total
+    for ti, t in enumerate(teams):
+        purse = 0
+        for m in t["players"]:
+            cid = m.get("customer_id")
+            if cid is None:
+                m["team_won"] = None
+                continue
+            if _is_blind(m):
+                take = blind_take.get((ti, int(cid)), 0)
+            else:
+                take = max(0, _tn_cents(cid) - sum(
+                    v for (tj, c), v in blind_take.items() if c == int(cid) and tj != ti))
+            m["team_won"] = round(take / 100.0, 2) if take else None
+            purse += take
+        t["purse"] = round(purse / 100.0, 2) if purse else None
 
 
 def get_event_leaderboard(event_name: str,
@@ -14763,7 +14829,18 @@ def get_event_leaderboard(event_name: str,
                 {"player": w.get("player_name"), "holes": 0, "of": _want} for w in waiting]
             field_state["holes_needed"] += len(waiting) * _want
             field_state["complete"] = False
-        if not field_state["complete"]:
+        _money_preview, money_final, money_final_at = None, True, None
+        try:
+            from email_parser import auto_payouts as _apx
+            _money_preview = _apx.preview_for(ev["id"], db_path)
+        except Exception:
+            logger.exception("Non-fatal: money preview unavailable for %s", ev["id"])
+        if _money_preview and field_state["complete"]:
+            # The job only writes a preview once every hole of the field is
+            # in; the money shows now, marked not final until it is.
+            money_final = bool(_money_preview.get("final"))
+            money_final_at = _money_preview.get("final_at")
+        elif not field_state["complete"]:
             money_visible, money_reason = False, "scores"
         elif last_score_at and _hold > 0:
             try:
@@ -14965,14 +15042,57 @@ def get_event_leaderboard(event_name: str,
         except Exception:
             game_counts = {}
 
-        # per-game flight membership (GG labels only — never derived)
+        # GOLF GENIUS IS HISTORY ONLY (Kerry 2026-10-13: "All leaderboards
+        # should be generated based on GAMES. Golf Genius doesn't have
+        # anything to do with anything now except for historical records").
+        # An event on/after the untether date never reads a Golf Genius
+        # flight, team result or proxy, even one that was stored; its board
+        # comes from the Tracker's own games (flight board, team engine,
+        # phone CTP claims). Older events keep the GG record they were
+        # played under.
+        try:
+            from email_parser.gg_untether import gg_allowed as _gg_allowed
+            _gg_era = bool(_gg_allowed(ev.get("event_date"), db_path))
+        except Exception:
+            logger.exception("leaderboard: untether check failed for %s", ev.get("item_name"))
+            _gg_era = False
+        # per-game flight membership: GG labels for a GG-era event
         flights: dict = {}
         for fr in conn.execute(
                 """SELECT game, flight_label, customer_id
-                   FROM gg_game_flights WHERE event_id = ?""", (ev["id"],)):
+                   FROM gg_game_flights WHERE event_id = ? AND ? = 1""",
+                (ev["id"], 1 if _gg_era else 0)):
             if fr["customer_id"] is not None:
                 flights.setdefault(fr["game"], {})[
                     int(fr["customer_id"])] = fr["flight_label"]
+        # A Tracker-scored event's flights are its own flight board, the
+        # same SELECTION the payouts are paid on (Kerry 10/13: "It doesn't
+        # look like flights are showing where they should on the
+        # leaderboard").
+        if not _gg_era:
+            try:
+                _fb = event_flights_board(ev["id"], db_path=db_path)
+            except Exception:
+                logger.exception("Non-fatal: flight board unavailable for %s", ev["id"])
+                _fb = None
+            for _entry in (_fb or {}).get("games") or []:
+                if not _entry.get("active"):
+                    continue
+                _sel = _entry.get("selection") or {}
+                _fls = _sel.get("flights") or []
+                if len(_fls) < 2:
+                    continue          # one flight is no flight
+                for _f in _fls:
+                    # Same shape as Golf Genius's labels, so the board's
+                    # boundary reader (_label_bounds) places non-buyers.
+                    _band = (_f.get("band") or "").replace(" · custom", "").strip()
+                    _lab = (f"Flight {_f.get('flight_no')} (HCP {_band})"
+                            if _band and _band != "All handicaps"
+                            else f"Flight {_f.get('flight_no')}")
+                    for _m in _f.get("members") or []:
+                        if _m.get("customer_id") is not None:
+                            flights.setdefault(_entry["game"], {})[
+                                int(_m["customer_id"])] = _lab
 
         # recorded money, per customer, with the shared friendly bits
         won: dict = {}
@@ -14994,14 +15114,29 @@ def get_event_leaderboard(event_name: str,
                 "category": cat, "label": label,
                 "cents": round((pr["amount"] or 0) * 100),
                 "detail": " · ".join(_payout_detail_bits(cat, pr["d"]))})
+        # PRIZE MONEY THE MOMENT THE FIELD IS IN (Kerry 2026-10-13: "When
+        # last hole score is entered by last player in field, won Columns
+        # should unhide and amounts should show but non-final until 15
+        # minutes have passed"). Until the auto-payouts job records the
+        # final money, the board reads its preview (auto_payouts.py).
+        if not won and _money_preview:
+            for pr in _money_preview.get("rows") or []:
+                if not pr.get("customer_id") or not pr.get("amount"):
+                    continue
+                cat = pr.get("category") or "other"
+                label = _PAYOUT_CAT_LABELS.get(cat) or cat.replace("_", " ").title()
+                won.setdefault(int(pr["customer_id"]), []).append({
+                    "category": cat, "label": label,
+                    "cents": round(float(pr["amount"]) * 100),
+                    "detail": " · ".join(_payout_detail_bits(cat, pr.get("description") or ""))})
 
         # GG-recorded team + proxy boards
         team_rows, proxies, hio_rows = [], [], []
         for gr in conn.execute(
                 """SELECT game, game_label, player_name, is_team, position,
                           detail, purse, customer_id
-                   FROM gg_game_results WHERE event_id = ?
-                   ORDER BY game, id""", (ev["id"],)):
+                   FROM gg_game_results WHERE event_id = ? AND ? = 1
+                   ORDER BY game, id""", (ev["id"], 1 if _gg_era else 0)):
             g = dict(gr)
             if g["game"] in ("team_net", "team_net_board") and g["is_team"]:
                 # gg_total = GG's posted board total (rides in detail as
@@ -15028,6 +15163,17 @@ def get_event_leaderboard(event_name: str,
                 hio_rows.append({"player": g["player_name"],
                                  "detail": g["detail"],
                                  "purse": g["purse"]})
+        # CTP FROM THE PHONES (Kerry 10/13: "Why aren't closest to pins showing?"). The
+        # proxies above come only from Golf Genius results; an event GG never
+        # scores (every event since the untether) has none there, so its winners
+        # are the phone claims (a manager ruling included), the same holders the
+        # Tracker's own payouts read (_tracker_team_and_ctp_rows). Amounts are the
+        # live matrix's CTP values for the field, as Record Payouts pays them.
+        if not _gg_era or not proxies:
+            try:
+                proxies = _entry_ctp_proxies(conn, ev, db_path=db_path)
+            except Exception:
+                logger.exception("leaderboard: phone CTP holders failed for %s", ev.get("item_name"))
 
         # stableford points, both tables, from the imported holes through
         # the formula layer — one bulk read, keyed by scoring_round_id
@@ -15733,6 +15879,23 @@ def get_event_leaderboard(event_name: str,
             t["position"] = (("T" if tied else "") + str(_rank)
                              if t["total_net"] is not None else "")
             t["official"] = False
+    # TEAM MONEY, SLOT BY SLOT, FROM THE GAMES MONEY (Kerry 2026-10-13:
+    # "GAMES and FLIGHTS and PAIRINGS in events dictates all items for
+    # leaderboards. In the case where a blind helps their team win and they
+    # are on another team that wins the person takes the higher total and
+    # doesn't get any of the lower. The lower is divided equally amongst the
+    # rest of the team."). The payouts already follow that rule; this reads
+    # them back per SLOT so the board shows what each team actually pays:
+    #   - a blind's take on the team it filled is its Team Net money unless
+    #     that money is explained by its own team (an own-team mate earned
+    #     the same share), in which case it took the other, higher slot;
+    #   - a real member's take is their Team Net money less what they took
+    #     as a blind elsewhere;
+    #   - the team purse is the sum of its slots.
+    # Each member carries team_won (dollars, None when nothing) and the
+    # team carries purse. A GG-era event keeps the purse GG recorded.
+    if not _gg_era:
+        team_slot_money(teams, won)
 
     # ── skins winning cells (outright low GROSS on a hole WITHIN the
     # flight — the engine's rule) for the GG-style hole-by-hole grid ──
@@ -15802,6 +15965,8 @@ def get_event_leaderboard(event_name: str,
         "tee_by_player": tee_by_player,
         "tee_legend": tee_legend,
         "money_visible": money_visible,
+        "money_final": money_final,
+        "money_final_at": money_final_at,
         "money_at": money_at,
         "money_reason": money_reason,
         "money_hold_minutes": _hold,
@@ -59131,6 +59296,49 @@ def restore_tgf_payouts_explicit(rows: list, apply: bool = False,
     return out
 
 
+def _entry_ctp_proxies(conn, ev: dict, db_path=None) -> list:
+    """The EVENTS board's Closest to Pin / Longest Putt rows for an event
+    scored on the phones: one row per contest hole, the claimed holder (by
+    customer_id, canonical name) and the matrix amount for that hole. A hole
+    nobody holds shows "No winner". Read-only."""
+    from email_parser.score_entry import event_ctp_holders
+    holders = event_ctp_holders(ev["id"], db_path=db_path)
+    if not holders:
+        return []
+    vals: list = []
+    try:
+        m9, m18 = _load_games_matrix(db_path=db_path)
+        holes = _event_holes_type(ev["item_name"], ev.get("format"))
+        counts = _event_player_counts(conn, ev["item_name"])
+        g_event = (m9 if holes == 9 else m18).get(str(counts["players"])) or {}
+        vals = [v for v in (_matrix_num(g_event.get(k)) for k in ("ctp1", "ctp2", "ctp3", "ctp4"))
+                if v and v > 0]
+    except Exception:
+        logger.exception("leaderboard: CTP amounts unavailable for %s", ev.get("item_name"))
+    out: list = []
+    ctp_i = 0
+    for h in holders:
+        lp = h["kind"] == "longest_putt"
+        nm = None
+        if h.get("customer_id"):
+            r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                             (h["customer_id"],)).fetchone()
+            if r and (r["first_name"] or r["last_name"]):
+                nm = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
+        amt = None
+        if not lp and vals:
+            amt = vals[min(ctp_i, len(vals) - 1)]
+            ctp_i += 1
+        pending = bool(h.get("needs_confirm"))     # a takeover the manager has not confirmed
+        out.append({"game": h["kind"], "label": "Longest Putt" if lp else "Closest to Pin",
+                    "player": nm or h.get("name") or "No winner",
+                    "customer_id": h.get("customer_id"),
+                    "detail": f"Hole {h['hole']}" + (" · to be confirmed" if pending else ""),
+                    "pending": pending,
+                    "purse": amt if h.get("customer_id") and not pending else None})
+    return out
+
+
 def _tracker_team_and_ctp_rows(ev: dict, notes: list, db_path=None) -> list:
     """GG-shaped result rows for an UNTETHERED event (no Golf Genius board):
     Team / CART Net from the Tracker's EVENTS leaderboard and CTP / Longest
@@ -59171,6 +59379,14 @@ def _tracker_team_and_ctp_rows(ev: dict, notes: list, db_path=None) -> list:
         label = "Longest Putt" if h["kind"] == "longest_putt" else "CTP"
         if not h.get("customer_id"):
             notes.append(f"{label} hole {h['hole']}: nobody holds it — not paid")
+            continue
+        # CTP VERIFICATION (Kerry 10/13): a claim that took the hole from another
+        # group is not paid until the manager confirms it on Live Scoring.
+        nc = h.get("needs_confirm")
+        if nc:
+            notes.append(f"{label} hole {h['hole']}: {nc['to'].get('name')} (group {nc['to'].get('group_num')}) "
+                         f"took it from {nc['from'].get('name')} (group {nc['from'].get('group_num')}) — "
+                         f"confirm it on the Live Scoring page first; not paid")
             continue
         nm = None
         try:

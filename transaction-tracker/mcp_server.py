@@ -5382,6 +5382,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps({"assembled": asm,
                                "result": db.record_event_game_payouts(
                                    arg, asm["rows"], force=True)}, indent=2)
+        if cmd == "scoring-auto-payouts":
+            # Kerry 10/13: payouts record themselves once every card is
+            # final. "scoring-auto-payouts" = dry run over the recent
+            # events; ":apply" records; "|<event_id>" names one event.
+            from email_parser.auto_payouts import run as _ap_run
+            _bits = [b.strip() for b in (arg or "").split("|") if b.strip()]
+            _apply = "apply" in _bits
+            _eid = next((int(b) for b in _bits if b.isdigit()), None)
+            return json.dumps(_ap_run(apply=_apply, event_id=_eid), indent=2, default=str)
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)

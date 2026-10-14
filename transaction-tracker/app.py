@@ -2194,6 +2194,31 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── PRIZE MONEY RUNS ITSELF (Kerry 2026-10-13: "Payouts need to auto
+    #    calculate and populate based on GAMES tabs immediately after scores
+    #    are all in"; the money shows the moment the last hole of the field
+    #    is in, "non-final until 15 minutes have passed" after each group's
+    #    last score). Every minute: preview the GAMES-tab money for the
+    #    board, record it once every card is final (paid rows never
+    #    touched). Dial `auto_payouts`. email_parser/auto_payouts.py.
+    def auto_payouts_job():
+        from email_parser.auto_payouts import run as _auto_payouts
+        try:
+            res = _auto_payouts(apply=True)
+            done = [e for e in res.get("events") or [] if e.get("state") == "recorded"]
+            if done:
+                logger.info("Auto payouts recorded: %s",
+                            [(e["event"], e.get("total")) for e in done])
+        except Exception:
+            logger.exception("Auto payouts failed (non-fatal)")
+    scheduler.add_job(
+        auto_payouts_job,
+        "interval", minutes=1,
+        id="auto_payouts",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # ── PAIRINGS APPROVAL PROMPT (Kerry 2026-10-13: the manager reviews and
     #    approves the automated pairings, which sends the player emails).
     #    Every 15 min from :05 (so the 5:00 PM auto-generate has saved):
@@ -12560,10 +12585,15 @@ def api_se_ctp():
     cid = b.get("customer_id")
     by = b.get("claimed_by")
     try:
+        kw = {}
+        if "seen_holder" in b:      # Kerry 10/13: a stale screen never overwrites a claim
+            kw["seen_holder"] = int(b["seen_holder"]) if b["seen_holder"] else None
         res = claim_ctp(gid, str(b.get("device_id") or ""), int(b["hole"]),
-                        int(cid) if cid else None, claimed_by=int(by) if by else None)
+                        int(cid) if cid else None, claimed_by=int(by) if by else None, **kw)
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "hole is required"}), 400
+    if res.get("stale"):
+        return jsonify(res), 409
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
@@ -12640,6 +12670,20 @@ def api_se_ctp_rule(round_id):
         res = rule_ctp(round_id, int(b["hole"]), int(b["customer_id"]), actor=_se_actor())
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "hole and customer_id are required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/groups/<int:group_id>/unlock", methods=["POST"])
+@require_role("manager")
+def api_se_unlock_card(group_id):
+    """Reopen a FINAL card (Kerry 10/13: a confirmed card locks 15 minutes
+    after the submit). The scorer fixes it and submits again; the 15
+    minutes start over and the payouts re-record."""
+    from email_parser.score_entry import unlock_card
+    gate = _se_event_gate("group", group_id)
+    if gate:
+        return gate
+    res = unlock_card(group_id)
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 

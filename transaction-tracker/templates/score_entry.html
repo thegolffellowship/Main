@@ -716,6 +716,7 @@
         // last fresh card; cleared on every successful load, when the server's
         // own "answered" flag takes over again.
         const ctpAsked = new Set();
+        let ctpStale = "";
         let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, flagVal = null, busy = false;
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;
@@ -1721,11 +1722,12 @@
                 <div class="se-box se-holder"><div class="se-flag">${ICON.flag}</div>
                   <div><div class="se-lbl">Current closest</div><div style="font-size:18px;font-weight:700">${holder || "No one yet"}</div></div></div>
                 <div class="se-gap"></div>
-                <div style="font-size:20px;font-weight:700">${holder ? "Did anyone in your group get closer?" : "Is anyone in your group on the green?"}</div>
+                ${ctpStale ? `<div class="se-box" style="background:#FEF3C7;margin-bottom:8px;">${esc(ctpStale)}</div>` : ""}
+                <div style="font-size:20px;font-weight:700">${c.holder_name ? `Is anyone in your group closer than ${esc(c.holder_name)}'s marker?` : "Is anyone in your group on the green?"}</div>
                 <div class="se-gap"></div>
-                <div class="se-stack">${btns}<button type="button" class="se-pill dark" data-act="ctp" data-cid="">${holder ? "No one closer" : "No one on the green"}</button></div>
+                <div class="se-stack">${btns}<button type="button" class="se-pill dark" data-act="ctp" data-cid="">${holder ? `No one closer than ${esc(c.holder_name)}` : "No one on the green"}</button></div>
                 <div class="se-gap"></div>
-                <div class="se-copy">No measuring needed. The next group sees whoever you pick. Your manager settles any disagreement.</div>
+                <div class="se-copy">Only pick someone whose ball is closer than the marker on the green, not just the closest in your group. Your manager confirms a change before it's paid.</div>
                 ${queue.length ? statusLine() : ""}`;
         }
 
@@ -1836,6 +1838,13 @@
                 const cc = card.card_check;
                 const ph = cc.has_photo ? "photo saved" : photo && photo.submitted && !photo.sent ? "photo waiting to send" : "no photo";
                 actions = `<div class="se-status">${ICON.check}<span>Card submitted · ${ph}${cc.signed_for_group ? " · you signed for the group" : ""}</span></div>`;
+            }
+            // A finished card is final 15 minutes after its last score (Kerry 10/13).
+            if (card.final) {
+                actions += `<div class="se-status">${ICON.check}<span>This card is final. Ask your manager if a score needs fixing.</span></div>`;
+            } else if (card.final_at) {
+                const t = new Date(card.final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+                actions += `<div class="se-status">${ICON.check}<span>Card locks and is final at ${esc(t)}.</span></div>`;
             }
             if (done) {
                 (card.flags_denied || []).filter((f) => f.customer_id === who && !signedSelf(who)).forEach((f) => {
@@ -2112,7 +2121,12 @@
                 }
                 queue = queue.filter((o) => !done.has(o.op_id));
                 store.set(K.q, queue);
-                if (refused.length) {
+                if (j.final || j.results.some((r) => r.result === "refused_final")) {
+                    // The confirmed card locked (Kerry 10/13: final 15 minutes
+                    // after the scorer confirms it).
+                    lostMsg = "This card is final, so the change didn't go on it. "
+                        + "Ask your manager if a score needs fixing.";
+                } else if (refused.length) {
                     const n = new Set(batch.filter((o) => refused.includes(o.op_id)).map((o) => o.hole)).size;
                     lostMsg = "Someone else took over scoring. " + n + (n === 1 ? " hole" : " holes")
                         + " from this phone didn't go on the card. They're kept on record for your manager.";
@@ -2262,7 +2276,26 @@
             if (act === "turn") { turnNext = null; render(); return; }
             if (act === "ctp") {
                 const n = ctpHole; ctpHole = null; ctpAsked.add(n);
-                post("/api/score-entry/ctp", {hole: n, customer_id: b.dataset.cid ? Number(b.dataset.cid) : null, claimed_by: who});
+                // A STALE SCREEN NEVER OVERWRITES A CLAIM (Kerry 10/13): send the holder this
+                // screen showed; if another group claimed since, ask again against them.
+                const seen = ((card.ctp || {})[String(n)] || {}).holder_customer_id || null;
+                if (busy) return;
+                busy = true;
+                api("/api/score-entry/ctp", {hole: n, customer_id: b.dataset.cid ? Number(b.dataset.cid) : null,
+                                             claimed_by: who, seen_holder: seen}).then(({j}) => {
+                    busy = false;
+                    if (j && j.stale) {
+                        const c = (card.ctp || {})[String(n)] || {};
+                        c.holder_customer_id = j.holder ? j.holder.customer_id : null;
+                        c.holder_name = j.holder ? j.holder.name : null;
+                        c.holder_group_num = j.holder ? j.holder.group_num : null;
+                        ctpStale = j.holder ? `${j.holder.name} (Group ${j.holder.group_num}) claimed this hole while you were playing it. Check their marker.` : "";
+                        ctpAsked.delete(n); ctpHole = n; errMsg = ""; render(); return;
+                    }
+                    ctpStale = "";
+                    errMsg = (j && j.error) || "";
+                    return load();
+                }).catch(() => { busy = false; ctpAsked.delete(n); ctpHole = n; errMsg = "No signal. Try again in a moment."; render(); });
                 return;
             }
             if (act === "finish") { commitDraft(); flush(); hole = "done"; render(); return; }

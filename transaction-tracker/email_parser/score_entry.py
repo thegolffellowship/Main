@@ -276,6 +276,7 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
                 "scorer": next((p["name"] for p in ps if p["customer_id"] == g["scorer_customer_id"]), None),
                 "attested": any((p["customer_id"], "scorekeeper") in signed for p in ps),
                 "card_check": checks.get(g["group_id"]),
+                "final_at": g.get("final_at"), "final": g.get("final"),
                 "url": links.get(g["group_id"])})
         names = {p["customer_id"]: p["name"] for p in r["players"]}
         # THE MANAGER PANEL (CA #843): the four actions and what they act on.
@@ -289,7 +290,10 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
                                              "name": cur["display_name"],
                                              "group_num": cur["group_num"],
                                              "by_manager": cur["kind"] == "manager"}
-                                            if cur else None)})
+                                            if cur else None),
+                                 # Kerry 10/13: a takeover waits for the manager's Confirm
+                                 "needs_confirm": ctp_takeover(conn, r["round_id"], hole),
+                                 "history": ctp_history(conn, r["round_id"], hole)})
             flags = [dict(x) for x in conn.execute(
                 "SELECT f.id, f.group_id, g.group_num, f.customer_id, f.hole_number AS hole, "
                 "f.note, f.at, p.proposed_gross AS proposed FROM se_card_flags f "
@@ -1705,6 +1709,105 @@ def close_round(round_id: int, db_path=None) -> dict:
     return {"closed": round_id}
 
 
+# A CARD LOCKS 15 MINUTES AFTER ITS LAST SCORE (Kerry 2026-10-13, first
+# "15 minutes after scorer confirms scorecard, it locks and is considered
+# final automatically", then: "Actually, let's say 15 minutes after last
+# score entered by each scorer because scorer may not finalize how they
+# should"). Once every hole of every player in the group has a score, the
+# card is FINAL 15 minutes after the group's last score was saved: the
+# phone can no longer change it, and it publishes and pays without
+# signatures or a submit. The manager can unlock a card (app setting
+# se_card_unlocks = {group_id: when}); it is final again 15 minutes after
+# the later of the unlock and the next score. Minutes are a dial:
+# se_card_lock_minutes.
+CARD_LOCK_SETTING = "se_card_lock_minutes"
+CARD_LOCK_DEFAULT = 15
+CARD_UNLOCK_SETTING = "se_card_unlocks"
+
+
+def card_lock_minutes(db_path=None) -> int:
+    from email_parser.database import get_app_setting
+    try:
+        v = int(get_app_setting(CARD_LOCK_SETTING, db_path) or CARD_LOCK_DEFAULT)
+    except (TypeError, ValueError):
+        v = CARD_LOCK_DEFAULT
+    return max(0, v)
+
+
+def _parse_utc(s):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(str(s)[:19].replace(" ", "T"),
+                                 "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def card_final_at(last_score_at, complete: bool, unlocked_at=None,
+                  minutes: int = CARD_LOCK_DEFAULT) -> str | None:
+    """When a group's card is (or will be) final: the later of its last
+    saved score and a manager unlock, plus the lock minutes. None while
+    any hole of any player is still blank."""
+    from datetime import timedelta
+    last = _parse_utc(last_score_at)
+    if not complete or last is None:
+        return None
+    unl = _parse_utc(unlocked_at)
+    base = max(last, unl) if unl else last
+    return (base + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def card_is_final(final_at: str | None, now: str | None = None) -> bool:
+    fa = _parse_utc(final_at)
+    return fa is not None and fa <= _parse_utc(now or _now())
+
+
+def _group_card_state(conn, group_id: int, db_path=None) -> dict:
+    """{last_score_at, complete, final_at, final} for one group."""
+    g = _group_ctx(conn, group_id)
+    if not g:
+        return {"last_score_at": None, "complete": False, "final_at": None, "final": False}
+    n = conn.execute("SELECT COUNT(*) FROM se_round_holes WHERE round_id = ?",
+                     (g["round_id"],)).fetchone()[0] or int(g["holes"] or 0)
+    subjects = [f"c:{r[0]}" for r in conn.execute(
+        "SELECT customer_id FROM se_players WHERE group_id = ?", (group_id,))]
+    if not subjects:
+        subjects = [f"t:{r[0]}" for r in conn.execute(
+            "SELECT id FROM se_teams WHERE group_id = ?", (group_id,))]
+    have = {r[0]: r[1] for r in conn.execute(
+        "SELECT subject_key, COUNT(*) FROM se_hole_scores WHERE group_id = ? "
+        "AND gross IS NOT NULL GROUP BY subject_key", (group_id,))}
+    complete = bool(subjects) and all((have.get(k) or 0) >= n for k in subjects)
+    last = conn.execute("SELECT MAX(server_ts) FROM se_hole_scores WHERE group_id = ?",
+                        (group_id,)).fetchone()[0]
+    fa = card_final_at(last, complete,
+                       _json_setting(CARD_UNLOCK_SETTING, db_path).get(str(group_id)),
+                       card_lock_minutes(db_path))
+    return {"last_score_at": last, "complete": complete, "final_at": fa,
+            "final": card_is_final(fa)}
+
+
+def _group_final_at(conn, group_id: int, db_path=None) -> str | None:
+    return _group_card_state(conn, group_id, db_path)["final_at"]
+
+
+def unlock_card(group_id: int, db_path=None) -> dict:
+    """Manager: reopen a final card so the scorer can fix it. It is final
+    again 15 minutes after the later of the unlock and the next score."""
+    from email_parser.database import set_app_setting
+    with _closing(_conn(db_path)) as conn:
+        g = _group_ctx(conn, group_id)
+        if not g:
+            return {"error": "no such group"}
+        m = _json_setting(CARD_UNLOCK_SETTING, db_path)
+        m[str(group_id)] = _now()
+        set_app_setting(CARD_UNLOCK_SETTING, json.dumps(m, sort_keys=True), db_path)
+        _bump(conn, g["event_id"])
+        conn.commit()
+    return {"unlocked": group_id, "at": m[str(group_id)]}
+
+
 def clear_group(group_id: int, *, apply: bool = False, include_checks: bool = False,
                 db_path=None) -> dict:
     """START ONE GROUP'S CARD OVER (Kerry 2026-10-08: "Can you also clear
@@ -2157,6 +2260,7 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
         lock = conn.execute("SELECT * FROM se_group_locks WHERE group_id = ?",
                             (group_id,)).fetchone()
         extras = _card_extras(conn, g, group_id)
+        final_at = _group_final_at(conn, group_id, db_path)
         marks = _marks_by_subject(conn, group_id=group_id)
         try:
             match_status = _match_status(conn, g)
@@ -2187,7 +2291,9 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             "start_hole": g["start_hole"], "tee_time": g["tee_time"],
             "course": holes, "players": players, "teams": teams, "scores": scores,
             "marks": marks, "match_status": match_status, "cup_standings": cup, "matches": {str(k): v for k, v in round_matches(g["round_id"]).items()},
-            "lock": _lock_view(lock, device_id, names)}
+            "lock": _lock_view(lock, device_id, names),
+            "final_at": final_at, "final": card_is_final(final_at),
+            "lock_minutes": card_lock_minutes(db_path)}
 
 
 def claim_group(group_id: int, device_id: str, customer_id: int | None,
@@ -2305,6 +2411,26 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
         lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
                             (group_id,)).fetchone()
         holds = bool(lock and lock["device_id"] == device_id)
+        if card_is_final(_group_final_at(conn, group_id, db_path)):
+            # The confirmed card locked (Kerry 10/13): nothing changes it
+            # from a phone; the attempt is kept for the manager.
+            now = _now()
+            for op in ops:
+                op_id = str(op.get("op_id") or "").strip()
+                results.append({"op_id": op_id or None, "result": "refused_final"})
+                if op_id and not conn.execute("SELECT 1 FROM se_audit WHERE op_id = ?",
+                                              (op_id,)).fetchone():
+                    conn.execute(
+                        "INSERT INTO se_audit (round_id, group_id, kind, customer_id, device_id, "
+                        "op_id, result, detail, at) VALUES (?,?,?,?,?,?,?,?,?)",
+                        (g["round_id"], group_id, "write", entered_by, device_id, op_id,
+                         "refused_final",
+                         json.dumps({"hole": op.get("hole"), "gross": op.get("gross"),
+                                     "customer_id": op.get("customer_id"),
+                                     "team_id": op.get("team_id"),
+                                     "client_ts": op.get("client_ts")}), now))
+            conn.commit()
+            return {"results": results, "applied": 0, "final": True}
         members = {r[0] for r in conn.execute(
             "SELECT customer_id FROM se_players WHERE group_id = ?", (group_id,))}
         teams = {r[0]: (r[1], r[2]) for r in conn.execute(
@@ -3023,8 +3149,44 @@ def _ctp_current(conn, round_id: int, hole: int):
         "ORDER BY c.id DESC LIMIT 1", (round_id, hole)).fetchone()
 
 
+_UNSET = object()
+
+
+def ctp_history(conn, round_id: int, hole: int) -> list[dict]:
+    """Every answer on one contest hole, oldest first: who claimed it (or "no
+    one closer"), from which group, when, and whether it was a manager
+    ruling. For the manager's confirm step (Kerry 10/13)."""
+    return [dict(r) for r in conn.execute(
+        "SELECT c.id, c.kind, c.customer_id, p.display_name AS name, g.group_num, c.at "
+        "FROM se_ctp_claims c LEFT JOIN se_players p ON p.round_id = c.round_id "
+        "AND p.customer_id = c.customer_id LEFT JOIN se_groups g ON g.id = c.group_id "
+        "WHERE c.round_id = ? AND c.hole_number = ? ORDER BY c.id", (round_id, int(hole)))]
+
+
+def ctp_takeover(conn, round_id: int, hole: int) -> dict | None:
+    """CTP VERIFICATION (Kerry 2026-10-13, after hole 16 at The Quarry went to
+    Dan Stich when Pat Youngs was closer: "We need to add a verification
+    step"). A hole NEEDS THE MANAGER'S CONFIRMATION when its current holder
+    came from a phone claim that took it away from a player in ANOTHER group
+    (a manager ruling counts as confirmed). Returns {from, to} or None."""
+    claims = [c for c in ctp_history(conn, round_id, hole) if c["kind"] in ("claim", "manager")]
+    if not claims or claims[-1]["kind"] != "claim":
+        return None
+    cur = claims[-1]
+    for prev in reversed(claims[:-1]):
+        if prev["customer_id"] == cur["customer_id"]:
+            continue
+        if prev.get("group_num") == cur.get("group_num") and prev["kind"] == "claim":
+            continue      # the same group changing its own answer is not a takeover
+        return {"from": {"customer_id": prev["customer_id"], "name": prev["name"],
+                         "group_num": prev["group_num"]},
+                "to": {"customer_id": cur["customer_id"], "name": cur["name"],
+                       "group_num": cur["group_num"], "at": cur["at"]}}
+    return None
+
+
 def claim_ctp(group_id: int, device_id: str, hole: int, customer_id: int | None,
-              claimed_by: int | None = None, db_path=None) -> dict:
+              claimed_by: int | None = None, db_path=None, seen_holder=_UNSET) -> dict:
     """The scorekeeper answers "Did anyone in your group get closer?" with a
     player (claim) or None ("No one closer"). Only on the round's CTP /
     Longest Putt holes (ctp_contests); lock holder only."""
@@ -3047,6 +3209,18 @@ def claim_ctp(group_id: int, device_id: str, hole: int, customer_id: int | None,
                 (group_id, customer_id)).fetchone():
             conn.rollback()
             return {"error": "that person is not in this group"}
+        # A STALE SCREEN NEVER OVERWRITES A CLAIM (Kerry 10/13): the phone sends
+        # the holder it showed. If another group has claimed since, nothing is
+        # written and the phone asks again against the current holder. Old
+        # phones that send no seen_holder are taken as before.
+        if seen_holder is not _UNSET:
+            cur = _ctp_current(conn, g["round_id"], int(hole))
+            now_cid = cur["customer_id"] if cur else None
+            if (now_cid or None) != (int(seen_holder) if seen_holder else None):
+                conn.rollback()
+                return {"stale": True,
+                        "holder": ({"customer_id": now_cid, "name": cur["display_name"],
+                                    "group_num": cur["group_num"]} if cur else None)}
         conn.execute(
             "INSERT INTO se_ctp_claims (round_id, group_id, hole_number, customer_id, kind, "
             "claimed_by_customer_id, device_id, at) VALUES (?,?,?,?,?,?,?,?)",
@@ -3431,7 +3605,8 @@ def event_ctp_holders(event_id: int, db_path=None) -> list[dict]:
                 cur = _ctp_current(conn, rid, int(hole))
                 out.append({"round_id": rid, "hole": int(hole), "kind": kind,
                             "customer_id": cur["customer_id"] if cur else None,
-                            "name": cur["display_name"] if cur else None})
+                            "name": cur["display_name"] if cur else None,
+                            "needs_confirm": ctp_takeover(conn, rid, int(hole))})
     return out
 
 
@@ -3499,6 +3674,24 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                 "print_scorer_customer_id, print_scorer_name, signed_for_group, "
                 "photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
                 "WHERE round_id = ? ORDER BY id", (rid,))]
+            # Final cards (Kerry 10/13: a confirmed card locks 15 minutes
+            # after the scorer submits it and is final automatically).
+            _unl = _json_setting(CARD_UNLOCK_SETTING, db_path)
+            _mins = card_lock_minutes(db_path)
+            _n = len(course) or int(r["holes"] or 0)
+            _subs: dict = {}
+            for _p in players:
+                _subs.setdefault(_p["group_id"], []).append(len(_p["scores"]))
+            for _t in teams:
+                if _t["group_id"] not in _subs or not any(
+                        p["group_id"] == _t["group_id"] for p in players):
+                    _subs.setdefault(_t["group_id"], []).append(len(_t["scores"]))
+            for _g in groups:
+                _done = bool(_subs.get(_g["group_id"])) and all(
+                    k >= _n for k in _subs[_g["group_id"]])
+                _g["final_at"] = card_final_at(_g.get("last_write_at"), _done,
+                                               _unl.get(str(_g["group_id"])), _mins)
+                _g["final"] = card_is_final(_g["final_at"])
             ctp = {}
             contests = ctp_contests(conn, rid, db_path)
             for hole, kind in contests["holes"].items():
