@@ -588,6 +588,11 @@ with sync_playwright() as p:
     check("the save button is on screen", fpg.locator("[data-act=save]").bounding_box()["y"] + 50 <= 660)
     # Kerry 2026-09-29: "Provide a centered TGF Logo on black header for all
     # screens but don't allow it to link anywhere." The header stays, with no links.
+    # THE BAR NEVER SHRINKS (Kerry 10/13: "That dark bar is getting reduced again"): the
+    # card fits on this short screen with the header at its full size and the 64 px mark.
+    _hd = fpg.evaluate("""[document.body.classList.contains('se-tight'),
+        document.querySelector('.shell-nav .shell-brand img').getBoundingClientRect().height]""")
+    check("a tight card keeps the full dark bar and its 64 px mark", _hd[1] >= 63, _hd)
     check("the header shows the mark and has no links while scoring",
           fpg.locator(".shell-nav").first.is_visible()
           and fpg.locator(".shell-nav a, .shell-nav button").count() == 0)

@@ -1748,6 +1748,9 @@ def start_scheduler():
     # Disable with AUTO_GG_SYNC=0.
     def auto_gg_results_sync_job():
         from email_parser.database import auto_gg_results_sync
+        from email_parser.gg_untether import gg_auto_jobs_on
+        if not gg_auto_jobs_on():
+            return          # Kerry 10/13: not needed anymore (gg_auto_jobs)
         try:
             res = auto_gg_results_sync()
             rec = (res.get("payouts") or {}).get("recorded") or []
@@ -1777,6 +1780,9 @@ def start_scheduler():
     # team-board fallback data stands. Disable with AUTO_PAIRINGS_GRAB=0.
     def auto_pairings_grab_job():
         from email_parser.database import import_gg_teesheets_all
+        from email_parser.gg_untether import gg_auto_jobs_on
+        if not gg_auto_jobs_on():
+            return          # Kerry 10/13: not needed anymore (gg_auto_jobs)
         for portal in ("sa", "austin"):
             try:
                 res = import_gg_teesheets_all(portal, apply=True,
@@ -2162,6 +2168,75 @@ def start_scheduler():
         "cron", minute="*/15",
         timezone="US/Central",
         id="live_scoring_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # ── EVENT INVITATIONS (Kerry 2026-10-13): 7:00 AM Central, Wed/Fri/Sun
+    #    before a Tuesday event; Friday two weeks out, the next Friday and the
+    #    Tuesday before for a weekend event. Does nothing unless app setting
+    #    event_invite_auto = on (Kerry's word) and the wording carries his
+    #    stamp. email_parser/invitations.py.
+    def event_invite_auto_job():
+        from email_parser.invitations import auto_check
+        try:
+            res = auto_check()
+            if res.get("ran"):
+                logger.info("Event invitations: %s", res["ran"])
+        except Exception:
+            logger.exception("Event invitations job failed (non-fatal)")
+    scheduler.add_job(
+        event_invite_auto_job,
+        "cron", hour="7-9", minute="2,17,32,47",
+        timezone="US/Central",
+        id="event_invite_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # ── PRIZE MONEY RUNS ITSELF (Kerry 2026-10-13: "Payouts need to auto
+    #    calculate and populate based on GAMES tabs immediately after scores
+    #    are all in"; the money shows the moment the last hole of the field
+    #    is in, "non-final until 15 minutes have passed" after each group's
+    #    last score). Every minute: preview the GAMES-tab money for the
+    #    board, record it once every card is final (paid rows never
+    #    touched). Dial `auto_payouts`. email_parser/auto_payouts.py.
+    def auto_payouts_job():
+        from email_parser.auto_payouts import run as _auto_payouts
+        try:
+            res = _auto_payouts(apply=True)
+            done = [e for e in res.get("events") or [] if e.get("state") == "recorded"]
+            if done:
+                logger.info("Auto payouts recorded: %s",
+                            [(e["event"], e.get("total")) for e in done])
+        except Exception:
+            logger.exception("Auto payouts failed (non-fatal)")
+    scheduler.add_job(
+        auto_payouts_job,
+        "interval", minutes=1,
+        id="auto_payouts",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # ── THE RESULTS EMAIL (Kerry 2026-10-14: "I want the recap emails
+    #    typically sent 30 minutes after the last score is posted for an
+    #    event. For this one let's send it at 6:00a"). Every minute: a
+    #    scheduled night whose time has come is sent, once per person, only
+    #    if every guard passes (final, engine = cards, payouts recorded =
+    #    engine, no blanks). email_parser/results_email.py.
+    def results_email_job():
+        from email_parser.results_email import auto_check as _results_auto
+        try:
+            res = _results_auto()
+            if res:
+                logger.info("Results email: %s", res)
+        except Exception:
+            logger.exception("Results email job failed (non-fatal)")
+    scheduler.add_job(
+        results_email_job,
+        "interval", minutes=1,
+        id="results_email_auto",
         replace_existing=True,
         max_instances=1, coalesce=True,
     )
@@ -4824,6 +4899,75 @@ def api_send_membership_notice(term_id):
     return jsonify(result)
 
 
+@app.route("/rsvp/<token>", methods=["GET", "POST"])
+def public_event_rsvp(token):
+    """TRACKER RSVP from an event invitation (Kerry 2026-10-13, Tracker-only
+    RSVPs). No login: the token is signed (email_parser/invitations.py).
+
+    Kerry 10/13: one tap. I'm in -> the event's registration page. Can't make
+    it -> straight to "Thanks for letting us know", with Changed my mind,
+    I'm in (-> registration), Remove me from invitations, and an optional
+    one-tap reason. Remove me -> straight to Done. The answer is written by
+    the page itself (a POST from the page's script, or its button when
+    scripts are off), never by the bare GET, so a mail scanner that only
+    fetches the link does not answer for a player."""
+    import html as _h
+    from email_parser import invitations as _inv
+    if request.method == "POST":
+        res = _inv.record_answer(token)
+        if not res.get("ok"):
+            return _public_page("RSVP link", f"<h2>{_h.escape(res['error'])}</h2>"), 400
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"ok": True})
+    else:
+        # "go straight to the event registration page if they click I'm In"
+        _go = _inv.click_in(token)
+        if _go.get("ok"):
+            return redirect(_go["redirect"])
+    info = _inv.describe_token(token)
+    if not info.get("ok"):
+        return _public_page("RSVP link", f"<h2>{_h.escape(info['error'])}</h2>"), 400
+    links = _inv.sibling_links(token)
+    done = request.method == "POST"
+    record = ("" if done else
+              "<script>fetch(location.href,{method:'POST',headers:{'X-Requested-With':'fetch'}})"
+              "</script><noscript><form method='post'><button type='submit' "
+              "style='margin-top:8px'>Confirm</button></form></noscript>")
+    btn = ("display:inline-block;border-radius:999px;padding:12px 22px;margin:6px 6px 0 0;"
+           "font:bold 16px Georgia,serif;text-decoration:none;")
+    if info["action"] == "unsub":
+        body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
+                "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>" + record)
+        return _public_page("Invitations", body)
+    if info["action"] == "in":           # no registration link on the event
+        body = (f"<h2>You're in. Thanks!</h2><p>{_h.escape(info['course'])}, "
+                f"{_h.escape(info['date_long'])}. {_h.escape(info['start_sentence'])}</p>" + record)
+        return _public_page("RSVP", body)
+    reasons = "".join(
+        f"<form method='post' action='/rsvp/{_h.escape(token)}/reason' style='display:inline'>"
+        f"<button name='r' value='{_h.escape(r)}' style='border:1px solid #D1D5DB;background:#fff;"
+        f"border-radius:999px;padding:6px 12px;margin:4px 4px 0 0;font-size:14px'>{_h.escape(r)}"
+        "</button></form>" for r in _inv.REASONS)
+    body = (f"<h2>Thanks for letting us know.</h2><p>We'll miss you at {_h.escape(info['course'])} "
+            f"on {_h.escape(info['date_long'])}.</p>"
+            f'<a href="{_h.escape(links.get("in", ""))}" style="{btn}background:#15803D;color:#fff;">'
+            "Changed my mind, I'm in</a>"
+            f'<a href="{_h.escape(links.get("unsub", ""))}" style="{btn}background:#E5E7EB;color:#1B1B1B;">'
+            "Remove me from invitations</a>"
+            "<p style='margin-top:22px;color:#6B7280;font-size:14px'>Mind sharing why? (optional)</p>"
+            + reasons + record)
+    return _public_page("RSVP", body)
+
+
+@app.route("/rsvp/<token>/reason", methods=["POST"])
+def public_event_rsvp_reason(token):
+    """The optional one-tap reason on the Can't make it page (Kerry 10/13)."""
+    from email_parser import invitations as _inv
+    ok = _inv.record_reason(token, (request.form.get("r") or "").strip())
+    return _public_page("RSVP", "<h2>Thanks, noted.</h2><p>See you next time.</p>"
+                        if ok else "<h2>That link has expired.</h2>"), (200 if ok else 400)
+
+
 @app.route("/m/roster/<token>")
 def public_roster_choice(token):
     """One-click roster keep/remove from the lapsed-notice email.
@@ -6093,6 +6237,73 @@ def api_send_print_pack(event_id):
     res = send_event_print_pack(built, to_address=(data.get("to") or "").strip() or None)
     res.update(parts=built["parts"], engine=built.get("engine"))
     return jsonify(res), (200 if res.get("sent") else 502)
+
+
+@app.route("/api/events/<int:event_id>/course-files/send", methods=["POST"])
+@require_role("manager")
+def api_send_course_files(event_id):
+    """COURSE FILES (Kerry 2026-10-13: "Course email should include Starter
+    Sheet, Cart Signs, Scorecards, Proxies and Rules Sheets...not the other
+    stuff" / "Set it up to send straight to course contact"). One email
+    To the course's print contact, Kerry's pack recipients on CC, one PDF
+    per report. No contact on file -> 409 `no_contact` with the course_id,
+    and the page asks for it. Leaves the pack's sent hash alone."""
+    from email_parser.print_pack import send_course_files
+    from email_parser.database import get_all_events
+    ev = next((e for e in get_all_events() if e["id"] == event_id), None)
+    if not ev:
+        return jsonify({"error": "Event not found"}), 404
+    from email_parser.print_pack import course_recipients_for_event
+    _rec = course_recipients_for_event(ev)
+    if not _rec.get("ok"):
+        return jsonify({"sent": False, "no_contact": True, "course_id": _rec.get("course_id"),
+                        "course": ev.get("course"),
+                        "why": f"{_rec.get('why')} ({ev.get('course') or 'this course'})"}), 409
+    built = build_print_pack_for_event(event_id, force_scorecards=True)
+    if not built:
+        return jsonify({"error": "Event not found or nothing to print"}), 404
+    if built.get("error"):
+        return jsonify({"error": built["error"]}), 503
+    try:
+        res = send_course_files(built)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 500
+    try:
+        log_agent_action(f"manager:{session.get('chapter') or session.get('role') or 'manager'}",
+                         "course-files-send", f"event {event_id}: {json.dumps(res, default=str)[:300]}")
+    except Exception:
+        pass
+    return jsonify(res), (200 if res.get("sent") else 502)
+
+
+@app.route("/api/courses/<int:course_id>/staff", methods=["GET", "POST"])
+@require_role("manager")
+def api_course_staff(course_id):
+    """COURSE STAFF (migration 0014, Kerry 10/13 "Deploy now" #1737): the
+    people at a course and their roles. GET for managers (event setup shows
+    them); POST for admins only (add a person, change a role, set the
+    primary, deactivate). The primary TGF contact gets the Course Files."""
+    from email_parser import course_staff as cs
+    from email_parser.database import _connect
+    if request.method == "GET":
+        with _connect() as conn:
+            staff = cs.for_course(conn, course_id,
+                                  include_inactive=session.get("role") == "admin")
+            rec = cs.print_recipients(conn, course_id)
+        return jsonify({"course_id": course_id, "staff": staff, "roles": list(cs.ROLES),
+                        "role_labels": cs.ROLE_LABELS,
+                        "print_to": rec.get("to"), "print_cc": rec.get("cc") or [],
+                        "print_why": None if rec.get("ok") else rec.get("why")})
+    if session.get("role") != "admin":
+        return jsonify({"error": "Admin access required."}), 403
+    d = request.get_json(silent=True) or {}
+    res = cs.save_staff(course_id, name=d.get("name") or "", email=d.get("email") or "",
+                        phone=d.get("phone") or "", role=d.get("role") or "tgf_contact",
+                        is_primary=bool(d.get("is_primary")), notes=d.get("notes") or "",
+                        customer_id=d.get("customer_id") or None,
+                        active=d.get("active", True) not in (False, 0, "0", "false"),
+                        apply=True, set_by="admin")
+    return jsonify(res), (200 if res.get("applied") else 400)
 
 
 @app.route("/events/<int:event_id>/games-payouts")
@@ -12396,10 +12607,15 @@ def api_se_ctp():
     cid = b.get("customer_id")
     by = b.get("claimed_by")
     try:
+        kw = {}
+        if "seen_holder" in b:      # Kerry 10/13: a stale screen never overwrites a claim
+            kw["seen_holder"] = int(b["seen_holder"]) if b["seen_holder"] else None
         res = claim_ctp(gid, str(b.get("device_id") or ""), int(b["hole"]),
-                        int(cid) if cid else None, claimed_by=int(by) if by else None)
+                        int(cid) if cid else None, claimed_by=int(by) if by else None, **kw)
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "hole is required"}), 400
+    if res.get("stale"):
+        return jsonify(res), 409
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
@@ -12476,6 +12692,20 @@ def api_se_ctp_rule(round_id):
         res = rule_ctp(round_id, int(b["hole"]), int(b["customer_id"]), actor=_se_actor())
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "hole and customer_id are required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/groups/<int:group_id>/unlock", methods=["POST"])
+@require_role("manager")
+def api_se_unlock_card(group_id):
+    """Reopen a FINAL card (Kerry 10/13: a confirmed card locks 15 minutes
+    after the submit). The scorer fixes it and submits again; the 15
+    minutes start over and the payouts re-record."""
+    from email_parser.score_entry import unlock_card
+    gate = _se_event_gate("group", group_id)
+    if gate:
+        return gate
+    res = unlock_card(group_id)
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
@@ -12730,11 +12960,14 @@ def api_se_close(round_id):
 
 
 @app.route("/api/score-entry/groups/<int:group_id>/qr.svg")
-@require_role("admin")
+@require_role("manager")
 def api_se_group_qr(group_id):
-    """The group's scoring link as a QR code, for the PAIRINGS panel (CA
-    #782). The same link the Live Scoring page copies; admin only, so it
-    works for the dry run while score_entry_qr (the cart signs) stays off."""
+    """The group's scoring link as a QR code, for the PAIRINGS / SCORING
+    panel (CA #782). The same link the Live Scoring page copies. Managers
+    too since Kerry 2026-10-13, on an event with score entry on."""
+    gate = _se_event_gate("group", group_id)
+    if gate:
+        return gate
     from email_parser.score_entry import group_link, qr_svg_file
     url = group_link(group_id)
     svg = qr_svg_file(url) if url else None
@@ -13142,8 +13375,29 @@ def api_season_contest_points_race_detail():
     race = _GG_POINTS_RACES.get(race_key)
     if not race:
         return jsonify({"error": f"Unknown race {race_key!r}"}), 400
-    if not card.isdigit():
+    if not (card.isdigit() or (card[:1] == "c" and card[1:].isdigit())):
         return jsonify({"error": "card must be a numeric member_card_id"}), 400
+
+    # GG points intake OFF (Kerry 10/13, CoS #1693-1): the row expansion
+    # stops calling Golf Genius; the page still shows the player's cards.
+    from email_parser.gg_untether import gg_points_intake_on, POINTS_PAUSED
+    if not gg_points_intake_on():
+        # No GG call. A Tracker-computed race serves its own lines; any
+        # other race serves GG's table from the newest captured ledger.
+        from email_parser import tracker_points as _tp
+        try:
+            if race_key in _tp.TRACKER_RACES and _tp.tracker_source_on():
+                d = _tp.member_detail(race_key, card)
+            else:
+                d = _tp.bundle_detail(race_key, card)
+        except Exception:
+            logger.exception("points detail (intake off) failed")
+            d = None
+        if d:
+            from email_parser.database import substitute_gg_tournament_names
+            d["tables"] = substitute_gg_tournament_names(d["tables"])
+            return jsonify(d)
+        return jsonify({"tables": [], "paused": True, "note": POINTS_PAUSED})
 
     now = time.time()
     cached = _points_detail_cache.get((race_key, card))
@@ -13475,6 +13729,21 @@ def member_teesheet(event_id):
     return render_teesheet(data)
 
 
+@app.route("/member/live-scoring")
+def member_live_scoring_guide():
+    """LIVE SCORING HOW-TO (Kerry 2026-10-13: "a slideshow or directions
+    directly on the Tracker that has its own link that we can send out. So
+    it's fully vetted, locked and can be updated at any point"). Public, no
+    PII; the steps and their phone screenshots live in
+    templates/live_scoring_guide.html and static/img/live-scoring/."""
+    folder = os.path.join(app.static_folder, "img", "live-scoring")
+    try:
+        img_v = int(max(os.path.getmtime(os.path.join(folder, f)) for f in os.listdir(folder)))
+    except (OSError, ValueError):
+        img_v = 0
+    return render_template("live_scoring_guide.html", img_v=img_v)
+
+
 @app.route("/member/matchplay/<chapter_slug>")
 def member_matchplay(chapter_slug):
     """Chapter-specific shareable Match Play links (Kerry 2026-08-21:
@@ -13500,6 +13769,23 @@ def member_results():
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
                            evlb_landing=True)
+
+
+@app.route("/member/results/<int:event_id>")
+def member_results_event(event_id):
+    """ONE event's results (Kerry 2026-10-13: "if you provide links I want it
+    to open up that event like for full results, not just go to all events.
+    Links need to go to specific locations"). The same member Events page,
+    with that event opened and pinned to the top. An unknown id lands on the
+    full list rather than an error, so an old link still goes somewhere."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT item_name FROM events WHERE id = ?",
+                           (event_id,)).fetchone()
+    if not row:
+        return redirect("/member/results")
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           evlb_landing=True, evlb_open=row["item_name"])
 
 
 @app.route("/member/handicaps")

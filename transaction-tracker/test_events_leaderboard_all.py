@@ -49,8 +49,8 @@ html = open("templates/contests.html", encoding="utf-8").read()
 check("the EVENTS tab: manager-only on the staff page, a plain tab on /member (v2.523.4, #1146-1), no BETA badge (Kerry 2026-10-08)",
       '{% if member_mode %}<button class="top-tab" data-top="events">' in html
       and '<button class="top-tab manager-only" data-top="events"' in html and 'class="evlb-beta">BETA' not in html)
-check("every board carries the short Unofficial / GG-official line (Kerry 10/8: less text)",
-      'Unofficial &middot; Golf Genius is the official scorer' in html and 'Money shown as computed, not as paid.' not in html)
+check("no board says Golf Genius is the official scorer; the Tracker is official now (Kerry 10/13)",
+      'Golf Genius is the official scorer' not in html and 'Money shown as computed, not as paid.' not in html)
 check("legends are chips, not prose (Kerry 10/8: \"Nobody is going to read all that\")",
       'Money winners color-code by FLIGHT: ${' not in html and 'Tap a player for their scorecard.</p>' in html)
 check("the solo board drops the GG line on an event GG never scores (or with no posted score yet)",
@@ -83,6 +83,21 @@ db.set_app_setting("gg_official_through", "Oct 6", db_path=tmp)
 check("…and the date once set", db.get_events_leaderboard(db_path=tmp)["gg_official_through"] == "Oct 6")
 r = tc.get("/member/results")
 check("/member/results renders the member page and lands on Events", r.status_code == 200 and b"window.EVLB_LANDING = true" in r.data and b'data-top="events"' in r.data)
+# ONE EVENT'S LINK (Kerry 2026-10-13: "Links need to go to specific locations")
+import sqlite3 as _sq
+_c = _sq.connect(tmp)
+_eid = _c.execute("INSERT INTO events (item_name, event_date) VALUES ('s9.99 Link Test', '2026-10-13') "
+                  "RETURNING id").fetchone()[0]
+_c.commit(); _c.close()
+r = tc.get(f"/member/results/{_eid}")
+check("/member/results/<id> lands on Events with THAT event named to open",
+      r.status_code == 200 and b"window.EVLB_LANDING = true" in r.data
+      and b'window.EVLB_OPEN = "s9.99 Link Test"' in r.data)
+check("the page opens the named event (which loads and pins it)",
+      "if (window.EVLB_OPEN && !window.SOLO_EVENT)" in html and "if (el) el.open = true;" in html)
+r = tc.get("/member/results/999999")
+check("an unknown event id falls back to the full results list",
+      r.status_code == 302 and r.headers["Location"].endswith("/member/results"))
 print()
 if F: print(f"{len(F)} FAILED"); sys.exit(1)
 print("\n== non-buyers are placed by INDEX against an index ladder (Kerry 9/29: Vest / McCormick) ==")

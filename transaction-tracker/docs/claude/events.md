@@ -104,6 +104,61 @@ Test: `test_event_links.py`.
 - `transferred` — transferred to another event, shown in **Inactive** section below table. Creates contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target.
 - `wd` — withdrawn, shown in **Inactive** section below table
 
+## Tracker event invitations + RSVPs (v2.563.0, Kerry 2026-10-13)
+
+Kerry: "would rather switch completely on that too starting tomorrow for next
+week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
+
+- **Audience** (Kerry: "That audience works, go with it"), per chapter event:
+  active members of the chapter (home chapter by id, else the text) + anyone
+  who played that chapter in the 12 months before the event + lead opt-ins
+  (`get_lead_export_rows`, mapped to customer_id); minus the invitation
+  opt-out list (app setting `event_invite_optout`), membership
+  `roster_choice = 'remove'`, `course_staff.non_member_ids`, undeliverable
+  addresses, anyone already registered, and (Kerry 10/13: "Austin members
+  should not be getting invites to SA only events…only combined events and
+  their own events") anyone whose home chapter is the other chapter
+  (`other_chapter`). `audience(event_id)` reports each
+  person's reasons and every exclusion count.
+- **Message**: words in module constants (SUBJECT/INTRO, REMINDER_*,
+  LASTCALL_*, CLOSING, FOOTER), structure in code, the event-day email's
+  `frame`. `template_hash()` must equal app setting `event_invite_approved`
+  (Kerry's stamp) before any member send.
+- **Links** `/rsvp/<token>` (signed, `make_token`/`verify_token`, expire the
+  day after the event; no login). **I'm in** redirects to the event's
+  `registration_url` and notes the click (`event_invite_clicks:<id>`), never
+  an RSVP (Kerry: "go straight to the event registration page"), and clears
+  an earlier Can't make it. **Can't make it** lands straight on "Thanks for
+  letting us know" with **Changed my mind, I'm in** (-> registration),
+  **Remove me from invitations** (-> straight to Done) and an optional one-tap
+  reason (`REASONS`, table `event_decline_reasons` from migration 0016, one
+  row per event + customer_id, a later tap updates it; `decline_reasons(id)`
+  reads the counts; route `/rsvp/<token>/reason`) (Kerry 10/13: "The sequence for Can't make it is too
+  long"). The page writes the answer itself (a script POST, or a button with
+  scripts off); the bare GET never does, so a mail scanner can't answer. An answer is an `rsvps` row with email_uid
+  `tracker:<event_id>:<customer_id>`, upserted (the latest answer wins).
+- **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
+  tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.
+- **Schedule** (Kerry), 7:00 AM Central, `schedule(event_date)`: weekday event
+  = invite the Wednesday before, reminders Friday and Sunday, **last call**
+  the day before ("Sign up by 5:00 PM tonight", Monday for a Tuesday event);
+  weekend event = invite the Friday two weeks out, reminders the next Friday
+  and the Tuesday before, last call the Wednesday before. Reminders and the
+  last call go only to invitees who are not registered and have no answer.
+  Sent slots per person in app setting `event_invite_sent:<id>`.
+- **TGF events** (Kerry 10/13: "Yes, invite both chapters to the Fall
+  Championship") invite both chapters' lists, signed by the San Antonio
+  manager; a named event shows as "2026 Fall Championship @ Kissing Tree" (no event code).
+- **Early invitation** on Kerry's word: app setting `event_invite_early`
+  `{event_id: "YYYY-MM-DD"}` adds an invite slot that morning (set for 3305 =
+  2026-10-14, Kerry: "Just 10/20 events and the Championship"); the regular
+  invite date then reaches only people added since.
+- **Locks**: job `event_invite_auto` (7-9 AM, every 15 min) does nothing
+  unless app setting `event_invite_auto` = `on` (Kerry's word) and the stamp
+  matches. By hand: bridge `scoring-event-invite:<id>` (audience, read-only),
+  `|preview[|<staff>][|reminder|lastcall]` (staff only),
+  `|send|<kerry-ok post>[|reminder|lastcall][|confirm]`.
+
 ## RSVP → event matching: multi-round GG events (v2.151.2, Kerry 2026-07-30)
 GG multi-round events name each round separately ("2026 TGF CHAMPIONSHIP
 round 1" / "round 2" / "Practice Round") while the tracker carries ONE
@@ -153,6 +208,39 @@ game-payouts-preview are @require_role("admin"). Managers keep
 credit/transfer/WD (internal ledger moves); anything recording a REAL
 outbound payment (refund, partial-refund, payout-credit, payout
 recording, mark-paid) is admin-only.
+
+## Payouts without Golf Genius (Kerry 2026-10-13, v2.559.6)
+
+Kerry: "we're not running Golf Genius at all tonight, so I'm relying on you
+and what we've built to make it all happen now." For an event on or after
+`gg_untether_from`, `assemble_event_game_payouts` (the Games tab's Record
+Payouts, `game-payouts-preview`, `scoring-payouts-preview`) no longer waits
+for a GG board:
+- **Team / CART Net:** `_tracker_team_and_ctp_rows` reads the teams on the
+  Tracker's own EVENTS leaderboard (`get_event_leaderboard`: the drawn
+  blinds, cart teams, Team Net pops). It feeds them in GG's row shape
+  through the existing split, tie and blind rules, at the matrix
+  `team1st` / `team2nd`.
+- **CTP / Longest Putt:** paid to the holder claimed on the phones,
+  `score_entry.event_ctp_holders`, which includes a manager ruling. The
+  row carries the `customer_id`. An unclaimed hole is named in the notes
+  and not paid.
+- **Individual Net, Skins, Individual Gross:** `_engine_flight_payout_rows`
+  from `engine_game_payouts`, the engine run on the flight board's
+  SELECTION and AMOUNTS. It never takes the GG-label path, which returns
+  `flights_unknown` for a multi-flight game. A flight with no skin is
+  reported as unpaid, never guessed.
+- **When it pays:** Team and CTP wait for the leaderboard's
+  `field_complete`. The engine games need the entered cards published
+  first (`scoring-entry-publish:<id>|apply`) and every card complete.
+- **customer_id:** `import_tgf_payouts` and the preserved-row matcher
+  record to a row's `customer_id` when the row carries one, and fall back
+  to the name resolver otherwise.
+- **Never automatic:** the hourly bulk pass still skips untethered events.
+  Money is recorded only on Record Payouts.
+- **Events before the untether date** keep the GG path unchanged.
+
+Guard: `test_untethered_payouts.py`.
 
 ## Tee Time Advisor status rules (Kerry-ratified framing 2026-09-01, v2.276.0)
 
@@ -2987,6 +3075,54 @@ emailed to me."
   `|files|send[|<to>]` mails them as separate attachments in one email
   (`send_print_pack_files`). It leaves the evening-before sent hash alone.
   Guard: `test_print_pack_files.py`.
+- **Course Files and the Rules of Play** (v2.556.0, Kerry 10/13: "Print packs
+  need to also include the scorecards and rules sheets" / "Course email should
+  include Starter Sheet, Cart Signs, Scorecards, Proxies and Rules Sheets…not
+  the other stuff"). Scorecards are in every pack by default
+  (`print_pack_scorecards` unset or "all"; "off" or an id list narrows it).
+  Kerry's Rules of Play sheet, a fixed PDF at `static/print/TGF_Rules_of_Play.pdf`,
+  is bound last in every pack (part `rules-of-play`; its hash is in the pack's
+  sha). The course email (`send_print_pack_files`, the `|files` bridge and the
+  PAIRINGS tab's **Course Files** button, `POST /api/events/<id>/course-files/send`)
+  carries only `COURSE_FILE_PARTS`: Starter Sheet, Cart Signs, Scorecards,
+  Proximity, Rules of Play. Games & Payouts and Divisions & Flights are left out.
+- **Straight to the course contact** (v2.556.1, Kerry 10/13: "Set it up to send
+  straight to course contact"; **from v2.562.0 read from `course_staff`**).
+  Course Files go To the course's PRIMARY active `tgf_contact`
+  (`course_staff.print_recipients`), CC its other active TGF contacts plus
+  `print_pack_recipient` (Kerry and the chapter extras). With no primary on file
+  the route answers 409 `no_contact` and the button points the admin to the
+  Courses page (`/courses?course=<id>`). The interim `course_print_contacts`
+  setting and the `scoring-course-contact` bridge are retired. Bridge:
+  `scoring-print-pack-pdf:<id>|files|send|course`.
+- **COURSE STAFF** (v2.562.0, migration 0014, Kerry 10/13 "Deploy now" #1737;
+  shape #1699, db-claude #1701). `course_staff` holds one row per person per
+  role per course (`tgf_contact`, `general_manager`, `head_golf_professional`,
+  `assistant_general_manager`, `golf_shop`, `food_beverage`, `billing`), keyed
+  by `customer_id`; the email comes from `customer_emails`. One primary per role
+  per course among active rows (partial unique index). Deactivate, never delete.
+  `email_parser/course_staff.py`: `for_course` (the one reader),
+  `print_recipients`, `save_staff` (the one writer: admin UI, or a bridge citing
+  Kerry's OK post; dry run default; a new primary demotes the old), `non_member_ids`
+  (the one "not a member audience" predicate: course contact / sponsor / vendor
+  only, never bought or registered; Brevo sync, the pairings roster and
+  `query_customers` read it), `seed_quarry`. Routes `GET /api/courses/<id>/staff`
+  (manager) and `POST` (admin). UI: the Courses page's **Contacts** panel, and the
+  contacts box under Course in Add/Edit Event, whose **Manage contacts** opens the same
+  panel in a window (`static/js/course-staff.js`: `tgfCourseStaffPanel` / `tgfCourseStaffModal`). Bridges
+  `scoring-course-staff`, `scoring-course-staff-set`, `scoring-course-staff-seed`.
+  Guard `test_course_staff.py`.
+- **One card per group** (v2.556.2, Kerry 10/13: "Scorecards should always be
+  per group unless I direct otherwise"). The pack's scorecards are grouped by
+  `print_pack.scorecard_grouping`: per group (`team`) by default, whatever the
+  net game is. Per cart only when app setting `print_pack_scorecard_grouping`
+  is "cart" or lists the event id. The net game's name, %, and dots on the
+  card are unchanged.
+- **No CTP, no proximity page** (v2.556.6, Kerry 10/13: "If there are no Closest
+  to Pins for the event due to numbers, then don't send the page"). When
+  `event_proximity_report` has no `contests`, the pack and the course files
+  leave the part out; the build result lists it under `skipped` with the
+  report's own notes.
 - **Deploy:** `nixpacks.toml` installs `chromium` from Nix beside
   Python (`nixPkgs`), the WeasyPrint libraries via `nixLibs` (apt libs
   are invisible to the Nix Python — "cannot load library gobject-2.0-0"
@@ -3195,6 +3331,22 @@ does, the member send refuses.**
   address. It writes no `event_day_email_sends` row. This is the way to check
   how a real player's mail app renders it (the 10/13 winmail.dat / TNEF
   fix).
+- **Sender spec, standing config line (#1669, CoS #1692):** Exchange
+  remote domain Default: TNEF Never (set by Kerry 10/13). Before it, Apple
+  Mail and other non-Outlook readers got plain text plus a winmail.dat
+  attachment. The 10/13 player emails that went out before the fix are NOT
+  resent; resend only to a player who reports a problem.
+- **Re-issue after a start change** (v2.559.0, Kerry 10/13, the Quarry:
+  "Re-issue to players", "Send it - GO"): `send_event_day_reissue(event_id,
+  kerry_ok_post, confirm)`, bridge
+  `scoring-event-day-email:<id>|reissue|<post id>[|confirm]`. The same approved
+  message to every ready player, subject prefixed `UPDATED START: `, an orange
+  notice at the top of the panel naming the new start. Needs the template
+  stamp, a mailbox post carrying Kerry's word (`customer_query._kerry_ok`) and
+  confirm (dry run otherwise). Once per player per sheet state: app setting
+  `event_day_reissue:<event>:<hash of every start line>` holds the
+  customer_ids sent, so another change can be re-issued again. Does not touch
+  `event_day_email_sends`; logged to `message_log` as `event_day_email_reissue`.
 - **To approve**: Kerry reads a preview, then
   `scoring-setting-set:event_day_email_approved|<template_hash>`.
 - Test: `test_event_day_email.py` (Graph mocked).

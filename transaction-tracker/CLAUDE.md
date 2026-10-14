@@ -402,7 +402,8 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/perf.py` — the Tracker measures itself (Tracker Health lane 2026-09-22): `Stopwatch` / `@timed_route` / `timed_job` / `timed_call` → `perf_samples` (schema.md); SLOW lines in `SLOW_MS` + the `perf_slow_ms` dial; a slow sample also writes `agent_action_log` (`<name>_slow`). `app.py`'s `_TimedScheduler` wraps every job; `mcp_server._scoring_dispatch` wraps every bridge. Read with `/admin/health`, `scoring-health`
 - `email_parser/health.py` — the DAILY HEALTH DIGEST, i.e. the **CTO agent** (Kerry 2026-09-22): `build_health_report` → findings (`RULES`) → mailbox post (`tracker-health`) + COO action items (`HEALTH: <key>`, de-duped while open) + prune; dial `health_digest_time` (default 05:00 Central), checked every 15 min 4–9 AM; see coo.md
 - `email_parser/gg_archive.py` — **the GG raw archive in its OWN FILE** (`transactions_gg_archive.db`, Kerry 2026-09-23 #627): `get_connection` ATTACHes it as `arc`; every reader/writer of `gg_raw_archive` goes through `archive_table(conn)` (never name the table directly); the move is `scoring-gg-archive:plan|migrate|verify|cutover|go|vacuum|go`; weekly `gg_archive_backup` job. schema.md "The GG raw archive lives in its own file"; guard `test_gg_archive.py`
-- `email_parser/print_pack.py` — the event PRINT PACK (v2.465.0): Starter Sheet + Cart Signs + Divisions & Flights + Proximity bound into one PDF by headless Chromium (Playwright; WeasyPrint fallback); `GET /events/<id>/print-pack.pdf`; evening-before routine 5–10 PM Central mails tomorrow's packs once per change (`print_pack_sent:<id>` hash); bridge `scoring-print-pack-pdf:<id>[|send]`. See events.md
+- `email_parser/print_pack.py` — the event PRINT PACK (v2.465.0): Starter Sheet + Cart Signs + Scorecards + Games & Payouts + Divisions & Flights + Proximity + the fixed Rules of Play PDF (`static/print/`, v2.556.0) bound into one PDF; the course email (`COURSE_FILE_PARTS`, Course Files button) carries only Starter Sheet, Cart Signs, Scorecards, Proximity, Rules by headless Chromium (Playwright; WeasyPrint fallback); `GET /events/<id>/print-pack.pdf`; evening-before routine 5–10 PM Central mails tomorrow's packs once per change (`print_pack_sent:<id>` hash); bridge `scoring-print-pack-pdf:<id>[|send]`. See events.md
+- `email_parser/course_staff.py` — **COURSE STAFF** (v2.562.0, migration 0014, Kerry 10/13 #1737, db-claude #1701): the people at each course by role, keyed by customer_id; `for_course` (the one reader), `print_recipients` (Course Files To the primary TGF contact, CC the other TGF contacts), `save_staff` (the one writer), `non_member_ids` (course contacts / sponsors / vendors are never a member audience: Brevo, rosters, query_customers); Courses page Contacts panel + the contacts box in event setup; guard `test_course_staff.py`; events.md
 - `email_parser/scorecards.py` — **THE PRINTED SCORECARD** (v2.519.0, design-claude #890–#897, CA #898): three layouts × 9/18 × Team/Cart Net at `/events/<id>/scorecards[.pdf]`, every value read from the Starter Sheet's `get_event_print_pack`, `event_tee_legend`, `course_tee_holes` and `handicap_calc.ruled_dots` (the allocator G-0 stores pops with); gaps stop the print; bridge `scoring-scorecards`; guard `test_scorecards.py`; details events.md
 - `email_parser/games_sheet.py` — **THE GAMES & PAYOUTS SHEET** (v2.524.2, CD #967 + Kerry 9/29; approved "good for now" 10/3): one Letter page at `/events/<id>/games-payouts`, on the REPORTS tab and in the print pack; every figure parsed from the GAMES tab via `page_probe` (never recomputed), CTP holes from the Proximity report, Stableford from `get_scoring_formulas`, HIO from its ledger, rule text in `GAME_RULES`; pot check must equal the tab's TOTAL; guard `test_games_sheet.py`; details events.md
 - `email_parser/report.py` — Daily digest email builder + sender
@@ -413,8 +414,14 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/cup_titles.py` — **cup champion titles on the Spotlight header** (Kerry 2026-10-12, v2.538.0): `cup_titles(customer_id, season, current)` → "The Fellowship Cup - 2026 Champion" lines; current season from each cup's declared `champions` (final + enrolled + best rank), past seasons only from `CUP_CHAMPION_HISTORY` (Kerry's list, never inferred); `get_player_spotlight` → `cup_titles` (each with `photos`, v2.541.0) and `past_champions()` for `GET /api/cup-champions` (the Past Champions strip on both cup boards); guard `test_cup_titles.py`; lone-star-cup-board.md
 - `email_parser/lsc_recap.py` — **Lone Star Cup recap DRAFTS** (Kerry 10/9, v2.533.4): `build_recap('saturday'|'final')` from `lsc_cup.lsc_board_payload()` only (session scores, every match on one line, standouts the cards back, Cup math from `cup_status`; clinch only when finish times are in the data; no dollars), refused until the sessions are final; DRAFT to Kerry only, once per kind (`lsc_recap_sent`), job `lsc_recap_auto` every 10 min on the Cup's dates behind setting `lsc_recap_auto` (default on); bridge `scoring-lsc-recap`; guard `test_lsc_recap.py`; lone-star-cup-board.md
 - `email_parser/event_day_email.py` — **the EVENT-DAY EMAIL** (CA #829, 2026-09-28; **design A2 since v2.553.0**, Kerry 10/12: a YOUR START card with the group, tees and format, plus a GAMES card read from the GAMES tab via page_probe; email-safe tables only; structure in code, words in the template): one pairing email per roster player (start as the Starter Sheet states it, group-mates, cart partner, course/date, games bought from `_event_game_buyers` or nothing), wording = system template `Event Day — Your Pairing`; any blank / leftover `{tag}` / `[BLANK]` HOLDS the message; staff-only preview; member send refuses unless `event_day_email_approved` = the current template hash AND confirm, once per event+customer (`event_day_email_sends`). Bridges `scoring-event-day-email:<id>[|preview[|<staff>]]` (no member-send bridge); guard `test_event_day_email.py`; details events.md
+- `email_parser/results_email.py` — **THE RESULTS EMAIL** (Kerry 2026-10-13/14, v2.565.0): one personal email per person after an event night (players: their card with pops, winnings from the recorded rows, handicap, points linked to their own row; everyone else: their standing), the chapter's recap story from `docs/claude/recaps/`, UP NEXT from the event rows. Audience = players + chapter members + played the chapter in 12 months, minus the invitation exclusions; leads not included. Guards hold every send (final, card parity, recorded = engine, lint); once per person (`results_email_sent:<event>`); sent at **6:00 AM the next morning** (Kerry #1778): the 9 PM closeout schedules it (`schedule-next`) in `results_email_schedule`, job `results_email_auto` sends it; previews to staff or a chapter manager's own address; bridge `scoring-results-email` (members only through a schedule carrying a Kerry-OK post); guard `test_results_email.py`; spec `docs/claude/manager-fellowship-prompt.md`
+- `email_parser/card_parity.py` — **ENGINE vs SCORECARD CHECK** (Kerry 2026-10-14, v2.564.0, after s9.27's Dan Stich): the engine reads the strokes saved on each card (`event_engine_state`, one source), and `engine_card_parity(event)` checks every entered player (saved strokes vs the rule on his own tee; engine card vs saved card). Any difference holds `record_event_game_payouts`, `closeout_final_check` and the points rebuild, and every publish raises one HIGH COO item `SCORING HOLD`; bridge `scoring-card-parity`; guard `test_card_parity.py`; score-entry.md
+- `email_parser/auto_payouts.py` — **PRIZE MONEY RUNS ITSELF** (Kerry 2026-10-13, v2.562.6). A score-entry card is final 15 minutes after its group's last score (`score_entry.card_final_at`, dial `se_card_lock_minutes`; the manager can Unlock it). Every minute, job `auto_payouts` checks each event. Once the field is in, it computes the GAMES-tab money as the board preview (app setting `auto_payouts_preview`, read by `get_event_leaderboard`), and the WON column shows it marked not final. Once every card is final, it records the money (`record_event_game_payouts`, paid-safe). Dial `auto_payouts`; bridge `scoring-auto-payouts`; guard `test_auto_payouts.py`; score-entry.md
 - `email_parser/live_scoring_default.py` — **Live Scoring ON BY DEFAULT** (Kerry 2026-10-13, v2.554.0): from 5 PM Central the day before (and all event day), an event with saved pairings joins `score_entry_events` and its rounds are seeded; job `live_scoring_auto` every 15 min (dial `live_scoring_auto`); the event-day email ensures it before any preview or send; never switches off; skips GG-era and Cup events; guard `test_live_scoring_default.py`; score-entry.md
 - `email_parser/pairings_approval.py` — **MANAGER APPROVES THE PAIRINGS → player emails** (Kerry 2026-10-13, v2.555.0): job `pairings_approval_prompt` mails the chapter manager one review prompt per sheet; `/events/<id>/approve-pairings` (manager login, own chapter) approves the fingerprinted sheet and runs the event-day member send; state in app setting `pairings_approval`; dial `pairings_approval_prompt`; guard `test_pairings_approval.py`; events.md
+- `templates/live_scoring_guide.html` — **the players' LIVE SCORING HOW-TO** (Kerry 2026-10-13, v2.561.3): public `/member/live-scoring`, eleven steps as slides or one page (step 1 = the three ways in: cart-sign QR, scorecard QR, the email's Keep score button, each circled), `#step-N` links; every screenshot one full iPhone screen (780x1688) so each phone is the same size; every word in the template's `steps` list, phone screenshots in `static/img/live-scoring/` (replace by file name); guard `test_live_scoring_guide.py`; score-entry.md
+- `email_parser/invitations.py` — **TRACKER EVENT INVITATIONS + RSVPs** (Kerry 2026-10-13, v2.563.0): the ruled audience (chapter members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered), I'm in → the event's registration page, Can't make it / Stop invitations via a confirm page at `/rsvp/<token>`, answers as `rsvps` rows `tracker:<event>:<cid>` that survive `gg_rsvps_off`; schedule 7 AM (Tue event: Wed invite, Fri + Sun reminders, Mon last call; weekend: Fri two weeks out, next Fri, Tue, Wed last call), job `event_invite_auto` locked behind the dial + Kerry's wording stamp `event_invite_approved`; bridge `scoring-event-invite`; guard `test_invitations.py`; events.md
+- **`/member/results/<event_id>`** (app.py `member_results_event`, Kerry 2026-10-13, v2.563.5): one event's results, the member Events page opened on that event (`window.EVLB_OPEN`); recaps link here, never the bare list (event-recaps.md lesson 68); guard `test_events_leaderboard_all.py`
 - `email_parser/member_teesheet.py` — **the public MEMBER TEE SHEET** (Kerry 2026-10-13, v2.554.0): `/member/teesheet/<event_id>`, groups/starts/players/carts/tee names from `get_event_print_pack`, no PII or money, no PIN; the event-day email links to it at `#g<group>`; guard `test_event_day_email.py`
 - `email_parser/bounces.py` — **BOUNCE INTAKE** (CA #688, Kerry 2026-09-25 "Deal with this.", after the Hayden Cooper 550 5.1.2): `parse_ndr` reads Exchange/MTA non-delivery reports (rejected address, basic + enhanced SMTP code); `process_bounces` marks a PERMANENT (5.x.x) bounce undeliverable on every `customer_emails` row with that address via `set_email_undeliverable` (reason = code + server text + "NDR <date>") and raises ONE COO action item per customer ("Email bounced: <name> <email>"); TRANSIENT (4.x.x) is logged only. Job `bounce_inbox_check` (every 15 min, `BOUNCE_CHECK_INTERVAL_MINUTES`) reads the sending mailboxes; the 2-min expense check hands NDRs to it before classifying. Dedup via `expense_seen_emails` (`classified_as='ndr'`). Guard `test_bounce_intake.py`
 - `email_parser/entry_publish.py` — **G-0 KEYSTONE** (CA #786 GO 1, v2.508.0): closed+signed entered cards → `scoring_rounds`/`scoring_holes` (`source='entry'`, key `gg_aggregate_id='entry:<round>'`). WRITES only when the event has no GG rows and is on/after app setting `entry_record_from` (default 2026-10-10); otherwise SHADOW (writes nothing, returns `entry_parity`). `import_gg_scorecards` refuses to write into an event/player-date that entered scores own. Reads se_* only through `score_entry.get_entered_scores`. Bridges `scoring-entry-publish:<event_id>[|<round_id>][|apply]`, `scoring-entry-parity:<event_id>`; guard `test_entry_publish.py`; details score-entry.md
@@ -571,7 +578,7 @@ headers, and a payout **category color map**. **Typography rule
 (RATIFIED, Kerry 2026-07-09, mailbox #44; EXCEPTION Kerry 2026-10-12: names and money in every STANDINGS are Bitter, money larger and right-aligned on the name row): Bitter serif only for
 headings, nav/CTA labels, eyebrows, and large stat numerals; dense data
 (table cells, list rows, numeric columns) is system sans with
-tabular-nums — be judicious with Bitter.** `templates/tgf.html` is the
+tabular-nums — be judicious with Bitter.** **Every nav link and every button is Bitter, app-wide (Kerry 2026-10-13: "All nav bar links should be bitters always. Buttons too")**: one rule at the top of `.btn` in dashboard.css covers `button`, `.btn`, `.tab-nav a`, `.sub-tab`, `.top-tab`, `.contest-cta`. `templates/tgf.html` is the
 Phase 1 reference implementation (dark nav, sub-tab pill convention, and
 the GOLFERS "Command Ledger": dark leaderboard rail + golfer winnings
 detail with collapsible chapter bands). Tokens live in `dashboard.css`
@@ -654,8 +661,10 @@ that are NOT layout-mode switches (640px scorecard/points density, 700/720/
 760px grid collapses, 900px split panes) are cosmetic and stay as they are.
 Because the desktop layout now runs down to 561px, `shell.css` wraps the
 header into two rows between 561px and 1479px (brand + right-hand pills on
-row 1, links on row 2; member shell: brand + CTA, then the three tabs) —
-above 1480px the single row is unchanged.
+row 1, links on row 2) —
+above 1480px the single row is unchanged. The MEMBER shell (brand + three
+tabs + CTA) stays on one row down to 860px and wraps only 561–859px (Kerry
+2026-10-13).
 
 ## Handicap identity: `customer_id` (v2.459.0)
 
@@ -705,7 +714,7 @@ use). Chapter semantic layer: `--chapter-austin #BF5700` (white text),
 `--chapter-sa #D3DDE4` (dark text, alt `--chapter-sa-alt #8FA8B8`),
 `--chapter-national #374151` — applied to the Events/Handicaps chapter pills.
 PWA `theme-color` metas + manifest are TGF orange. Do not reintroduce royal
-blue for interactive/CTA states. **BOUGHT IN (Kerry 2026-10-12, v2.547.0: on the POINTS RACES and FELLOWSHIP CUP boards a bought-in row is now plain WHITE and a NOT-bought-in row a soft grey `#EEEEEC` with muted text and a BUY IN pill while the race is not final — the green below still rules the Events leaderboard and badges). It was one green app-wide
+blue for interactive/CTA states. **BOUGHT IN ROWS, EVERY LEADERBOARD (Kerry 2026-10-13, v2.558.1: "For all leaderboard views everywhere, adopt the new standards we set with the grey for those not bought in and no color for those who are"): a bought-in row is plain WHITE (`--buyin-row`) and a NOT-bought-in row soft grey `--buyin-nobuy` #EEEEEC with `--buyin-nobuy-text` #6B7280 — Season Contests, the Events leaderboard, the Lone Star Cup skins, every board. Green (`--buyin-green`, below) survives only on badges/chips, never as a row colour; `test_events_board.js` guards it. It was one green app-wide
 (v2.395.0, Kerry 2026-09-13: "Same green as points race but ins for
 events"):** `--buyin-green #bbf7d0` / `--buyin-green-text #15803D` /
 `--buyin-grey #FAFAFA`. Green means bought in and nothing else (the
@@ -816,6 +825,69 @@ stay on until app setting `gg_rsvps_off`=1. The 5-minute GG live poll is OFF
 unless `AUTO_LIVE_POLL=1`. Events before it keep their GG walks (the 10/6 points). A NEW
 Golf Genius path must call the same rule. Move the date only on Kerry's word.
 Guard `test_gg_untether.py`.
+
+**Every leaderboard from GAMES (Kerry 2026-10-13: "All leaderboards should be
+generated based on GAMES. Golf Genius doesn't have anything to do with anything
+now except for historical records").** `get_event_leaderboard` reads
+`gg_game_flights` / `gg_game_results` only for a GG-era event (`_gg_era`, from
+`gg_allowed`). For a Tracker-scored event, three sources replace them:
+- flights come from `event_flights_board`, the payouts' own selection;
+- Closest to Pin comes from the phone claims;
+- team purses come from the GAMES money.
+
+Guard `test_board_engine_flights.py`.
+
+**Golf Genius POINTS intake is OFF (Kerry 2026-10-13, CoS #1693-1):** "you'll need
+to turn off the GG connector that automates bringing them in. I want to make sure
+we're calculating them correctly." App setting `gg_points_intake` (off unless it
+reads `on`, `gg_untether.gg_points_intake_on`). While off, a points board serves
+its saved snapshot and never refreshes, the monthly-points job keeps its snapshot,
+the row-expansion proxy (`/api/season-contests/points-race/detail`) makes no GG
+call, and `refresh_points_race_standings` (which overwrites live standings)
+refuses. Manual read-only captures that write elsewhere (`points_ledger`) still
+run, for Kerry's GG comparison. Turn it on only on Kerry's word. Guard
+`test_gg_points_intake.py`.
+
+**The Tracker computes the Fall races and Monthly (Kerry 2026-10-13: "I'm relying
+on you and what we've built")** — `email_parser/tracker_points.py`. It builds
+the standings from three sources:
+- Golf Genius's own lines through 9/29, frozen in `data/points_baseline/fall_2026_gg_through_0929.json`.
+- Kerry-ruled events in `ruled_events.json` (10/6: "Yes, 54 is right for Baker").
+- Every later published entered event, computed by the engine: net Stableford, floored at 0, plus off the round, an 18 = two entries.
+
+Rules:
+- Members only.
+- The player's home-chapter race.
+- Best N, and a championship line always counts.
+
+The blind test matched GG's own boards on every player but the ruled Baker
+(`test_tracker_points.py`). How it runs:
+- While app setting `points_source` = `tracker`, the GG refresh path rebuilds
+  those races from the Tracker instead of refusing (no network), and the
+  monthly job writes the Tracker's months.
+- The row expansion serves our own lines. Concluded races serve GG's table
+  from the newest captured ledger.
+- Bridge `scoring-tracker-points[:apply]` (dry run by default).
+
+**2026 is locked on our side (Kerry 2026-10-13: "All needs to be hardened/locked on
+our side to not rely on Golf Genius for anything related to 2026 without losing ANY
+results").**
+- **Championship boards:** the Fellowship Cup / Players Cup championship boards and
+  every player's championship card are FROZEN exactly as members saw them
+  (`email_parser/gg_freeze.py`, `gg_data_snapshots` keys
+  `frozen_champ_points:<race>` / `frozen_champ_cards:<race>`, bridge
+  `scoring-gg-freeze-champ`).
+- **How the freeze is served:** `fetch_champ_points` / `fetch_champ_player_card`
+  serve the freeze while intake is off. They never serve the older
+  `gg_champ_final_board_*` copy, which differs by a point for Jeff Young and would
+  flip the Players Cup champion.
+- **Jobs off:** the hourly results check and the nightly tee-sheet grab do nothing
+  unless app setting `gg_auto_jobs` = `on`.
+- **Retired / stopped:** the GG Team Net import is retired, and live City Match
+  Play polling stops with intake off.
+- **Backup:** the captured points ledger (`gg_points_ledger/`) is in the nightly
+  file backup.
+- Guard `test_gg_hardened_2026.py`.
 
 ## No-push window during live events (CA #829, 2026-09-28, standing rule)
 

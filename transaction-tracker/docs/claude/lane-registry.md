@@ -55,6 +55,14 @@ Star Cup, possibly CGO › Golf Genius History Archive and handicap work, with t
 closeout Routines moving under CGO. Open question: where the line sits between
 CGO and COO. Renames wait for his ruling.
 
+**CCO umbrella (Kerry's word, mailbox #1684; recorded 2026-10-13 per CoS #1692):**
+Customer Communications (event invitations, RSVPs, the event-day email) and
+Course Connection (course-contact correspondence and the course lifecycle) sit
+under the CCO. Course Connection design is held past its concepts doc and
+Slice 1 (M1 by email plus contacts on the `course_staff` shape) until Kerry
+places the rest in the Convergence release sequence (CoS #1696). The other
+CGO renames still wait for the ratified C-suite tree (#1437).
+
 **Moved to CA (Kerry, 2026-09-23 ~5:35 PM):** the full C-Suite tree (seats incl.
 CGO and the new CCO, what each owns, advisor personas per seat, lanes and
 Routines under each, reporting, loops) is being built with Kerry in CA. The

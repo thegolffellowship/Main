@@ -191,7 +191,7 @@ g3id = se.upsert_group(r3, 1, players=[
     {"customer_id": 301, "display_name": "Kerry N", "tee": "50-64", "playing_handicap": 5},
     {"customer_id": 303, "display_name": "Pat Y", "tee": "50-64", "playing_handicap": 0}], db_path=DB)["group_id"]
 lst = lambda: {e["id"]: e for e in db.get_events_leaderboard(db_path=DB)["events"]}
-check("no score yet: not listed", EV3 not in lst())
+check("no score yet, groups exist: listed (Kerry 10/13: show starting when tee times are generated)", EV3 in lst())
 se.claim_group(g3id, "dev3", 301, db_path=DB)
 se.write_scores(g3id, "dev3", 301, [{"op_id": f"p{h}-{cid}", "hole": h, "gross": 4, "customer_id": cid}
                                      for h in (1, 2, 3, 4) for cid in (301, 303)], db_path=DB)

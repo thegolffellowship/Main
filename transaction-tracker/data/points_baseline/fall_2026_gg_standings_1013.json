@@ -1,0 +1,765 @@
+{
+ "note": "GG's own Fall standings as of 10/13 (10/6 awarded by Kerry in GG), read-only, for the parity test only.",
+ "standings": {
+  "san_antonio_fall_net": [
+   {
+    "rank": "1",
+    "player_name": "RIDEOUT, Jeff",
+    "member_card_id": "12351479",
+    "tournaments": 10,
+    "wins": 1,
+    "total_points": 60,
+    "affiliation": ""
+   },
+   {
+    "rank": "2",
+    "player_name": "MAZANEC, Luke",
+    "member_card_id": "12135103",
+    "tournaments": 10,
+    "wins": 4,
+    "total_points": 55,
+    "affiliation": ""
+   },
+   {
+    "rank": "3",
+    "player_name": "BAKER, Adam",
+    "member_card_id": "11311131",
+    "tournaments": 7,
+    "wins": 2,
+    "total_points": 53,
+    "affiliation": ""
+   },
+   {
+    "rank": "4",
+    "player_name": "STICH, Dan",
+    "member_card_id": "11251659",
+    "tournaments": 8,
+    "wins": 1,
+    "total_points": 52,
+    "affiliation": ""
+   },
+   {
+    "rank": "5",
+    "player_name": "NIESTER, Kerry",
+    "member_card_id": "183496",
+    "tournaments": 8,
+    "wins": 1,
+    "total_points": 50,
+    "affiliation": ""
+   },
+   {
+    "rank": "T6",
+    "player_name": "MURPHY, Mike",
+    "member_card_id": "183768",
+    "tournaments": 5,
+    "wins": 2,
+    "total_points": 46,
+    "affiliation": ""
+   },
+   {
+    "rank": "T6",
+    "player_name": "PALACIOS, Richard",
+    "member_card_id": "183750",
+    "tournaments": 8,
+    "wins": 1,
+    "total_points": 46,
+    "affiliation": ""
+   },
+   {
+    "rank": "T8",
+    "player_name": "MARROQUIN, Scott",
+    "member_card_id": "7144556",
+    "tournaments": 6,
+    "wins": 0,
+    "total_points": 45,
+    "affiliation": ""
+   },
+   {
+    "rank": "T8",
+    "player_name": "SOUTH, Daniel",
+    "member_card_id": "11126866",
+    "tournaments": 7,
+    "wins": 1,
+    "total_points": 45,
+    "affiliation": ""
+   },
+   {
+    "rank": "10",
+    "player_name": "WADE, Mary",
+    "member_card_id": "5287212",
+    "tournaments": 7,
+    "wins": 0,
+    "total_points": 41,
+    "affiliation": ""
+   },
+   {
+    "rank": "T11",
+    "player_name": "ANTHIS, Larry",
+    "member_card_id": "183519",
+    "tournaments": 6,
+    "wins": 0,
+    "total_points": 40,
+    "affiliation": ""
+   },
+   {
+    "rank": "T11",
+    "player_name": "YOUNG, Jeff",
+    "member_card_id": "183516",
+    "tournaments": 6,
+    "wins": 0,
+    "total_points": 40,
+    "affiliation": ""
+   },
+   {
+    "rank": "T13",
+    "player_name": "SALDANA, Jesse",
+    "member_card_id": "12360956",
+    "tournaments": 3,
+    "wins": 1,
+    "total_points": 31,
+    "affiliation": ""
+   },
+   {
+    "rank": "T13",
+    "player_name": "YOUNGS, Pat",
+    "member_card_id": "8538469",
+    "tournaments": 4,
+    "wins": 1,
+    "total_points": 31,
+    "affiliation": ""
+   },
+   {
+    "rank": "15",
+    "player_name": "VASQUEZ, Gus",
+    "member_card_id": "348539",
+    "tournaments": 7,
+    "wins": 1,
+    "total_points": 28,
+    "affiliation": ""
+   },
+   {
+    "rank": "16",
+    "player_name": "DelCARMEN, Michelle",
+    "member_card_id": "10074400",
+    "tournaments": 5,
+    "wins": 1,
+    "total_points": 27,
+    "affiliation": ""
+   },
+   {
+    "rank": "17",
+    "player_name": "FEHLIS, Chuck",
+    "member_card_id": "7085644",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 26,
+    "affiliation": ""
+   },
+   {
+    "rank": "18",
+    "player_name": "SHARITZ, Don",
+    "member_card_id": "183850",
+    "tournaments": 5,
+    "wins": 0,
+    "total_points": 18,
+    "affiliation": ""
+   },
+   {
+    "rank": "T19",
+    "player_name": "ALLEN, Morris",
+    "member_card_id": "13004025",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 15,
+    "affiliation": ""
+   },
+   {
+    "rank": "T19",
+    "player_name": "BOURQUIN, Craig",
+    "member_card_id": "10945222",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 15,
+    "affiliation": ""
+   },
+   {
+    "rank": "T19",
+    "player_name": "BURLINGAME, Rob",
+    "member_card_id": "183747",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 15,
+    "affiliation": ""
+   },
+   {
+    "rank": "T19",
+    "player_name": "SANFORD, Andy",
+    "member_card_id": "11503287",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 15,
+    "affiliation": ""
+   },
+   {
+    "rank": "23",
+    "player_name": "WOLIN, Allen",
+    "member_card_id": "12349277",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 13,
+    "affiliation": ""
+   },
+   {
+    "rank": "T24",
+    "player_name": "AGUILERA, Hector",
+    "member_card_id": "12415121",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 12,
+    "affiliation": ""
+   },
+   {
+    "rank": "T24",
+    "player_name": "KULAWIK, Steve",
+    "member_card_id": "4405838",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 12,
+    "affiliation": ""
+   },
+   {
+    "rank": "T24",
+    "player_name": "SKINNER, Nic",
+    "member_card_id": "11335741",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 12,
+    "affiliation": ""
+   },
+   {
+    "rank": "27",
+    "player_name": "THOMPSON, Brian",
+    "member_card_id": "11258891",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 11,
+    "affiliation": ""
+   },
+   {
+    "rank": "T28",
+    "player_name": "ANGELONE, Justin",
+    "member_card_id": "12988391",
+    "tournaments": 5,
+    "wins": 0,
+    "total_points": 10,
+    "affiliation": ""
+   },
+   {
+    "rank": "T28",
+    "player_name": "WICKER, Fred",
+    "member_card_id": "5277836",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 10,
+    "affiliation": ""
+   },
+   {
+    "rank": "T30",
+    "player_name": "CALLAWAY, Rob",
+    "member_card_id": "2626330",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 9,
+    "affiliation": ""
+   },
+   {
+    "rank": "T30",
+    "player_name": "HAMILTON, Doug",
+    "member_card_id": "8329335",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 9,
+    "affiliation": ""
+   },
+   {
+    "rank": "T30",
+    "player_name": "JOHNSON, Reggie",
+    "member_card_id": "12520764",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 9,
+    "affiliation": ""
+   },
+   {
+    "rank": "T30",
+    "player_name": "MILLER, Daniel",
+    "member_card_id": "12999814",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 9,
+    "affiliation": ""
+   },
+   {
+    "rank": "T34",
+    "player_name": "WAFFORD, Jeremy",
+    "member_card_id": "10969802",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 8,
+    "affiliation": ""
+   },
+   {
+    "rank": "T34",
+    "player_name": "Williams, Jacob",
+    "member_card_id": "12993288",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 8,
+    "affiliation": ""
+   },
+   {
+    "rank": "T36",
+    "player_name": "LEWIS, Wade",
+    "member_card_id": "13012450",
+    "tournaments": 4,
+    "wins": 0,
+    "total_points": 7,
+    "affiliation": ""
+   },
+   {
+    "rank": "T36",
+    "player_name": "Pearson, Jason",
+    "member_card_id": "13004034",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 7,
+    "affiliation": ""
+   },
+   {
+    "rank": "38",
+    "player_name": "CLARKSON, Bear",
+    "member_card_id": "13004029",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 6,
+    "affiliation": ""
+   },
+   {
+    "rank": "T39",
+    "player_name": "McCRARY, Justin",
+    "member_card_id": "12351478",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 5,
+    "affiliation": ""
+   },
+   {
+    "rank": "T39",
+    "player_name": "WALLACE, Will",
+    "member_card_id": "12982254",
+    "tournaments": 4,
+    "wins": 0,
+    "total_points": 5,
+    "affiliation": ""
+   },
+   {
+    "rank": "T41",
+    "player_name": "McCORMICK, Michele",
+    "member_card_id": "13004033",
+    "tournaments": 4,
+    "wins": 0,
+    "total_points": 4,
+    "affiliation": ""
+   },
+   {
+    "rank": "T41",
+    "player_name": "WILSON, James",
+    "member_card_id": "9943059",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 4,
+    "affiliation": ""
+   },
+   {
+    "rank": "T43",
+    "player_name": "ATKINSON, Bob",
+    "member_card_id": "11606489",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 3,
+    "affiliation": ""
+   },
+   {
+    "rank": "T43",
+    "player_name": "Espinosa, Christopher",
+    "member_card_id": "13026331",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 3,
+    "affiliation": ""
+   },
+   {
+    "rank": "T45",
+    "player_name": "Mejia, Joe",
+    "member_card_id": "13047009",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 2,
+    "affiliation": ""
+   },
+   {
+    "rank": "T45",
+    "player_name": "PETERSON, Will",
+    "member_card_id": "818241",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 2,
+    "affiliation": ""
+   }
+  ],
+  "austin_fall_net": [
+   {
+    "rank": "1",
+    "player_name": "YOUNGS, Luke",
+    "member_card_id": "9079869",
+    "tournaments": 10,
+    "wins": 3,
+    "total_points": 62,
+    "affiliation": ""
+   },
+   {
+    "rank": "2",
+    "player_name": "WADE, John",
+    "member_card_id": "5199524",
+    "tournaments": 8,
+    "wins": 1,
+    "total_points": 50,
+    "affiliation": ""
+   },
+   {
+    "rank": "3",
+    "player_name": "STRAITON, Robert",
+    "member_card_id": "9245422",
+    "tournaments": 12,
+    "wins": 1,
+    "total_points": 46,
+    "affiliation": ""
+   },
+   {
+    "rank": "4",
+    "player_name": "BARTZ, Joshua",
+    "member_card_id": "11966062",
+    "tournaments": 5,
+    "wins": 1,
+    "total_points": 36,
+    "affiliation": ""
+   },
+   {
+    "rank": "5",
+    "player_name": "VASQUEZ, Lee",
+    "member_card_id": "9229096",
+    "tournaments": 4,
+    "wins": 1,
+    "total_points": 34,
+    "affiliation": ""
+   },
+   {
+    "rank": "6",
+    "player_name": "SCHNEIDER, Louis",
+    "member_card_id": "12347458",
+    "tournaments": 5,
+    "wins": 1,
+    "total_points": 31,
+    "affiliation": ""
+   },
+   {
+    "rank": "7",
+    "player_name": "Compton, Kyle",
+    "member_card_id": "11184495",
+    "tournaments": 6,
+    "wins": 1,
+    "total_points": 30,
+    "affiliation": ""
+   },
+   {
+    "rank": "T8",
+    "player_name": "CANNON, Chris",
+    "member_card_id": "12628130",
+    "tournaments": 7,
+    "wins": 0,
+    "total_points": 29,
+    "affiliation": ""
+   },
+   {
+    "rank": "T8",
+    "player_name": "SHARP, Matt",
+    "member_card_id": "11432786",
+    "tournaments": 5,
+    "wins": 0,
+    "total_points": 29,
+    "affiliation": ""
+   },
+   {
+    "rank": "10",
+    "player_name": "CLOER, Neal",
+    "member_card_id": "10056187",
+    "tournaments": 4,
+    "wins": 1,
+    "total_points": 28,
+    "affiliation": ""
+   },
+   {
+    "rank": "11",
+    "player_name": "ZAPATA, Carlos",
+    "member_card_id": "12628132",
+    "tournaments": 4,
+    "wins": 1,
+    "total_points": 26,
+    "affiliation": ""
+   },
+   {
+    "rank": "12",
+    "player_name": "MOORE, Dion",
+    "member_card_id": "11359163",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 25,
+    "affiliation": ""
+   },
+   {
+    "rank": "13",
+    "player_name": "AREVALO, Guillermo",
+    "member_card_id": "13024613",
+    "tournaments": 6,
+    "wins": 1,
+    "total_points": 23,
+    "affiliation": ""
+   },
+   {
+    "rank": "T14",
+    "player_name": "BARNA, Kelly",
+    "member_card_id": "5039652",
+    "tournaments": 4,
+    "wins": 0,
+    "total_points": 20,
+    "affiliation": ""
+   },
+   {
+    "rank": "T14",
+    "player_name": "HOGUE, Jay",
+    "member_card_id": "7124833",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 20,
+    "affiliation": ""
+   },
+   {
+    "rank": "T14",
+    "player_name": "MCCORMICK, Sam",
+    "member_card_id": "12355458",
+    "tournaments": 2,
+    "wins": 1,
+    "total_points": 20,
+    "affiliation": ""
+   },
+   {
+    "rank": "T17",
+    "player_name": "HIGHTOWER, Geoff",
+    "member_card_id": "11510502",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 16,
+    "affiliation": ""
+   },
+   {
+    "rank": "T17",
+    "player_name": "MELCHOR, Eduardo",
+    "member_card_id": "11432768",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 16,
+    "affiliation": ""
+   },
+   {
+    "rank": "19",
+    "player_name": "MCDONNELL, Kaleb",
+    "member_card_id": "12841699",
+    "tournaments": 3,
+    "wins": 1,
+    "total_points": 15,
+    "affiliation": ""
+   },
+   {
+    "rank": "T20",
+    "player_name": "CHESHIRE, Neil",
+    "member_card_id": "11339709",
+    "tournaments": 2,
+    "wins": 1,
+    "total_points": 14,
+    "affiliation": ""
+   },
+   {
+    "rank": "T20",
+    "player_name": "Zac Hammond",
+    "member_card_id": "11510503",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 14,
+    "affiliation": ""
+   },
+   {
+    "rank": "22",
+    "player_name": "DOGGETT, Hayden",
+    "member_card_id": "11409511",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 13,
+    "affiliation": ""
+   },
+   {
+    "rank": "T23",
+    "player_name": "DONOVAN, Tom",
+    "member_card_id": "13011541",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 12,
+    "affiliation": ""
+   },
+   {
+    "rank": "T23",
+    "player_name": "JENKINS, Mike",
+    "member_card_id": "11571110",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 12,
+    "affiliation": ""
+   },
+   {
+    "rank": "T23",
+    "player_name": "KIRKSEY, Stu",
+    "member_card_id": "11363546",
+    "tournaments": 2,
+    "wins": 1,
+    "total_points": 12,
+    "affiliation": ""
+   },
+   {
+    "rank": "T26",
+    "player_name": "DOGGETT, Bryce",
+    "member_card_id": "11325236",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 11,
+    "affiliation": ""
+   },
+   {
+    "rank": "T26",
+    "player_name": "LUNA, Isabella",
+    "member_card_id": "11261715",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 11,
+    "affiliation": ""
+   },
+   {
+    "rank": "T26",
+    "player_name": "REED, Paul",
+    "member_card_id": "11369283",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 11,
+    "affiliation": ""
+   },
+   {
+    "rank": "T26",
+    "player_name": "WILLIAMS, Yolanda",
+    "member_card_id": "12351473",
+    "tournaments": 3,
+    "wins": 0,
+    "total_points": 11,
+    "affiliation": ""
+   },
+   {
+    "rank": "30",
+    "player_name": "Hall, Taylor",
+    "member_card_id": "13024612",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 8,
+    "affiliation": ""
+   },
+   {
+    "rank": "T31",
+    "player_name": "FRANZ, Kyle",
+    "member_card_id": "12396717",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 7,
+    "affiliation": ""
+   },
+   {
+    "rank": "T31",
+    "player_name": "King, Jeff",
+    "member_card_id": "13004012",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 7,
+    "affiliation": ""
+   },
+   {
+    "rank": "T33",
+    "player_name": "CHESHIRE, Sharon",
+    "member_card_id": "12345795",
+    "tournaments": 2,
+    "wins": 0,
+    "total_points": 6,
+    "affiliation": ""
+   },
+   {
+    "rank": "T33",
+    "player_name": "GWIN, Billy",
+    "member_card_id": "11920055",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 6,
+    "affiliation": ""
+   },
+   {
+    "rank": "T33",
+    "player_name": "SCHNEIDER, Louis",
+    "member_card_id": "13085037",
+    "tournaments": 2,
+    "wins": 1,
+    "total_points": 6,
+    "affiliation": ""
+   },
+   {
+    "rank": "36",
+    "player_name": "POST, Brent",
+    "member_card_id": "11369746",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 5,
+    "affiliation": ""
+   },
+   {
+    "rank": "T37",
+    "player_name": "BROWN, Kannon",
+    "member_card_id": "12992877",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 1,
+    "affiliation": ""
+   },
+   {
+    "rank": "T37",
+    "player_name": "ESTES, Ryan",
+    "member_card_id": "11441610",
+    "tournaments": 1,
+    "wins": 0,
+    "total_points": 1,
+    "affiliation": ""
+   }
+  ]
+ }
+}

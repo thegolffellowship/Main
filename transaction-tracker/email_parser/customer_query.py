@@ -48,7 +48,8 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
                            AND substr(e.event_date, 1, 10) >= ?) AS rounds_since
                   FROM customers c
                  WHERE {' AND '.join(where)}""", [year_from] + args).fetchall()
-        vendors = set() if include_vendors else db.vendor_customer_ids(conn)
+        from email_parser.course_staff import non_member_ids
+        vendors = set() if include_vendors else non_member_ids(conn)
     rows = [r for r in rows if r["customer_id"] not in vendors]
     out = [{"customer_id": r["customer_id"],
             "name": f"{r['first_name'] or ''} {r['last_name'] or ''}".strip(),

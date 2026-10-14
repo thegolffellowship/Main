@@ -67,6 +67,12 @@ c = sqlite3.connect(tmp)
 for cid in (401, 402, 403, 404, 405):
     c.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, holes_played, gross, source, tee_id) "
               "VALUES (?, ?, 771, '2026-10-13', 9, 36, 'entry', 1)", (cid, " ".join(people[cid])))
+# The card's tee, with its holes: the engine-vs-card check (Kerry 10/14)
+# needs par and stroke index to build the engine's card.
+c.execute("INSERT OR IGNORE INTO courses (course_id, name) VALUES (1, 'Future Links')")
+c.execute("INSERT OR IGNORE INTO course_tees (tee_id, course_id, tee_name) VALUES (1, 1, 'White')")
+for _h in range(1, 10):
+    c.execute("INSERT OR IGNORE INTO course_tee_holes (tee_id, hole_number, par, stroke_index) VALUES (1, ?, 4, ?)", (_h, _h))
 c.execute("INSERT INTO tgf_events (id, code, name, event_date, events_id) VALUES (91, 's9.40', 's9.40 Future Links', '2026-10-13', 771)")
 c.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description) VALUES (91, 401, 'Individual Net', 20, 'x')")
 c.commit(); c.close()
@@ -89,7 +95,10 @@ c.execute("UPDATE scoring_holes SET strokes_received = 1 WHERE scoring_round_id 
           "(SELECT id FROM scoring_rounds WHERE event_id = 771 AND customer_id = 403)")
 c.commit(); c.close()
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, status="open", sign=False))
-check("unsigned cards block, each player named", not f["final"] and any("Ann Able: card not signed" in b for b in f["blocking"]), f.get("blocking"))
+# Kerry 10/13: an unsigned confirmed card waits for its 15-minute lock.
+check("unsigned cards block, each player named", not f["final"] and any(
+    "Ann Able: card not signed" in b or "Ann Able: card final at" in b
+    for b in f["blocking"]), f.get("blocking"))
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, hio=[{"hole": 3, "status": "witnessed"}]))
 check("a hole-in-one claim still in flight blocks", not f["final"] and any("hole-in-one" in b for b in f["blocking"]), f.get("blocking"))
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, ctp={"3": None}))

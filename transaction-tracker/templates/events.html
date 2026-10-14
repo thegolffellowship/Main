@@ -899,7 +899,16 @@
             line-height: 1;
         }
         .row-actions-toggle:hover { background: #1f2937; }
-    </style>
+        .course-staff-box { border: 1px solid var(--border, #E5E7EB); border-radius: 8px; padding: 8px 10px; background: #FAFAFA; font-size: 12.5px; }
+    .course-staff-box .cs-head { font-family: 'Bitter', serif; font-weight: 700; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #6B7280; margin-bottom: 4px; }
+    .course-staff-box .cs-head a { text-transform: none; letter-spacing: 0; font-weight: 600; margin-left: 6px; color: var(--link, #2563eb); }
+    .course-staff-box .cs-row { display: grid; grid-template-columns: 170px minmax(130px, 1fr) minmax(0, 1.4fr); gap: 8px; padding: 2px 0; white-space: normal; }
+    .course-staff-box .cs-role { color: #4B5563; }
+    .course-staff-box .cs-prim { font-size: 9.5px; color: #E87C3E; letter-spacing: .05em; }
+    .course-staff-box .cs-files { margin-top: 6px; color: #4B5563; }
+    .course-staff-box .cs-empty { color: #9CA3AF; }
+    @media (max-width: 560px) { .course-staff-box .cs-row { grid-template-columns: 1fr; gap: 0; padding: 4px 0; } }
+</style>
 </head>
 <body>
     {% if shell_v2 %}
@@ -1058,6 +1067,7 @@
                     <label>Event Name<input type="text" id="edit-event-item_name" class="modal-input"></label>
                     <label>Date<input type="date" id="edit-event-event_date" class="modal-input"></label>
                     <label>Course<input type="text" id="edit-event-course" class="modal-input" list="course-datalist" placeholder="Type or select a course..."></label>
+                    <div class="course-staff-box" id="edit-event-course-staff" style="grid-column:1/-1;display:none;"></div>
                     <label>Chapter
                         <select id="edit-event-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
@@ -1909,6 +1919,7 @@
                     <label>Event Name<input type="text" id="add-event-name" class="modal-input" required aria-required="true"></label>
                     <label>Date<input type="date" id="add-event-date" class="modal-input"></label>
                     <label>Course<input type="text" id="add-event-course" class="modal-input" list="course-datalist" placeholder="Type or select a course..."></label>
+                    <div class="course-staff-box" id="add-event-course-staff" style="grid-column:1/-1;display:none;"></div>
                     <label>Chapter
                         <select id="add-event-chapter" class="modal-input">
                             <option value="">Select chapter...</option>
@@ -2397,6 +2408,7 @@
 
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/course-staff.js"></script>
     <script src="/static/js/chat-widget.js"></script>
     <script src="/static/js/games-matrix.js"></script>
     <script>
@@ -3646,7 +3658,8 @@
                     badgesHtml += `<span class="game-stat-badge ${mobileFlightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="5" title="Divisions &amp; Flights — the ratified flighting and payout rules, dry run">FLIGHTS</span>`;
                 }
                 badgesHtml += `<span class="game-stat-badge ${mobileReportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="6" title="Print reports">REPORTS</span>`;
-                if (currentRole === "admin" && seEventOn(ev.id)) badgesHtml += `<span class="game-stat-badge ${mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
+                // SCORING for managers too (Kerry 2026-10-13: "make the SCORING tab available to Managers under each event")
+                if ((currentRole === "admin" || currentRole === "manager") && seEventOn(ev.id)) badgesHtml += `<span class="game-stat-badge ${mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
                 if (currentRole === 'admin') {
                     badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
                     badgesHtml += `<span class="game-stat-badge fin-badge-admin ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
@@ -6125,7 +6138,8 @@
         // Kerry 2026-09-21: "there should be a button to SEND PACK" — the
         // bound PDF mailed now, on demand.
         if (!perRound && currentRole === "admin") h += emailPlayersBtn(ev.id);
-        if (!perRound) h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
+        if (!perRound) h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers, rules of play) now">&#x2709; Send Pack</button>`;
+        if (!perRound) h += `<button class="pairings-action-btn send-pack-btn" onclick="sendCourseFiles(${ev.id}, this)" title="Email the course's print files straight to the course contact, one PDF each: starter sheet, cart signs, scorecards, proximity markers, rules of play">&#x2709; Course Files</button>`;
         h += '</div>';
         h += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">Each report opens in a new tab with its own Print and Download PDF buttons.</div>';
         h += '</div>';
@@ -6605,6 +6619,53 @@
         }
         return null;
     }
+    // COURSE CONTACTS in event setup (Kerry 2026-10-13: "those contacts should
+    // come up in the event setup when Quarry is selected"). Read-only here; an
+    // admin manages them on the Courses page (course_staff, migration 0014).
+    let _csTimer = null;
+    async function showCourseStaff(inputId) {
+        const box = document.getElementById(inputId + "-staff");
+        const inp = document.getElementById(inputId);
+        if (!box || !inp) return;
+        const lower = (inp.value || "").trim().toLowerCase();
+        const c = lower && (COURSES_CACHE || []).find(x => (x.name || "").toLowerCase() === lower
+            || (x.aliases || []).some(a => (a || "").toLowerCase() === lower));
+        if (!c) { box.style.display = "none"; box.innerHTML = ""; return; }
+        try {
+            const res = await fetch(`/api/courses/${c.course_id}/staff`);
+            if (!res.ok) { box.style.display = "none"; return; }
+            const d = await res.json();
+            if ((inp.value || "").trim().toLowerCase() !== lower) return;   // typed on
+            const esc = v => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const rows = (d.staff || []).filter(s => s.active).map(s =>
+                `<div class="cs-row"><span class="cs-role">${esc(s.role_label)}${s.is_primary ? ' <b class="cs-prim">PRIMARY</b>' : ""}</span>`
+                + `<span class="cs-name">${esc(s.name)}</span><span class="cs-mail">${esc(s.email || "no email")}</span></div>`).join("");
+            const files = d.print_to
+                ? `Course Files go to <b>${esc(d.print_to)}</b>${(d.print_cc || []).length ? ", cc " + esc(d.print_cc.join(", ")) : ""}.`
+                : `<span style="color:#b45309;">Course Files can't be sent: ${esc(d.print_why || "no primary TGF contact")}.</span>`;
+            // Opens the contacts in a window over the event editor (Kerry 10/13: the new-tab
+            // link "didn't take me to a manage contacts modal or page").
+            const manage = currentRole === "admin"
+                ? ` <a href="#" class="cs-manage" data-course="${c.course_id}">Manage contacts</a>` : "";
+            box.innerHTML = `<div class="cs-head">Course contacts${manage}</div>`
+                + (rows || '<div class="cs-empty">No contacts on file for this course.</div>')
+                + `<div class="cs-files">${files}</div>`;
+            box.style.display = "";
+            const mg = box.querySelector(".cs-manage");
+            if (mg) mg.addEventListener("click", ev => {
+                ev.preventDefault();
+                if (window.tgfCourseStaffModal) window.tgfCourseStaffModal(c.course_id, c.name, () => showCourseStaff(inputId));
+            });
+        } catch (e) { box.style.display = "none"; }
+    }
+    ["edit-event-course", "add-event-course"].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const go = () => { clearTimeout(_csTimer); _csTimer = setTimeout(() => showCourseStaff(id), 250); };
+        el.addEventListener("input", go);
+        el.addEventListener("change", go);
+    });
+
     async function fetchCoursesForDatalist() {
         try {
             const res = await fetch("/api/courses");
@@ -7156,6 +7217,37 @@
     }
     window.sendPrintPack = sendPrintPack;
 
+    // COURSE FILES (Kerry 2026-10-13): the course's reports only, one PDF
+    // each, To the course's primary TGF contact, its other TGF contacts and
+    // Kerry on CC (course_staff, migration 0014). With no primary on file the
+    // send is refused and the admin is pointed at the Courses page.
+    async function sendCourseFiles(evId, btn) {
+        if (!confirm("Email the course print files (starter sheet, cart signs, scorecards, proximity, rules) to the course now?")) return;
+        const was = btn ? btn.textContent : "";
+        if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+        try {
+            const post = () => fetch(`/api/events/${evId}/course-files/send`, {
+                method: "POST", headers: {"Content-Type": "application/json"}, body: "{}" });
+            let res = await post();
+            let data = await res.json().catch(() => ({}));
+            if (data.no_contact) {
+                // Course contacts live on the course (Courses page, migration 0014).
+                const go = data.course_id && currentRole === "admin"
+                    && confirm(`${data.why}.\n\nOpen this course's contacts on the Courses page to add its primary TGF contact?`);
+                if (go) window.open(`/courses?course=${data.course_id}`, "_blank");
+                else if (!data.course_id || currentRole !== "admin") alert(`${data.why}. An admin adds the course's primary TGF contact on the Courses page.`);
+                return;
+            }
+            if (!res.ok || !data.sent) { alert(data.error || data.why || "The course files were not sent."); return; }
+            alert(`Course files sent to ${data.to}${data.cc ? " (cc " + data.cc + ")" : ""}: ${(data.files || []).map(f => f.filename).join(", ")}.`);
+        } catch (err) {
+            alert("The course files were not sent.");
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = was; }
+        }
+    }
+    window.sendCourseFiles = sendCourseFiles;
+
     // ═══════════ EMAIL PLAYERS (Kerry 2026-10-08) ═══════════════════
     // "I need to be able to have a way to send all of tomorrow's info for
     // the practice round to those players playing." Each player gets his
@@ -7290,7 +7382,7 @@
         rounds.forEach((r) => { seeded[String(r.holes)] = r.status === 'open' ? 'open' : (seeded[String(r.holes)] || 'closed'); });
         let seed = '';
         ["9", "18"].forEach((h) => {
-            if (!has[h] || seeded[h] === 'closed') return;
+            if (!has[h] || seeded[h] === 'closed' || currentRole !== 'admin') return;   // seeding stays admin-only (CA #843)
             seed += seeded[h]
                 ? `<button class="pairings-action-btn" data-se-seed="${h}" data-se-ev="${evId}" title="Re-read the saved pairings: groups and handicaps update, scores are kept">&#x21BB; Update ${h}-hole groups from pairings</button> `
                 : `<button class="pairings-action-btn" data-se-seed="${h}" data-se-ev="${evId}" style="background:var(--green);color:#fff;border-color:var(--green);">Seed ${h}-hole score entry</button> `;
@@ -7304,7 +7396,7 @@
             body += `<div class="se-pp-round"><div class="se-pp-rh"><b>${escapeHtml(r.label || 'Round')}</b>`
                 + `<span class="se-pp-st ${r.status === 'open' ? 'open' : 'closed'}">${escapeHtml(r.status)}</span>`
                 + `<span class="se-pp-muted">${r.holes} holes · ${r.groups.length} groups · ${inn} finished${r.matches ? ' · match play' : ''}</span>`
-                + (r.status === 'open' ? `<button class="pairings-action-btn" data-se-close="${r.round_id}" data-se-ev="${evId}" style="margin-left:auto;color:var(--red);">Close round</button>` : '')
+                + (r.status === 'open' && currentRole === 'admin' ? `<button class="pairings-action-btn" data-se-close="${r.round_id}" data-se-ev="${evId}" style="margin-left:auto;color:var(--red);">Close round</button>` : '')
                 + `</div>${r.groups.map((g) => `<div class="se-pp-g">
                     <span class="n">G${g.group_num != null ? g.group_num : ''}</span>
                     <span class="p">${g.players.map((p) => escapeHtml(p.name) + (p.signed ? ' &#10003;' : '')).join(', ')}</span>
@@ -9206,7 +9298,7 @@
         // SCORE ENTRY (Kerry 2026-10-06: "Move the SCORE ENTRY section to
         // it's own toggle after REPORTS and before PAYOUTS. Too much going on
         // on that PAIRINGS view"). Same audience as the old panel.
-        if (currentRole === "admin" && seEventOn(ev.id)) {
+        if ((currentRole === "admin" || currentRole === "manager") && seEventOn(ev.id)) {   // managers too (Kerry 10/13)
             html += `<span class="game-stat-badge ${scoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
         }
         if (currentRole === 'admin') {
@@ -14917,6 +15009,7 @@
         document.getElementById("add-event-name").value = "";
         document.getElementById("add-event-date").value = "";
         document.getElementById("add-event-course").value = "";
+        showCourseStaff("add-event-course");
         document.getElementById("add-event-chapter").value = "";
         document.getElementById("add-event-start_time").value = "";
         document.getElementById("add-event-start_time_9").value = "";
@@ -15969,6 +16062,7 @@
             const input = document.getElementById("edit-event-" + field);
             if (input) input.value = ev[field] || "";
         });
+        showCourseStaff("edit-event-course");
 
         // Radio buttons: format
         document.querySelectorAll('input[name="edit-event-format"]').forEach(r => {

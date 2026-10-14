@@ -57,6 +57,15 @@
         .crs-saved { color: #16A34A; font-weight: 700; font-size: 12px; }
         tr.crs-archived td { opacity: .55; }
         .crs-tees { font-size: 11.5px; color: var(--text-muted); }
+        .crs-staff-btn { margin-left: 4px; }
+        .crs-staff-row > td { background: #FAFAFA; white-space: normal; }
+        .crs-staff { padding: 6px 4px 10px; }
+        .crs-staff-files { font-size: 13px; margin-bottom: 6px; }
+        .crs-staff-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 8px; }
+        .crs-staff-table th { text-align: left; font-size: 11px; color: #6B7280; font-weight: 600; }
+        .crs-staff-table td, .crs-staff-table th { padding: 4px 6px; border-bottom: 1px solid #EEE; }
+        .crs-staff-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .crs-staff-add input, .crs-staff-add select { font-size: 12.5px; padding: 4px 6px; }
         @media (max-width: 560px) {
             .crs-wrap { padding: 0.5rem 0.5rem 2rem; }
             .crs-hide-mobile { display: none; }
@@ -135,6 +144,7 @@
 
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/course-staff.js"></script>
     <script>
     (function () {
         "use strict";
@@ -186,8 +196,10 @@
                     </select></td>
                     <td class="crs-num crs-hide-mobile">${c.n_tees ?? 0}</td>
                     <td class="crs-num crs-hide-mobile">${c.n_rounds ?? 0}</td>
-                    <td><button class="crs-save">Save</button></td>
-                </tr>`).join("");
+                    <td style="white-space:nowrap;"><button class="crs-save">Save</button>
+                        <button class="crs-staff-btn" title="People at this course, their roles, and who gets the Course Files">Contacts</button></td>
+                </tr>
+                <tr class="crs-staff-row" data-staff-for="${c.course_id}" style="display:none;"><td colspan="9"><div class="crs-staff"></div></td></tr>`).join("");
             bind();
         }
 
@@ -225,11 +237,35 @@
             });
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
+        // COURSE CONTACTS (Kerry 2026-10-13, migration 0014): each course's people
+        // and roles. The PRIMARY TGF contact gets the Course Files email; the
+        // other TGF contacts are CC'd. Rows are deactivated, never deleted.
+        function openStaff(courseId) {
+            const row = document.querySelector(`tr[data-staff-for="${courseId}"]`);
+            if (!row) return;
+            row.style.display = "";
+            window.tgfCourseStaffPanel(row.querySelector(".crs-staff"), courseId);   // static/js/course-staff.js
+        }
+
+        document.addEventListener("click", e => {
+            const b = e.target.closest(".crs-staff-btn");
+            if (!b) return;
+            const id = b.closest("tr[data-id]").dataset.id;
+            const row = document.querySelector(`tr[data-staff-for="${id}"]`);
+            if (row && row.style.display === "") row.style.display = "none";
+            else openStaff(id);
+        });
+
+        document.addEventListener("DOMContentLoaded", async () => {
             if (typeof initAuth === "function") initAuth();
             $("crs-search").addEventListener("input", render);
             $("crs-show-archived").addEventListener("change", render);
-            load();
+            await load();
+            const want = new URLSearchParams(location.search).get("course");
+            if (want && document.querySelector(`tr[data-id="${want}"]`)) {
+                openStaff(want);
+                document.querySelector(`tr[data-id="${want}"]`).scrollIntoView({ block: "center" });
+            }
         });
     })();
     </script>

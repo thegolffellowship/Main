@@ -345,8 +345,16 @@
            header shrinks ONLY when the rendered page would actually overflow the
            screen (render() measures and sets se-tight), so a normal card keeps
            the full logo. */
-        body.se-tight header.shell-nav.shell-slim { min-height: 26px; padding-top: 1px; padding-bottom: 1px; }
-        body.se-tight header.shell-nav.shell-slim .shell-brand img { width: 24px; height: 24px; }
+        /* Kerry 2026-10-13 (opened from Mail, 4:04 PM): "the formatting ... in the top bar is
+           smooshed". The tight bar (26 px, 1 px padding, a 24 px mark) jammed the logo under
+           the clock. It keeps the 9/29 padding ("not squished": 5 px above, 8 px below) and
+           a 40 px mark, so it still saves room on a short screen but never looks crushed. */
+        /* THE BAR NEVER SHRINKS (Kerry 2026-10-13, 4:04 PM, scoring from the Mail app:
+           "the top bar is smooshed", then "That dark bar is getting reduced again. We've had
+           that problem before" — 9/29: "shows right size for a flash then gets small").
+           The tight card used to give the header back 51 px (a 24 px mark, 1 px padding);
+           the dark bar and its 64 px mark now stay exactly as they are on every screen,
+           and a tight card saves the room inside the card instead (below). */
         body.se-tight .se-hole .se-popkey { margin-top: 6px; }
         .se-hole .se-top { align-items: center; }
         .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
@@ -390,7 +398,7 @@
            indicator), so the key never hides under it */
         body.se-focus .se-hole { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
         /* ONE SCREEN, NO SCROLLING (Kerry 2026-09-26) still holds with the toggle:
-           when the card would overflow, the mark shrinks (above), the toggle and
+           when the card would overflow, the toggle and
            the bottom bar tighten, and the rows close up a little. */
         /* The SCORING | LEADERBOARD toggle keeps one size on every screen,
            tight or not, so it reads the same on both pages (Kerry 10/8:
@@ -416,6 +424,18 @@
         body.se-tight .se-hole .se-popkey { margin-top: 2px; }
         body.se-tight .se-hole .se-h1.big { font-size: 24px; }
         body.se-tight .se-hole .se-strip { margin-top: 4px !important; }
+        /* the room the bar used to give up comes out of the card (10/13) */
+        body.se-tight .se-hole .se-minus, body.se-tight .se-hole .se-plus { width: 38px; height: 38px; }
+        body.se-tight .se-hole .se-pops { height: 38px; }
+        body.se-tight .se-hole .se-row { padding: 2px 10px; }
+        body.se-tight .se-hole .se-cell { height: 30px; }
+        body.se-tight .se-chk .se-h1 { font-size: 22px; }
+        body.se-tight .se-chk .se-check button.cell { min-height: 31px; }
+        body.se-tight .se-chk .se-seg button { height: 27px; }
+        body.se-tight .se-hole .se-h1.big { font-size: 22px; }
+        body.se-tight .se-hole .se-mstrip, body.se-tight .se-chk .se-mstrip { margin: 3px 0 0; }
+        body.se-tight .se-chk .se-check td { padding: 0; }
+        body.se-tight .se-chk .se-check button.cell { min-height: 29px; }
         .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }
         .se-popkey span { display: inline-flex; align-items: center; gap: 5px; }
         /* Kerry 2026-09-29: "I don't love how the legend renders wrapping like it
@@ -716,6 +736,7 @@
         // last fresh card; cleared on every successful load, when the server's
         // own "answered" flag takes over again.
         const ctpAsked = new Set();
+        let ctpStale = "";
         let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, flagVal = null, busy = false;
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;
@@ -1721,11 +1742,12 @@
                 <div class="se-box se-holder"><div class="se-flag">${ICON.flag}</div>
                   <div><div class="se-lbl">Current closest</div><div style="font-size:18px;font-weight:700">${holder || "No one yet"}</div></div></div>
                 <div class="se-gap"></div>
-                <div style="font-size:20px;font-weight:700">${holder ? "Did anyone in your group get closer?" : "Is anyone in your group on the green?"}</div>
+                ${ctpStale ? `<div class="se-box" style="background:#FEF3C7;margin-bottom:8px;">${esc(ctpStale)}</div>` : ""}
+                <div style="font-size:20px;font-weight:700">${c.holder_name ? `Is anyone in your group closer than ${esc(c.holder_name)}'s marker?` : "Is anyone in your group on the green?"}</div>
                 <div class="se-gap"></div>
-                <div class="se-stack">${btns}<button type="button" class="se-pill dark" data-act="ctp" data-cid="">${holder ? "No one closer" : "No one on the green"}</button></div>
+                <div class="se-stack">${btns}<button type="button" class="se-pill dark" data-act="ctp" data-cid="">${holder ? `No one closer than ${esc(c.holder_name)}` : "No one on the green"}</button></div>
                 <div class="se-gap"></div>
-                <div class="se-copy">No measuring needed. The next group sees whoever you pick. Your manager settles any disagreement.</div>
+                <div class="se-copy">Only pick someone whose ball is closer than the marker on the green, not just the closest in your group. Your manager confirms a change before it's paid.</div>
                 ${queue.length ? statusLine() : ""}`;
         }
 
@@ -1836,6 +1858,13 @@
                 const cc = card.card_check;
                 const ph = cc.has_photo ? "photo saved" : photo && photo.submitted && !photo.sent ? "photo waiting to send" : "no photo";
                 actions = `<div class="se-status">${ICON.check}<span>Card submitted · ${ph}${cc.signed_for_group ? " · you signed for the group" : ""}</span></div>`;
+            }
+            // A finished card is final 15 minutes after its last score (Kerry 10/13).
+            if (card.final) {
+                actions += `<div class="se-status">${ICON.check}<span>This card is final. Ask your manager if a score needs fixing.</span></div>`;
+            } else if (card.final_at) {
+                const t = new Date(card.final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+                actions += `<div class="se-status">${ICON.check}<span>Card locks and is final at ${esc(t)}.</span></div>`;
             }
             if (done) {
                 (card.flags_denied || []).filter((f) => f.customer_id === who && !signedSelf(who)).forEach((f) => {
@@ -2112,7 +2141,12 @@
                 }
                 queue = queue.filter((o) => !done.has(o.op_id));
                 store.set(K.q, queue);
-                if (refused.length) {
+                if (j.final || j.results.some((r) => r.result === "refused_final")) {
+                    // The confirmed card locked (Kerry 10/13: final 15 minutes
+                    // after the scorer confirms it).
+                    lostMsg = "This card is final, so the change didn't go on it. "
+                        + "Ask your manager if a score needs fixing.";
+                } else if (refused.length) {
                     const n = new Set(batch.filter((o) => refused.includes(o.op_id)).map((o) => o.hole)).size;
                     lostMsg = "Someone else took over scoring. " + n + (n === 1 ? " hole" : " holes")
                         + " from this phone didn't go on the card. They're kept on record for your manager.";
@@ -2262,7 +2296,26 @@
             if (act === "turn") { turnNext = null; render(); return; }
             if (act === "ctp") {
                 const n = ctpHole; ctpHole = null; ctpAsked.add(n);
-                post("/api/score-entry/ctp", {hole: n, customer_id: b.dataset.cid ? Number(b.dataset.cid) : null, claimed_by: who});
+                // A STALE SCREEN NEVER OVERWRITES A CLAIM (Kerry 10/13): send the holder this
+                // screen showed; if another group claimed since, ask again against them.
+                const seen = ((card.ctp || {})[String(n)] || {}).holder_customer_id || null;
+                if (busy) return;
+                busy = true;
+                api("/api/score-entry/ctp", {hole: n, customer_id: b.dataset.cid ? Number(b.dataset.cid) : null,
+                                             claimed_by: who, seen_holder: seen}).then(({j}) => {
+                    busy = false;
+                    if (j && j.stale) {
+                        const c = (card.ctp || {})[String(n)] || {};
+                        c.holder_customer_id = j.holder ? j.holder.customer_id : null;
+                        c.holder_name = j.holder ? j.holder.name : null;
+                        c.holder_group_num = j.holder ? j.holder.group_num : null;
+                        ctpStale = j.holder ? `${j.holder.name} (Group ${j.holder.group_num}) claimed this hole while you were playing it. Check their marker.` : "";
+                        ctpAsked.delete(n); ctpHole = n; errMsg = ""; render(); return;
+                    }
+                    ctpStale = "";
+                    errMsg = (j && j.error) || "";
+                    return load();
+                }).catch(() => { busy = false; ctpAsked.delete(n); ctpHole = n; errMsg = "No signal. Try again in a moment."; render(); });
                 return;
             }
             if (act === "finish") { commitDraft(); flush(); hole = "done"; render(); return; }

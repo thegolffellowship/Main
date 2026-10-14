@@ -175,6 +175,11 @@ def tracker_contact_targets(db_path: str | Path | None = None) -> dict:
                WHERE ce.email IS NOT NULL AND ce.email <> ''
                  AND c.account_status <> 'banned'
                ORDER BY ce.customer_id, ce.is_primary DESC, ce.email_id""").fetchall()
+        # Course contacts, sponsors and vendors are not a member audience
+        # (#1701-b): they are never pushed to Brevo.
+        from email_parser.course_staff import non_member_ids
+        _not_members = non_member_ids(conn)
+        rows = [r for r in rows if r["customer_id"] not in _not_members]
         cids = sorted({r["customer_id"] for r in rows})
         derived = db.derive_member_financial_status_bulk(conn, cids)
         played = last_played_by_customer(conn)

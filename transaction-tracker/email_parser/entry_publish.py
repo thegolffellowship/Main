@@ -98,18 +98,17 @@ def _round_holes(rnd: dict) -> list[int]:
 
 def publish_eligibility(rnd: dict, player: dict) -> tuple[bool, str | None]:
     """(eligible, reason_if_held) for one player of one round, from the
-    get_entered_scores read. Change the rule here and only here."""
+    get_entered_scores read. Change the rule here and only here.
+
+    A complete card publishes when it is FINAL (Kerry 2026-10-13: "15
+    minutes after last score entered by each scorer"; score_entry stamps
+    `final` / `final_at` on each group), or the old way (submitted or the
+    round closed, and the player signed). `rnd["_provisional"]` (set by
+    the auto-payouts job once the whole field is in) publishes every
+    complete card so the money can show, marked not final."""
     cid = player.get("customer_id")
     if not cid:
         return False, "no customer_id"
-    submitted = any(c.get("group_id") == player.get("group_id")
-                    for c in (rnd.get("card_checks") or []))
-    if rnd.get("status") != "closed" and not submitted:
-        return False, "round still open and the group's card has not been submitted"
-    signed = any(s.get("customer_id") == cid and s.get("kind") == "player"
-                 for s in (rnd.get("signoffs") or []))
-    if not signed:
-        return False, "card not signed (no live player signature)"
     scores = player.get("scores") or {}
     holes = _round_holes(rnd)
     if holes:
@@ -119,7 +118,18 @@ def publish_eligibility(rnd: dict, player: dict) -> tuple[bool, str | None]:
     elif len([v for v in scores.values() if v is not None]) != int(rnd.get("holes") or 0):
         return False, (f"card incomplete: {len(scores)} of {rnd.get('holes')} holes "
                        "(no hole list on the round)")
-    return True, None
+    grp = next((g for g in (rnd.get("groups") or [])
+                if g.get("group_id") == player.get("group_id")), {})
+    if grp.get("final") or rnd.get("_provisional"):
+        return True, None
+    submitted = any(c.get("group_id") == player.get("group_id")
+                    for c in (rnd.get("card_checks") or []))
+    signed = any(s.get("customer_id") == cid and s.get("kind") == "player"
+                 for s in (rnd.get("signoffs") or []))
+    if (rnd.get("status") == "closed" or submitted) and signed:
+        return True, None
+    return False, "card final at " + str(grp.get("final_at") or "?") + \
+        " (15 minutes after its last score)"
 
 
 # ---------------------------------------------------------------------------
@@ -586,12 +596,16 @@ def publish_entered_round(round_id: int | None = None, event_id: int | None = No
     return _publish(ev_id, int(round_id), apply, db_path)
 
 
-def publish_event(event_id: int, apply: bool = False, db_path=None) -> dict:
-    return _publish(int(event_id), None, apply, db_path)
+def publish_event(event_id: int, apply: bool = False, db_path=None,
+                  provisional: bool = False) -> dict:
+    return _publish(int(event_id), None, apply, db_path, provisional=provisional)
 
 
-def _publish(event_id: int, round_id, apply: bool, db_path) -> dict:
+def _publish(event_id: int, round_id, apply: bool, db_path, provisional: bool = False) -> dict:
     read = se.get_entered_scores(event_id, round_id=round_id, db_path=db_path)
+    if provisional:
+        for _r in read.get("rounds") or []:
+            _r["_provisional"] = True
     with db._connect(db_path) as conn:
         db._ensure_scoring_tables(conn)
         ev = _event(conn, event_id)
@@ -629,6 +643,17 @@ def _publish(event_id: int, round_id, apply: bool, db_path) -> dict:
             db.recompute_computed_mvps(ev["item_name"], db_path=db_path)
         except Exception:
             logger.warning("MVP recompute after entry publish failed", exc_info=True)
+        # Every publish: the engine against the saved cards, every player
+        # (Kerry 10/14). A difference raises one COO item now, and the
+        # payout writer and the points rebuild refuse until it is fixed.
+        try:
+            from email_parser import card_parity as _cp
+            _par = _cp.engine_card_parity(event_id, db_path=db_path)
+            out["card_parity"] = {"ok": _par.get("ok"), "checked": _par.get("checked"),
+                                  "mismatches": _par.get("mismatches") or []}
+            _cp.alarm(_par, db_path=db_path)
+        except Exception:
+            logger.warning("card parity after entry publish failed", exc_info=True)
     return out
 
 

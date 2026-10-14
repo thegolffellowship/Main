@@ -6,8 +6,9 @@ emails me the PDF reports for an event? Or perhaps a bound PDF with all
 of them in one that I could print, rather than each separately?" —
 "Build the PDF routine and have it emailed to me."
 
-Parts, in print order: Starter Sheet, Cart Signs, Divisions & Flights,
-Proximity Markers — the same templates the browser prints, rendered
+Parts, in print order: Starter Sheet, Cart Signs, Scorecards, Games &
+Payouts, Divisions & Flights, Proximity Markers, then the Rules of Play
+sheet (a fixed PDF, static/print/TGF_Rules_of_Play.pdf, Kerry 10/13) — the same templates the browser prints, rendered
 server-side by WeasyPrint (paged-media CSS, the `@page` rules the
 templates already carry). The PDF engine is imported lazily so a deploy
 without it still boots; the route and the bridge then say so instead of
@@ -64,13 +65,62 @@ def _static_url_fetcher(static_dir: str):
 
 
 def scorecards_in_pack(event_id: int, db_path=None) -> bool:
-    """Does this event's pack carry scorecards? App setting
-    `print_pack_scorecards`: "all" or a comma/space list of event ids."""
+    """Does this event's pack carry scorecards? Yes, always (Kerry
+    2026-10-13: "Print packs need to also include the scorecards and rules
+    sheets"). App setting `print_pack_scorecards` can still narrow it:
+    "off" leaves them out everywhere, a comma/space list of event ids
+    includes only those; unset or "all" means every event."""
     from email_parser import database as db
     raw = (db.get_app_setting("print_pack_scorecards", db_path) or "").strip().lower()
-    if raw == "all":
+    if raw in ("", "all"):
         return True
+    if raw in ("off", "none", "0", "no"):
+        return False
     return str(int(event_id)) in {t for t in re.split(r"[\s,\[\]\"']+", raw) if t}
+
+
+def scorecard_grouping(event_id: int, db_path=None) -> str:
+    """"team" (one card per group) unless Kerry directed per-cart cards:
+    app setting `print_pack_scorecard_grouping` = "cart" (every event) or
+    a comma/space list of event ids."""
+    from email_parser import database as db
+    raw = (db.get_app_setting("print_pack_scorecard_grouping", db_path) or "").strip().lower()
+    if raw == "cart":
+        return "cart"
+    ids = {t for t in re.split(r"[\s,\[\]\"']+", raw) if t}
+    return "cart" if str(int(event_id)) in ids else "team"
+
+
+# THE RULES OF PLAY sheet (Kerry 2026-10-13, his own print file: two
+# copies per Letter page with a cut line). A fixed PDF, not a template:
+# it is appended to every pack as it is, last in print order.
+RULES_SHEET_REL = "print/TGF_Rules_of_Play.pdf"
+
+
+def _rules_sheet_bytes(static_dir: str) -> bytes | None:
+    path = os.path.join(static_dir, RULES_SHEET_REL)
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        logger.warning("print pack: rules sheet missing at %s", path)
+        return None
+
+
+def _append_rules_sheet(pdf: bytes, parts: list, rules: bytes | None):
+    """Bind the Rules of Play pages onto the end of a rendered pack."""
+    if not rules:
+        return pdf, parts
+    import io
+    from pypdf import PdfReader, PdfWriter
+    w = PdfWriter()
+    for pg in PdfReader(io.BytesIO(pdf)).pages:
+        w.add_page(pg)
+    rr = PdfReader(io.BytesIO(rules))
+    for pg in rr.pages:
+        w.add_page(pg)
+    out = io.BytesIO(); w.write(out)
+    return out.getvalue(), list(parts) + [{"slug": "rules-of-play", "pages": len(rr.pages)}]
 
 
 def build_event_print_pack(render, event_id: int, static_dir: str,
@@ -90,6 +140,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     if not ev:
         return None
     htmls: list[tuple[str, str]] = []
+    skipped_parts: list[dict] = []
     sheet_pack = None
     _no_games = db.event_games_off(ev)
     for slug, template, builder, key in PRINT_PACK_PARTS:
@@ -97,6 +148,13 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             continue   # no games at this event: no game sheets (Kerry 10/8)
         ctx = getattr(db, builder)(int(event_id), db_path=db_path)
         if not ctx:
+            continue
+        if slug == "proximity-markers" and not ctx.get("contests"):
+            # No CTP funded at this count: no page at all, in the pack or the
+            # course files (Kerry 2026-10-13: "If there are no Closest to Pins
+            # for the event due to numbers, then don't send the page").
+            skipped_parts.append({"slug": slug, "why": "; ".join(ctx.get("notes") or [])
+                                  or "no closest-to-pin contests"})
             continue
         if slug == "starter-sheet":
             sheet_pack = ctx
@@ -130,16 +188,19 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     # SCORECARDS IN THE PACK (Kerry 2026-09-29: "Include the scorecards in
     # the print pack now"), right after the cart signs. Which events is a
     # dial, `print_pack_scorecards`: "all", or event ids ("3304,3317").
-    # Defaults: 3-up, the grouping the engine's net game uses (Cart Net ->
-    # one card per cart), the event's holes, QR only per the score-entry
-    # dials, the saved GGID codes. A named gap does not print a guessed
-    # card: the part is the gap sheet, and `scorecards.gaps` says why.
+    # Defaults: 3-up, ONE CARD PER GROUP whatever the net game is (Kerry
+    # 2026-10-13: "Scorecards should always be per group unless I direct
+    # otherwise"; a Cart Net event used to print one card per cart), the
+    # event's holes, QR only per the score-entry dials, the saved GGID
+    # codes. Per cart only when app setting `print_pack_scorecard_grouping`
+    # names the event ("<id>,<id>") or is "cart" for all. A named gap does
+    # not print a guessed card: the part is the gap sheet, and
+    # `scorecards.gaps` says why.
     sc_info = None
     if htmls and (force_scorecards or scorecards_in_pack(int(event_id), db_path=db_path)):
         try:
             from email_parser.scorecards import build_scorecards
-            unit = (sheet_pack or {}).get("team_unit")
-            sc = build_scorecards(int(event_id), "3up", "cart" if unit == "cart" else "team",
+            sc = build_scorecards(int(event_id), "3up", scorecard_grouping(int(event_id), db_path=db_path),
                                   qr="on", allow_gaps=allow_gaps, db_path=db_path)
             if sc:
                 at = next((i + 1 for i, (sl, _) in enumerate(htmls) if sl == "cart-signs"),
@@ -173,7 +234,10 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             gs_info = {"error": "games & payouts failed to render; see the log"}
     if not htmls:
         return None
-    sha = hashlib.sha256("\n".join(_hash_view(h) for _, h in htmls).encode("utf-8")).hexdigest()[:16]
+    rules = _rules_sheet_bytes(static_dir)
+    sha = hashlib.sha256(("\n".join(_hash_view(h) for _, h in htmls)
+                          + "\nrules:" + (hashlib.sha256(rules).hexdigest() if rules else "-")
+                          ).encode("utf-8")).hexdigest()[:16]
     code = (ev.get("item_name") or f"event-{event_id}").replace("/", "-")
     # CHROMIUM FIRST (v2.465.8, Kerry 2026-09-18: "Formatting for your PDF
     # email is really bad compared to the PDF downloads on the Tracker").
@@ -196,9 +260,10 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
         except Exception as exc2:                  # engine absent on this deploy
             return {"error": f"PDF engine unavailable: {exc2}", "sha": sha, "engine_note": engine_note,
                     "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
+    pdf, parts = _append_rules_sheet(pdf, parts, rules)
     from email_parser.database import print_file_stub as _pfs
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
-            "scorecards": sc_info, "games_sheet": gs_info,
+            "scorecards": sc_info, "games_sheet": gs_info, "skipped": skipped_parts,
             "engine_note": engine_note, "pack": sheet_pack,
             "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
             # <stub>-PrintPack.pdf, the report file-name convention (Kerry 9/29).
@@ -358,6 +423,58 @@ def print_pack_recipient(ev: dict | None = None, db_path=None) -> str | None:
     return ", ".join(addrs) or None
 
 
+# THE COURSE CONTACT (Kerry 2026-10-13: "Set it up to send straight to
+# course contact"). Since v2.561.0 it is read from `course_staff` (migration
+# 0014, #1699/#1701): To the course's primary TGF contact, CC its other TGF
+# contacts plus Kerry's pack recipients. The interim app setting
+# `course_print_contacts` is retired. An event whose course has no primary
+# TGF contact is refused, never sent to a guessed address.
+def _event_course_id(ev: dict | None, db_path=None) -> int | None:
+    if not ev:
+        return None
+    if ev.get("course_id"):
+        return int(ev["course_id"])
+    from email_parser import database as db
+    with db._connect(db_path) as conn:
+        row = conn.execute("SELECT course_id FROM events WHERE id = ?", (ev.get("id"),)).fetchone()
+    return int(row["course_id"]) if row and row["course_id"] else None
+
+
+def course_recipients_for_event(ev: dict | None, db_path=None) -> dict:
+    """{ok, to, cc[], why, course_id} from course_staff (the one reader)."""
+    from email_parser import database as db
+    from email_parser import course_staff as cs
+    cid = _event_course_id(ev, db_path)
+    if not cid:
+        return {"ok": False, "course_id": None, "why": "this event has no course linked"}
+    with db._connect(db_path) as conn:
+        res = cs.print_recipients(conn, cid)
+    return {**res, "course_id": cid}
+
+
+def course_contact_for_event(ev: dict | None, db_path=None) -> str | None:
+    r = course_recipients_for_event(ev, db_path)
+    return r.get("to") if r.get("ok") else None
+
+
+def send_course_files(built: dict, db_path=None) -> dict:
+    """Course Files to the course's primary TGF contact; its other TGF
+    contacts and Kerry's pack recipients on CC."""
+    ev = built.get("event") or {}
+    rec = course_recipients_for_event(ev, db_path)
+    if not rec.get("ok"):
+        return {"sent": False, "no_contact": True, "course_id": rec.get("course_id"),
+                "course": ev.get("course"),
+                "why": f"{rec.get('why')} ({ev.get('course') or 'this course'})"}
+    cc = list(rec.get("cc") or [])
+    for a in (print_pack_recipient(ev, db_path=db_path) or "").split(","):
+        a = a.strip()
+        if a and a.lower() not in {x.lower() for x in cc} and a.lower() != rec["to"].lower():
+            cc.append(a)
+    return send_print_pack_files(built, to_address=rec["to"], db_path=db_path,
+                                 cc_address=", ".join(cc) or None, for_course=True)
+
+
 def _esc(v) -> str:
     return html_mod.escape("" if v is None else str(v), quote=True)
 
@@ -447,15 +564,24 @@ def print_pack_email_body(built: dict) -> str:
 
 PART_FILE_NAMES = {"starter-sheet": "StarterSheet", "cart-signs": "CartSigns",
                    "scorecards": "Scorecards", "games-payouts": "GamesPayouts",
-                   "divisions-flights": "DivisionsFlights", "proximity-markers": "Proximity"}
+                   "divisions-flights": "DivisionsFlights", "proximity-markers": "Proximity",
+                   "rules-of-play": "RulesOfPlay"}
+
+# What the COURSE gets (Kerry 2026-10-13: "Course email should include
+# Starter Sheet, Cart Signs, Scorecards, Proxies and Rules Sheets...not the
+# other stuff"). Games & Payouts and Divisions & Flights stay in Kerry's
+# own pack; they are TGF's money sheets, not the course's.
+COURSE_FILE_PARTS = ("starter-sheet", "cart-signs", "scorecards",
+                     "proximity-markers", "rules-of-play")
 
 
-def split_print_pack(built: dict) -> list[tuple[str, bytes]]:
+def split_print_pack(built: dict, only=None) -> list[tuple[str, bytes]]:
     """The bound pack cut back into one PDF per report, by the page count
     each part printed (Kerry 2026-10-09: "Can you have the practice round
     reports sent to me in separate PDF files right now? I need to send to
     course for printing"). [(filename, pdf bytes)] in print order, named
-    <stub>-<Report>.pdf like the per-report downloads."""
+    <stub>-<Report>.pdf like the per-report downloads. ``only`` keeps just
+    those part slugs (COURSE_FILE_PARTS for the course email)."""
     import io
     from pypdf import PdfReader, PdfWriter
     from email_parser.database import print_file_stub as _pfs
@@ -465,6 +591,9 @@ def split_print_pack(built: dict) -> list[tuple[str, bytes]]:
     for part in built.get("parts") or []:
         n = int(part.get("pages") or 0)
         if n <= 0:
+            continue
+        if only is not None and part["slug"] not in only:
+            at += n
             continue
         w = PdfWriter()
         for pg in reader.pages[at:at + n]:
@@ -479,12 +608,13 @@ def split_print_pack(built: dict) -> list[tuple[str, bytes]]:
 
 
 def send_print_pack_files(built: dict, to_address: str | None = None, db_path=None,
-                          files: list | None = None) -> dict:
+                          files: list | None = None, cc_address: str | None = None,
+                          for_course: bool = False) -> dict:
     """Mail every report of a built pack as its OWN PDF attachment, one
     email. Does not touch the evening-before pack's sent hash. ``files``
     ([(name, bytes)]) sends those instead of splitting a bound pack."""
     from email_parser.fetcher import send_mail_graph
-    files = files if files is not None else split_print_pack(built)
+    files = files if files is not None else split_print_pack(built, only=COURSE_FILE_PARTS)
     to_address = to_address or print_pack_recipient(built.get("event"), db_path=db_path)
     creds = {k: os.getenv(k) for k in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID",
                                        "AZURE_CLIENT_SECRET", "EMAIL_ADDRESS")}
@@ -493,16 +623,26 @@ def send_print_pack_files(built: dict, to_address: str | None = None, db_path=No
         return {"sent": False, "why": "mail credentials or recipient not set", "files": listing}
     ev = built["event"]
     rows = "".join(f"<li>{_esc(f)}</li>" for f, _ in files)
-    html = (f'<p style="margin:0 0 1em;">Print files for <b>{_esc(ev.get("item_name"))}</b>, '
-            f'{_esc(ev.get("event_date"))}: one PDF per report, ready to forward to the course.</p>'
-            f'<ul style="margin:0 0 1em;">{rows}</ul>')
+    if for_course:
+        html = (f'<p style="margin:0 0 1em;">Hello,</p>'
+                f'<p style="margin:0 0 1em;">Attached are the print files for The Golf Fellowship\'s '
+                f'event at {_esc(ev.get("course") or "your course")} on {_esc(ev.get("event_date"))}, '
+                f'one PDF per sheet. Could you please print them for us before we arrive?</p>'
+                f'<ul style="margin:0 0 1em;">{rows}</ul>'
+                f'<p style="margin:0 0 1em;">Thank you!<br>The Golf Fellowship</p>')
+    else:
+        html = (f'<p style="margin:0 0 1em;">Print files for <b>{_esc(ev.get("item_name"))}</b>, '
+                f'{_esc(ev.get("event_date"))}: one PDF per report, ready to forward to the course.</p>'
+                f'<ul style="margin:0 0 1em;">{rows}</ul>')
     ok = send_mail_graph(tenant_id=creds["AZURE_TENANT_ID"], client_id=creds["AZURE_CLIENT_ID"],
                          client_secret=creds["AZURE_CLIENT_SECRET"],
                          from_address=creds["EMAIL_ADDRESS"], to_address=to_address,
-                         subject=f"Print files — {ev.get('item_name')} — {ev.get('event_date')}",
-                         html_body=html,
+                         subject=(f"The Golf Fellowship print files — {ev.get('course') or ''} — {ev.get('event_date')}"
+                                  if for_course else
+                                  f"Print files — {ev.get('item_name')} — {ev.get('event_date')}"),
+                         html_body=html, cc_address=cc_address or None,
                          attachments=[(f, b, "application/pdf") for f, b in files])
-    return {"sent": bool(ok), "to": to_address, "files": listing}
+    return {"sent": bool(ok), "to": to_address, "cc": cc_address, "files": listing}
 
 
 def send_event_print_pack(built: dict, to_address: str | None = None,

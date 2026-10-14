@@ -1838,11 +1838,14 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-course-merge:<loser_id>|<winner_id>[|apply]  fold a duplicate course row into the canonical one (tees collapse/move, rounds/events/items re-point, names aliased); dry run by default
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
+      scoring-results-email:preview|<event_id>|<cid>|<recap file>[|send[|<to>]][|html] / plan|<ids>|<recap> / schedule|<ids>|<YYYY-MM-DDTHH:MM>|<recap>|<kerry_ok_post> / schedule-next|<ids>|<recap>|<kerry_ok_post> (6:00 AM the next morning, Kerry #1778) / cancel|<ids> / status — the personal RESULTS EMAIL (Kerry 10/14); previews go to staff or a chapter manager's own address; members only through a schedule, guards first
+      scoring-card-parity:<event name or id>  READ-ONLY engine vs saved scorecards, every entered player: stored strokes vs the rule (own tee, the nine played) and the engine's card vs the stored card; any difference holds payouts + points
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
       scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
-      scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO member-send bridge
+      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
+      scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
       scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
@@ -1903,6 +1906,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    another (dry run shows both + the refs moved)
       scoring-customer-dupes       potential duplicate customer profiles (name /
                                    email / phone), report only
+      scoring-tracker-points[:apply]          Tracker Fall standings + Monthly (dry run default)
       scoring-race-detail:<race_key>|<card>  one GG member record's per-event lines
       scoring-race-dupes[:refresh]  one person = one row on every Season Contests
                                    board (GG duplicate member records folded;
@@ -4219,6 +4223,35 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _d["best_n_total_of_parsed"] = (db._best_n_total(_d["parsed_events"], _race["best_n"])
                                             if _race.get("best_n") else None)
             return json.dumps(_d, indent=2, default=str)
+        if cmd == "scoring-gg-freeze-champ":
+            # "<race>[|apply]" freezes the championship board members see now;
+            # "<race>|cards[|<start>]" captures every player's card, chunked
+            # (Kerry 10/13: lock 2026 on our side). See email_parser/gg_freeze.py.
+            from email_parser import gg_freeze as _gf
+            parts = [x.strip() for x in (arg or "").split("|")]
+            race = parts[0]
+            if len(parts) > 1 and parts[1] == "cards":
+                st = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+                res = _gf.freeze_cards(race, start=st)
+                _audit("scoring-gg-freeze-champ", f"{race} cards from {st}")
+            else:
+                res = _gf.freeze_points(race, apply=(len(parts) > 1 and parts[1] == "apply"))
+                if res.get("frozen"):
+                    _audit("scoring-gg-freeze-champ", f"{race} points")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-tracker-points":
+            # "[apply]" — TRACKER POINTS STANDINGS (Kerry 10/13): rebuild the
+            # Fall races and the Tracker's Monthly months from GG's frozen
+            # lines through 9/29 + the ruled 10/6 + every published entered
+            # event. Dry run by default: the changes against the rows live
+            # now. "apply" writes them. Live boards then refresh themselves
+            # from the Tracker while app setting points_source = tracker.
+            from email_parser import tracker_points as _tp
+            _apply = (arg or "").strip().lower() == "apply"
+            res = _tp.rebuild(apply=_apply)
+            if _apply:
+                _audit("scoring-tracker-points", "apply")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-race-dupes":
             # "[refresh]" — one person = one row across every Season Contests
             # board. refresh re-fetches every GG race first (write-time merge
@@ -5351,6 +5384,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps({"assembled": asm,
                                "result": db.record_event_game_payouts(
                                    arg, asm["rows"], force=True)}, indent=2)
+        if cmd == "scoring-auto-payouts":
+            # Kerry 10/13: payouts record themselves once every card is
+            # final. "scoring-auto-payouts" = dry run over the recent
+            # events; ":apply" records; "|<event_id>" names one event.
+            from email_parser.auto_payouts import run as _ap_run
+            _bits = [b.strip() for b in (arg or "").split("|") if b.strip()]
+            _apply = "apply" in _bits
+            _eid = next((int(b) for b in _bits if b.isdigit()), None)
+            return json.dumps(_ap_run(apply=_apply, event_id=_eid), indent=2, default=str)
         if cmd == "scoring-payouts-preview":
             # assemble without writing — inspect what would be recorded
             return json.dumps(db.assemble_event_game_payouts(arg), indent=2)
@@ -5728,15 +5770,24 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 # scoring-print-pack-pdf:<id>|files[|send[|<to>]] — every
                 # report as its OWN PDF, scorecards included (Kerry 10/9:
                 # "separate PDF files ... to send to course for printing")
-                from email_parser.print_pack import split_print_pack, send_print_pack_files
+                # Only the course's reports (Kerry 10/13): Starter Sheet,
+                # Cart Signs, Scorecards, Proximity, Rules of Play.
+                from email_parser.print_pack import (split_print_pack, send_print_pack_files,
+                                                     COURSE_FILE_PARTS)
                 built = build_print_pack_for_event(int(parts[0]), force_scorecards=True)
                 if not built or built.get("error"):
                     return json.dumps({"error": (built or {}).get("error") or "event not found or nothing to print"})
                 out = {"parts": built.get("parts"), "scorecards": built.get("scorecards"),
-                       "files": [{"filename": f, "bytes": len(b)} for f, b in split_print_pack(built)]}
+                       "files": [{"filename": f, "bytes": len(b)}
+                                 for f, b in split_print_pack(built, only=COURSE_FILE_PARTS)]}
                 if len(parts) > 2 and parts[2].lower() == "send":
                     db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)
-                    out["send"] = send_print_pack_files(built, to_address=(parts[3] if len(parts) > 3 else None))
+                    if len(parts) > 3 and parts[3].lower() == "course":
+                        # |files|send|course: straight to the course contact (Kerry 10/13)
+                        from email_parser.print_pack import send_course_files
+                        out["send"] = send_course_files(built)
+                    else:
+                        out["send"] = send_print_pack_files(built, to_address=(parts[3] if len(parts) > 3 else None))
                 return json.dumps(out, indent=2, default=str)
             built = build_print_pack_for_event(int(parts[0]))
             if not built:
@@ -6486,6 +6537,51 @@ def _scoring_dispatch_inner(url: str, extract: str):
             finally:
                 _c.close()
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-results-email":
+            # Kerry 10/13-14: one personal results email per person.
+            #   preview|<event_id>|<customer_id>|<recap file>[|send[|<to>]][|html]
+            #   plan|<event_id,event_id>|<recap file>        dry run of the night
+            #   schedule|<event_ids>|<YYYY-MM-DDTHH:MM>|<recap file>|<kerry_ok_post>
+            #   cancel|<event_ids>      status
+            from email_parser import results_email as _re
+            _b = [b.strip() for b in (arg or "").split("|")]
+            _op = _b[0] if _b else ""
+            if _op == "status":
+                return json.dumps(_re._json_setting(_re.SCHEDULE_KEY), indent=2, default=str)
+            if _op == "preview":
+                _send = "send" in _b[4:]
+                _to = next((x for x in _b[5:] if "@" in x), None)
+                r = _re.preview(int(_b[1]), int(_b[2]), _b[3], to_address=_to, send=_send)
+                if "html" not in _b[4:]:
+                    r.pop("html", None)
+                return json.dumps(r, indent=2, default=str)
+            if _op == "plan":
+                _ids = [int(x) for x in _b[1].split(",") if x.strip()]
+                return json.dumps(_re.deliver(_ids, _b[2], confirm=False), indent=2, default=str)
+            if _op in ("schedule", "schedule-next"):
+                # schedule-next|<ids>|<recap>|<post>: 6:00 AM the next
+                # morning, Kerry's standing rule (#1778).
+                from email_parser.customer_query import _kerry_ok
+                _post = _b[4] if _op == "schedule" else (_b[3] if len(_b) > 3 else None)
+                with db._connect() as _c:
+                    _ok, _why = _kerry_ok(_c, _post)
+                if not _ok:
+                    return json.dumps({"refused": f"rule 3b: {_why}"})
+                _ids = [int(x) for x in _b[1].split(",") if x.strip()]
+                if _op == "schedule-next":
+                    return json.dumps(_re.schedule_send(_ids, _re.next_morning(_ids), _b[2], _why), indent=2)
+                return json.dumps(_re.schedule_send(_ids, _b[2], _b[3], _why), indent=2)
+            if _op == "cancel":
+                _sch = _re._json_setting(_re.SCHEDULE_KEY)
+                if _b[1] in _sch:
+                    _sch[_b[1]]["state"] = "cancelled"
+                    db.set_app_setting(_re.SCHEDULE_KEY, json.dumps(_sch))
+                return json.dumps(_sch.get(_b[1]) or {"error": "not scheduled"}, indent=2)
+            return json.dumps({"error": "ops: preview | plan | schedule | cancel | status"})
+        if cmd == "scoring-card-parity":
+            # Kerry 10/14: the engine against the saved cards, every player.
+            from email_parser.card_parity import engine_card_parity as _ecp
+            return json.dumps(_ecp(arg.strip()), indent=2, default=str)
         if cmd == "scoring-closeout-final":
             # "<event name or id>" — READ-ONLY: is the event's result final
             # enough to close out (CA #829)? GG era: cards = field, identity,
@@ -6546,6 +6642,40 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if isinstance(_out.get("page_size"), int) and isinstance(_out.get("page_count"), int):
                 _out["pages_bytes"] = _out["page_size"] * _out["page_count"]
             return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-course-staff":
+            # COURSE STAFF (migration 0014, #1699/#1701). Read-only:
+            # "<course_id>" lists the people, roles and who gets Course Files.
+            from email_parser import course_staff as _cs
+            with db._connect() as _c:
+                _cid = int((arg or "").strip())
+                return json.dumps({"course_id": _cid,
+                                   "staff": _cs.for_course(_c, _cid, include_inactive=True),
+                                   "print": _cs.print_recipients(_c, _cid)}, indent=2, default=str)
+        if cmd == "scoring-course-staff-set":
+            # "<course_id>|<json>|<kerry_ok_post>[|apply]": json keys name, email,
+            # phone, role, is_primary, notes, customer_id, active. Dry run by default;
+            # refused unless the post carries Kerry's word.
+            from email_parser import course_staff as _cs
+            _p = (arg or "").split("|")
+            if len(_p) < 3:
+                return json.dumps({"error": "usage: <course_id>|<json>|<kerry_ok_post>[|apply]"})
+            _d = json.loads(_p[1] or "{}")
+            res = _cs.save_staff(int(_p[0]), name=_d.get("name") or "", email=_d.get("email") or "",
+                                 phone=_d.get("phone") or "", role=_d.get("role") or "tgf_contact",
+                                 is_primary=bool(_d.get("is_primary")), notes=_d.get("notes") or "",
+                                 customer_id=_d.get("customer_id"), active=_d.get("active", True) is not False,
+                                 apply=len(_p) > 3 and _p[3].strip().lower() == "apply",
+                                 set_by="mcp-claude", kerry_ok_post=_p[2].strip())
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-course-staff-seed":
+            # "<course_id>|<kerry_ok_post>[|apply]": The Quarry's people (#1699).
+            from email_parser import course_staff as _cs
+            _p = (arg or "").split("|")
+            if len(_p) < 2:
+                return json.dumps({"error": "usage: <course_id>|<kerry_ok_post>[|apply]"})
+            return json.dumps(_cs.seed_quarry(int(_p[0]), kerry_ok_post=_p[1].strip(),
+                                              apply=len(_p) > 2 and _p[2].strip().lower() == "apply"),
+                              indent=2, default=str)
         if cmd == "scoring-role-flags":
             # The live AMB / CAPT / BACK chips (#1090-3). Read-only.
             from email_parser.cos_reads import role_flags as _rf
@@ -6793,6 +6923,39 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     return json.dumps({"error": f"no event {_a}"})
                 _a = _r[0]
             return json.dumps(db.get_event_financial_summary(_a), indent=2, default=str)
+        if cmd == "scoring-event-invite":
+            # "<event_id>" (who would be invited, read-only) |
+            # "<event_id>|preview[|<staff addr>][|reminder]" (staff only) |
+            # "<event_id>|send|<kerry-ok post id>[|reminder][|confirm]" —
+            # Tracker invitations with I'm in / Can't make it (Kerry 10/13).
+            # The member send needs the wording stamp, Kerry's word on the
+            # mailbox and |confirm; dry run otherwise.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>[|preview[|addr]|send|<post>[|reminder][|confirm]]"})
+            from email_parser import invitations as _inv
+            _low = [x.lower() for x in _p[1:]]
+            _kind = "lastcall" if "lastcall" in _low else ("reminder" if "reminder" in _low else "invite")
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
+                _addr = _p[2] if len(_p) > 2 and "@" in _p[2] else None
+                return json.dumps(_inv.send_preview(int(_p[0]), _addr, _kind), indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "send":
+                db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
+                if len(_p) < 3 or not _p[2].lstrip("#").isdigit():
+                    return json.dumps({"error": "<event_id>|send|<kerry-ok post id>[|reminder][|confirm]"})
+                return json.dumps(_inv.send(int(_p[0]), int(_p[2].lstrip("#")), _kind,
+                                            confirm=("confirm" in [x.lower() for x in _p[3:]])),
+                                  indent=2, default=str)
+            _pl = _inv.plan(int(_p[0]), _kind)
+            if _pl.get("error"):
+                return json.dumps(_pl)
+            return json.dumps({k: _pl[k] for k in ("event", "counts", "template_hash", "approved",
+                                                   "already_sent")}
+                              | {"decline_reasons": _inv.decline_reasons(int(_p[0]))["counts"],
+                                 "would_send": len(_pl["to_send"]),
+                                 "sample": [{k: x[k] for k in ("customer_id", "name", "why")}
+                                            for x in _pl["to_send"][:10]]}, indent=2, default=str)
         if cmd == "scoring-event-day-email":
             # "<event_id>[|preview[|<staff addr>[|cids=1,2]]]" or
             # "<event_id>|test|<staff addr>|cid=<id>" — CA #829. The dry build
@@ -6813,6 +6976,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_ede.send_event_day_preview(
                     int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None),
                     only=_only),
+                    indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "reissue":
+                # "<event_id>|reissue|<kerry-ok post id>[|confirm]" (Kerry
+                # 10/13, the Quarry start change): the approved message again,
+                # "UPDATED START:" + a notice, to every ready player. Refused
+                # without a mailbox post carrying Kerry's word; dry run
+                # without |confirm; once per player per sheet state.
+                db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
+                if len(_p) < 3 or not _p[2].lstrip("#").isdigit():
+                    return json.dumps({"error": "<event_id>|reissue|<kerry-ok post id>[|confirm]"})
+                return json.dumps(_ede.send_event_day_reissue(
+                    int(_p[0]), int(_p[2].lstrip("#")),
+                    confirm=(len(_p) > 3 and _p[3].lower() == "confirm")),
                     indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "test":
                 # "<event_id>|test|<staff addr>|cid=<id>" (Kerry 10/13): ONE

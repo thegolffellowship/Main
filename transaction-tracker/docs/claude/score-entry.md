@@ -806,6 +806,71 @@ sandbox has 3.45.1. The tables are still created lazily with `CREATE TABLE
 IF NOT EXISTS` (once per database), since the repo has no migration-file
 convention yet; that goes to CA with the hardening ruling.
 
+## Prize money runs itself; a card is final 15 minutes after its last score (v2.562.6, Kerry 2026-10-13)
+
+What Kerry said, verbatim:
+- "Payouts need to auto calculate and populate based on GAMES tabs
+  immediately after scores are all in"
+- "15 minutes after last score entered by each scorer because scorer may
+  not finalize how they should"
+- "When last hole score is entered by last player in field, won Columns
+  should unhide and amounts should show but non-final until 15 minutes
+  have passed"
+
+**Final card.**
+- `score_entry.card_final_at(last_score_at, complete, unlocked_at,
+  minutes)`. Once every hole of every player in the group has a gross,
+  the card is final at the later of the group's last `se_hole_scores.server_ts`
+  and a manager unlock, plus app setting `se_card_lock_minutes` (default 15).
+- Unlocks are stored in app setting `se_card_unlocks` (`{group_id: when}`);
+  there is no new table.
+- `_group_card_state` gives the state for one group. `get_group_card`
+  returns `final` / `final_at` / `lock_minutes`, and `get_entered_scores`
+  stamps each group with `final` / `final_at`.
+- `write_scores` refuses phone writes to a final card. The result is
+  `refused_final`, kept in `se_audit`, and the version is not bumped.
+- `POST /api/score-entry/groups/<id>/unlock` (manager) calls `unlock_card`.
+
+**Publish.** `entry_publish.publish_eligibility` publishes a complete card
+in any of three cases:
+- it is final (no submit or signature needed);
+- the old way: submitted or the round closed, and the player signed;
+- `rnd["_provisional"]` is set (`publish_event(provisional=True)`). The
+  auto-payouts job uses this once the whole field is in.
+
+A complete card that is not final is held with the reason "card final at …".
+
+**Auto payouts** (`email_parser/auto_payouts.py`, job `auto_payouts` every
+minute, dial `auto_payouts`). It covers score-entry events of the last 3
+days that are untethered from Golf Genius. On each event:
+1. A dry run of the publish runs first, so nothing is written while a
+   hole is out ("waiting").
+2. Once the field is in, it publishes provisionally and assembles the
+   payouts with `assemble_event_game_payouts`. The rows, with
+   customer_id, become the board PREVIEW (app setting `auto_payouts_preview`):
+   `{rows, final, final_at, total, fp}`.
+3. `get_event_leaderboard` reads the preview when no payouts are recorded.
+   It sets `money_visible` (no 10-minute hold), `money_final` and
+   `money_final_at`. contests.html's `evlbFinalNotice` prints the
+   "not final yet" note.
+4. Once every group is final, it records with
+   `record_event_game_payouts(force=True)`, but only while app setting
+   `auto_payouts_record` reads `on`. It is OFF to start: 10/13 is
+   display only and Kerry records by hand (CoS #1760/#1761, Kerry "Go
+   with your conditions"). It goes on from 10/20 once
+   `scoring-auto-payouts` dry run matches the hand rows to the cent.
+   With the dial off, the state is `final_display_only` and the board
+   shows the money as final. The recording is paid-safe, and an event
+   with manual payouts is refused.
+
+Per-event state lives in app setting `auto_payouts_fp`:
+`{fp, v (score-entry version), final, final_at, mins, recorded | refused}`.
+An event is not re-run until its version moves, its final time passes, or
+the lock dial changes.
+
+Bridge `scoring-auto-payouts[:apply][|<event_id>]`. Guard
+`test_auto_payouts.py`.
+
 ## Publishing entered scores (G-0 keystone, CA #786 GO 1)
 
 Kerry's ruling: when a group's card is CLOSED AND SIGNED, its gross scores
@@ -1057,6 +1122,39 @@ se_game_handicaps basis text.
   when it differs from the field's. The phone card's own-tee pops are Track
   A's v2.525.6 (`_si_by_band`).
 
+## One source for strokes, and the engine-vs-card check (v2.564.0, Kerry 2026-10-14)
+
+Kerry 10/14: "Yes, build both before next Tuesday." After s9.27 (10/13) the
+saved cards were right and the payout engine was wrong for Dan Stich (net
+41 vs 38): the engine worked out his strokes a second time, on the wrong
+tee's 18-hole indexes (fixed the same night in v2.563.4, `test_own_tee_nine.py`).
+
+- **One source.** `database.event_engine_state` hands the engine the strokes
+  SAVED on every card (`scoring_holes.strokes_received`), entered cards
+  included, so payouts and points read the same strokes as the card, the
+  handicap post and the MVP. The one exception: an entered card from before
+  CA #865 with placeholder zeros (playing handicap 1+ and no stroke on any
+  hole) is still derived, and the check below flags it.
+- **The check.** `email_parser/card_parity.py` `engine_card_parity(event)`,
+  every ENTERED card (GG-era cards carry GG's own dots and are skipped):
+  (1) the saved strokes against the rule worked out independently (his own
+  tee, the nine he played, `handicap_calc.ruled_dots`); (2) the engine's
+  card (`event_engine_state` + `build_cards`) against the saved card, hole
+  by hole, gross and net. A card with no holes saved is skipped; a tee with
+  no stroke index for a played hole is itself a mismatch.
+- **What a difference holds.** `record_event_game_payouts` refuses (the one
+  writer: auto payouts, `scoring-record-payouts`, the closeout);
+  `closeout_final_check` lists it as blocking (`card_parity` in its output);
+  `tracker_points.event_lines` leaves the event out with a `HELD ` warning and
+  `rebuild` / `rebuild_monthly` refuse to apply (`refused`), so standings stay
+  as they were rather than lose the event's points. Every publish
+  (`entry_publish._publish`, applied + changed) runs it and raises one HIGH
+  COO item, `SCORING HOLD: engine vs scorecard — <event>`, deduped while open.
+- Auto payouts records a refusal and waits for the next card change; after a
+  fix that is not a card change (tee data), run `scoring-record-payouts:<event>`.
+- Read-only bridge `scoring-card-parity:<event name or id>`. Guard
+  `test_card_parity.py`.
+
 ## Finding 0: entry mode, the board reads entered scores only (CoS #1333, 2026-10-07)
 
 Kerry (#1313): "audit actual tracker entered scores ... without any importing
@@ -1132,3 +1230,46 @@ on by itself" rule for regular events. `email_parser/live_scoring_default.py`:
 - Early seeding is safe: rounds re-sync to later pairing saves (the pairings
   fingerprint) and re-seeding never touches a score.
 - Guard: `test_live_scoring_default.py`.
+
+
+## SCORING tab for managers (v2.559.3, Kerry 2026-10-13)
+
+"Can you make the SCORING tab available to Managers under each event?"
+- The Events page's SCORING tab (`data-toggle-games="7"`) shows for admin AND manager on any event in `score_entry_events`.
+- Managers get the read (`/api/score-entry/events/<id>/admin`, already manager), the copy-link buttons and each group's QR. `/api/score-entry/groups/<id>/qr.svg` is now manager, behind `_se_event_gate("group", ...)`.
+- Seed / Update-from-pairings (`/seed`) and Close round stay ADMIN (CA #843); the panel hides those buttons for non-admins.
+- Guard: `test_score_entry.py`.
+
+- **v2.559.7, EVENTS list before the first score (Kerry 2026-10-13: "They should show starting when tee times are generated").** `get_events_leaderboard` lists a score-entry event in entry mode (live today or later) as soon as its groups have seated players, even with no score posted (`_entry_mode_overlay` returned `{}`). Field = distinct seated customer_ids across non-preview rounds; money and ranks stay hidden until the field is complete. Guard `test_events_list_pre_score.py`.
+
+## The players' how-to page (v2.561.3, Kerry 2026-10-13)
+
+`/member/live-scoring` is the public, vetted how-to for players: ten steps,
+one per slide (Next / back, swipe, `#step-N` deep links) or all on one page.
+Kerry: "a slideshow or directions directly on the Tracker that has its own
+link that we can send out. So it's fully vetted, locked and can be updated
+at any point", "with literal screenshots from a phone that shows correct
+fonts". Every word and picture lives in the `steps` list at the top of
+`templates/live_scoring_guide.html`; the screenshots are files in
+`static/img/live-scoring/` (iPhone size, 390 x 844 at 3x, real Bitter, taken
+on a test copy with sample names). When a scoring screen changes, re-shoot
+that step and replace its file under the same name. Guard
+`test_live_scoring_guide.py`. Known friction it documents: a non-scorekeeper
+signs via SCORE THIS GROUP, their name, then Follow along, next to Take over
+(Closeout #1739).
+
+Every phone screenshot is one full screen, 780 x 1688, so every phone frame
+is the same size (v2.562.1, the test checks it). Step 1 (v2.562.2) shows the
+three ways in, each circled in red: the cart sign's QR (`00-cart-sign.jpg`),
+the paper scorecard's QR (`00-scorecard.jpg`), and the pairing email's Keep
+score on your phone button (`00-email.jpg`). They were rendered from
+`cart_signs.html`, `scorecards.html` and `event_day_email.spot_card` /
+`scoring_button` with sample names. Re-render them when any of those three
+layouts changes.
+
+- **CTP VERIFICATION (v2.562.5, Kerry 2026-10-13, "Yes, build all three after close-out").** At The Quarry, hole 16 went to Dan Stich (group 3) when Pat Youngs (group 6) was closer.
+  1. **A stale screen never overwrites a claim.** The phone sends `seen_holder` (the holder it showed) with every CTP answer. If another group has claimed since, `claim_ctp` writes nothing and returns `{stale, holder}` (HTTP 409). The phone shows "X (Group N) claimed this hole while you were playing it" and asks again. A request without `seen_holder` (an old phone) is taken as before.
+  2. **The question names the marker:** "Is anyone in your group closer than X's marker?" / "No one closer than X". The copy says not to pick the closest in your own group.
+  3. **The manager confirms takeovers.** `ctp_takeover(conn, round, hole)` is set when the current holder came from a phone claim that took the hole from a player in another group. A change within the same group, or a manager ruling, is not a takeover. The Live Scoring manager panel shows a "Confirm <name>" button (a manager ruling on the same player) and the hole's claim history (`ctp_history`). `event_ctp_holders` carries `needs_confirm`. Record Payouts (`_tracker_team_and_ctp_rows`) skips an unconfirmed hole with a note, and the EVENTS board shows it as "to be confirmed" with no dollar.
+  4. No schema: everything is read from `se_ctp_claims`.
+  5. Guards: test_score_entry.py, test_untethered_payouts.py, test_board_phone_ctp.py.

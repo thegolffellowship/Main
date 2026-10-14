@@ -65,6 +65,46 @@
            popup (its "This board" block); only the title and the button stay on the board. */
         #pr-preamble, #pr-preamble-toggle, #pr-phase-chip { display: none !important; }
         #pr-hiw-btn { margin-left: auto; }
+        /* CD #1638 L3 (Kerry 2026-10-13): the race-chip row is deleted (kept in the DOM, hidden: the pickers drive
+           the same chip click), the race picker IS the title, HOW IT WORKS sits at the right of the title line. */
+        .pr-race-row { display: none !important; }
+        .pr-pickers.pr-pickers-mp { padding: 1rem 2rem 0; }
+        /* the pickers name the chapter, so Match Play's own chapter control hides beside them (season stays) */
+        #section-match-play:has(> .pr-pickers-mp) #cmp-hiw-btn { display: none !important; }
+        .pr-pickers-mp ~ .cmp-chapter-bar .cmp-chapter-tab, .pr-pickers-mp ~ .cmp-chapter-bar .mp-select-field:first-child { display: none !important; }
+        @media (max-width: 560px) { .pr-pickers.pr-pickers-mp { padding: 0.75rem 1rem 0; } }
+        #pr-standings-title { display: none !important; }
+        .pr-pk-btn.race { font: 800 24px/1.15 'Bitter', Georgia, serif; letter-spacing: 0; padding: 5px 12px 5px 14px; }
+        .pr-pk-btn.race i { font-size: 14px; }
+        /* HOW IT WORKS keeps its own button and name (Kerry 2026-10-13: "Keep the HOW IT WORKS button instead of
+           changing it to RULES"), at the right of the title line, with room above the champion banner. */
+        .pr-pickers #pr-hiw-btn { margin-left: auto; }
+        .pr-pickers { margin-bottom: 14px; }
+        .pr-pk-btn .ts { display: none; }
+        /* PHONES: two rows above the board, not seven (Kerry 2026-10-13: "This is too many rows above the leaderboard").
+           Row 1 = chapter (short name) + race + HOW IT WORKS as an (i) disc; the status tag drops (the banner/LIVE pill
+           carry it). Row 2 = LIVE pill + Past Champions + Show All Players (.pr-pc-row). */
+        @media (max-width: 560px) {
+            .pr-pickers { flex-wrap: nowrap; gap: 6px; margin-bottom: 10px; }
+            #pr-pk-ch { flex: 0 0 auto !important; }
+            #pr-pk-ch .pr-pk-btn { width: auto !important; padding: 8px 8px; gap: 6px; }
+            #pr-pk-ch .pr-pk-btn .t { display: none; } #pr-pk-ch .pr-pk-btn .ts { display: inline; }
+            #pr-pk-race { flex: 1 1 auto; min-width: 0; }
+            .pr-pk-btn.race { font-size: 16px; width: 100%; box-sizing: border-box; justify-content: space-between; }
+            .pr-pk-btn.race .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+            #pr-pk-tag { display: none; }
+            .pr-pickers #pr-hiw-btn { flex: none; width: 34px; height: 34px; min-width: 34px; padding: 0; margin-left: 0;
+                font-size: 0 !important; letter-spacing: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+            .pr-pickers #pr-hiw-btn::before { content: "i"; font: italic 700 17px/1 Georgia, serif; color: #fff; text-transform: none; }
+            .pr-pickers #pr-hiw-btn { text-transform: none; }
+            /* the month strip fits the phone width; the in-progress pill folds into its dot (OCT \u2022) */
+            .pr-mo-seg { display: flex; flex: 1 1 100%; width: 100%; min-width: 0; }
+            .pr-mo-seg button { flex: 1 1 auto; min-width: 0; padding: 0.4rem 0.15rem; font-size: 0.64rem; letter-spacing: 0; }
+            .pr-mo-inprog { display: none; }
+            .pr-pc-row { gap: 8px; }
+            .pr-pc-row > .past-champs > summary { padding: 0.45rem 0.6rem; font-size: 0.78rem; }
+            .pr-pc-row > .pr-buy-legend { font-size: 11px; }
+        }
         /* CHAPTER / RACE PICKERS (CD #1638 section 2-3, built beside the chips) */
         .pr-pickers { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 0.6rem; }
         .pr-pk { position: relative; }
@@ -337,16 +377,25 @@
         .top-tabs::-webkit-scrollbar { display: none; }
         .top-tab {
             padding: 0.65rem clamp(0.5rem, 1.5vw, 1.25rem); cursor: pointer;
-            font-size: 0.82rem;
-            font-weight: 600; color: var(--text-muted); border-bottom: 3px solid transparent;
+            /* Bitter, as CD #1638 L2 draws every section tab (Kerry 2026-10-13) */
+            font: 700 12px/1.2 'Bitter', Georgia, serif; letter-spacing: 1.5px;
+            color: var(--text-muted); border-bottom: 3px solid transparent;
             margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
             background: none; border-top: none; border-left: none; border-right: none;
-            text-transform: uppercase; letter-spacing: 0.04em;
+            text-transform: uppercase;
             white-space: nowrap; flex: 0 0 auto;
         }
         .top-tab:hover { color: var(--text); }
         /* Cup board session / view toggles (Kerry 2026-10-07, CoS #1351 D3) */
         .lsc-preview-band { background:#B91C1C; color:#fff; font:700 12px/1 'Bitter',serif; letter-spacing:.12em; text-align:center; padding:8px; border-radius:8px; margin:0 0 10px; }
+        /* MONTHLY month picker: one connected segmented control (Kerry 2026-10-13) */
+        .pr-mo-seg { display: inline-flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; border: 1px solid var(--border, #E5E7EB);
+            border-radius: 9999px; background: var(--surface, #fff); }
+        .pr-mo-seg button { border: 0; border-left: 1px solid var(--border, #E5E7EB); background: none; cursor: pointer; white-space: nowrap;
+            padding: 0.35rem 0.8rem; font: 700 0.74rem/1.2 'Bitter', Georgia, serif; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+        .pr-mo-seg button:first-child { border-left: 0; }
+        .pr-mo-seg button.on { background: var(--primary, #E87C3E); color: #fff; }
+        .pr-mo-seg button:not(.on):hover { color: var(--text, #1B1B1B); background: #F8F8F8; }
         .lsc-bd-seg { display: flex; gap: 4px; margin: 12px 0 8px; padding: 4px;
                       background: #EEF1F6; border-radius: 9999px; }
         .lsc-bd-seg button { flex: 1 1 0; min-height: 40px; border: none; border-radius: 9999px;
@@ -381,16 +430,9 @@
            blue background with white text."). Same navy as the Cup event
            card (.lsc-event); selected adds the orange ring the card's top
            border carries, unselected text sits at 90%. */
-        .top-tab[data-top="lone-star-cup"] {
-            background: var(--lsc-navy, #002855); color: rgba(255,255,255,0.9);
-            border: 2px solid var(--lsc-navy, #002855); border-radius: 9999px;
-            margin: 0.3rem 0.35rem; padding-top: 0.4rem; padding-bottom: 0.4rem;
-            align-self: center;
-        }
-        .top-tab[data-top="lone-star-cup"]:hover { color: #fff; }
-        .top-tab[data-top="lone-star-cup"].active {
-            color: #fff; border-color: #E87C3E; box-shadow: 0 0 0 1px #E87C3E;
-        }
+        /* LONE STAR CUP tab: a normal underline tab with a navy star (CD #1638 L2, Kerry 2026-10-13: "the top
+           part is not how CD designed it"); the navy pill of 10/7 is retired by that design. */
+        .top-tab[data-top="lone-star-cup"]::before { content: "\2605"; color: #002868; margin-right: 6px; }
 
         /* ── EVENTS leaderboard (ADMIN pilot, Kerry 2026-09-11) ──
            toggles are CONNECTED segments (Kerry: "Connect the toggles
@@ -583,6 +625,9 @@
         .evlb-nm-stack > span { font-weight: 700; letter-spacing: .01em; }
         .evlb-holes th.nm { color: #fff; }
         .evlb-holes tr.mute td { color: #9CA3AF; }
+        .evlb-blind { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+            background: #FEF3C7; color: #92400E; font: 700 10px/1.4 -apple-system, "Helvetica Neue", sans-serif;
+            letter-spacing: .04em; vertical-align: middle; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
             border-top: 2px solid #1B1B1B; }
         /* POPS — strokes received on the hole, house standard: dots
@@ -608,9 +653,10 @@
            2026-09-13): green row = bought into THAT game, light grey =
            did not. Backgrounds only — the inline win tints on the score
            cells still paint over the top, which is the point. */
-        .evlb-ovr tr.evlb-plr.bought td { background: var(--buyin-green, #bbf7d0); }
-        .evlb-ovr tr.evlb-plr.nobuy td { background: var(--buyin-grey, #FAFAFA); color: #9CA3AF; }
-        .evlb-ovr tr.evlb-plr.nobuy td.nm { color: #6B7280; }
+        /* bought in = plain white, not bought in = soft grey + muted text, on every board (Kerry 2026-10-13) */
+        .evlb-ovr tr.evlb-plr.bought td { background: var(--buyin-row, #FFFFFF); }
+        .evlb-ovr tr.evlb-plr.nobuy td { background: var(--buyin-nobuy, #EEEEEC); color: var(--buyin-nobuy-text, #6B7280); }
+        .evlb-ovr tr.evlb-plr.nobuy td.nm { color: var(--buyin-nobuy-text, #6B7280); }
         /* MVP badges under the name on OVERALL (Kerry 2026-09-14) —
            the Player Spotlight's .spt-badge shape (8px uppercase Bitter
            pill) in the ratified payout-category colours. */
@@ -1445,6 +1491,27 @@
             font: 700 0.56rem/1 'Bitter', Georgia, serif; letter-spacing: 0.05em;
             text-transform: uppercase; color: var(--mp-accent); white-space: nowrap; flex: none;
         }
+        /* OPEN CARD rides the hole-dots line (Kerry 2026-10-13: "move the OPEN
+           CARD to same line as the dots ... reduce the vertical height").
+           Note left, dots centred, hint right; one row instead of two. */
+        .mpv2 .mp-dots-line {
+            display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+            gap: 0.5rem; padding: 0.5rem 0.7rem;
+        }
+        .mpv2 .mp-dots-line .mp-hole-dots { padding: 0; }
+        .mpv2 .mp-dots-line .mp-illus-note { justify-self: start; }
+        .mpv2 .mp-dots-line .mp-toggle-hint { justify-self: end; }
+        .mpv2 .mp-hint-short { display: none; }
+        @media (max-width: 560px) {
+            /* phone: "OPEN" / "CLOSE" and "Start 10", all on the one line
+               (Kerry 10/13: "The Started on hole x should be on the same
+               line as well"). Side columns may shrink to 0 so the dots
+               keep their single line. */
+            .mpv2 .mp-hint-long { display: none; }
+            .mpv2 .mp-hint-short { display: inline; }
+            .mpv2 .mp-dots-line { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.3rem; }
+            .mpv2 .mp-dots-line .mp-illus-note { white-space: nowrap; }
+        }
         .mpv2 .mp-scorecard[hidden] { display: none; }
         .mpv2 .mp-scorecard { border-top: 1px solid var(--border); padding: 0.75rem 0.7rem; background: #FCFCFB; }
         .mpv2 .mp-sc-nines { display: flex; flex-wrap: wrap; gap: 0.9rem 1.1rem; }
@@ -1750,6 +1817,20 @@
             border-bottom: 1px solid var(--border); padding: 10px 12px 8px;
         }
         #pr-table-container .enrollment-table th span { color: #9CA3AF !important; }
+        /* COLUMN HEADERS: TGF black band, white text, rounded top corners, less height (Kerry 2026-10-13). The table goes
+           border-collapse: separate (spacing 0) because a collapsed table ignores border-radius on its cells. */
+        #pr-table-container .enrollment-table { border-collapse: separate; border-spacing: 0; }
+        #pr-table-container .enrollment-table thead th { background: #1B1B1B !important; color: #fff !important;
+            padding-top: 5px !important; padding-bottom: 4px !important; border-bottom: 0 !important; }
+        #pr-table-container .enrollment-table thead th span { color: #D1D5DB !important; }
+        #pr-table-container .enrollment-table thead th span.pr-proj { color: #F4A574 !important; }
+        #pr-table-container .enrollment-table thead tr:first-child th:first-child { border-top-left-radius: 8px; }
+        #pr-table-container .enrollment-table thead tr:first-child th:last-child { border-top-right-radius: 8px; }
+        /* Past Champions and Show All Players share one line (Kerry 2026-10-13) */
+        .mp-champ-plaque { margin: 12px 0 4px; }
+        .pr-pc-row { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 0.7rem; }
+        .pr-pc-row > .past-champs { flex: 1 1 auto; margin: 0; min-width: 0; }
+        .pr-pc-row > .pr-buy-legend { margin: 0 0 0 auto; align-self: center; flex: none; }
         /* (PROJ) eyebrow in TGF orange (Kerry, 2026-07-10) — must out-specific
            the gray th-span rule above */
         #pr-table-container .enrollment-table th span.pr-proj { color: var(--primary) !important; }
@@ -1778,7 +1859,6 @@
                (Kerry, 2026-07-10) — no separate selector rows */
             .pr-race-row { display: none; }
             .cmp-chapter-bar .cmp-chapter-tab { display: none; }
-            .top-tab[data-top="points-race"].active::after,
             .top-tab[data-top="match-play"].active::after { content: " \25BE"; color: var(--primary); }
             .shell-menu.pr-tab-anchored {
                 position: absolute; top: 100%; left: 10px; right: 10px; z-index: 70;
@@ -2148,7 +2228,7 @@
         }
         /* three member top-tabs must fit a 390px phone without scroll */
         @media (max-width: 420px) {
-            .top-tab { padding: 0.5rem 0.55rem; font-size: 0.76rem; letter-spacing: 0; }
+            .top-tab { padding: 0.5rem 0.55rem; font-size: 11px; letter-spacing: 0.6px; }
         }
         /* CHAMPION PLAQUE (Kerry 2026-08-16: "the champion highlight is
            very boring in the amber. How can we really make it pop?") —
@@ -2312,9 +2392,12 @@
                    LONE STAR CUP toggle to the left on the nav bar"); EVENTS
                    drops its BETA badge (same message). #}
                 {% if member_mode %}<button class="top-tab" data-top="events">Events</button>{% else %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events</button>{% endif %}
-                <button class="top-tab active" data-top="points-race">Points Races</button>
+                {# SEASON CONTESTS (Kerry 2026-10-13: "Let's roll MATCH PLAY for each city into the POINTS RACES tab, but change
+                   POINTS RACES to SEASON CONTESTS"): Match Play is now a race in each chapter's picker; its tab stays in the
+                   DOM, hidden, so #tab=mp links and the section handlers keep working. #}
+                <button class="top-tab active" data-top="points-race">Season Contests</button>
                 <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
-                <button class="top-tab" data-top="match-play">Match Play</button>
+                <button class="top-tab" data-top="match-play" style="display:none;">Match Play</button>
                 <button class="top-tab manager-only" data-top="enrollment">Enrollment</button>
             </div>
         </div>
@@ -2528,10 +2611,8 @@
                 <span class="evlb-year" id="evlb-year" title="Year selector arrives with historical records">2026</span>
                 <span class="evlb-pilot" id="evlb-pilot"></span>
             </div>
-            {# While Golf Genius is the official scorer every board says so
-               (Kerry 2026-10-02, CoS #1146-1). The date comes from the
-               gg_official_through setting through the list API. #}
-            <p class="evlb-official" id="evlb-official">Unofficial &middot; Golf Genius is the official scorer<span id="evlb-official-through"></span>.</p>
+            {# The Tracker is the official scorer now (Kerry 2026-10-13: "it needs to be official now. Not Golf Genius is
+               the official scorer"). The old Unofficial / GG-official line (CoS #1146-1) is gone. #}
             <div id="evlb-list"><p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p></div>
         </div>
 
@@ -2573,22 +2654,24 @@
                     </div>
                 </div>
                 <div class="standings-section" style="padding:1rem 2rem;">
-                    <!-- CHAPTER / RACE PICKERS (CD #1638, Kerry 2026-10-12: keep the chips and the LSC pill, add the pickers beside them) -->
+                    <!-- CHAPTER / RACE PICKERS = the title line (CD #1638; Kerry 2026-10-13: the chips and the LSC pill go, as CD designed) -->
+                    <span id="pr-pickers-home" hidden></span>
                     <div class="pr-pickers" id="pr-pickers">
-                        <div class="pr-pk" id="pr-pk-ch"><button type="button" class="pr-pk-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dot"></span><span class="t"></span><i>&#9662;</i></button><div class="pr-pk-menu" role="listbox" hidden></div></div>
+                        <div class="pr-pk" id="pr-pk-ch"><button type="button" class="pr-pk-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dot"></span><span class="t"></span><span class="ts"></span><i>&#9662;</i></button><div class="pr-pk-menu" role="listbox" hidden></div></div>
                         <span class="pr-pk-sl">/</span>
                         <div class="pr-pk" id="pr-pk-race"><button type="button" class="pr-pk-btn race" aria-haspopup="listbox" aria-expanded="false"><span class="t"></span><i>&#9662;</i></button><div class="pr-pk-menu" role="listbox" hidden></div></div>
                         <span class="pr-pk-tag" id="pr-pk-tag"></span>
+                        <button id="pr-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
                     </div>
                     <div class="pr-pk-scrim" id="pr-pk-scrim" hidden></div>
                     <!-- HIW left beside the title, badges right (Kerry 2026-08-06) -->
                     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
                         <h4 id="pr-standings-title"></h4>
-                        <button id="pr-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
                         <!-- starts hidden: the landing race is a Fall NET (chip is for the
      season cups/city races; race clicks + deep links toggle it) -->
                         <span id="pr-phase-chip" style="margin-left:auto;display:none;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
-                        <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
+                        <!-- "Refresh from Golf Genius" removed (Kerry 2026-10-13: "Refresh from
+                             Golf Genius should be gone now"). The Tracker computes the races. -->
                     </div>
                     <!-- Mobile: everything between the race name and the
                          table folds behind one slim chip (Kerry 2026-08-01,
@@ -2845,6 +2928,7 @@
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
     {% if evlb_landing %}<script>window.EVLB_LANDING = true;</script>{% endif %}
+    {% if evlb_open %}<script>window.EVLB_OPEN = {{ evlb_open|tojson }};</script>{% endif %}
     {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
     {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }}; window.SOLO_T = {{ (SOLO_T or "")|tojson }};{% if SOLO_CUP %} window.SOLO_CUP = {{ SOLO_CUP|tojson }}; window.lscSel = window.SOLO_CUP;{% endif %}</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
@@ -3728,6 +3812,15 @@
                     evlbPinToTop(el);
                 });
             });
+            // ONE EVENT'S LINK (/member/results/<id>, Kerry 2026-10-13: "Links
+            // need to go to specific locations"): open that event, which loads
+            // its board and pins it to the top through the toggle above.
+            if (window.EVLB_OPEN && !window.SOLO_EVENT) {
+                const want = String(window.EVLB_OPEN).toLowerCase();
+                const el = [...box.querySelectorAll("details.evlb-ev")]
+                    .find(x => (x.dataset.ev || "").toLowerCase() === want);
+                if (el) el.open = true;
+            }
             // THE SCORER'S BOARD (Kerry 2026-10-02: "The leaderboard that they
             // would go to would be JUST for that event"): the other events
             // leave the page and his opens by itself.
@@ -3744,7 +3837,8 @@
                 const off = $("evlb-official");
                 if (off) off.hidden = !ev || !!ev.live_entry || ev.gg_scored === false;
                 if (st && ev) {
-                    st.textContent = ev.money_visible === false ? "In play" : evlbDate(ev.event_date) + " · final";
+                    st.textContent = ev.money_visible === false ? "In play"
+                        : evlbDate(ev.event_date) + (ev.money_final === false ? " · not final" : " · final");
                     st.classList.toggle("posted", ev.money_visible !== false);
                 }
                 if (mine) { mine.open = true; }
@@ -3868,7 +3962,7 @@
         else if (what[game]) out.push(sec("This tab", what[game]));
         if (!noGames) out.push(sec("Colors",
             `Money winners are colour-coded by FLIGHT: ${[1, 2, 3].map(f => `<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`).join(" ")}. `
-            + `On the Net, Gross, Skins and MVP/Points tabs a <span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">green</span> row bought into that game and a <span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">grey</span> row did not; non-buyers are placed in the flight their handicap would have flighted them. Show All Players brings the non-buyers back onto a Net or Gross board.`));
+            + `On the Net, Gross, Skins and MVP/Points tabs a <span class="lg" style="background:var(--buyin-row,#FFFFFF);color:#1B1B1B;border:1px solid #E5E7EB;">white</span> row bought into that game and a <span class="lg" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">grey</span> row did not; non-buyers are placed in the flight their handicap would have flighted them. Show All Players brings the non-buyers back onto a Net or Gross board.`));
         out.push(sec("Tapping", "Tap a player for their scorecard, or a team for its best-ball card. Tap a column header to sort and re-rank. Dots in the corner of a hole are the strokes received there. Hole by hole and Handicaps add those columns."));
         const ev = d.event || {};
         out.push(sec("Where the scores come from", ev.score_source === "entry"
@@ -3898,6 +3992,17 @@
         if (e.target.closest && e.target.closest("#evlb-hiw-close, #evlb-hiw-gotit, #evlb-hiw-scrim")) evlbCloseGuide();
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") evlbCloseGuide(); });
+    function evlbFinalNotice(d) {
+        // NOT FINAL YET (Kerry 2026-10-13: "amounts should show but
+        // non-final until 15 minutes have passed"). The field is in, the
+        // money shows; it locks 15 minutes after the last group's last score.
+        if (d && !d._moneyHeld && d.money_final === false && !evlbNoGames(d)) {
+            const t = d.money_final_at ? new Date(d.money_final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : "";
+            return `<div style="margin:0 0 8px;padding:7px 10px;border:1px solid #FCD34D;background:#FFFBEB;border-radius:6px;font-size:12px;color:#92400E;">
+                <strong>Winnings are not final yet.</strong> Every score is in. The money below is final${t ? " at " + escapeHtml(t) : " soon"}, 15 minutes after the last score, unless a score changes.</div>`;
+        }
+        return "";
+    }
     function evlbMoneyNotice(d) {
         if (!d || !d._moneyHeld || evlbNoGames(d)) return "";   // no games, no money to wait for
         const mins = d.money_hold_minutes || 10;
@@ -4089,6 +4194,15 @@
     //    These live out here rather than inside evlbEventHtml so the
     //    headless guard runs the REAL mapping, not a copy of it — a
     //    duplicated copy is exactly what went stale before.
+    // A blind slot arrives as "Bl[Robert Straiton]" (the GG convention) with
+    // blind: true; the board names the player and says "(blind)".
+    function evlbIsBlind(x) {
+        return !!(x && (x.blind || /^Bl\[/.test(x.player_name || "")));
+    }
+    function evlbTeamMemberName(x) {
+        const nm = String((x && x.player_name) || "").replace(/^Bl\[(.*)\]$/, "$1");
+        return evlbIsBlind(x) ? nm + " (blind)" : nm;
+    }
     function evlbOvOf(ovIx, x, note) {
         const base = x && ovIx[String(x.scoring_round_id)];
         if (!base) return null;
@@ -4206,7 +4320,11 @@
             && (r.win_skins
                 || ((d.skin_cells || {})[String(r.scoring_round_id)] || []).length > 0);
         const shM = (!game || game === "points") && r.win_mvp;
-        const money = evlbGameMoney(r, game);
+        // On the TEAM tab a row's Won is what that SLOT earned from this
+        // team (Kerry 10/13: a blind on two winning teams takes the higher
+        // and nothing from the lower), not the player's whole Team Net money.
+        const money = (game === "team" && r._teamWon !== undefined)
+            ? (r._teamWon || 0) : evlbGameMoney(r, game);
         const skinHoles = shS
             ? (((d.skin_cells || {})[String(r.scoring_round_id)]) || []) : [];
         const skC = evlbFlightColor(r.skins_flight);
@@ -4271,7 +4389,7 @@
             // the row's name for sorting and lookups
             `<td class="nm">${Array.isArray(r._name_lines) && r._name_lines.length
                 ? `<span class="evlb-nm-stack" title="${escapeHtml(r.player_name)}">${r._name_lines.map(x => `<span>${escapeHtml(x)}</span>`).join("")}</span>`
-                : escapeHtml(r.player_name)}${evlbTeeDot(d, r, "right")}` +
+                : escapeHtml(r.player_name)}${r._blind ? ' <span class="evlb-blind" title="Blind draw: this player\'s card fills an open slot on this team">BLIND</span>' : ""}${evlbTeeDot(d, r, "right")}` +
             (game ? "" : evlbMvpBadges(r)) +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
@@ -4592,7 +4710,7 @@
                ["points", "MVP/Points"], ["prox", "Proxies"]];
         const first = tabs[0][0];
         // no games, no money: nothing to hold or explain
-        const offNotes = noGames ? "" : evlbMoneyNotice(d) + (d.games_off || []).map(g =>
+        const offNotes = noGames ? "" : evlbMoneyNotice(d) + evlbFinalNotice(d) + (d.games_off || []).map(g =>
             `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
         // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
         // hole-by-hole gross plus totals. Wins highlight by the ratified
@@ -4628,7 +4746,7 @@
         const ovTeamWins = (d.teams || []).filter(t => t.purse != null && t.purse > 0)
             .map(t => `<div class="evlb-winline team"><span class="cat">TEAM NET</span>` +
                 `<span class="who">${t.position ? escapeHtml(t.position) + " · " : ""}` +
-                `${t.players.map(p => escapeHtml(p.player_name)).join(" · ")}` +
+                `${t.players.map(p => escapeHtml(evlbTeamMemberName(p))).join(" · ")}` +
                 `${t.gg_total != null ? ` · <b>${t.gg_total}</b>` : ""}</span>` +
                 `<span class="amt">$${Number(t.purse).toFixed(2)}</span></div>`);
         const ovProxWins = (d.proxies || [])
@@ -4669,8 +4787,8 @@
             if ((!game || game === "points") && ovRows.some(r => r.win_mvp || r.mvp))
                 chips.push(`<span class="lg w-mvp">Pts</span> MVP`);
             if (EVLB_BUYIN_GAMES.includes(game))
-                chips.push(`<span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">bought in</span>`,
-                           `<span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">not in</span>`);
+                chips.push(`<span class="lg" style="background:var(--buyin-row,#FFFFFF);color:#1B1B1B;border:1px solid #E5E7EB;">bought in</span>`,
+                           `<span class="lg" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">not in</span>`);
             return chips.length ? `<p class="evlb-legend">${chips.join(" ")}</p>` : "";
         };
         const ovLegend = evlbLegendFor(null);
@@ -4745,8 +4863,12 @@
                 // of the band carries the per-hole score, the total and
                 // the purse, so those numbers are stated ONCE
                 sections: (d.teams || []).map(t => ({
+                    // BLINDS NAMED PLAINLY (Kerry 10/13: "What we're not
+                    // doing a good job on the team leaderboard is showing
+                    // who the blinds are"): "Robert Straiton (blind)", never
+                    // the raw "Bl[...]" key.
                     label: `${t.position ? t.position + " · " : ""}` +
-                        `${t.players.map(p => p.player_name).join(" · ")}`,
+                        `${t.players.map(evlbTeamMemberName).join(" · ")}`,
                     // PH on this tab is the TEAM handicap (Kerry
                     // 2026-09-15: "For team/cart net, PH should show
                     // their team/cart net handicap for that game, not
@@ -4755,9 +4877,12 @@
                     // shared row renderer stays one function.
                     rows: (t.players || []).map(x => {
                         const base = ovOf(x);
-                        return (base && x.team_hcp != null)
-                            ? Object.assign({}, base, { _teamHcp: x.team_hcp })
-                            : base;
+                        if (!base) return base;
+                        const extra = {};
+                        if (x.team_hcp != null) extra._teamHcp = x.team_hcp;
+                        if (evlbIsBlind(x)) extra._blind = true;
+                        if ("team_won" in x) extra._teamWon = x.team_won;
+                        return Object.keys(extra).length ? Object.assign({}, base, extra) : base;
                     }).filter(Boolean),
                 })).filter(sec => sec.rows.length),
                 sort: "keep",
@@ -4776,7 +4901,7 @@
                 : `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions and purses are the recorded Golf Genius result (the money of record). The total shown is our best-ball reconstruction from each player's own card — the official Team Net game plays a 75% off-lowest allowance, so the two can differ.</div>`) +
               d.teams.map((t, ti) => {
                 const names = t.players.map(p =>
-                    escapeHtml(p.player_name) + evlbTeeDot(d, p)).join(" &middot; ");
+                    escapeHtml(evlbTeamMemberName(p)) + evlbTeeDot(d, p)).join(" &middot; ");
                 const win = !d._moneyHeld && /^T?1$/.test(t.position || "");   // no winner tint mid-round
                 // GG's posted board total is the score of record; a team
                 // GG didn't post (shouldn't happen on a walked board)
@@ -4883,7 +5008,7 @@
         const netOf = (rid, n) => evlbNetOf(d, rid, n, t);
         const mins = evlbTeamMins(d, t);
         const rows = t.players.map(p =>
-            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}${evlbTeeDot(d, p, "right")}</td>` +
+            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(evlbTeamMemberName(p).replace(/ \(blind\)$/, ""))}${evlbIsBlind(p) ? ' <span class="evlb-blind">BLIND</span>' : ""}${evlbTeeDot(d, p, "right")}</td>` +
             cols.map(n => {
                 const v = netOf(p.scoring_round_id, n);
                 if (v == null) return '<td class="h"></td>';
@@ -5206,6 +5331,7 @@
     $$(".top-tab").forEach(btn => {
         btn.addEventListener("click", (e) => {
             const top = btn.dataset.top;
+            if (top === "points-race" && typeof prCloseMatchPlay === "function") prCloseMatchPlay();
             // Mobile (Kerry, 2026-07-10): tapping POINTS RACES drops the
             // race menu straight from the tab — no separate selector row.
             const mobile = window.matchMedia && window.matchMedia("(max-width: 560px)").matches;
@@ -5215,6 +5341,9 @@
             ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
+            // A new tab opens at the top, not at the old tab's scroll depth (Kerry 10/13: "When we click to new
+            // pages, they should all start at the top, not part way down")
+            if (!wasActive) window.scrollTo(0, 0);
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
             if (top === "events") evlbLoad();
@@ -5248,7 +5377,7 @@
     // MATCH PLAY → chapter menu. Menus are moved into .top-tabs-wrap — NOT
     // .top-tabs, whose overflow-x:auto CLIPS absolutely-positioned children
     // (the v2.57.5 menu opened but was invisible on iOS).
-    const TAB_MENU_IDS = { "points-race": "pr-race-dd-menu", "match-play": "cmp-chapter-dd-menu" };
+    const TAB_MENU_IDS = { "match-play": "cmp-chapter-dd-menu" };   // POINTS RACES: the pickers are the menu (CD #1638)
     function prToggleTabMenu(top) {
         const m = $(TAB_MENU_IDS[top]);
         if (!m) return;
@@ -5662,9 +5791,9 @@
     // table (today: the two Fall NETs and Monthly are live); the tag beside the title reads the real board state.
     const PR_NAV = {
         chapters: [
-            { id: "tgf", name: "TGF \u00b7 All chapters", color: "#1B1B1B", hint: "Fellowship Cup \u00b7 Players Cup \u00b7 Monthly", races: ["monthly", "tfc", "gross"] },
-            { id: "austin", name: "Austin", color: "#BF5700", races: ["fall_austin", "austin"] },
-            { id: "san-antonio", name: "San Antonio", color: "#4B6274", races: ["fall_sa", "net"] },
+            { id: "tgf", name: "TGF \u00b7 All chapters", short: "TGF", color: "#1B1B1B", hint: "Fellowship Cup \u00b7 Players Cup \u00b7 Monthly", races: ["tfc", "gross", "monthly"] },
+            { id: "austin", name: "Austin", color: "#BF5700", races: ["fall_austin", "austin", "mp_austin"] },
+            { id: "san-antonio", name: "San Antonio", short: "SA", color: "#4B6274", races: ["fall_sa", "net", "mp_sa"] },
         ],
         races: {
             monthly: { name: "Monthly", slug: "monthly-2026", live: true },
@@ -5674,8 +5803,13 @@
             austin: { name: "Austin NET", slug: "austin-net-2026", live: false },
             fall_sa: { name: "SA Fall NET", slug: "san-antonio-fall-net-2026", live: true },
             net: { name: "San Antonio NET", slug: "san-antonio-net-2026", live: false },
+            // Match Play per city (Kerry 2026-10-13): `mp` names the chapter the Match Play section loads
+            mp_austin: { name: "Austin Match Play", slug: "austin-match-play-2026", live: false, mp: "Austin" },
+            mp_sa: { name: "San Antonio Match Play", slug: "san-antonio-match-play-2026", live: false, mp: "San Antonio" },
         },
     };
+    // The TGF view lists every chapter's contests up to this many chapters (Kerry 2026-10-13).
+    const PR_NAV_ALL_CHAPTERS_MAX = 4;
     const prChapterOf = key => PR_NAV.chapters.find(c => c.races.includes(key)) || PR_NAV.chapters[0];
     const prKeyFromSlug = slug => Object.keys(PR_NAV.races).find(k => PR_NAV.races[k].slug === slug) || null;
     const prDefaultRaceOf = ch => (ch.races.find(k => PR_NAV.races[k].live) || ch.races[0]);
@@ -5689,6 +5823,52 @@
             history.replaceState(null, "", u.toString());
         } catch (e) { /* ignore */ }
     }
+    // MATCH PLAY inside SEASON CONTESTS (Kerry 2026-10-13). Picking a Match Play race shows the Match Play section under
+    // the same pickers: the picker row moves into that section and back, so its handlers and menus are untouched.
+    let prMpKey = null;
+    function prOpenMatchPlay(key, writeUrl = true) {
+        const race = PR_NAV.races[key]; if (!race || !race.mp) return;
+        prMpKey = key;
+        const pk = $("pr-pickers"), mp = $("section-match-play");
+        if (pk && mp && pk.parentElement !== mp) { pk.classList.add("pr-pickers-mp"); mp.insertBefore(pk, mp.firstChild); }
+        $$(".top-tab").forEach(b => b.classList.toggle("active", b.dataset.top === "points-race"));
+        ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
+            const sec = $("section-" + k); if (sec) sec.classList.toggle("section-hidden", k !== "match-play");
+        });
+        const tab = document.querySelector(`.cmp-chapter-tab[data-chapter="${race.mp}"]`);
+        if (tab && !tab.classList.contains("active")) tab.click();
+        if (writeUrl) {
+            try {
+                const u = new URL(location.href);
+                u.searchParams.set("chapter", prChapterOf(key).id); u.searchParams.set("race", race.slug);
+                u.hash = "#tab=mp&ch=" + (race.mp === "Austin" ? "austin" : "sa");
+                history.replaceState(null, "", u.toString());
+            } catch (e) { /* ignore */ }
+        }
+        if (window.prPinBars) window.prPinBars();
+        prSyncPickers();
+    }
+    function prCloseMatchPlay() {
+        if (!prMpKey) return;
+        prMpKey = null;
+        const pk = $("pr-pickers"), home = $("pr-pickers-home");
+        if (pk && home && pk.previousElementSibling !== home) { pk.classList.remove("pr-pickers-mp"); home.after(pk); }
+        ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
+            const sec = $("section-" + k); if (sec) sec.classList.toggle("section-hidden", k !== "points-race");
+        });
+        const act = document.querySelector(".sub-tab[data-pr].active");
+        if (act && PR_NAV.races[act.dataset.pr]) prWriteUrl(act.dataset.pr);
+        prSyncPickers();
+    }
+    // one HOW IT WORKS on the title line: on a Match Play race it opens Match Play's own (that button hides)
+    (function () {
+        const b = $("pr-hiw-btn");
+        if (b) b.addEventListener("click", ev => {
+            if (!prMpKey) return;
+            const mpb = $("cmp-hiw-btn");
+            if (mpb) { ev.stopImmediatePropagation(); ev.preventDefault(); mpb.click(); }
+        }, true);
+    })();
     function prCloseMenus() {
         document.querySelectorAll(".pr-pk-menu").forEach(m => { m.hidden = true; });
         document.querySelectorAll(".pr-pk-btn").forEach(b => { b.classList.remove("open"); b.setAttribute("aria-expanded", "false"); });
@@ -5696,15 +5876,16 @@
     }
     function prSyncPickers() {
         const act = document.querySelector(".sub-tab[data-pr].active");
-        const key = act && PR_NAV.races[act.dataset.pr] ? act.dataset.pr : "fall_sa";
+        const key = prMpKey || (act && PR_NAV.races[act.dataset.pr] ? act.dataset.pr : "fall_sa");
         const ch = prChapterOf(key), race = PR_NAV.races[key];
         const chBtn = document.querySelector("#pr-pk-ch .pr-pk-btn"), raceBtn = document.querySelector("#pr-pk-race .pr-pk-btn");
         if (!chBtn || !raceBtn) return;
         chBtn.querySelector(".dot").style.background = ch.color;
         chBtn.querySelector(".t").textContent = ch.name;
+        chBtn.querySelector(".ts").textContent = ch.short || ch.name;
         raceBtn.querySelector(".t").textContent = race.name;
         const tag = $("pr-pk-tag");
-        let fin = false; try { fin = prRaceFinal; } catch (e) { /* not declared yet on first call */ }
+        let fin = false; try { fin = !prMpKey && prRaceFinal; } catch (e) { /* not declared yet on first call */ }
         const live = !fin && race.live;
         tag.textContent = live ? "LIVE" : "FINAL"; tag.className = "pr-pk-tag " + (live ? "live" : "fin");
         const row = (k, selKey) => `<button type="button" class="pr-pk-it${k === selKey ? " sel" : ""}" role="option" data-pk-race="${k}"><span>${escapeHtml(PR_NAV.races[k].name)}</span>`
@@ -5712,10 +5893,16 @@
         const tgf = PR_NAV.chapters[0];
         document.querySelector("#pr-pk-ch .pr-pk-menu").innerHTML = `<div class="pr-pk-gh">Chapter</div>`
             + PR_NAV.chapters.map(c => `<button type="button" class="pr-pk-it${c.id === ch.id ? " sel" : ""}" role="option" data-pk-ch="${c.id}"><span class="dot" style="background:${c.color}"></span><span>${escapeHtml(c.name)}</span>${c.hint ? `<small>${escapeHtml(c.hint)}</small>` : ""}</button>`).join("");
+        // TGF view: every chapter's contests get their own section while there
+        // are 4 chapters or fewer; past that, TGF's own contests only (Kerry
+        // 2026-10-13). A chapter view shows TGF + that chapter.
+        const others = PR_NAV.chapters.slice(1);
+        const shown = ch.id === "tgf" ? (others.length <= PR_NAV_ALL_CHAPTERS_MAX ? others : []) : [ch];
+        const section = c => `<div class="pr-pk-gh">${escapeHtml(c.name)}</div>` + c.races.map(k => row(k, key)).join("");
         document.querySelector("#pr-pk-race .pr-pk-menu").innerHTML = `<div class="pr-pk-gh">TGF \u00b7 All chapters<span>open to everyone</span></div>`
             + tgf.races.map(k => row(k, key)).join("")
-            + (ch.id !== "tgf" ? `<div class="pr-pk-gh">${escapeHtml(ch.name)}</div>` + ch.races.map(k => row(k, key)).join("") : "")
-            + `<div class="pr-pk-foot">Other chapters: use the chapter switch.</div>`;
+            + shown.map(section).join("")
+            + (shown.length < others.length ? `<div class="pr-pk-foot">Other chapters: use the chapter switch.</div>` : "");
     }
     (function () {
         const wrap = $("pr-pickers"); if (!wrap) return;
@@ -5741,6 +5928,8 @@
             if (key) {
                 try { localStorage.setItem("tgf_pr_chapter", prChapterOf(key).id); } catch (e) { /* ignore */ }
                 prCloseMenus();
+                if (PR_NAV.races[key] && PR_NAV.races[key].mp) { prOpenMatchPlay(key); return; }
+                prCloseMatchPlay();
                 const chip = document.querySelector(`.sub-tab[data-pr="${key}"]`);
                 if (chip) chip.click();
             }
@@ -5939,7 +6128,34 @@
             <h2 class="mp-header-title">City Match Play &mdash; ${escapeHtml(cmpState.chapter)} ${escapeHtml(cmpState.season)}</h2>
             ${sub ? `<div class="mp-header-sub">${escapeHtml(sub)}</div>` : ''}
             ${warn}
+            <div id="mp-champ-slot"></div>
         </div>`;
+        mpRenderChampBanner();
+    }
+
+    // CHAMPION BANNER on City Match Play (Kerry 2026-10-13: "We also need a top banner for the champion on City Match
+    // Play"): the same plaque as the cups, at the top of the board. The champion is the recorded winner of the Final;
+    // their customer_id comes from the bracket (winner_id, else the bracket row that seats them, by its player/opponent
+    // id) and the headshot index swaps the trophy for their photo. No photo on file, the trophy stays.
+    function mpRenderChampBanner() {
+        const slot = $("mp-champ-slot");
+        if (!slot) return;
+        const rows = cmpState.bracket || [];
+        const fin = rows.filter(r => r.round === "final" && r.winner_name);
+        if (!fin.length) { slot.innerHTML = ""; return; }
+        const name = fin[0].winner_name;
+        let cid = fin.map(r => r.winner_id).find(Boolean) || null;
+        if (!cid) {
+            for (const r of rows) {
+                if (r.player_name === name && r.player_id) { cid = r.player_id; break; }
+                if (r.opponent_name === name && r.opponent_id) { cid = r.opponent_id; break; }
+            }
+        }
+        slot.innerHTML = `<div class="tgf-champ-plaque mp-champ-plaque" data-head="1" data-cids="${cid || ""}">`
+            + `<div class="tgf-champ-trophy"></div><div class="tgf-champ-text">`
+            + `<div class="tgf-champ-eyebrow">${escapeHtml(cmpState.season)} ${escapeHtml(cmpState.chapter)} Match Play Champion</div>`
+            + `<div class="tgf-champ-name">${escapeHtml(name)}</div></div></div>`;
+        if (cid && typeof fcChampPhotoLoad === "function") fcChampPhotoLoad();
     }
 
     // ── POOLS panel: per-pool standings list + note + (manager) editor ──
@@ -6511,6 +6727,14 @@
     // Shared match card: clickable head (meta + strip + hole-dots + caption) and
     // a pre-rendered, hidden scorecard grid revealed on click. Used by both the
     // pool-match and knockout-slot renderers so every strip behaves identically.
+    // The open/collapse label on every match card. Phones show the short
+    // word (Kerry 2026-10-13: "On mobile you can reduce OPEN CARD to OPEN").
+    function mpToggleHintHtml(open) {
+        return open
+            ? '&#9652; <span class="mp-hint-long">collapse card</span><span class="mp-hint-short">close</span>'
+            : '&rsaquo; open<span class="mp-hint-long"> card</span>';
+    }
+
     function mpMatchCard(o, opts) {
         // Only ever render REAL Golf Genius hole detail — never a fabricated
         // placeholder. Without GG detail the card shows just the result strip
@@ -6529,7 +6753,7 @@
             // for each match and where pops will be")
             return `<div class="mp-match-card"${da}>
             <div class="mp-card-head mp-clickable" role="button" tabindex="0" aria-expanded="false" aria-label="Show where the strokes fall">
-                ${meta}${strip}<div class="mp-card-toggle"><span class="mp-illus-note"></span><span class="mp-toggle-hint">&rsaquo; open card</span></div>${opts.prov || ''}
+                ${meta}${strip}<div class="mp-card-toggle"><span class="mp-illus-note"></span><span class="mp-toggle-hint">${mpToggleHintHtml(false)}</span></div>${opts.prov || ''}
             </div>
             <div class="mp-scorecard" hidden>${opts.cardHtml}</div>
         </div>`;
@@ -6542,14 +6766,15 @@
         // keeps the shared hole dots either way
         const grid = opts.cardHtml || mpScorecardGridHtml(gen, o);
         const note = gen.source === 'gg'
-            ? (gen.startHole ? `Started on hole ${gen.startHole}.` : '')
+            ? (gen.startHole ? `<span class="mp-hint-long">Started on hole ${gen.startHole}.</span><span class="mp-hint-short">Start ${gen.startHole}</span>` : '')
             : 'Illustrative hole map — generated from the result; real scoring wires in from Golf Genius.';
-        const toggle = `<div class="mp-card-toggle">
-            <span class="mp-illus-note">${note}</span>
-            <span class="mp-toggle-hint">&rsaquo; open card</span></div>`;
+        // dots + note + OPEN CARD on ONE line (Kerry 2026-10-13)
+        const dotsLine = `<div class="mp-dots-line">
+            <span class="mp-illus-note">${note}</span>${dots}
+            <span class="mp-toggle-hint">${mpToggleHintHtml(false)}</span></div>`;
         return `<div class="mp-match-card"${da}>
             <div class="mp-card-head mp-clickable" role="button" tabindex="0" aria-expanded="false" aria-label="Show hole-by-hole scorecard">
-                ${meta}${strip}${dots}${toggle}${opts.prov || ''}
+                ${meta}${strip}${dotsLine}${opts.prov || ''}
             </div>
             <div class="mp-scorecard" hidden>${grid}</div>
         </div>`;
@@ -6861,7 +7086,12 @@
             const sc = fresh.querySelector('.mp-scorecard');
             const head = fresh.querySelector('.mp-card-head');
             if (sc) sc.hidden = false;
-            if (head) head.setAttribute('aria-expanded', 'true');
+            if (head) {
+                head.setAttribute('aria-expanded', 'true');
+                head.classList.add('open');
+                const hint = head.querySelector('.mp-toggle-hint');
+                if (hint) hint.innerHTML = mpToggleHintHtml(true);
+            }
         }
         card.replaceWith(fresh);
         // Decided semifinal → flow the winner into a pending one-sided
@@ -7117,7 +7347,7 @@
         head.classList.toggle('open', !open);
         head.setAttribute('aria-expanded', String(!open));
         const hint = head.querySelector('.mp-toggle-hint');
-        if (hint) hint.innerHTML = open ? '&rsaquo; open card' : '&#9652; collapse card';
+        if (hint) hint.innerHTML = mpToggleHintHtml(!open);
     }
 
     // One-time wiring: pill sub-tabs + delegated pool clicks + card expanders.
@@ -8197,6 +8427,7 @@
     function cmpRenderBracket() {
         const container = $("cmp-bracket-container");
         const bracket = cmpState.bracket || [];
+        mpRenderChampBanner();   // the top banner follows the bracket (Kerry 10/13)
         // Feed the par registry so knockout scorecards (including live
         // re-renders that only know the event name) can show a Par row.
         bracket.forEach(r => mpRegisterPars(r.event_name, r.hole_pars));
@@ -8332,15 +8563,8 @@
                     </span>
                 </div>` : '';
 
-            // ── Champion card: when the Final has a recorded winner ──
-            const finalMatch = (slotMap['final:0'] || {});
-            const finalMatch2 = (slotMap['final:1'] || {});
-            const champ = finalMatch.winner_name || finalMatch2.winner_name || null;
-            const champHtml = champ ? `
-                <div class="mp-champ">
-                    <div class="mp-champ-label">Champion</div>
-                    <div class="mp-champ-name">${escapeHtml(champ)}</div>
-                </div>` : '';
+            // The champion shows in the top banner only (mpRenderChampBanner); the small Champion box in the
+            // knockout panel is gone (Kerry 10/13: "Remove the small Champion box in Knockout").
 
             // ── D-MP-08 · Consolation (3rd place) block ──
             // Gate strictly on enrolled field size: hasConsolation = fieldN >= 6.
@@ -8477,7 +8701,7 @@
             container.innerHTML =
                 legendHtml +
                 `<div class="bracket-tree">${html || '<p style="color:var(--text-muted);">No bracket data yet.</p>'}</div>` +
-                champHtml + consolationHtml + nextInHtml;
+                consolationHtml + nextInHtml;
 
             // Live-poll any in-progress bracket card against Golf Genius.
             mpStartBracketLive(container);
@@ -9131,12 +9355,9 @@
         return ` <span title="${escapeHtml(ch)}" style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:0.6rem;font-weight:700;letter-spacing:0.04em;background:${bg};color:${fg};vertical-align:1px;">${label}</span>`;
     }
 
-    $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
 
     async function prLoadStandings(force = false) {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
-        // monthly swaps the header refresh button for an inline one
-        $("pr-refresh-btn").style.display = kind === "monthly" ? "none" : "";
         // Fall boards are LIVE (2026-09-01): they load through the normal
         // standings path below via PR_RACE_BY_TAB. prRenderFallPreview
         // stays only as the fallback when the board can't be read.
@@ -9222,14 +9443,17 @@
         if (prIsCompact()) {
             if (el) el.remove();
             const tog = $("pr-preamble-toggle");
-            if (!badge && tog) {
+            const pcRow = document.querySelector("#pr-table-container .pr-pc-row");
+            if (!badge && (pcRow || tog)) {
                 badge = document.createElement("span");
                 badge.id = "pr-live-badge";
                 badge.style.cssText = "display:inline-flex;align-items:center;gap:4px;height:26px;"
                     + "padding:0 10px;margin-left:6px;vertical-align:middle;border-radius:9999px;"
                     + "background:#fff7ed;border:1px solid #fdba74;color:#c2410c;"
                     + "font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;";
-                tog.after(badge);
+                // phones: the pill sits at the left of the Past Champions / Show All Players row (Kerry 2026-10-13)
+                if (pcRow) { badge.style.marginLeft = "0"; badge.style.flex = "none"; badge.style.alignSelf = "center"; pcRow.prepend(badge); }
+                else tog.after(badge);
             }
             if (badge) {
                 badge.innerHTML = `&#x1F534; LIVE &middot; ${scoring}/${data.champ_field || scoring}`
@@ -9913,7 +10137,7 @@
                 ${showBuy ? `<col style="width:110px">` : ""}
             </colgroup>`
             : "";
-        $("pr-table-container").innerHTML = testStrip + champStrip + pcHolder + prBuyLegend(d.standings) + `
+        $("pr-table-container").innerHTML = testStrip + champStrip + `<div class="pr-pc-row">${pcHolder}${prBuyLegend(d.standings)}</div>` + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 ${colgroupCup}
                 <thead>${theadHtml}</thead>
@@ -10409,7 +10633,7 @@
         const fcStrip = fcChamps.length
             ? `<div class="tgf-champ-plaque" data-race="fellowship_cup" data-cids="${fcChamps.map(c => c.customer_id).filter(Boolean).join(",")}"><div class="tgf-champ-trophy"></div><div class="tgf-champ-text"><div class="tgf-champ-eyebrow">2026 FELLOWSHIP CUP ${fcCo ? "Co-Champions" : "Champion"}</div><div class="tgf-champ-name" style="font-size:${compact ? "1.7rem" : "2.1rem"};">${fcChamps.map(c => escapeHtml(prFirstLast(c.player_name))).join(" &amp; ")}</div></div></div>`
             : "";
-        $("pr-table-container").innerHTML = testStripF + fcStrip + `<details class="past-champs" data-race="fellowship_cup" hidden></details>` + prBuyLegend(d.standings) + `
+        $("pr-table-container").innerHTML = testStripF + fcStrip + `<div class="pr-pc-row"><details class="past-champs" data-race="fellowship_cup" hidden></details>${prBuyLegend(d.standings)}</div>` + `
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 ${colgroupF}
                 <thead>${theadF}</thead>
@@ -10502,14 +10726,13 @@
         prMonthlySel = sel.month;
         const compact = prIsCompact();
 
-        const nav = months.map(x => {
+        // ONE connected segmented control, not separate pills (Kerry 2026-10-13: "make the MONTHLY buttons connected
+        // toggles rather than separate buttons, to save space")
+        const nav = `<div class="pr-mo-seg" role="tablist">` + months.map(x => {
             const on = x.month === sel.month;
-            return `<button data-mp="${x.month}" title="${(x.complete || x.final) ? "Final" : "In progress"}"
-                style="padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;letter-spacing:0.03em;
-                       border:1px solid ${on ? "var(--primary)" : "var(--border)"};border-radius:999px;
-                       background:${on ? "var(--primary)" : "var(--surface)"};color:${on ? "#fff" : "var(--text-muted)"};">
-                ${compact ? x.name.slice(0, 3) : x.name}${(x.complete || x.final) ? "" : " •"}</button>`;
-        }).join(" ");
+            return `<button type="button" role="tab" aria-selected="${on}" class="${on ? "on" : ""}" data-mp="${x.month}" title="${(x.complete || x.final) ? "Final" : "In progress"}">`
+                + `${x.name.slice(0, 3)}${(x.complete || x.final) ? "" : " \u2022"}</button>`;   // always 3 letters (Kerry 10/13)
+        }).join("") + `</div>`;
 
         const rankStyle = `width:${compact ? "28px" : "40px"};`;
         const rndStyle = `width:${compact ? "30px" : "80px"};text-align:center;border-right:2px solid #cbd5e1;`;
@@ -10556,7 +10779,7 @@
         const statusChip = (sel.final && !sel.complete) ? `
             <div style="margin:0 0 0.6rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#fde68a;color:#78350F;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9733;&nbsp;${escapeHtml(sel.name)} &middot; Final</span></div>`
             : sel.complete ? "" : `
-            <div style="margin:0 0 0.6rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;${escapeHtml(sel.name)} &middot; In Progress</span></div>`;
+            <div class="pr-mo-inprog" style="margin:0 0 0.6rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;${escapeHtml(sel.name)} &middot; In Progress</span></div>`;
 
         // MONTH WINNER plaque with the headshot (Kerry 10/12), once the month is final
         const mWin = sel.complete ? (sel.winners || []) : (sel.final ? (sel.final_winners || []) : []);
@@ -10567,10 +10790,6 @@
             : "";
         cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
-                <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
-                    style="display:${userRole === "admin" || userRole === "manager" ? "" : "none"};padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;
-                           border:1px solid var(--border);border-radius:999px;background:var(--surface);
-                           color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
                 ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}
             </div>${statusChip}${monthPlaque}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
@@ -10909,18 +11128,15 @@
         // filter above narrows to the scorer's event.
         // a Cup round's scorer reads the Cup's matches, on his session (Kerry 10/9)
         if (window.SOLO_EVENT) hash = window.SOLO_CUP ? "#tab=lsc" : "#tab=events";
-        // Landing and the new address (CD #1638, Kerry 2026-10-12): ?chapter=&race= opens that race; with nothing in the address
-        // a visitor lands on TGF \u00b7 All chapters and its live race (Monthly), or on the chapter they chose last time.
+        // Landing (Kerry 2026-10-13: "By default, land on the biggest current TGF Wide event ... When in season it would be
+        // The Fellowship Cup then the Players Cup then the current monthly"): ?chapter=&race= opens that race; with nothing
+        // in the address every visitor lands on TGF \u00b7 All chapters and the first LIVE race in PR_NAV's TGF order
+        // (tfc, gross, monthly), today Monthly. The last chapter chosen no longer overrides it.
         if (!hash) {
             const qRace = prKeyFromSlug(new URLSearchParams(location.search).get("race"));
-            let want = qRace;
-            if (!want) {
-                let last = null;
-                try { last = localStorage.getItem("tgf_pr_chapter"); } catch (e) { /* ignore */ }
-                const chap = PR_NAV.chapters.find(c => c.id === last) || PR_NAV.chapters[0];
-                want = prDefaultRaceOf(chap);
-            }
-            hash = "#race=" + want;
+            const mpRace = qRace && PR_NAV.races[qRace].mp;
+            hash = mpRace ? "#tab=mp&ch=" + (mpRace === "Austin" ? "austin" : "sa")
+                : "#race=" + (qRace || prDefaultRaceOf(PR_NAV.chapters[0]));
         }
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
@@ -10973,6 +11189,8 @@
                 const csel = $("cmp-chapter-select");
                 if (csel) csel.value = wantCh;
             }
+            if (top === "match-play" && typeof prOpenMatchPlay === "function")
+                prOpenMatchPlay(cmpState.chapter === "Austin" ? "mp_austin" : "mp_sa", false);
         }
         // Sync the mobile race dropdown (label + checkmark) with whatever
         // race actually landed — the chapter flip and deep links above can

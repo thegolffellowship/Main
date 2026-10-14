@@ -281,6 +281,39 @@ with db._connect(DB) as conn:
 check("…and it is not counted as the player's send", n == 5, n)
 check("a held player has no test", "held" in (ede.send_event_day_test(EV, 880005, "kerry@thegolffellowship.com", db_path=DB).get("error") or ""))
 
+print("4c. Re-issue after a start change (Kerry 10/13, the Quarry)")
+with db._connect(DB) as conn:
+    ok_post = conn.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES "
+                           "('kerry', 'front-desk', 'Send it - GO') RETURNING id").fetchone()[0]
+    lane_post = conn.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES "
+                             "('tracker-claude', 'front-desk', 'TO: x\nFROM: tracker-claude (lane)\nre-issue') "
+                             "RETURNING id").fetchone()[0]
+    conn.commit()
+SENT.clear()
+r = ede.send_event_day_reissue(EV, lane_post, confirm=True, db_path=DB)
+check("a post without Kerry's word is refused", "refused" in r and not SENT, r)
+r = ede.send_event_day_reissue(EV, ok_post, db_path=DB)
+check("without confirm it is a dry run naming every ready player",
+      r.get("dry_run") and r["counts"]["to_send"] == 5 and not SENT
+      and r["sample_subject"].startswith("UPDATED START: "), r.get("counts"))
+r = ede.send_event_day_reissue(EV, ok_post, confirm=True, db_path=DB)
+check("confirm re-issues to every ready player although each was already sent",
+      r.get("counts", {}).get("sent") == 5 and len(SENT) == 5, r.get("counts"))
+check("…subject says UPDATED START and the notice sits inside the panel",
+      all(s["subject"].startswith("UPDATED START: ") for s in SENT)
+      and all("Your starting hole has changed" in s["html_body"] for s in SENT)
+      and all(s["html_body"].find("UPDATED START") < s["html_body"].find("YOUR START") for s in SENT))
+check("…to the fixture's own addresses only",
+      sorted(s["to_address"] for s in SENT) == sorted(["ann@example.test", "bob@example.test",
+                                                         "cal@example.test", "dee@example.test",
+                                                         "gus@example.test"]))
+r = ede.send_event_day_reissue(EV, ok_post, confirm=True, db_path=DB)
+check("the same sheet state is never re-issued twice",
+      len(SENT) == 5 and r["counts"]["sent"] == 0 and len(r["already_reissued"]) == 5, r.get("counts"))
+with db._connect(DB) as conn:
+    n = conn.execute("SELECT COUNT(*) FROM event_day_email_sends WHERE event_id = ?", (EV,)).fetchone()[0]
+check("…and event_day_email_sends is untouched", n == 5, n)
+
 print("5. The bridge")
 os.environ["DATABASE_PATH"] = DB
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

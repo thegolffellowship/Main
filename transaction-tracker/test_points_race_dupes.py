@@ -58,6 +58,12 @@ CIDS = {"STRAITON, Robert": 31, "WADE, John": 4, "MCCORMICK, Sam": 700, "YOUNGS,
         "CHESHIRE, Neil": 701, "HOGUE, Jay": 702}
 
 
+# The merge runs inside a GG refresh, so these checks run with the GG points
+# intake switched on (off by default since Kerry 10/13, CoS #1693-1).
+import email_parser.gg_untether as _ggu
+_ggu.gg_points_intake_on = lambda *a, **k: True
+
+
 def fresh_db():
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()

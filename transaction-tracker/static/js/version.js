@@ -1,7 +1,348 @@
-window.TGF_VERSION = "2.555.4";
+window.TGF_VERSION = "2.565.2";
 window.TGF_CHANGELOG = [
   {
-    version: "2.555.4",
+    version: "2.565.2",
+    date: "2026-10-14",
+    title: "Results email goes at 6:00 AM the next morning (standing rule)",
+    changes: [
+      "Kerry 10/14 (#1778): \"Actually maybe the email recap is best at 6:00am the next morning\" — asked whether that is the standing rule for now: \"Yes\". It replaces the 30-minutes-after-the-last-score timing. New bridge op scoring-results-email:schedule-next|<ids>|<recap>|<post> schedules 6:00 AM Central the morning after the night's events; the 9 PM closeout routine runs it after a clean plan. The guards still run at send time.",
+    ],
+  },
+  {
+    version: "2.565.1",
+    date: "2026-10-14",
+    title: "Results email: clearer preview line and tee-time wording",
+    changes: [
+      "The inbox preview line reads \"Kerry, you won $13.00. Your card, handicap and points inside.\" (was \"you won $13.00 and 2 birdies or better\"), and UP NEXT says \"tee times from 3:40 PM\" for a tee-time start (a shotgun still reads \"4:30 PM shotgun\"). Found reading the real 10/13 messages before the 6:00 AM send.",
+    ],
+  },
+  {
+    version: "2.565.0",
+    date: "2026-10-14",
+    title: "The results email: one personal email per person after an event night",
+    changes: [
+      "Kerry 10/13: \"one email that goes out to players with everything rather than several different emails. For those that didn't play, they'd get just the recap and what's next stuff.\" Kerry 10/14: \"I want the recap emails typically sent 30 minutes after the last score is posted for an event. For this one let's send it at 6:00a.\" email_parser/results_email.py builds it from the record: a player's card with pops, gross / net / points and birdies, winnings from the recorded payout rows, handicap before and after with the differential, fall race and month standings each linked to his own row; everyone else gets their standing if they have one. Then the chapter's recap story (docs/claude/recaps/, a bought-in reader without the buy-in line) and UP NEXT from the event rows (start time, signed up or not, an I'm in button).",
+      "Audience: everyone who played, the chapter's active members and anyone who played the chapter in the last 12 months, minus invitation opt-outs, roster removals, course staff, other chapters' members and anyone with no deliverable email. Leads are not included. One email per person per night.",
+      "Nothing goes out unless every guard passes: results final, the engine and the saved cards agree on every player, recorded payouts equal the engine's, and no blank, leftover tag or unrendered name in any message. A held night raises one HIGH COO item and is re-checked every 10 minutes. Sends are scheduled (results_email_schedule) and delivered by the every-minute job results_email_auto; previews go only to staff or a chapter manager's own address. Bridge scoring-results-email; guard test_results_email.py. The automatic schedule at last score + 30 and the manager window are next.",
+    ],
+  },
+  {
+    version: "2.564.0",
+    date: "2026-10-14",
+    title: "Payouts and points read the strokes saved on the card, and wait if anything disagrees",
+    changes: [
+      "Kerry 10/14 (\"Yes, build both before next Tuesday\"), after s9.27: the saved scorecards were right and the payout engine was wrong for Dan Stich, because the engine worked out his strokes a second time on the wrong tee. ONE SOURCE: event_engine_state now hands the engine the strokes saved on each card, the same ones the card, the handicap post and the MVP read. The only exception is an entered card from before CA #865 that carries placeholder zeros (a handicap of 1+ and no stroke anywhere); its strokes are still worked out, and the new check flags it.",
+      "THE CHECK (email_parser/card_parity.py): for every entered player, the strokes saved on each hole are compared with the rule worked out independently (his own tee, the nine he played, handicap_calc.ruled_dots), and the engine's card is compared with the saved card hole by hole, gross and net. Any difference holds the money and the points: record_event_game_payouts refuses (every path: auto payouts, the bridge, the closeout), closeout_final_check lists it as blocking, and the points rebuild leaves the event out and refuses to apply. Every publish runs it and a difference raises one HIGH COO item, SCORING HOLD, naming each player and hole. Golf Genius-era cards carry GG's own strokes and are not checked.",
+      "Read-only bridge scoring-card-parity:<event name or id>. Guard test_card_parity.py replays the 10/13 card (Blue-tee player on a Gold-tee night) through both fixes; test_closeout_checks.py's fixture now gives its tee real holes.",
+    ],
+  },
+  {
+    version: "2.563.6",
+    date: "2026-10-13",
+    title: "Invitations: members get their own chapter's events and combined events only",
+    changes: [
+      "Kerry 10/13: \"Austin members should not be getting invites to SA only events…only combined events and their own events.\" The audience now leaves out anyone whose home chapter is another chapter (home_chapter_id, else customers.chapter) from a single-chapter event, whatever brought them in (playing that chapter, a lead opt-in). Combined TGF events still invite both lists. People with no home chapter are unchanged. New exclusion count other_chapter; test_invitations.py.",
+    ],
+  },
+  {
+    version: "2.563.5",
+    date: "2026-10-13",
+    title: "One event's results have their own link: /member/results/<event id>",
+    changes: [
+      "Kerry 10/13: 'if you provide links I want it to open up that event like for full results, not just go to all events. Links need to go to specific locations.' /member/results/<event id> opens the member Events results with that event expanded and pinned to the top. Its board loads at once, so a recap's FULL EVENT RESULTS lands on that night's results. An unknown id falls back to the full list. The bare /member/results still lands on every event.",
+      "Recap rule of record (event-recaps.md lesson 68): every link goes to the specific place. The 10/13 drafts now link /member/results/3307 and /member/results/3318. Guard test_events_leaderboard_all.py.",
+    ],
+  },
+  {
+    version: "2.563.4",
+    date: "2026-10-13",
+    title: "Payout engine: a player on another tee gets all his strokes on the nine played",
+    changes: [
+      "Found in the s9.27 closeout cross-check (Kerry 10/13: 'cross check results with games, flights and pairings ... to make sure it's correct and record it'). For a player on a different tee from the event's most-played tee, the payout engine handed the stroke allocator his tee's full 18-hole stroke-index map on a nine-hole round, so his strokes were spread over holes nobody played. Dan Stich (Blues, PH 6) got only 3 of his 6 strokes: net 41 instead of 38, and he dropped out of the Individual Net Flight 2 tie with Justin Angelone and Rob Burlingame. Austin's Bryce Doggett (Whites, 35 net) dropped out of the tie for Individual Net 2nd the same way.",
+      "The engine now gives the allocator only the holes played, from the player's own tee, so a nine collapses to 1-9 exactly as the event's card does (Kerry's CA #771 ruling). Stored cards, handicaps, MVP and points were never affected: they read the dots entry publish stores, which were already right. Only the engine's Individual Net / Individual Gross ranking derived its own. Team and Cart Net already used the nine's indexes. Guard test_own_tee_nine.py.",
+    ],
+  },
+  {
+    version: "2.563.3",
+    date: "2026-10-13",
+    title: "Scoring page: the dark bar never shrinks",
+    changes: [
+      "Kerry 10/13, scoring from the Mail app: \"the formatting ... in the top bar is smooshed\", then \"That dark bar is getting reduced again. We've had that problem before.\" When a hole card was taller than the screen (an in-app browser with its toolbar), the page shrank the dark bar to 26 px with a 24 px logo to make room. The bar now stays its full size with the 64 px logo on every screen. The room comes out of the card instead, only when it would not fit: the -/+ buttons go from 44 to 38 px, rows close up, the group strip and the Check-the-card cells get a little shorter, and the hole number is 22 px. Both screens still fit a 390x660 phone without scrolling.",
+      "Guards: test_score_entry_ui.py now fails if a tight card shrinks the bar or its logo. test_scorer_nav.py is updated to the 10/13 ruling that the leaderboard no longer says Golf Genius is the official scorer.",
+    ],
+  },
+  {
+    version: "2.563.2",
+    date: "2026-10-13",
+    title: "EVENTS list: the pot shows before the payouts are recorded",
+    changes: [
+      "Kerry 10/13: \"Why aren't total pots being shown.\" The events list's POT added up only RECORDED payouts, so a Tracker-scored event read $0.00 until someone pressed Record Payouts (auto-record is off for 10/13). Now, while nothing is recorded, the pot is the GAMES money the event board already shows (the auto-payouts preview); once payouts are recorded it reads them as before. Guard: test_auto_payouts.py.",
+    ],
+  },
+  {
+    version: "2.563.1",
+    date: "2026-10-13",
+    title: "LEADERBOARD: no more \"Refresh from Golf Genius\"",
+    changes: [
+      "Kerry 10/13: \"Refresh from Golf Genius should be gone now.\" The Tracker computes the Fall races and the Monthly points itself (points_source = tracker), so the button above every points race and the Refresh pill on the Monthly board are removed. The boards still load and update on their own.",
+    ],
+  },
+  {
+    version: "2.563.0",
+    date: "2026-10-13",
+    title: "Tracker event invitations + RSVPs (off Golf Genius)",
+    changes: [
+      "Kerry 10/13: \"RSVP's are the only thing that we might need to continue, but would rather switch completely on that too starting tomorrow for next week's events.\" New email_parser/invitations.py: one invitation per invitee per event with I'm in / Can't make it buttons. AUDIENCE as Kerry ruled (\"That audience works, go with it\"): the chapter's active members, plus anyone who played that chapter in the last 12 months, plus lead opt-ins; minus opted-out (membership roster remove, a lead's no, the email's own Stop event invitations link), undeliverable addresses, non-member profiles and anyone already registered.",
+      "Kerry: \"go straight to the event registration page if they click I'm In\". I'm in opens the event's registration link; the click is noted, and paying is what puts a player on the roster (a mail scanner can follow a link too). Kerry: \"The sequence for Can't make it is too long\": Can't make it lands straight on Thanks, with Changed my mind, I'm in (to registration, clearing the no), Remove me from invitations (straight to Done) and an optional one-tap reason (Schedule, Weather, Course or price, Injury, Other). The page writes the answer itself; the bare link GET never does, so a mail scanner can't answer for a player. With no registration link on the event, I'm in shows the confirm page and records PLAYING. Answers are rsvps rows with email_uid tracker:<event>:<customer_id>, so the roster, Events tab, RSVP log and pairings read them; gg_rsvps_off now hides only Golf Genius rows.",
+      "SCHEDULE (Kerry), 7:00 AM Central: Tuesday event = invitation Wednesday, reminders Friday and Sunday, last call Monday (\"Sign up by 5:00 PM tonight\"); weekend event = invitation the Friday two weeks out, reminders the next Friday and the Tuesday before, last call Wednesday. Reminders and the last call skip anyone registered or who answered either way. Job event_invite_auto does nothing until app setting event_invite_auto = on AND the wording carries Kerry's stamp (event_invite_approved = the template hash). Manual: bridge scoring-event-invite:<id>[|preview|send|<kerry-ok post>[|reminder|lastcall][|confirm]]. test_invitations.py.",
+      "Kerry 10/13: \"Yes, invite both chapters to the Fall Championship - And I want it sent tomorrow morning\" (then: \"Just 10/20 events and the Championship\"). A TGF event invites both chapters' lists and reads as 2026 Fall Championship @ Kissing Tree (Kerry: \"Remove the event id ... Can be 2026 Fall Championship @ Kissing Tree\"); app setting event_invite_early {event_id: date} sends an invitation early (3305 on 10/14).",
+      "Kerry 10/13: \"Make sure database is setup to recieve player selections of reasons they can't play. We'll want to track whatever people are willing to give us.\" Migration 0016 adds event_decline_reasons (event_id, customer_id, reason, one row per event and person, a later tap updates it); the Can't make it page's one-tap reason writes there, and scoring-event-invite:<id> reports the counts.",
+    ],
+  },
+  {
+    version: "2.562.7",
+    date: "2026-10-13",
+    title: "EVENTS board: every leaderboard from GAMES; Golf Genius is history only",
+    changes: [
+      "Kerry 10/13: \"It doesn't look like flights are showing where they should on the leaderboard\", then \"All leaderboards should be generated based on GAMES. Golf Genius doesn't have anything to do with anything now except for historical records.\"",
+      "FLIGHTS. For an event on or after the untether date, the NET, GROSS and SKINS boards are sectioned by the event's own flight board. That is the same selection the GAMES money is paid on: \"Flight 1 (HCP <12.0)\" / \"Flight 2 (HCP 12.0+)\". A one-flight game shows no sections. Before this, they read only Golf Genius flight lists, which a Tracker event doesn't have, so the whole field showed as one list while the payouts were paid by flight. A non-buyer is placed by their handicap index against the stated line, as before.",
+      "NO GOLF GENIUS ON A TRACKER EVENT. The board for such an event never reads a Golf Genius flight, team result or proxy, even one that was stored. Closest to Pin always comes from the phone claims (a manager ruling included). Each team's purse is its GAMES money: each real member's Team Net share times the team's slots, a blind included. Events played before the untether keep the Golf Genius record they were played under. Guards: test_board_engine_flights.py, test_board_phone_ctp.py.",
+      "TEAM BOARD: BLINDS AND TEAM MONEY (Kerry 10/13: \"What we're not doing a good job on the team leaderboard is showing who the blinds are\", and the rule: \"In the case where a blind helps their team win and they are on another team that wins the person takes the higher total and doesn't get any of the lower. The lower is divided equally amongst the rest of the team. In Stu's case he wins the full amount of $26. While Robert and Luke split the $52 for first.\"). A blind is named plainly in the team header (\"Stu Kirksey · Robert Straiton (blind)\", never \"Bl[...]\") and carries a BLIND tag on its row and in the team card. Each row's Won on the TEAM tab is what that slot earned from THIS team: Straiton shows $26 on his own cart and nothing on Kirksey's. Each team's purse is the sum of its slots ($52 / $26 at Forest Creek; $46 on the SA team McCormick filled as a blind). The payouts already follow the rule; the board now reads it back (team_slot_money, guard test_team_slot_money.py).",
+    ],
+  },
+  {
+    version: "2.562.6",
+    date: "2026-10-13",
+    title: "Prize money shows the moment the field is in; final 15 minutes after the last score",
+    changes: [
+      "Kerry 10/13: \"Payouts need to auto calculate and populate based on GAMES tabs immediately after scores are all in\"; \"15 minutes after last score entered by each scorer because scorer may not finalize how they should\"; \"When last hole score is entered by last player in field, won Columns should unhide and amounts should show but non-final until 15 minutes have passed\".",
+      "THE MONEY SHOWS AT ONCE. When the last hole of the last player in the field is entered, the EVENTS board's WON column appears within a minute. It shows the amounts the GAMES tab's Record Payouts would pay, under a note: \"Winnings are not final yet. Every score is in. The money below is final at 8:24 PM, 15 minutes after the last score, unless a score changes.\" The events list reads \"not final\" until then. The old 10-minute hold no longer applies to a Tracker-scored event.",
+      "A CARD IS FINAL 15 MINUTES AFTER ITS LAST SCORE. Once every hole of every player in a group has a score, the card locks 15 minutes after the group's last saved score. No submit or signature is needed (a scorer may never press Submit). A phone change after that is refused, kept on record for the manager, and the phone says to ask the manager. The phone shows \"Card locks and is final at 8:24 PM\", then \"This card is final\". The Live Scoring page shows each group's final time, and a final card has an Unlock button. An unlocked card is final again 15 minutes after the later of the unlock and its next score. The minutes are a dial (app setting se_card_lock_minutes).",
+      "THE MONEY RECORDS ITSELF. Every minute, for each Tracker-scored event of the last three days: once the field is in, the complete cards are published and the money is computed for the board. Once every card is final, the payouts are recorded, filling the PAYOUTS tab with no button press. They are recorded again whenever the cards change (an unlocked card, a Closest to Pin ruling). A payout already paid is never touched, and an event with hand-entered payouts is left alone. The recording step has its own dial, app setting auto_payouts_record, and it is OFF to start. On 10/13 the money is display only and the manager records it by hand (CoS #1760/#1761, Kerry: \"Go with your conditions\"). It turns on from 10/20 once a dry run matches the hand-recorded rows to the cent. Dial: app setting auto_payouts (off stops the whole job). Bridge scoring-auto-payouts[:apply][|<event_id>], a dry run by default.",
+      "Why the WON column was empty on 10/13: we are off Golf Genius, so nothing recorded payouts until close-out. Individual Net, Skins and Individual Gross also waited for player signatures, and most cards were never signed. Guard: test_auto_payouts.py.",
+    ],
+  },
+  {
+    version: "2.562.5",
+    date: "2026-10-13",
+    title: "Closest to Pin verification",
+    changes: [
+      "Kerry 10/13: \"Closest to Pin in 16 was actually Pat Youngs. Dan thought it was closest in their group. We need to add a verification step\", then \"Yes, build all three\".",
+      "1. A stale screen never overwrites a claim. The phone sends the holder it showed. If another group claimed the hole since, nothing is saved and the phone asks again: \"Pat Youngs (Group 6) claimed this hole while you were playing it. Check their marker.\"",
+      "2. The question names the marker to beat: \"Is anyone in your group closer than Pat Youngs's marker?\" (buttons: the players, or \"No one closer than Pat Youngs\"). The note under it says to pick only someone closer than the marker, not just the closest in your group.",
+      "3. The manager confirms a takeover before it is paid. When a phone claim takes a hole from a player in another group, the Live Scoring page shows \"Confirm hole 16: Dan Stich (Group 3) took it from Pat Youngs (Group 6)\" with a Confirm button, beside the hole's full claim history. To pick someone else, use the existing Settle. Until it is confirmed, Record Payouts skips that hole with a note, and the EVENTS board shows it \"to be confirmed\" with no dollar. No new tables: it reads the claims already stored.",
+    ],
+  },
+  {
+    version: "2.562.4",
+    date: "2026-10-13",
+    title: "EVENTS board: Closest to Pin winners from the phones",
+    changes: [
+      "Kerry 10/13: \"Why aren't closest to pins showing?\" The EVENTS leaderboard's Closest to Pin rows (the winner strips under OVERALL and the PROXIES tab) were read only from Golf Genius results, so an event Golf Genius does not score showed none, even with winners claimed on the phones (The Quarry: Adam Baker on 12, Dan Stich on 16). With no Golf Genius CTP rows, the board now reads the phone claims (a manager ruling included): the same holders Record Payouts uses, by customer_id with the customer's own name, the hole in the detail and the matrix's CTP amount for the field. Money still waits for the field like every other dollar on the board. A hole nobody holds reads \"No winner\". Guard test_board_phone_ctp.py.",
+    ],
+  },
+  {
+    version: "2.562.3",
+    date: "2026-10-13",
+    title: "Manage contacts opens a window in the event editor",
+    changes: [
+      "Kerry 10/13: \"Manage Contacts link in the Quarry event didn't take me to a manage contacts modal or page.\" The link in Add/Edit Event used to open the Courses page in a new tab, which does nothing useful in the installed app. It now opens a Contacts window over the event editor, where you can add a contact, make one primary, or remove and restore one. Closing it refreshes the contacts box under Course. The Courses page and this window share one panel (static/js/course-staff.js), so they can never drift. Guard test_course_staff.py.",
+    ],
+  },
+  {
+    version: "2.562.2",
+    date: "2026-10-13",
+    title: "Live Scoring how-to: a first step on how to get to your scorecard",
+    changes: [
+      "New step 1 on /member/live-scoring, 'Get to your group's scorecard' (Kerry 2026-10-13: 'Probably need an intro of how a player would access the live scoring link. 3 ways currently: The cart sign, the scorecard, and the email with the link'). Each of the three ways in has its own picture with the spot circled in red: the QR code on the cart sign, the QR code at the top of the paper scorecard, and the Keep score on your phone button in the pairing email. The pictures are the real cart sign, scorecard and email layouts rendered from the Tracker's own templates with sample names. The guide is now eleven steps.",
+      "The old step 1 said to tap 'open your group's scorecard' in the email, which was the pre-A2 wording; the email's button reads Keep score on your phone. That step is now 'Score this group'.",
+    ],
+  },
+  {
+    version: "2.562.1",
+    date: "2026-10-13",
+    title: "Live Scoring how-to: every phone the same size",
+    changes: [
+      "Every screenshot on /member/live-scoring is now one full iPhone screen (390 x 844, saved at 780 x 1688), so the phone frame is the same size on every step whatever the screen shows (Kerry 2026-10-13: 'update the phone images so the phone is the same size in each one, regardless of content'). They had been cropped to their content, so the frames ran from 554 to 879 points tall. The frame also reserves the phone's shape before the picture loads, so the page doesn't jump. test_live_scoring_guide.py checks every image is 780 x 1688.",
+    ],
+  },
+  {
+    version: "2.562.0",
+    date: "2026-10-13",
+    title: "Course contacts: who works at each course, and who gets the Course Files",
+    changes: [
+      "Kerry 10/13: \"where do I see the course contacts in the event creator/editor? How can i add new ones and assign who should receive the print emails?\", then \"Deploy now\" (rule 3b, #1737). New table course_staff (migration 0014, shape #1699, db-claude PASS with changes #1701): one row per person per role per course, every person a customer_id, the email read from customer_emails. Roles: TGF contact, general manager, head golf professional, assistant GM, golf shop, food & beverage, billing. One primary per role per course, enforced by the database. Rows are deactivated, never deleted.",
+      "COURSES page (admin): a Contacts button on every course opens its people. Add a contact (name, email, phone, role, primary), Make primary, Remove (kept in history) and Restore. It says who the Course Files go to. /courses?course=<id> opens straight to one course.",
+      "EVENT SETUP: picking a course in Add Event or Edit Event shows its contacts and who the Course Files go to, read-only, with a Manage contacts link for the admin.",
+      "COURSE FILES now go To the course's primary TGF contact, CC its other TGF contacts plus Kerry. With no primary on file the send is refused and the admin is pointed at the Courses page. The interim app setting course_print_contacts (v2.556.1) and its bridge scoring-course-contact are retired.",
+      "NOT A MEMBER (#1701-b): a person whose only roles are course contact, sponsor or vendor, and who has never bought or registered, is never pushed to Brevo, never on a pairings roster and never in query_customers (course_staff.non_member_ids, which folds in the vendor list). A course contact who also plays with TGF stays a member.",
+      "Bridges: scoring-course-staff:<course_id> (read), scoring-course-staff-set (Kerry's OK post, dry run default), scoring-course-staff-seed (The Quarry's four people, dry run first). Merge safety: course_staff.customer_id is in _CUSTOMER_FK_COLUMNS. Guard test_course_staff.py; test_print_pack_files.py updated.",
+    ],
+  },
+  {
+    version: "2.561.3",
+    date: "2026-10-13",
+    title: "Live Scoring how-to page with its own link: /member/live-scoring",
+    changes: [
+      "New public page /member/live-scoring (Kerry 2026-10-13: 'a slideshow or directions directly on the Tracker that has its own link that we can send out. So it's fully vetted, locked and can be updated at any point'). Ten steps, one per slide with Next / back and swipe, or All on one page: open the group's scorecard, tap your name, enter each hole (made par? don't tap anything, every score starts at par), closest to the pin, check the card, fix a number, photo and submit, the scorekeeper signs, everyone else follows along (never Take over) and signs. #step-N links open a given step.",
+      "The screenshots are the real scoring screens at iPhone size (390 x 844 at 3x) with the real Bitter font, taken on a test copy with sample names, never a live group. Every word and image lives in the steps list at the top of templates/live_scoring_guide.html; replace a picture by its file name in static/img/live-scoring/. Guard test_live_scoring_guide.py.",
+      "Replaces the one-off how-to.html email page from 2.561.2.",
+    ],
+  },
+  {
+    version: "2.561.2",
+    date: "2026-10-13",
+    title: "Live Scoring how-to page for the players' email",
+    changes: [
+      "static/img/live-scoring/how-to.html is the 10/13 Live Scoring how-to email as one page (the seven steps with their screenshots, plus Kerry's note that a par needs no tap: every score starts at par). Kerry opens it, copies it and pastes it into a new email from kerry@thegolffellowship.com; the images come along because they are served from the Tracker. Static page only; no code changed.",
+    ],
+  },
+  {
+    version: "2.561.1",
+    date: "2026-10-13",
+    title: "Live Scoring how-to screenshots for the players' email",
+    changes: [
+      "Eight phone screenshots of the Live Scoring steps (open the group card, pick your name, enter a hole, closest to the pin, Check the card, photo and submit, follow along, sign) are now served from static/img/live-scoring/ so the 10/13 how-to email to all players can show them. They were taken on a local test copy with sample names, never on a live group. Images only; no code changed.",
+    ],
+  },
+  {
+    version: "2.561.0",
+    date: "2026-10-13",
+    title: "2026 locked on our side: championship boards and cards frozen, Golf Genius jobs off, October points expand",
+    changes: [
+      "Kerry 10/13: \"All needs to be hardened/locked on our side to not rely on Golf Genius for anything related to 2026 without losing ANY results.\" The Fellowship Cup and Players Cup boards still added the TGF Championship's points read live off Golf Genius on every open (Leaderboard, Fellowship Cup, Spotlight, Lone Star Cup projection), and each row's championship card was read live too. New email_parser/gg_freeze.py captures EXACTLY what members see now (the full board payload and every player's card, per round) into the database, and those copies are served from then on with no Golf Genius call. The copy saved back in August was deliberately NOT used: it gives Jeff Young 60 Players Cup championship points where the board shows 59, which would flip the champion from Robert Straiton. A freeze is refused if the live board is empty or stale. Bridge scoring-gg-freeze-champ.",
+      "Kerry 10/13: \"The hourly results check is not needed anymore\" / \"Tee sheet grab - won't be needed\" / \"Definitely remove the Team net import\". Both automatic Golf Genius jobs now do nothing unless app setting gg_auto_jobs = on. The GG Team Net import is retired; pairing history comes from the score-entry groups. Live City Match Play polling stops: the season is over and every match's detail is stored. The captured per-event points ledger, the only copy of Golf Genius's answer key once it is gone, is now in the nightly file backup.",
+      "Kerry 10/13: \"The event scoring records/points details aren't showing for October.\" Monthly rows built by the Tracker had no card, so their row expansion asked for nothing. Each row now carries the player's Fall-race card, and the expansion shows the month's points lines and scorecards. Guard: test_gg_hardened_2026.py.",
+    ],
+  },
+  {
+    version: "2.560.0",
+    date: "2026-10-13",
+    title: "The Tracker computes the Fall points races and Monthly itself",
+    changes: [
+      "Kerry 10/13: \"we're not running Golf Genius at all tonight, so I'm relying on you and what we've built to make it all happen now.\" Earlier the same day the 10/6 blind test matched Golf Genius on 33 of 35 players; Mark Parker, a 1st Timer, correctly earned nothing, and Kerry ruled the one difference: \"Yes, 54 is right for Baker.\" New email_parser/tracker_points.py builds the San Antonio and Austin Fall races and the Monthly months from three sources: (1) Golf Genius's own per-event lines through 9/29, captured read-only and frozen in data/points_baseline (past events stay as they were); (2) Kerry-ruled events (10/6); (3) every published event after that, from the scoring engine on the entered cards. Points are net Stableford floored at 0, with a plus off the round once; an 18 counts as two entries; members only; each line goes to the player's home-chapter race; best 6 plus a championship. Rebuilt from those lines, the boards match Golf Genius's own current boards for every player except Baker's ruled 54.",
+      "How it runs. While app setting points_source = tracker, a points board that goes stale after an event rebuilds itself from the Tracker (no network) instead of from Golf Genius, and the monthly job writes the Tracker's months beside Golf Genius's earlier ones. Expanding a row shows our own per-event lines in the same table (counted, then 'not counted'), and concluded races show Golf Genius's table from the captured ledger instead of a blank. The bridge scoring-tracker-points shows the changes as a dry run; scoring-tracker-points:apply writes them. Guard: test_tracker_points.py.",
+    ],
+  },
+  {
+    version: "2.559.7",
+    date: "2026-10-13",
+    title: "Tonight's events listed before the first score; the Tracker is the official scorer",
+    changes: [
+      "Kerry 10/13: \"Tonight's events not showing yet. They should show starting when tee times are generated.\" The EVENTS leaderboard listed a live-scoring event only once someone had posted a score. An event that is live today (or later) with score-entry groups seated is now listed straight away, with its field taken from the seated players; no money and no ranks show until scores come in, as before.",
+      "Kerry 10/13: \"it needs to be official now. Not Golf Genius is the official scorer.\" The \"Unofficial · Golf Genius is the official scorer\" line is removed from the EVENTS leaderboard (list and every board).",
+      "Guards: test_events_list_pre_score.py (new); test_board_entry_mode.py and test_events_leaderboard_all.py updated to the new rulings.",
+    ],
+  },
+  {
+    version: "2.559.6",
+    date: "2026-10-13",
+    title: "Payouts without Golf Genius: Team/CART Net, CTP and multi-flight games from the Tracker",
+    changes: [
+      "Kerry 10/13: \"we're not running Golf Genius at all tonight, so I'm relying on you and what we've built to make it all happen now.\" Record Payouts could not produce Team Net, CART Net, CTP or any multi-flight Individual Net or Skins without a Golf Genius board, about $730 across tonight's Quarry and Forest Creek. For an event on or after the untether date it now reads the Tracker. Team and CART Net come from the EVENTS leaderboard's own teams, with the drawn blinds and Team Net pops, through the same split, tie and blind rules as before. CTP and Longest Putt pay the holder claimed on the phones; an unclaimed hole is named, not paid. Individual Net, Skins and Individual Gross come from the engine run on the event's flight board, so multi-flight games pay per flight; a flight where nobody won a skin is reported as unpaid, never guessed. Team and CTP money waits for a complete field; the engine games need the entered cards published first. Rows carry the player's customer_id and the writer records to it. Nothing records by itself: the hourly pass still skips untethered events, and money is written only when Record Payouts is pressed. Events before the untether date are unchanged. Guard: test_untethered_payouts.py.",
+    ],
+  },
+  {
+    version: "2.559.5",
+    date: "2026-10-13",
+    title: "Tabs open at the top; Knockout champion box removed",
+    changes: [
+      "Kerry 10/13: \"When I click from EVENTS to SEASON CONTESTS (and back) if I'm scrolled down one of the pages, it automatically shows the other page at that scroll down. When we click to new pages, they should all start at the top, not part way down.\" Switching the leaderboard's top tab (Events, Season Contests, Lone Star Cup, Enrollment) now scrolls to the top. Tapping the tab you are already on does not move the page.",
+      "Kerry 10/13: \"Remove the small Champion box in Knockout.\" The champion now shows only in the top banner (v2.559.4).",
+    ],
+  },
+  {
+    version: "2.559.4",
+    date: "2026-10-13",
+    title: "City Match Play champion banner",
+    changes: [
+      "Kerry 10/13: \"We also need a top banner for the champion on City Match Play. We have a photo for Luke, but not currently for Derek Chandler.\" Once a chapter's Final has a recorded winner, the top of the City Match Play board shows the same champion plaque as the cups: \"2026 {Chapter} Match Play Champion\" and the name. The champion's headshot replaces the trophy when one is on file (Luke Youngs); with none on file the trophy stays (Derek Chandler, until his photo is uploaded). The customer id comes from the Final's winner_id, else from the bracket row that seats the winner, because Austin's Final rows carry no ids. No winner, no banner.",
+    ],
+  },
+  {
+    version: "2.559.3",
+    date: "2026-10-13",
+    title: "SCORING tab for managers",
+    changes: [
+      "Kerry 10/13: \"Can you make the SCORING tab available to Managers under each event?\" Chapter managers now see the SCORING tab on any event with live scoring on. It shows each group's scoring link (copy) and QR, holes in, signatures and card checks. The QR route opens to managers, still gated per event. Seeding or re-seeding groups and closing a round stay admin-only (CA #843), and their buttons are hidden for managers.",
+    ],
+  },  {
+    version: "2.559.2",
+    date: "2026-10-13",
+    title: "Golf Genius points intake switched OFF while the Tracker computes points blind",
+    changes: [
+      "Kerry 10/13 (CoS #1693-1): \"Can we generate points on our side first for last Tuesday? Then I'll run Golf Genius for you to check it against. However, you'll need to turn off the GG connector that automates bringing them in. I want to make sure we're calculating them correctly.\" Nothing in the Tracker could turn the GG points pull off: a points board refreshed itself from Golf Genius whenever its snapshot went stale after an event, the daily job refreshed the monthly points, and each row expansion called GG live. New app setting gg_points_intake, OFF unless it reads 'on'. While off, every points board serves its saved snapshot (everything through 9/29) with no error banner; the monthly snapshot is kept; the row expansion returns no GG detail (the player's own cards still show); and a refresh that would overwrite the live standings is refused. Nothing is deleted. Manual, read-only captures that write elsewhere (the points ledger) still run, so Kerry's GG comparison pull works on his word. Guard: test_gg_points_intake.py; the refresh-window tests now run with the switch on.",
+    ],
+  },
+  {
+    version: "2.559.1",
+    date: "2026-10-13",
+    title: "Match cards: OPEN CARD sits on the hole-dots line; OPEN on a phone",
+    changes: [
+      "Kerry 10/13: \"Can you move the OPEN CARD to same line as the dots for the hole results so we can reduce the vertical height? On mobile you can reduce OPEN CARD to OPEN. Do this for ALL Match Play events and matches, not just Lone Star cup.\" Every match card (City Match Play pools and knockout, and the Lone Star Cup) is built by one function, mpMatchCard. The dots, the start-hole note and the OPEN CARD label now share one row: on desktop the note is on the left, the dots are centred and OPEN CARD is on the right. The card loses a whole row. On a phone (560px and under) the label reads OPEN, or CLOSE when the card is open. All 18 dots stay on one line with OPEN at the right end, and the start-hole note stays on that line as 'Start 10' (Kerry 10/13: \"The Started on hole x should be on the same line as well\").",
+      "A live re-render of an open card used to keep the card open but put the label back to OPEN CARD. It now shows the close label. Guard: test_mp_card_dots_line.js.",
+    ],
+  },
+  {
+    version: "2.559.0",
+    date: "2026-10-13",
+    title: "Event-day email: re-issue after a start change (UPDATED START)",
+    changes: [
+      "Kerry 10/13, after the Quarry's start holes moved to 10-15 (Back 9, 4:30 PM shotgun): \"Re-issue to players\", then \"Approved to send yourself\" and \"Send it - GO\". The member send goes once per event and player, so a start change had no way back to the players. New send_event_day_reissue (event_day_email.py) sends the same approved message to every ready player with \"UPDATED START: \" before the subject and an orange notice at the top of the panel (\"Your starting hole has changed. You now start on Hole N. This replaces the earlier email. Your group and cart are the same.\"). It needs the template stamp, a mailbox post carrying Kerry's word (customer_query._kerry_ok, unchanged) and confirm; without confirm it is a dry run. Once per player per sheet state (app setting event_day_reissue:<event>:<hash of the start lines>); event_day_email_sends is untouched; every message is logged. Bridge scoring-event-day-email:<id>|reissue|<post id>[|confirm]. test_event_day_email.py section 4c.",
+    ],
+  },
+  {
+    version: "2.558.1",
+    date: "2026-10-13",
+    title: "Every leaderboard: bought in = white, not bought in = soft grey",
+    changes: [
+      "Kerry 10/13, on the Lone Star Cup skins board: \"For all leaderboard views everywhere, adopt the new standards we set with the grey for those not bought in and no color for those who are.\" The Events leaderboard and every board built on it (the Lone Star Cup skins, the scorer's board) drop the green bought-in rows. A bought-in row is plain white, and a not-bought-in row is the same soft grey #EEEEEC with muted text the Season Contests boards use. The legend chips and HOW IT WORKS text say white / grey. New tokens --buyin-row and --buyin-nobuy in dashboard.css; green (--buyin-green) stays for badges and chips only. test_events_board.js now fails any green leaderboard row.",
+    ],
+  },
+  {
+    version: "2.558.0",
+    date: "2026-10-13",
+    title: "SEASON CONTESTS: Match Play joins the race picker; black column headers; Bitter on every button",
+    changes: [
+      "Kerry 10/13: \"Let's roll MATCH PLAY for each city into the POINTS RACES tab, but change POINTS RACES to SEASON CONTESTS.\" The tab now reads SEASON CONTESTS. Each chapter's race menu lists its Match Play (Austin Match Play, San Antonio Match Play, both FINAL for 2026). Picking one shows the Match Play board under the same chapter and race pickers, with one HOW IT WORKS button, and Match Play's own chapter control hidden (season stays). The MATCH PLAY tab is gone from the bar. Its section and every #tab=mp link still work, and they now land inside SEASON CONTESTS. The address carries ?race=austin-match-play-2026 like any other race.",
+      "Kerry 10/13: \"Can you make the MONTHLY buttons connected toggles rather than separate buttons, to save space?\" The month picker is one connected segmented control, and months are always 3 letters (MAR, APR ... OCT).",
+      "Kerry 10/13: \"Can we make the column headers our TGF Black with white text and rounded top corners? And reduce vertical padding.\" Standings column headers are a #1B1B1B band with white Bitter labels, 8px rounded top corners and about half the old height. The (PROJECTED) eyebrow stays orange.",
+      "Kerry 10/13: \"maybe Show All Players could fit on same line as Past Champions.\" On the Fellowship Cup and Players Cup boards they now share one row.",
+      "Kerry 10/13: \"All nav bar links should be bitters always. Buttons too.\" One app-wide rule in dashboard.css makes every button, .btn, tab link and the ENTER EVENTS & CONTESTS banner Bitter.",
+      "Kerry 10/13, on the phone view: \"This is too many rows above the leaderboard. How can you condense or combine?\" On a phone the area above the board is down from seven rows to two. Row 1 holds the chapter (short name: TGF / Austin / SA), the race picker, and HOW IT WORKS as an (i) disc. The FINAL tag is dropped there, because the champion banner or the LIVE pill carries the status. Row 2 holds the LIVE pill, Past Champions and Show All Players. On Monthly the month strip fits the width and the 'October · In progress' pill folds into the OCT dot.",
+    ],
+  },
+  {
+    version: "2.557.1",
+    date: "2026-10-13",
+    title: "Leaderboard: Bitter section tabs, no POINTS RACES chevron, lands on the biggest live TGF race",
+    changes: [
+      "Kerry 10/13: \"Didn't it say all nav bars were supposed to be Bitters?\" The section tabs (EVENTS / POINTS RACES / LONE STAR CUP / MATCH PLAY) are now Bitter 700 12px with 1.5px letter spacing, as CD #1638 draws them.",
+      "Kerry 10/13: \"Remove the chevron on the POINTS RACES.\" Gone on every screen size; the race and chapter pickers are the menu.",
+      "Kerry 10/13: \"By default, land on the biggest current TGF Wide event. Right now that's simply October Points. When in season it would be The Fellowship Cup then the Players Cup then the current monthly.\" With no race in the address, every visitor lands on TGF · All chapters and the first LIVE race in that order. Today that is Monthly. The last chapter a visitor chose no longer overrides the landing.",
+      "Kerry 10/13: \"TOP NAV of PLAYERS LEADERBOARD HANDICAPS shouldn't be wrapping to second line so soon. Should stay up top.\" The member header (logo, the three tabs, ENTER EVENTS & CONTESTS) now stays on one row down to 860px wide. It used to drop the tabs to a second row anywhere under 1480px, a width set for the admin nav. The admin nav is unchanged.",
+    ],
+  },
+  {
+    version: "2.557.0",
+    date: "2026-10-13",
+    title: "Leaderboard top as Claude Design drew it; every chapter's races in the TGF race menu",
+    changes: [
+      "Kerry 10/13: \"the top part is not how CD designed it.\" The POINTS RACES top now follows CD #1638. The race-chip row is gone; it stays in the page, hidden, so every deep link and old code path still works. LONE STAR CUP is a normal tab with a navy star, no longer a pill. The race picker is the page title. HOW IT WORKS sits at the right of the title line (Kerry: \"Keep the HOW IT WORKS button instead of changing it to RULES\"), with space above the champion banner. On a phone the POINTS RACES tab no longer opens the old race list, because the pickers are the menu.",
+      "Kerry 10/13: \"For the All Chapters view, add sections for the Austin contests and San Antonio contests. Once it's over 4 chapters, we'll limit that to just the TGF All Chapter contests.\" With TGF selected, the race menu lists the TGF races, then an Austin section and a San Antonio section. Above 4 chapters (PR_NAV_ALL_CHAPTERS_MAX) it shows the TGF races only, with the footer pointing to the chapter switch. A chapter view still shows TGF plus that chapter.",
+      "Kerry 10/13: \"move Monthly below The Players Cup.\" TGF races now read The Fellowship Cup, The Players Cup, Monthly.",
+    ],
+  },
+  {
+    version: "2.556.6",
+    date: "2026-10-13",
+    title: "No proximity page when no Closest to Pin is funded",
+    changes: [
+      "Kerry 10/13, on Forest Creek's course files: \"If there are no Closest to Pins for the event due to numbers, then don't send the page. That's kind of weird.\" With 13 entries the games matrix funds no CTP, and the pack still printed a 'No proximity markers to print' page and attached it as Proximity.pdf. Now the print pack and the course files leave the page out entirely. The reason is kept on the build result (skipped) for anyone checking. The Proximity report on the REPORTS tab still explains itself when opened.",
+    ],
+  },
+  {
+    version: "2.556.5",
     date: "2026-10-13",
     title: "Health: the event-day email send has its own slow line (60 s)",
     changes: [
@@ -9,7 +350,7 @@ window.TGF_CHANGELOG = [
     ]
   },
   {
-    version: "2.555.3",
+    version: "2.556.4",
     date: "2026-10-13",
     title: "Backups: player photos and card photos now go off-site with the nightly backup",
     changes: [
@@ -17,12 +358,37 @@ window.TGF_CHANGELOG = [
     ]
   },
   {
-    version: "2.555.2",
+    version: "2.556.3",
     date: "2026-10-13",
     title: "Player Spotlight: an open during the warmer's refresh no longer rebuilds the Cup piece itself",
     changes: [
       "Three Spotlight opens took about 10.9 s on 10/9 and 10/10 (digest #1567; the Fellowship Cup piece alone is ~8.3 s). Cause: every 90 s the warmer expires the shared entries and then spends ~10 s rebuilding them, and an open that landed inside that window rebuilt the same entries on its own thread. While the warmer is mid-rebuild, every other thread now serves the entry it just expired (at most about 2.5 minutes old) and builds nothing. Nothing is cached longer, no figure changes, and a restart still starts cold until the first warmer tick. Guard in test_perf.py (a page open during a held-open rebuild returns in under 2 s)."
     ]
+  },
+  {
+    version: "2.556.2",
+    date: "2026-10-13",
+    title: "Print pack scorecards: one card per group, always",
+    changes: [
+      "Kerry 10/13: \"Why did Austin print scorecards per cart? Scorecards should always be per group unless I direct otherwise.\" The print pack (and the course files) chose one card per cart whenever the event's net game was Cart Net, so Forest Creek printed 8 cart cards instead of 4 group cards. Now every pack prints one card per group, and the net game is still named and dotted on the card as before. Per-cart cards happen only when Kerry directs it: app setting print_pack_scorecard_grouping = 'cart' for every event, or a list of event ids.",
+    ],
+  },
+  {
+    version: "2.556.1",
+    date: "2026-10-13",
+    title: "Course Files go straight to the course contact",
+    changes: [
+      "Kerry 10/13: \"Set it up to send straight to course contact.\" Course Files now emails the course's print contact directly, with Kerry's print-pack recipients on CC: Starter Sheet, Cart Signs, Scorecards, Proximity and Rules of Play, one PDF each, with a short note asking the course to print them. The contact is kept per course (by course_id) in app setting course_print_contacts. The first time a course has no contact, the button asks for the email address and saves it to that course. Nothing is ever sent to a guessed address. Route /api/courses/<id>/print-contact; bridge scoring-course-contact:<course_id>|<email>|apply, and scoring-print-pack-pdf:<id>|files|send|course sends it.",
+    ],
+  },
+  {
+    version: "2.556.0",
+    date: "2026-10-13",
+    title: "Print pack: scorecards and the Rules of Play in every pack; Course Files sends only the course's reports",
+    changes: [
+      "Kerry 10/13: \"Print packs need to also include the scorecards and rules sheets.\" Every event's pack now carries the scorecards by default (they had needed the print_pack_scorecards setting; it can still be set to 'off' or to a list of events). Kerry's own Rules of Play print sheet (two copies per page with a cut line) is bound onto the end of every pack. It is a fixed file, static/print/TGF_Rules_of_Play.pdf; replace that file to change the sheet.",
+      "Kerry 10/13: \"Course email should include Starter Sheet, Cart Signs, Scorecards, Proxies and Rules Sheets...not the other stuff.\" The separate-files email for the course now carries only those five, one PDF each. Games & Payouts and Divisions & Flights stay in Kerry's own pack. A new Course Files button beside Send Pack on the PAIRINGS tab sends it (POST /api/events/<id>/course-files/send), and the bridge scoring-print-pack-pdf:<id>|files does the same.",
+    ],
   },
   {
     version: "2.555.1",

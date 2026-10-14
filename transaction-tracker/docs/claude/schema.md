@@ -663,3 +663,19 @@ audits) as append-only rows. Spec: librarian-claude #1114; module
   UPDATE. Foreign keys are declarations (production `foreign_keys = 0`), so
   `library_put` checks section, supersedes target and readers in code.
 - `lane`, `owner`, `filed_by` are TEXT until a `lanes` lookup exists (#1124-g).
+
+## course_staff (migration 0014, v2.562.0)
+
+Kerry 2026-10-13 ("Deploy now", #1737); shape #1699, db-claude PASS with changes #1701 (Schema v3.0 #9, `customer_id` standing in for `user_id` until R6).
+`course_staff(course_staff_id PK, course_id → courses ON DELETE CASCADE, customer_id → customers ON DELETE RESTRICT, role CHECK in the 7 roles, is_primary CHECK 0/1, notes, active CHECK 0/1, created_at, created_by, updated_at, UNIQUE(course_id, customer_id, role))`; partial unique index `ux_course_staff_primary (course_id, role) WHERE is_primary = 1 AND active = 1`. No email column: the email is read from `customer_emails`. Each person also carries `customer_roles` 'course_contact'. A new role is a new migration. `active` is a Tracker addition beyond v3.0 (history). In `_CUSTOMER_FK_COLUMNS` and `_FK_LEFTOVER_DELETE_OK`. Code: `email_parser/course_staff.py`; details events.md.
+
+## event_decline_reasons (migration 0016, v2.563.0)
+
+Kerry 2026-10-13: "Make sure database is setup to recieve player selections of
+reasons they can't play. We'll want to track whatever people are willing to give
+us." The optional one-tap reason on an invitation's Can't make it page
+(`email_parser/invitations.py`). Columns: `event_id` -> events(id),
+`customer_id` -> customers, `reason` (CHECK: Schedule, Weather, Course or price,
+Injury, Other; a new reason is a new migration), `source` ('invitation'),
+created_at / updated_at. UNIQUE (event_id, customer_id): a later tap updates the
+row. Writer `record_reason`, reader `decline_reasons`.
