@@ -68,7 +68,7 @@ lb = db.get_event_leaderboard(NAME, db_path=DB) or {}
 check("the event's board carries the phone CTP winner",
       [(p["player"], p["detail"]) for p in lb.get("proxies") or []] == [("Adam Baker", "Hole 12")], lb.get("proxies"))
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "email_parser", "database.py")).read()
-check("the board falls back to the phones only when Golf Genius has no CTP rows",
-      "if not proxies:\n            try:\n                proxies = _entry_ctp_proxies(conn, ev, db_path=db_path)" in src)
+check("a Tracker-scored event always reads the phones; a GG-era event only when GG has no CTP rows",
+      "if not _gg_era or not proxies:\n            try:\n                proxies = _entry_ctp_proxies(conn, ev, db_path=db_path)" in src)
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

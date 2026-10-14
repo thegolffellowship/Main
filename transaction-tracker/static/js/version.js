@@ -3,10 +3,11 @@ window.TGF_CHANGELOG = [
   {
     version: "2.562.7",
     date: "2026-10-13",
-    title: "EVENTS board: flights from the Tracker's own flight board",
+    title: "EVENTS board: every leaderboard from GAMES; Golf Genius is history only",
     changes: [
-      "Kerry 10/13: \"It doesn't look like flights are showing where they should on the leaderboard.\" The NET, GROSS and SKINS boards were sectioned by flight only from Golf Genius's flight lists, and an event Golf Genius doesn't score has none. So the whole field showed as one list, while the payouts were paid by flight (Ind Net F1 / F2, Skins F1 / F2).",
-      "When Golf Genius has no flights for an event, the board now reads the event's own flight board: the same selection the payouts use. Each game is sectioned \"Flight 1 (HCP <12.0)\" / \"Flight 2 (HCP 12.0+)\". A game with a single flight shows no sections. A non-buyer is placed by their handicap index against the stated line, as before. Golf Genius flights still win where they exist. Guard: test_board_engine_flights.py.",
+      "Kerry 10/13: \"It doesn't look like flights are showing where they should on the leaderboard\", then \"All leaderboards should be generated based on GAMES. Golf Genius doesn't have anything to do with anything now except for historical records.\"",
+      "FLIGHTS. For an event on or after the untether date, the NET, GROSS and SKINS boards are sectioned by the event's own flight board. That is the same selection the GAMES money is paid on: \"Flight 1 (HCP <12.0)\" / \"Flight 2 (HCP 12.0+)\". A one-flight game shows no sections. Before this, they read only Golf Genius flight lists, which a Tracker event doesn't have, so the whole field showed as one list while the payouts were paid by flight. A non-buyer is placed by their handicap index against the stated line, as before.",
+      "NO GOLF GENIUS ON A TRACKER EVENT. The board for such an event never reads a Golf Genius flight, team result or proxy, even one that was stored. Closest to Pin always comes from the phone claims (a manager ruling included). Each team's purse is its GAMES money: each real member's Team Net share times the team's slots, a blind included. Events played before the untether keep the Golf Genius record they were played under. Guards: test_board_engine_flights.py, test_board_phone_ctp.py.",
     ],
   },
   {

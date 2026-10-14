@@ -92,8 +92,38 @@ c.execute("INSERT INTO gg_game_flights (event_id, gg_tournament_id, game, flight
           "VALUES (?,?,?,?,?,?)", (EV, "t1", "individual_net", "LOW FLIGHT", 601, "Low One"))
 c.commit(); c.close()
 lb = db.get_event_leaderboard(NAME, db_path=DB) or {}
-check("Golf Genius flights win when they exist",
-      "LOW FLIGHT" in [s["label"] for s in lb.get("net_board") or []],
+check("a Tracker-scored event ignores a stored Golf Genius flight (GAMES only)",
+      "LOW FLIGHT" not in [s["label"] for s in lb.get("net_board") or []]
+      and [s["label"] for s in lb.get("net_board") or []][:2] == ["Flight 1 (HCP <12.0)", "Flight 2 (HCP 12.0+)"],
       [s["label"] for s in lb.get("net_board") or []])
+
+# A GG-era event (before the untether date) keeps the record it was played under.
+OLD, OLD_NAME = 952, "s9.1 Old Links"
+c = sqlite3.connect(DB)
+c.execute("INSERT INTO events (id, item_name, event_date, course_id, course, chapter, format) "
+          "VALUES (?,?,?,?,?,?,?)", (OLD, OLD_NAME, "2026-09-01", course_id, "Flight Links",
+                                     "San Antonio", "9 Holes"))
+for cid, fn, ln, ph in PLAYERS[:2]:
+    rid = c.execute(
+        "INSERT INTO scoring_rounds (customer_id, player_name, event_id, gg_aggregate_id, round_date, "
+        "course_id, holes_played, playing_handicap, gross, net, source, imported_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+        (cid, f"{fn} {ln}", OLD, f"gg:{cid}", "2026-09-01", course_id, 9, ph, 45, 45 - ph,
+         "gg", "2026-09-02 00:09:14")).fetchone()[0]
+    for h in range(1, 10):
+        c.execute("INSERT INTO scoring_holes (scoring_round_id, hole_number, strokes, strokes_received) "
+                  "VALUES (?,?,?,?)", (rid, h, 5, 0))
+for cid, lab in ((601, "LOW FLIGHT"), (602, "HIGH FLIGHT")):
+    c.execute("INSERT INTO gg_game_flights (event_id, gg_tournament_id, game, flight_label, customer_id, "
+              "player_name) VALUES (?,?,?,?,?,?)", (OLD, "t2", "individual_net", lab, cid, str(cid)))
+c.commit(); c.close()
+lb = db.get_event_leaderboard(OLD_NAME, db_path=DB) or {}
+check("a GG-era event keeps its Golf Genius flights (history)",
+      sorted(s["label"] for s in lb.get("net_board") or []) == ["HIGH FLIGHT", "LOW FLIGHT"],
+      [s["label"] for s in lb.get("net_board") or []])
+src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "email_parser", "database.py")).read()
+check("the board reads GG results only for a GG-era event",
+      'FROM gg_game_results WHERE event_id = ? AND ? = 1' in src
+      and 'FROM gg_game_flights WHERE event_id = ? AND ? = 1' in src)
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

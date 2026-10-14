@@ -14984,19 +14984,34 @@ def get_event_leaderboard(event_name: str,
         except Exception:
             game_counts = {}
 
-        # per-game flight membership (GG labels only — never derived)
+        # GOLF GENIUS IS HISTORY ONLY (Kerry 2026-10-13: "All leaderboards
+        # should be generated based on GAMES. Golf Genius doesn't have
+        # anything to do with anything now except for historical records").
+        # An event on/after the untether date never reads a Golf Genius
+        # flight, team result or proxy, even one that was stored; its board
+        # comes from the Tracker's own games (flight board, team engine,
+        # phone CTP claims). Older events keep the GG record they were
+        # played under.
+        try:
+            from email_parser.gg_untether import gg_allowed as _gg_allowed
+            _gg_era = bool(_gg_allowed(ev.get("event_date"), db_path))
+        except Exception:
+            logger.exception("leaderboard: untether check failed for %s", ev.get("item_name"))
+            _gg_era = False
+        # per-game flight membership: GG labels for a GG-era event
         flights: dict = {}
         for fr in conn.execute(
                 """SELECT game, flight_label, customer_id
-                   FROM gg_game_flights WHERE event_id = ?""", (ev["id"],)):
+                   FROM gg_game_flights WHERE event_id = ? AND ? = 1""",
+                (ev["id"], 1 if _gg_era else 0)):
             if fr["customer_id"] is not None:
                 flights.setdefault(fr["game"], {})[
                     int(fr["customer_id"])] = fr["flight_label"]
-        # An event Golf Genius does not score has no GG flights: its flights
-        # are the Tracker's own flight board, the same SELECTION the payouts
-        # are paid on (Kerry 10/13: "It doesn't look like flights are
-        # showing where they should on the leaderboard").
-        if not flights:
+        # A Tracker-scored event's flights are its own flight board, the
+        # same SELECTION the payouts are paid on (Kerry 10/13: "It doesn't
+        # look like flights are showing where they should on the
+        # leaderboard").
+        if not _gg_era:
             try:
                 _fb = event_flights_board(ev["id"], db_path=db_path)
             except Exception:
@@ -15062,8 +15077,8 @@ def get_event_leaderboard(event_name: str,
         for gr in conn.execute(
                 """SELECT game, game_label, player_name, is_team, position,
                           detail, purse, customer_id
-                   FROM gg_game_results WHERE event_id = ?
-                   ORDER BY game, id""", (ev["id"],)):
+                   FROM gg_game_results WHERE event_id = ? AND ? = 1
+                   ORDER BY game, id""", (ev["id"], 1 if _gg_era else 0)):
             g = dict(gr)
             if g["game"] in ("team_net", "team_net_board") and g["is_team"]:
                 # gg_total = GG's posted board total (rides in detail as
@@ -15096,7 +15111,7 @@ def get_event_leaderboard(event_name: str,
         # are the phone claims (a manager ruling included), the same holders the
         # Tracker's own payouts read (_tracker_team_and_ctp_rows). Amounts are the
         # live matrix's CTP values for the field, as Record Payouts pays them.
-        if not proxies:
+        if not _gg_era or not proxies:
             try:
                 proxies = _entry_ctp_proxies(conn, ev, db_path=db_path)
             except Exception:
@@ -15806,6 +15821,22 @@ def get_event_leaderboard(event_name: str,
             t["position"] = (("T" if tied else "") + str(_rank)
                              if t["total_net"] is not None else "")
             t["official"] = False
+    # A Tracker-scored event's team purse is what its GAMES money pays the
+    # team (recorded payouts, else the board preview, both in `won`), not a
+    # Golf Genius row (Kerry 2026-10-13: "All leaderboards should be
+    # generated based on GAMES").
+    # Teams split their purse equally, a blind slot included, and a blind
+    # may also play in another group, so the purse is read off the team's
+    # REAL members: each one's Team Net share times the team's slots.
+    if not _gg_era:
+        for t in teams:
+            real = [p for p in t["players"]
+                    if p.get("customer_id") is not None and not p.get("blind")
+                    and not str(p.get("player_name") or "").startswith("Bl[")]
+            shares = [sum(w["cents"] for w in won.get(int(p["customer_id"]), [])
+                          if w["category"] == "team_net") for p in real]
+            t["purse"] = (round(min(shares) * len(t["players"]) / 100.0, 2)
+                          if shares and min(shares) > 0 else None)
 
     # ── skins winning cells (outright low GROSS on a hole WITHIN the
     # flight — the engine's rule) for the GG-style hole-by-hole grid ──
