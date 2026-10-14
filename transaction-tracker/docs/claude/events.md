@@ -148,6 +148,20 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   PLAYING. `restore_answers` (bridge `0|restore|<kerry-ok post>|<cids>[|confirm]`)
   undoes answers a person did not give: back on invitations, their Tracker
   NOT PLAYING rows and decline reasons on upcoming events removed.
+- **Scanner filter (Kerry 10/14: "yes on the scanner filter", CoS #1793/#1794).**
+  Each sent link carries its send time (`s` in the token). A tap is ignored
+  (the page looks normal, nothing is recorded, `agent_action_log`
+  `event_invite_scanner_ignored`) when it comes within `SCANNER_GRACE_S`
+  (120 s) of the send, or when the OTHER of I'm in / Can't make it was tapped
+  within `BURST_S` (30 s); a burst also undoes that earlier tap (its NOT
+  PLAYING row or its click). Remove me gets the grace only, never the burst
+  (a person goes Can't make it -> Remove me in seconds), and an ignored
+  Remove me asks again instead of saying Done. `event_invite_clicks:<id>` now
+  keeps the LATEST click time. **Previews** show a staff member's own
+  invitation (`event_invite_preview_cid`, default 18 = Kerry), never a member's.
+  Research behind it (CAN-SPAM, Gmail/Yahoo/Outlook bulk rules, why no
+  RFC 8058 header through Graph): mailbox #1792/#1793. Footer postal address:
+  on HOLD for Kerry's virtual mailbox (#1795).
 - **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
   tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.
 - **Schedule** (Kerry), 7:00 AM Central, `schedule(event_date)`: weekday event

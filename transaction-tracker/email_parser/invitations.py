@@ -37,6 +37,8 @@ from datetime import date, datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+PREVIEW_CID_KEY = "event_invite_preview_cid"
+DEFAULT_PREVIEW_CID = 18          # Kerry Niester
 APPROVAL_KEY = "event_invite_approved"
 OPTOUT_KEY = "event_invite_optout"
 SENT_KEY = "event_invite_sent:{event_id}"
@@ -98,7 +100,7 @@ def _secret() -> bytes:
 
 
 def make_token(customer_id: int, event_id: int, action: str, expires: date,
-               preview: bool = False) -> str:
+               preview: bool = False, sent_at: int | None = None) -> str:
     """preview=True marks a staff PREVIEW link (Kerry 10/14: tapping the
     preview recorded Todd McConahy's answers). It opens the same pages and
     records nothing."""
@@ -109,6 +111,8 @@ def make_token(customer_id: int, event_id: int, action: str, expires: date,
                "x": int(exp.timestamp())}
     if preview:
         payload["p"] = 1
+    if sent_at:
+        payload["s"] = int(sent_at)     # when the email went out (scanner grace)
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()
                                     ).rstrip(b"=").decode()
     sig = hmac.new(_secret(), b"rsvp." + body.encode(), hashlib.sha256).hexdigest()[:32]
@@ -374,11 +378,12 @@ def _button(url: str, label: str, bg: str, ink: str) -> str:
 
 
 def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,
-                  preview: bool = False) -> dict:
+                  preview: bool = False, sent_at: int | None = None) -> dict:
     from email_parser.event_day_email import frame
     ctx = _context(ev, db_path)
     cid, eid = person["customer_id"], int(ev["id"])
-    links = {a: rsvp_url(make_token(cid, eid, a, ctx["event_date"], preview=preview))
+    links = {a: rsvp_url(make_token(cid, eid, a, ctx["event_date"], preview=preview,
+                                    sent_at=sent_at))
              for a in ACTIONS}
     vals = {**{k: _e(v) for k, v in ctx.items() if k != "event_date"},
             "first_name": _e(person.get("first_name") or "there"),
@@ -406,6 +411,97 @@ def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,
 # Recording an answer
 # ---------------------------------------------------------------------------
 
+# Kerry 10/14 ("yes on the scanner filter", CoS #1794): mail security
+# scanners (Defender, Mimecast, Proofpoint, Barracuda) open every link at
+# delivery and some run page scripts. A tap is IGNORED (the page still shows
+# as normal, nothing is recorded) when it comes within SCANNER_GRACE_S of the
+# email going out, or when a DIFFERENT button of the same email was hit
+# within BURST_S, which no person does. A burst also undoes the other tap.
+SCANNER_GRACE_S = 120
+BURST_S = 30
+
+
+def _ts(iso) -> float | None:
+    try:
+        return datetime.strptime(str(iso)[:19], "%Y-%m-%dT%H:%M:%S").timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def _last_taps(eid: int, cid: int, db_path=None) -> dict:
+    """When this person's I'm in and Can't make it were last tapped."""
+    from email_parser import database as db
+    out = {}
+    try:
+        clicks = json.loads(_setting(CLICKS_KEY.format(event_id=eid), db_path) or "{}")
+        out["in"] = _ts(clicks.get(str(cid)))
+    except Exception:
+        pass
+    conn = db.get_connection(db_path)
+    try:
+        r = conn.execute("SELECT received_at FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
+                         (f"{UID_PREFIX}{eid}:{cid}",)).fetchone()
+        out["out"] = _ts(r[0]) if r else None
+    finally:
+        conn.close()
+    return out
+
+
+def scanner_check(p: dict, action: str, db_path=None) -> str | None:
+    """'grace' / 'burst' when this tap looks like a mail scanner, else None."""
+    now = datetime.utcnow().timestamp()
+    if p.get("s") and now - int(p["s"]) < SCANNER_GRACE_S:
+        return "grace"
+    if action == "unsub":
+        # Remove me needs a button tap already, and a person naturally goes
+        # Can't make it -> Remove me within seconds: grace only, no burst.
+        return None
+    taps = _last_taps(int(p["v"]), int(p["c"]), db_path)
+    for other in ("in", "out"):
+        t = taps.get(other)
+        if other != action and t and now - t < BURST_S:
+            return "burst"
+    return None
+
+
+def _undo_burst(eid: int, cid: int, db_path=None) -> None:
+    """A burst means the earlier tap was the scanner too: drop it."""
+    from email_parser import database as db
+    now = datetime.utcnow().timestamp()
+    taps = _last_taps(eid, cid, db_path)
+    if taps.get("out") and now - taps["out"] < BURST_S:
+        conn = db.get_connection(db_path)
+        try:
+            conn.execute("DELETE FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
+                         (f"{UID_PREFIX}{eid}:{cid}",))
+            conn.commit()
+        finally:
+            conn.close()
+    if taps.get("in") and now - taps["in"] < BURST_S:
+        key = CLICKS_KEY.format(event_id=eid)
+        try:
+            clicks = json.loads(_setting(key, db_path) or "{}")
+            clicks.pop(str(cid), None)
+            db.set_app_setting(key, json.dumps(clicks), db_path=db_path)
+        except Exception:
+            logger.exception("invitations: could not drop a scanner click")
+
+
+def _scanner_ignored(p: dict, action: str, db_path=None) -> str | None:
+    why = scanner_check(p, action, db_path)
+    if not why:
+        return None
+    if why == "burst":
+        _undo_burst(int(p["v"]), int(p["c"]), db_path)
+    try:
+        from email_parser import database as db
+        db.log_agent_action("rsvp-link", "event_invite_scanner_ignored",
+                            f"event {int(p['v'])} customer {int(p['c'])} {action} ({why})")
+    except Exception:
+        pass
+    return why
+
+
 def record_answer(token: str, db_path=None) -> dict:
     """POST side of the link. Records I'm in / Can't make it as a Tracker
     rsvps row (one per event + person, the latest answer wins), or the
@@ -417,6 +513,9 @@ def record_answer(token: str, db_path=None) -> dict:
     cid, eid, action = int(p["c"]), int(p["v"]), p["a"]
     if p.get("p"):
         return {"ok": True, "action": action, "preview": True}
+    why = _scanner_ignored(p, action, db_path)
+    if why:
+        return {"ok": True, "action": action, "ignored": why}
     if action == "unsub":
         opt = _opted_out(db_path)
         opt.add(cid)
@@ -502,12 +601,15 @@ def click_in(token: str, db_path=None) -> dict:
         return {"ok": False}
     if p.get("p"):
         return {"ok": True, "redirect": url, "preview": True}
+    why = _scanner_ignored(p, "in", db_path)
+    if why:
+        return {"ok": True, "redirect": url, "ignored": why}
     key = CLICKS_KEY.format(event_id=int(p["v"]))
     try:
         clicks = json.loads(_setting(key, db_path) or "{}")
     except Exception:
         clicks = {}
-    clicks.setdefault(str(int(p["c"])), datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
+    clicks[str(int(p["c"]))] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         db.set_app_setting(key, json.dumps(clicks), db_path=db_path)
     except Exception:
@@ -533,7 +635,8 @@ def sibling_links(token: str) -> dict:
     if not p:
         return {}
     exp = (datetime.utcfromtimestamp(int(p["x"])) - timedelta(days=1)).date()
-    return {a: rsvp_url(make_token(int(p["c"]), int(p["v"]), a, exp, preview=bool(p.get("p"))))
+    return {a: rsvp_url(make_token(int(p["c"]), int(p["v"]), a, exp, preview=bool(p.get("p")),
+                                   sent_at=p.get("s")))
             for a in ACTIONS}
 
 
@@ -683,8 +786,18 @@ def send_preview(event_id: int, to_address: str | None = None, kind: str = "invi
         ev = _event(conn, event_id)
     finally:
         conn.close()
-    sample = (pl["to_send"] or pl["people"] or [{"customer_id": 0, "first_name": "Sample",
-                                                  "name": "Sample", "email": ""}])[0]
+    # Kerry 10/14 (CoS #1793): the preview shows a staff member's OWN
+    # invitation (app setting event_invite_preview_cid, default Kerry), never
+    # a member's, so no tap on it can touch a member's record.
+    pcid = int(_setting(PREVIEW_CID_KEY, db_path) or DEFAULT_PREVIEW_CID)
+    conn = db.get_connection(db_path)
+    try:
+        r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                         (pcid,)).fetchone()
+    finally:
+        conn.close()
+    sample = {"customer_id": pcid, "first_name": (r[0] if r else "") or "Kerry",
+              "name": " ".join(x for x in ((r[0], r[1]) if r else ("Kerry", "")) if x)}
     msg = build_message(ev, sample, kind, db_path, preview=True)
     c = pl["counts"]
     sched = ", ".join(f"{s['kind']} {s['date']}" for s in pl["schedule"])
@@ -695,8 +808,8 @@ def send_preview(event_id: int, to_address: str | None = None, kind: str = "invi
             f"Excluded: {_e(json.dumps(c['excluded']))}. Schedule (7:00 AM): {_e(sched)}. "
             f"Template <code>{pl['template_hash']}</code>: "
             f"{'APPROVED' if pl['approved'] else 'NOT approved'}.</p>"
-            f"<p>Sample to {_e(sample['name'])}. The buttons open the real pages but "
-            f"record nothing for that person.</p><hr>")
+            f"<p>Sample: {_e(sample['name'])}'s own invitation. The buttons open the real "
+            f"pages and record nothing.</p><hr>")
     creds = _creds()
     if not creds:
         return {"error": "Email credentials not configured on server"}
@@ -716,7 +829,8 @@ def _deliver(ev: dict, pl: dict, db_path=None) -> dict:
     sent_map = _sent_map(ev["id"], db_path)
     sent, failed, held = [], [], []
     for p in pl["to_send"]:
-        msg = build_message(ev, p, pl["kind"], db_path)
+        msg = build_message(ev, p, pl["kind"], db_path,
+                            sent_at=int(datetime.utcnow().timestamp()))
         if msg["held"]:
             held.append({"customer_id": p["customer_id"], "why": msg["held"]}); continue
         good = False

@@ -17,6 +17,7 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
     from email_parser import invitations as inv
     from email_parser import fetcher
     db.init_db(DB)
+inv.BURST_S = 0   # off until 6g: earlier sections tap buttons back to back
 
 F = []
 def check(label, cond, detail=""):
@@ -100,6 +101,10 @@ r = inv.send_preview(EV, "pat@gmail.com", db_path=DB)
 check("a preview to a non-staff address is refused", "error" in r and not SENT, r)
 r = inv.send_preview(EV, "kerry@thegolffellowship.com", db_path=DB)
 check("a staff preview sends one message", r.get("status") == "sent" and len(SENT) == 1, r)
+db.set_app_setting(inv.PREVIEW_CID_KEY, "770001", db_path=DB)
+SENT.clear(); inv.send_preview(EV, "kerry@thegolffellowship.com", db_path=DB)
+check("Kerry 10/14: the preview is the staff member's own invitation (setting), not a member's",
+      "Hi Ann" in SENT[0]["body"] if "body" in SENT[0] else any("Ann" in str(v) for v in SENT[0].values()), list(SENT[0].keys()))
 SENT.clear()
 r = inv.send(EV, ok_post, confirm=True, db_path=DB)
 check("no send until the wording carries Kerry's stamp", "refused" in r and not SENT, r)
@@ -233,6 +238,35 @@ with db._connect(DB) as conn:
 check("restore puts them back on, clears the no and the reason", done_.get("applied")
       and 770002 not in inv._opted_out(DB) and left == 0
       and all(x["customer_id"] != 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), done_)
+print("6g. Kerry 10/14: the scanner filter (2-minute grace, burst rule)")
+inv.BURST_S = 30   # the earlier sections tap buttons back to back on purpose
+import time as _time
+def _np(cid):
+    with db._connect(DB) as conn:
+        return conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
+                            (f"tracker:{EV}:{cid}",)).fetchone()[0]
+now_ = int(_time.time())
+fresh = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), sent_at=now_) for a in inv.ACTIONS}
+cl.post(f"/rsvp/{fresh['out']}", headers={"X-Requested-With": "fetch"})
+check("a Can't make it within 2 minutes of the send records nothing", _np(770003) == 0)
+pu = cl.post(f"/rsvp/{fresh['unsub']}").get_data(as_text=True)
+check("…a Remove me within 2 minutes is not done and asks again", 770003 not in inv._opted_out(DB)
+      and "once more" in pu and "won't get" not in pu, pu[:200])
+old = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), sent_at=now_ - 600) for a in inv.ACTIONS}
+cl.post(f"/rsvp/{old['out']}", headers={"X-Requested-With": "fetch"})
+check("ten minutes after the send, Can't make it records", _np(770003) == 1)
+g = cl.get(f"/rsvp/{old['in']}")
+clicks = json.loads(db.get_app_setting(inv.CLICKS_KEY.format(event_id=EV), db_path=DB) or "{}")
+check("burst: I'm in seconds after Can't make it undoes both (a scanner hits every button)",
+      g.status_code == 302 and _np(770003) == 0 and "770003" not in clicks, (_np(770003), clicks.get("770003")))
+cl.get(f"/rsvp/{old['in']}")
+cl.post(f"/rsvp/{old['out']}", headers={"X-Requested-With": "fetch"})
+check("burst the other way: Can't make it seconds after I'm in records nothing", _np(770003) == 0)
+cl.post(f"/rsvp/{old['unsub']}")
+check("…but Remove me right after Can't make it still works (a person does that)",
+      770003 in inv._opted_out(DB))
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps(sorted(inv._opted_out(DB) - {770003})), db_path=DB)
+db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), "{}", db_path=DB)
 print("6e. Kerry 10/14: preview buttons record nothing")
 pv = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), preview=True) for a in inv.ACTIONS}
 cl.post(f"/rsvp/{pv['out']}", headers={"X-Requested-With": "fetch"})

@@ -4918,6 +4918,7 @@ def public_event_rsvp(token):
     page now asks, and only its button saves."""
     import html as _h
     from email_parser import invitations as _inv
+    res = {}
     if request.method == "POST":
         res = _inv.record_answer(token)
         if not res.get("ok"):
@@ -4941,6 +4942,14 @@ def public_event_rsvp(token):
     btn = ("display:inline-block;border-radius:999px;padding:12px 22px;margin:6px 6px 0 0;"
            "font:bold 16px Georgia,serif;text-decoration:none;")
     if info["action"] == "unsub":
+        if done and res.get("ignored"):
+            # Tapped within the scanner grace (Kerry 10/14): never claim it
+            # was done; ask again so a real person can confirm.
+            body = ("<h2>Remove you from event invitations?</h2>"
+                    "<p>Please tap the button once more to confirm.</p>"
+                    f"<form method='post'><button type='submit' style='{btn}border:0;"
+                    "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
+            return _public_page("Invitations", body)
         if done:
             body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
                     "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>")

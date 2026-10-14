@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.565.3";
+window.TGF_VERSION = "2.565.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.565.4",
+    date: "2026-10-14",
+    title: "Invitations: mail-scanner filter on every button; previews show Kerry's own invite",
+    changes: [
+      "Kerry 10/14: \"yes on the scanner filter\" (CoS #1793/#1794). Security scanners (Defender, Mimecast, Proofpoint, Barracuda) open every link when an email arrives. A tap on I'm in, Can't make it or Remove me is now ignored when it comes within 2 minutes of the email going out, and a tap on I'm in or Can't make it is ignored when the other button of the same email was hit within 30 seconds (no person does that); a burst also undoes the earlier tap. Nothing a scanner does can now mark anyone NOT PLAYING, cut their reminders or take them off invitations.",
+      "Remove me gets the 2-minute grace only (a person goes Can't make it then Remove me in seconds), and a Remove me tap inside the grace asks again rather than saying Done. The I'm in click log keeps the latest click time.",
+      "The staff preview now shows a staff member's own invitation (app setting event_invite_preview_cid, default Kerry), never a member's. test_invitations.py section 6g.",
+    ],
+  },
   {
     version: "2.565.3",
     date: "2026-10-14",
