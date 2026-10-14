@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.565.4";
+window.TGF_VERSION = "2.565.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.565.5",
+    date: "2026-10-14",
+    title: "ROSTER: decline reasons on the Not Playing list",
+    changes: [
+      "Kerry 10/14: \"Where can I see a report on schedule decline reasons? Can that show in ROSTER under EVENTS\". The ROSTER's Not Playing list now opens with the counts (\"Reasons given: Schedule 2 · Weather 1 (3 gave none)\"), and each player's card shows the reason they picked on the invitation's Can't make it page. An answer to our own email invitation is badged TGF instead of GG. The RSVP reads (get_rsvps_for_event, get_all_rsvps_bulk) carry source and decline_reason from event_decline_reasons.",
+    ],
+  },
   {
     version: "2.565.4",
     date: "2026-10-14",

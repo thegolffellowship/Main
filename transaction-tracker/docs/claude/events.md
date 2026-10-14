@@ -159,6 +159,10 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   Remove me asks again instead of saying Done. `event_invite_clicks:<id>` now
   keeps the LATEST click time. **Previews** show a staff member's own
   invitation (`event_invite_preview_cid`, default 18 = Kerry), never a member's.
+  **Where the reasons show (Kerry 10/14):** EVENTS → ROSTER → Not Playing:
+  the counts head the list and each card carries its reason chip; an answer
+  to our invitation is badged TGF (GG = a Golf Genius RSVP). Fields `source`
+  and `decline_reason` on every RSVP read (`_tag_tracker_rsvp`).
   Research behind it (CAN-SPAM, Gmail/Yahoo/Outlook bulk rules, why no
   RFC 8058 header through Graph): mailbox #1792/#1793. Footer postal address:
   on HOLD for Kerry's virtual mailbox (#1795).
