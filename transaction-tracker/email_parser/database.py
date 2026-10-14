@@ -18453,6 +18453,13 @@ def determine_event_game_results(event_name: str, game: str,
         if not ev:
             return {"error": f"event not found: {event_name}"}
         ev = dict(ev)
+    # F1 (Kerry 10/14, #1817): an event untethered from Golf Genius reads its
+    # winners from the Tracker's engine on the event's own flight board, the
+    # same numbers the payouts use, never GG flight labels.
+    from email_parser.gg_untether import gg_allowed
+    if not gg_allowed(str(ev.get("event_date") or "")[:10], db_path):
+        return _engine_game_results(ev, game, kind, db_path=db_path)
+    with _connect(db_path) as conn:
         binfo = _event_game_buyers(conn, ev["item_name"], kind)
         out = {"event_name": ev["item_name"], "game": game, "kind": kind,
                "buyers": len(binfo["buyers"]),
@@ -18588,6 +18595,67 @@ def determine_event_game_results(event_name: str, game: str,
         out["flights"] = result_flights
         out["status"] = "determined"
         return out
+
+
+def _engine_game_results(ev: dict, game: str, kind: str, db_path=None) -> dict:
+    """The Games tab's winner rows for an untethered event, in the shape
+    `determine_event_game_results` returns (flights → ranking / per_player),
+    computed by the engine with the flight board's flights pinned, exactly
+    as `engine_game_payouts` pays them. Read-only."""
+    from . import live_scoring as _ls
+    out = {"event_name": ev["item_name"], "game": game, "kind": kind,
+           "source": "engine"}
+    with _connect(db_path) as conn:
+        binfo = _event_game_buyers(conn, ev["item_name"], kind)
+    out["buyers"] = len(binfo["buyers"])
+    out["buyers_without_customer_id"] = binfo["no_customer_id"]
+    if not binfo["buyers"]:
+        out["status"] = "no_buyers"
+        return out
+    st = event_engine_state(ev["item_name"], db_path=db_path)
+    if st.get("error") or not st.get("players"):
+        out["status"] = "awaiting_results"
+        if st.get("error"):
+            out["why"] = st["error"]
+        return out
+    fb = event_flights_board(ev["id"], db_path=db_path)
+    if fb:
+        st = dict(st, flight_pins=_flight_pins_for(fb, st["players"]),
+                  variant_pins=_variant_pins_for(fb))
+    formulas = (get_championship_formulas(db_path=db_path)
+                if st["meta"].get("championship") else get_scoring_formulas(db_path))
+    res = (_ls.compute_leaderboard(st, formulas).get("games") or {}).get(game) or {}
+    if not res.get("active", True) or not res.get("flights"):
+        out["status"] = "awaiting_results"
+        out["warnings"] = list(res.get("warnings") or [])
+        return out
+    metric = "net" if game == "individual_net" else "gross"
+    flights, awaiting = [], set()
+    for f in res["flights"]:
+        label = f"Flight {f['flight']}" if len(res["flights"]) > 1 else "Overall"
+        if game == "skins":
+            per = {t["name"]: t["skins"] for t in f.get("tally") or []}
+            flights.append({"flight": label, "players": f.get("players"),
+                            "skin_count": sum(per.values()), "per_player": per})
+        else:
+            ranking = []
+            for r in f.get("rows") or []:
+                if not r.get("complete"):
+                    awaiting.add(r.get("name"))
+                if r.get("score") is None:
+                    continue
+                ranking.append({"position": r["place"], "player": r["name"],
+                                "customer_id": r.get("customer_id"),
+                                metric: r["score"]})
+            hcps = [r["playing_handicap"] for r in f.get("rows") or []
+                    if r.get("playing_handicap") is not None]
+            flights.append({"flight": label, "players": f.get("players"),
+                            "hcp_range": [min(hcps), max(hcps)] if hcps else None,
+                            "ranking": ranking})
+    out.update(flights=flights, awaiting=sorted(a for a in awaiting if a),
+               flight_source=res.get("flight_source"), status="determined",
+               warnings=list(res.get("warnings") or []))
+    return out
 
 
 def skins_audit(event_query: str, db_path: str | Path | None = None) -> dict:
@@ -63157,6 +63225,13 @@ def _decorate_flights_board(board: dict, inp: dict) -> dict:
         for u in entry["selection"].get("unflighted") or []:
             u["sort_name"] = _sort_name(u.get("name"))
         entry["gg_recorded"] = inp["gg"].get(entry["game"]) or {"rows": [], "total": 0.0}
+    # F2 (Kerry 10/14, #1817): an untethered event is paid by the Tracker
+    # (auto payouts records from this board), never by Golf Genius.
+    from email_parser.gg_untether import gg_allowed
+    _gg_era = gg_allowed(str(ev.get("event_date") or "")[:10])
+    if not _gg_era:
+        for entry in board["games"]:
+            entry["gg_recorded"] = {"rows": [], "total": 0.0}
     board.update({
         "event_id": ev["id"], "event_name": ev.get("item_name"),
         "event_date": ev.get("event_date"), "chapter": ev.get("chapter"),
@@ -63172,7 +63247,7 @@ def _decorate_flights_board(board: dict, inp: dict) -> dict:
         "places_by_flight_size": inp["rules"]["places_by_flight_size"],
         "event_started": inp["started"], "event_completed": inp["completed"],
         "dry_run": True,
-        "payer_of_record": "Golf Genius",
+        "payer_of_record": "Golf Genius" if _gg_era else "The Tracker (auto payouts)",
         "file_stub": print_file_stub(ev),
     })
     return board
@@ -67752,6 +67827,13 @@ def gg_teesheet_round_options(event_id: int,
             "WHERE id = ?", (int(event_id),)).fetchone()
     if not ev:
         return {"error": f"no event {event_id}"}
+    # F3 (Kerry 10/14, #1817): an event untethered from Golf Genius never
+    # calls Golf Genius, not even to list its rounds. Refused BEFORE the
+    # network, so the pull-from-GG import (which starts here) is too.
+    from email_parser.gg_untether import gg_allowed
+    if not gg_allowed(str(ev["event_date"] or "")[:10], db_path):
+        return {"error": "this event is untethered from Golf Genius: its pairings "
+                         "come from the Tracker's own generator", "untethered": True}
     chapter = (ev["chapter"] or "").strip().lower()
     portal = "austin" if chapter.startswith("austin") else "sa"
     listing = gg_teesheet_rounds(portal)
@@ -68030,6 +68112,16 @@ def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
     ruled source of truth). Players resolve through the scoring cascade;
     rode pairs = tee-sheet sequence 1&2 / 3&4 (Kerry ruling)."""
     from golf_genius_sync import fetch_public_page
+    if event_override and str(event_override).isdigit():
+        # F3: a named untethered event is refused before any GG call.
+        from email_parser.gg_untether import gg_allowed
+        with _connect(db_path) as _c:
+            _r = _c.execute("SELECT event_date FROM events WHERE id = ?",
+                            (int(event_override),)).fetchone()
+        if _r and not gg_allowed(str(_r["event_date"] or "")[:10], db_path):
+            return {"portal": portal, "round_id": round_id, "applied": False,
+                    "untethered": True,
+                    "error": "this event is untethered from Golf Genius; nothing fetched"}
     widget = _gg_teesheet_widget(portal)
     joiner = "&" if "?" in widget else "?"
     page = fetch_public_page(f"{widget}{joiner}round_id={round_id}", xhr=False)

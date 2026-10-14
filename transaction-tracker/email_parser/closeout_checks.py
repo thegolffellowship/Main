@@ -198,10 +198,22 @@ def closeout_final_check(event: str | int, db_path=None, _read: dict | None = No
         rounds = [r for r in (read.get("rounds") or []) if not ep._is_preview(r)]
         mode, why = ep._mode(conn, ev, db_path) if rounds else ("gg", "no entered rounds")
         era = "entry" if (rounds and mode == "authoritative") else "gg"
+        # F4 (Kerry 10/14, #1817/#1838): an event untethered from Golf Genius
+        # never falls back to GG's rulebook. With no entered rounds it says
+        # so, instead of asking for GG boards that will never come.
+        from email_parser.gg_untether import gg_allowed
+        untethered = not gg_allowed(str(ev.get("event_date") or "")[:10], db_path)
+        if untethered and not rounds:
+            era, why = "entry", "no entered rounds (untethered from Golf Genius)"
         out = {"event": {"id": eid, "name": ev["item_name"], "date": str(ev.get("event_date") or "")[:10]},
                "era": era, "era_why": why}
 
-        if era == "gg":
+        if untethered and not rounds:
+            out["checks"] = {"entered_players": 0, "published_cards": len(entry_cards),
+                             "payout_rows": len(payouts)}
+            blocking.append("no entered cards for this event (Live Scoring has no rounds: "
+                            "check the event's SCORING tab)")
+        elif era == "gg":
             roster = db._event_roster_rows(conn, eid)
             field_ids = {int(r["customer_id"]) for r in roster if r.get("customer_id")}
             field_unid = sorted({(r.get("name") or r.get("customer") or "").strip()

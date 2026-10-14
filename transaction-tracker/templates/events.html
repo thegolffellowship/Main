@@ -6230,7 +6230,7 @@
         html += `<div class="games-panel-header" style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
             <span>DIVISIONS / FLIGHTS &mdash; ${board.holes_key} holes</span>
             ${fbStateBadge(board)}
-            <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:0.72rem;">dry run &middot; ${escapeHtml(board.payer_of_record || "Golf Genius")} is the payer of record</span>
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:0.72rem;">dry run &middot; ${escapeHtml(board.payer_of_record || "The Tracker")} is the payer of record</span>
             ${fbActionButtons(board)}
         </div>`;
         if (board.freeze) {
@@ -6375,7 +6375,7 @@
         if (!tgfEvent || !tgfEvent.payouts || tgfEvent.payouts.length === 0) {
             html += `<div style="text-align:center;padding:2rem;color:var(--text-muted);">`;
             html += `<div style="font-size:0.95rem;font-weight:600;">No payouts recorded</div>`;
-            html += `<div style="font-size:0.82rem;margin-top:0.25rem;">Payouts record automatically after Golf Genius results sync &mdash; or use Record Payouts on the GAMES tab</div>`;
+            html += `<div style="font-size:0.82rem;margin-top:0.25rem;">Payouts record automatically once every card is final &mdash; or use Record Payouts on the GAMES tab</div>`;
             html += `</div></div>`;
             return html;
         }

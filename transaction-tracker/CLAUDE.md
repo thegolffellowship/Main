@@ -837,6 +837,17 @@ now except for historical records").** `get_event_leaderboard` reads
 
 Guard `test_board_engine_flights.py`.
 
+**Golf Genius out of four more places (Kerry 2026-10-14, "Yes, build all four",
+#1817, v2.566.0).** For an untethered event:
+- F1: the GAMES tab winner rows (`determine_event_game_results` → `_engine_game_results`)
+  come from the engine on the flight board, the same numbers the payouts use;
+- F2: the flight board's payer of record is "The Tracker (auto payouts)" with no GG line;
+- F3: `gg_teesheet_round_options` / `import_gg_teesheet_round` refuse before any GG call;
+- F4: `closeout_final_check` never uses GG's rulebook ("no entered cards" instead).
+Guards: `test_board_engine_flights.py`, `test_flights_board.py`, `test_gg_untether.py`,
+`test_closeout_checks.py`. The remaining GG paths and their dispositions are in the
+10/21 system audit (#1809-2).
+
 **Golf Genius POINTS intake is OFF (Kerry 2026-10-13, CoS #1693-1):** "you'll need
 to turn off the GG connector that automates bringing them in. I want to make sure
 we're calculating them correctly." App setting `gg_points_intake` (off unless it
