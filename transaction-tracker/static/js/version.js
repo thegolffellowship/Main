@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.562.3";
+window.TGF_VERSION = "2.562.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.4",
+    date: "2026-10-13",
+    title: "EVENTS board: Closest to Pin winners from the phones",
+    changes: [
+      "Kerry 10/13: \"Why aren't closest to pins showing?\" The EVENTS leaderboard's Closest to Pin rows (the winner strips under OVERALL and the PROXIES tab) were read only from Golf Genius results, so an event Golf Genius does not score showed none, even with winners claimed on the phones (The Quarry: Adam Baker on 12, Dan Stich on 16). With no Golf Genius CTP rows, the board now reads the phone claims (a manager ruling included): the same holders Record Payouts uses, by customer_id with the customer's own name, the hole in the detail and the matrix's CTP amount for the field. Money still waits for the field like every other dollar on the board. A hole nobody holds reads \"No winner\". Guard test_board_phone_ctp.py.",
+    ],
+  },
   {
     version: "2.562.3",
     date: "2026-10-13",

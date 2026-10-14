@@ -15028,6 +15028,17 @@ def get_event_leaderboard(event_name: str,
                 hio_rows.append({"player": g["player_name"],
                                  "detail": g["detail"],
                                  "purse": g["purse"]})
+        # CTP FROM THE PHONES (Kerry 10/13: "Why aren't closest to pins showing?"). The
+        # proxies above come only from Golf Genius results; an event GG never
+        # scores (every event since the untether) has none there, so its winners
+        # are the phone claims (a manager ruling included), the same holders the
+        # Tracker's own payouts read (_tracker_team_and_ctp_rows). Amounts are the
+        # live matrix's CTP values for the field, as Record Payouts pays them.
+        if not proxies:
+            try:
+                proxies = _entry_ctp_proxies(conn, ev, db_path=db_path)
+            except Exception:
+                logger.exception("leaderboard: phone CTP holders failed for %s", ev.get("item_name"))
 
         # stableford points, both tables, from the imported holes through
         # the formula layer — one bulk read, keyed by scoring_round_id
@@ -59121,6 +59132,47 @@ def restore_tgf_payouts_explicit(rows: list, apply: bool = False,
                                     "amount": r["amount"]})
         if apply:
             conn.commit()
+    return out
+
+
+def _entry_ctp_proxies(conn, ev: dict, db_path=None) -> list:
+    """The EVENTS board's Closest to Pin / Longest Putt rows for an event
+    scored on the phones: one row per contest hole, the claimed holder (by
+    customer_id, canonical name) and the matrix amount for that hole. A hole
+    nobody holds shows "No winner". Read-only."""
+    from email_parser.score_entry import event_ctp_holders
+    holders = event_ctp_holders(ev["id"], db_path=db_path)
+    if not holders:
+        return []
+    vals: list = []
+    try:
+        m9, m18 = _load_games_matrix(db_path=db_path)
+        holes = _event_holes_type(ev["item_name"], ev.get("format"))
+        counts = _event_player_counts(conn, ev["item_name"])
+        g_event = (m9 if holes == 9 else m18).get(str(counts["players"])) or {}
+        vals = [v for v in (_matrix_num(g_event.get(k)) for k in ("ctp1", "ctp2", "ctp3", "ctp4"))
+                if v and v > 0]
+    except Exception:
+        logger.exception("leaderboard: CTP amounts unavailable for %s", ev.get("item_name"))
+    out: list = []
+    ctp_i = 0
+    for h in holders:
+        lp = h["kind"] == "longest_putt"
+        nm = None
+        if h.get("customer_id"):
+            r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                             (h["customer_id"],)).fetchone()
+            if r and (r["first_name"] or r["last_name"]):
+                nm = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
+        amt = None
+        if not lp and vals:
+            amt = vals[min(ctp_i, len(vals) - 1)]
+            ctp_i += 1
+        out.append({"game": h["kind"], "label": "Longest Putt" if lp else "Closest to Pin",
+                    "player": nm or h.get("name") or "No winner",
+                    "customer_id": h.get("customer_id"),
+                    "detail": f"Hole {h['hole']}",
+                    "purse": amt if h.get("customer_id") else None})
     return out
 
 
