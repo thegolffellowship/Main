@@ -115,7 +115,10 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   (`get_lead_export_rows`, mapped to customer_id); minus the invitation
   opt-out list (app setting `event_invite_optout`), membership
   `roster_choice = 'remove'`, `course_staff.non_member_ids`, undeliverable
-  addresses, and anyone already registered. `audience(event_id)` reports each
+  addresses, anyone already registered, and (Kerry 10/13: "Austin members
+  should not be getting invites to SA only events…only combined events and
+  their own events") anyone whose home chapter is the other chapter
+  (`other_chapter`). `audience(event_id)` reports each
   person's reasons and every exclusion count.
 - **Message**: words in module constants (SUBJECT/INTRO, REMINDER_*,
   LASTCALL_*, CLOSING, FOOTER), structure in code, the event-day email's

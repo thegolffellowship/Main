@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.563.0";
+window.TGF_VERSION = "2.563.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.563.1",
+    date: "2026-10-13",
+    title: "Invitations: members get their own chapter's events and combined events only",
+    changes: [
+      "Kerry 10/13: \"Austin members should not be getting invites to SA only events…only combined events and their own events.\" The audience now leaves out anyone whose home chapter is another chapter (home_chapter_id, else customers.chapter) from a single-chapter event, whatever brought them in (playing that chapter, a lead opt-in). Combined TGF events still invite both lists. People with no home chapter are unchanged. New exclusion count other_chapter; test_invitations.py.",
+    ],
+  },
   {
     version: "2.563.0",
     date: "2026-10-13",

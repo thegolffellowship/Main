@@ -76,6 +76,15 @@ check("someone whose last round was over 12 months ago is not", 770003 not in id
 check("an undeliverable address is left out", 770005 not in ids and a["counts"]["excluded"]["no_email"] == 1)
 check("a player already registered is left out", 770006 not in ids and a["counts"]["excluded"]["registered"] == 1)
 check("another chapter's member is not invited", 770007 not in ids)
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, transaction_status, "
+                 "order_date, order_id, email_uid, merchant) VALUES ('x', 770007, 's9.50 RECENT LINKS', ?, "
+                 "'active', '2026-01-01', 'R770007x', 'manual-770007x', 'GoDaddy')", (RECENT,))
+    conn.commit()
+a_x = inv.audience(EV, db_path=DB)
+check("an Austin member who played an SA event still gets no SA-only invite (Kerry 10/13)",
+      770007 not in {p["customer_id"] for p in a_x["people"]} and a_x["counts"]["excluded"]["other_chapter"] >= 1,
+      a_x["counts"])
 check("the TGF/national event is refused", "error" in inv.audience(999999, db_path=DB))
 
 print("2. The message")

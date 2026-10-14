@@ -245,7 +245,18 @@ def audience(event_id: int, db_path=None) -> dict:
 
         # Exclusions.
         out = {"opted_out": 0, "membership_remove": 0, "non_member": 0,
-               "registered": 0, "no_email": 0}
+               "other_chapter": 0, "registered": 0, "no_email": 0}
+        # Kerry 10/13: "Austin members should not be getting invites to SA
+        # only events…only combined events and their own events." Anyone whose
+        # home chapter is another chapter is left off a single-chapter event,
+        # whatever brought them in. A combined (TGF) event invites both lists.
+        own = {c.lower() for c in chapters}
+        home = {}
+        for r in conn.execute(
+                "SELECT c.customer_id, lower(COALESCE(ch.name, c.chapter, '')) "
+                "FROM customers c LEFT JOIN chapters ch ON ch.chapter_id = c.home_chapter_id").fetchall():
+            if r[1]:
+                home[int(r[0])] = r[1].strip()
         optout = _opted_out(db_path)
         removed = set()
         try:
@@ -268,6 +279,8 @@ def audience(event_id: int, db_path=None) -> dict:
                 out["membership_remove"] += 1; continue
             if cid in nonmem:
                 out["non_member"] += 1; continue
+            if home.get(cid) in CHAPTER_EVENTS and home.get(cid) not in own:
+                out["other_chapter"] += 1; continue
             if cid in registered:
                 out["registered"] += 1; continue
             email = _send_email(conn, cid)
