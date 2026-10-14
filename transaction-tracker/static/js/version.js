@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.565.2";
+window.TGF_VERSION = "2.565.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.565.3",
+    date: "2026-10-14",
+    title: "Invitations: Remove me needs a real tap; preview buttons record nothing",
+    changes: [
+      "Kerry 10/14: \"Yes, restore them and ship the fix\". Within minutes of the first 7 AM send, mail scanners that run page scripts opened every button, and the Remove me page, which saved itself, took seven members off invitations (Tanner Chalfant, Chris Kelm, Chris Best, Gus Vasquez, Eric Taft, Derek Chandler, Mark Parker). The Remove me page now asks \"Remove you from event invitations?\" and only its Yes, remove me button saves.",
+      "Staff preview links carry a preview mark: they open the same pages and record nothing. Taps on the 10/13 preview had answered for its sample person, Todd McConahy.",
+      "New restore_answers (bridge scoring-event-invite 0|restore|<Kerry-OK post>|<ids>[|confirm], dry run by default) puts people back on invitations and removes the Tracker NOT PLAYING rows and decline reasons they did not give on upcoming events, so their reminders go out. Can't make it still saves from the page as Kerry ruled. test_invitations.py.",
+    ],
+  },
   {
     version: "2.565.2",
     date: "2026-10-14",

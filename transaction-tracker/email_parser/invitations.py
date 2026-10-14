@@ -97,12 +97,18 @@ def _secret() -> bytes:
     return s()
 
 
-def make_token(customer_id: int, event_id: int, action: str, expires: date) -> str:
+def make_token(customer_id: int, event_id: int, action: str, expires: date,
+               preview: bool = False) -> str:
+    """preview=True marks a staff PREVIEW link (Kerry 10/14: tapping the
+    preview recorded Todd McConahy's answers). It opens the same pages and
+    records nothing."""
     if action not in ACTIONS:
         raise ValueError("action must be in, out or unsub")
     exp = datetime(expires.year, expires.month, expires.day) + timedelta(days=1)
     payload = {"c": int(customer_id), "v": int(event_id), "a": action,
                "x": int(exp.timestamp())}
+    if preview:
+        payload["p"] = 1
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()
                                     ).rstrip(b"=").decode()
     sig = hmac.new(_secret(), b"rsvp." + body.encode(), hashlib.sha256).hexdigest()[:32]
@@ -367,11 +373,13 @@ def _button(url: str, label: str, bg: str, ink: str) -> str:
             f'padding:12px 22px;border-radius:999px;">{_e(label)}</a></td>')
 
 
-def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None) -> dict:
+def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,
+                  preview: bool = False) -> dict:
     from email_parser.event_day_email import frame
     ctx = _context(ev, db_path)
     cid, eid = person["customer_id"], int(ev["id"])
-    links = {a: rsvp_url(make_token(cid, eid, a, ctx["event_date"])) for a in ACTIONS}
+    links = {a: rsvp_url(make_token(cid, eid, a, ctx["event_date"], preview=preview))
+             for a in ACTIONS}
     vals = {**{k: _e(v) for k, v in ctx.items() if k != "event_date"},
             "first_name": _e(person.get("first_name") or "there"),
             "unsub_url": _e(links["unsub"])}
@@ -407,6 +415,8 @@ def record_answer(token: str, db_path=None) -> dict:
     if not p:
         return {"ok": False, "error": "This link is invalid or has expired."}
     cid, eid, action = int(p["c"]), int(p["v"]), p["a"]
+    if p.get("p"):
+        return {"ok": True, "action": action, "preview": True}
     if action == "unsub":
         opt = _opted_out(db_path)
         opt.add(cid)
@@ -490,6 +500,8 @@ def click_in(token: str, db_path=None) -> dict:
     url = ((ev or {}).get("registration_url") or "").strip()
     if not url:
         return {"ok": False}
+    if p.get("p"):
+        return {"ok": True, "redirect": url, "preview": True}
     key = CLICKS_KEY.format(event_id=int(p["v"]))
     try:
         clicks = json.loads(_setting(key, db_path) or "{}")
@@ -521,7 +533,8 @@ def sibling_links(token: str) -> dict:
     if not p:
         return {}
     exp = (datetime.utcfromtimestamp(int(p["x"])) - timedelta(days=1)).date()
-    return {a: rsvp_url(make_token(int(p["c"]), int(p["v"]), a, exp)) for a in ACTIONS}
+    return {a: rsvp_url(make_token(int(p["c"]), int(p["v"]), a, exp, preview=bool(p.get("p"))))
+            for a in ACTIONS}
 
 
 REASONS = ("Schedule", "Weather", "Course or price", "Injury", "Other")
@@ -536,6 +549,8 @@ def record_reason(token: str, reason: str, db_path=None) -> bool:
     p = verify_token(token)
     if not p or reason not in REASONS:
         return False
+    if p.get("p"):
+        return True
     conn = db.get_connection(db_path)
     try:
         conn.execute(
@@ -670,7 +685,7 @@ def send_preview(event_id: int, to_address: str | None = None, kind: str = "invi
         conn.close()
     sample = (pl["to_send"] or pl["people"] or [{"customer_id": 0, "first_name": "Sample",
                                                   "name": "Sample", "email": ""}])[0]
-    msg = build_message(ev, sample, kind, db_path)
+    msg = build_message(ev, sample, kind, db_path, preview=True)
     c = pl["counts"]
     sched = ", ".join(f"{s['kind']} {s['date']}" for s in pl["schedule"])
     head = (f"<p><strong>Invitation PREVIEW ({kind})</strong> for {_e(ev.get('item_name'))}. "
@@ -680,8 +695,8 @@ def send_preview(event_id: int, to_address: str | None = None, kind: str = "invi
             f"Excluded: {_e(json.dumps(c['excluded']))}. Schedule (7:00 AM): {_e(sched)}. "
             f"Template <code>{pl['template_hash']}</code>: "
             f"{'APPROVED' if pl['approved'] else 'NOT approved'}.</p>"
-            f"<p>Sample to {_e(sample['name'])}. The buttons in a preview are live links for "
-            f"that person: do not tap them.</p><hr>")
+            f"<p>Sample to {_e(sample['name'])}. The buttons open the real pages but "
+            f"record nothing for that person.</p><hr>")
     creds = _creds()
     if not creds:
         return {"error": "Email credentials not configured on server"}
@@ -723,6 +738,55 @@ def _deliver(ev: dict, pl: dict, db_path=None) -> dict:
         except Exception:
             pass
     return {"sent": sent, "failed": failed, "held": held}
+
+
+def restore_answers(customer_ids, kerry_ok_post, confirm: bool = False, db_path=None) -> dict:
+    """Undo answers that a person did not give (Kerry 10/14: "Yes, restore
+    them"). On 10/14 mail scanners opened every button, and taps on a staff
+    preview answered for the sample person. For each customer_id this puts
+    them back on the invitation list, deletes their Tracker NOT PLAYING rows
+    on upcoming events (so reminders reach them), and deletes their decline
+    reasons on those events. A registration or a Golf Genius RSVP is never
+    touched. Kerry's word on the mailbox; dry run unless confirm."""
+    from email_parser import database as db
+    from email_parser.customer_query import _kerry_ok
+    from email_parser.timezone_utils import today_central_str as today_iso
+    cids = sorted({int(c) for c in customer_ids})
+    if not cids:
+        return {"error": "no customer ids"}
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+        if not ok:
+            return {"refused": f"rule 3b: {why}"}
+        marks = ",".join("?" * len(cids))
+        nos = [dict(r) for r in conn.execute(
+            f"SELECT email_uid, customer_id, matched_event FROM rsvps "
+            f"WHERE customer_id IN ({marks}) AND response = 'NOT PLAYING' "
+            f"AND substr(email_uid, 1, 8) = 'tracker:' AND event_date >= ?",
+            (*cids, today_iso())).fetchall()]
+        reasons = [dict(r) for r in conn.execute(
+            f"SELECT r.event_id, r.customer_id, r.reason FROM event_decline_reasons r "
+            f"JOIN events e ON e.id = r.event_id WHERE r.customer_id IN ({marks}) "
+            f"AND e.event_date >= ?", (*cids, today_iso())).fetchall()]
+        opted = _opted_out(db_path)
+        out = {"authority": why, "customer_ids": cids,
+               "back_on_invitations": [c for c in cids if c in opted],
+               "not_playing_rows_removed": nos, "decline_reasons_removed": reasons}
+        if confirm is not True:
+            return {**out, "dry_run": True}
+        for r in nos:
+            conn.execute("DELETE FROM rsvps WHERE email_uid = ?", (r["email_uid"],))
+        for r in reasons:
+            conn.execute("DELETE FROM event_decline_reasons WHERE event_id = ? AND customer_id = ?",
+                         (r["event_id"], r["customer_id"]))
+        conn.commit()
+    finally:
+        conn.close()
+    db.set_app_setting(OPTOUT_KEY, json.dumps(sorted(opted - set(cids))), db_path=db_path)
+    db.log_agent_action("mcp-claude", "event_invite_restore",
+                        f"post {kerry_ok_post}: customers {cids}")
+    return {**out, "applied": True}
 
 
 def send(event_id: int, kerry_ok_post, kind: str = "invite", confirm: bool = False,

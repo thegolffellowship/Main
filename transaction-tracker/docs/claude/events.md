@@ -137,6 +137,17 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   long"). The page writes the answer itself (a script POST, or a button with
   scripts off); the bare GET never does, so a mail scanner can't answer. An answer is an `rsvps` row with email_uid
   `tracker:<event_id>:<customer_id>`, upserted (the latest answer wins).
+- **Mail scanners and previews (Kerry 10/14).** On the first send, scanners that
+  RUN page scripts opened every button within minutes, and the self-saving
+  Remove me page took seven members off invitations; taps on a staff preview
+  answered for its sample person (Todd McConahy). Now **Remove me asks first**
+  ("Yes, remove me") and only its button saves. **Preview links** carry a
+  preview mark (`make_token(..., preview=True)`): they open the same pages and
+  record nothing (no RSVP, opt-out, reason or click). Can't make it still saves
+  from the page's script, as Kerry ruled, so a scanner can still mark a NOT
+  PLAYING. `restore_answers` (bridge `0|restore|<kerry-ok post>|<cids>[|confirm]`)
+  undoes answers a person did not give: back on invitations, their Tracker
+  NOT PLAYING rows and decline reasons on upcoming events removed.
 - **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
   tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.
 - **Schedule** (Kerry), 7:00 AM Central, `schedule(event_date)`: weekday event

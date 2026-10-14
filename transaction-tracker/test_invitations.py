@@ -207,8 +207,48 @@ mind = cl.get(f"/rsvp/{inv.make_token(770002, EV, 'in', date(2026, 12, 15))}")
 with db._connect(DB) as conn:
     r = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()[0]
 check("Changed my mind goes to registration and clears the earlier no", mind.status_code == 302 and r == 0, (mind.status_code, r))
-pu = cl.get(f"/rsvp/{inv.make_token(770001, EV, 'unsub', date(2026, 12, 15))}").get_data(as_text=True)
-check("Remove me lands straight on Done", "You won't get event invitations" in pu)
+tok_un = inv.make_token(770001, EV, 'unsub', date(2026, 12, 15))
+pu = cl.get(f"/rsvp/{tok_un}").get_data(as_text=True)
+check("Kerry 10/14: Remove me asks first and saves nothing by itself (mail scanners)",
+      "Yes, remove me" in pu and "fetch(" not in pu and 770001 not in inv._opted_out(DB), pu[:300])
+pu2 = cl.post(f"/rsvp/{tok_un}").get_data(as_text=True)
+check("…its button removes them and shows Done",
+      "You won't get event invitations" in pu2 and 770001 in inv._opted_out(DB))
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps(sorted(inv._opted_out(DB) - {770001})), db_path=DB)
+print("6f. Kerry 10/14: restore answers a person did not give")
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps([770002]), db_path=DB)
+cl.post(f"/rsvp/{inv.make_token(770002, EV, 'out', date(2026, 12, 15))}", headers={"X-Requested-With": "fetch"})
+inv.record_reason(inv.make_token(770002, EV, 'out', date(2026, 12, 15)), "Weather", db_path=DB)
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('kerry', 't', 'Yes, restore them')")
+    kpost = conn.execute("SELECT max(id) FROM platform_dialogue").fetchone()[0]
+    conn.commit()
+dry = inv.restore_answers([770002], kpost, db_path=DB)
+check("restore dry run changes nothing", dry.get("dry_run") and 770002 in inv._opted_out(DB)
+      and len(dry["not_playing_rows_removed"]) == 1 and len(dry["decline_reasons_removed"]) == 1, dry)
+check("restore refuses without Kerry's word", "refused" in inv.restore_answers([770002], 999999, True, db_path=DB))
+done_ = inv.restore_answers([770002], kpost, confirm=True, db_path=DB)
+with db._connect(DB) as conn:
+    left = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()[0]
+check("restore puts them back on, clears the no and the reason", done_.get("applied")
+      and 770002 not in inv._opted_out(DB) and left == 0
+      and all(x["customer_id"] != 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), done_)
+print("6e. Kerry 10/14: preview buttons record nothing")
+pv = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), preview=True) for a in inv.ACTIONS}
+cl.post(f"/rsvp/{pv['out']}", headers={"X-Requested-With": "fetch"})
+cl.post(f"/rsvp/{pv['unsub']}")
+cl.post(f"/rsvp/{pv['out']}/reason", data={"r": "Weather"})
+gin = cl.get(f"/rsvp/{pv['in']}")
+with db._connect(DB) as conn:
+    r = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770003",)).fetchone()[0]
+clicks = json.loads(db.get_app_setting(inv.CLICKS_KEY.format(event_id=EV), db_path=DB) or "{}")
+check("a preview tap writes no RSVP, opt-out, reason or click", r == 0
+      and 770003 not in inv._opted_out(DB) and "770003" not in clicks
+      and all(x["customer_id"] != 770003 for x in inv.decline_reasons(EV, db_path=DB)["rows"]),
+      (r, clicks))
+check("…and I'm in still opens the registration page", gin.status_code == 302)
+check("…and its sibling buttons stay preview links",
+      all(inv.verify_token(u.rsplit("/", 1)[-1]).get("p") for u in inv.sibling_links(pv["out"]).values()))
 
 from datetime import datetime as _dt
 check("the 7 AM job does nothing until event_invite_auto is on",
