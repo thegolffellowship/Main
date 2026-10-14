@@ -822,6 +822,17 @@ unless `AUTO_LIVE_POLL=1`. Events before it keep their GG walks (the 10/6 points
 Golf Genius path must call the same rule. Move the date only on Kerry's word.
 Guard `test_gg_untether.py`.
 
+**Every leaderboard from GAMES (Kerry 2026-10-13: "All leaderboards should be
+generated based on GAMES. Golf Genius doesn't have anything to do with anything
+now except for historical records").** `get_event_leaderboard` reads
+`gg_game_flights` / `gg_game_results` only for a GG-era event (`_gg_era`, from
+`gg_allowed`). For a Tracker-scored event, three sources replace them:
+- flights come from `event_flights_board`, the payouts' own selection;
+- Closest to Pin comes from the phone claims;
+- team purses come from the GAMES money.
+
+Guard `test_board_engine_flights.py`.
+
 **Golf Genius POINTS intake is OFF (Kerry 2026-10-13, CoS #1693-1):** "you'll need
 to turn off the GG connector that automates bringing them in. I want to make sure
 we're calculating them correctly." App setting `gg_points_intake` (off unless it
