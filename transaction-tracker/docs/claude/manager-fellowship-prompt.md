@@ -18,7 +18,17 @@ build for members to submit photos for inclusion and perhaps comments about
 anything else like fellowship location and details too."
 ("Leaning" — this design is for his ruling, not yet ratified.)
 
-**RULED, Kerry 2026-10-14:** "I want the recap emails typically sent 30 minutes
+**RULED, Kerry 2026-10-14 (#1778), standing rule for now:** the results email
+goes at **6:00 AM the next morning**. Kerry: "Actually maybe the email recap is
+best at 6:00am the next morning. Not sure" — asked "Should 6:00 AM the next
+morning be the standing rule for now?" — "Yes". This supersedes the 30-minute
+timing below. How it runs: the 9 PM closeout writes the recap, dry-runs
+`scoring-results-email:plan|<ids>|<recap>` (0 held) and schedules
+`scoring-results-email:schedule-next|<ids>|<recap>|1778`; job
+`results_email_auto` sends at 6:00 AM if every guard still passes. The night
+leaves the manager window open overnight (still to build).
+
+Superseded: "I want the recap emails typically sent 30 minutes
 after the last score is posted for an event. For this one let's send it at
 6:00a." So the deadline (open item 1) is **30 minutes after the last score is
 posted**. The 10/13 night (s9.27 + a9.27) is scheduled for 6:00 AM 10/14.
@@ -97,7 +107,9 @@ Two ways to answer, whichever is easier:
   TGF Insider.
 
 ## Open for Kerry
-1. ~~The deadline~~ RULED 10/14: 30 minutes after the last score. That leaves
+1. ~~The deadline~~ RULED 10/14 (#1778): 6:00 AM the next morning (first ruled
+   30 minutes after the last score, #1776, then changed). The note below is kept
+   for the record. That left
    the recap story itself: today it is written at the 9 PM closeout, after the
    last score + 30. Either the story is written the moment the cards are final
    (the email waits for it), or the 30-minute email goes with the personal part

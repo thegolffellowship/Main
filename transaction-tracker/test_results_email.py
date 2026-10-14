@@ -134,6 +134,9 @@ check("cleared guards: one email per person", res.get("sent") == 3 and len(sent)
 res = rx.deliver([3307], RECAP, confirm=True, db_path=tmp)
 check("never twice", res.get("sent") == 0 and res.get("already_sent") == 3 and len(sent) == 3, res)
 
+check("the standing time is 6:00 AM the next morning (Kerry #1778)",
+      rx.next_morning([3307], db_path=tmp) == "2026-10-14T06:00", rx.next_morning([3307], db_path=tmp))
+
 m = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_server.py")).read()
 check("bridge scoring-results-email exists, members only through a schedule",
       'cmd == "scoring-results-email"' in m and "_kerry_ok" in m[m.find('cmd == "scoring-results-email"'):][:3000])

@@ -3,8 +3,8 @@
 Kerry 2026-10-13: "I'm just thinking one email that goes out to players with
 everything rather than several different emails. For those that didn't play,
 they'd get just the recap and what's next stuff. Perhaps with some personal
-stuff." Kerry 10/14: "I want the recap emails typically sent 30 minutes after
-the last score is posted for an event. For this one let's send it at 6:00a."
+stuff." Kerry 10/14 (#1778, superseding "30 minutes after the last score" in
+#1776): the email goes at 6:00 AM the next morning, the standing rule for now.
 
 Who gets it (`audience`): everyone who played the event, plus the chapter's
 active members and anyone who played the chapter in the last 12 months
@@ -48,7 +48,7 @@ BASE = "https://tgf-tracker.up.railway.app"
 RECAP_DIR = Path(__file__).resolve().parent.parent / "docs" / "claude" / "recaps"
 SCHEDULE_KEY = "results_email_schedule"
 SENT_KEY = "results_email_sent:{event_id}"
-AFTER_LAST_SCORE_MIN = 30          # Kerry 10/14: 30 minutes after the last score
+SEND_TIME = "06:00"                # Kerry 10/14 #1778: 6:00 AM the next morning
 
 INK, ORANGE, LINE, MUTED, GREEN, BODY = "#1B1B1B", "#E87C3E", "#E5E7EB", "#6B7280", "#15803D", "#4B5563"
 EYE = "font:bold 11px Arial,sans-serif;letter-spacing:2px;"
@@ -812,6 +812,15 @@ def schedule_send(event_ids: list, at: str, recap_file: str, authority: str, db_
     sch[key] = {"at": at, "recap": recap_file, "authority": authority, "state": "scheduled"}
     db.set_app_setting(SCHEDULE_KEY, json.dumps(sch), db_path=db_path)
     return {"scheduled": key, **sch[key]}
+
+
+def next_morning(event_ids: list, db_path=None) -> str:
+    """6:00 AM Central the morning after the night's (latest) event date."""
+    from email_parser import database as db
+    with db._connect(db_path) as conn:
+        d = max(str(conn.execute("SELECT event_date FROM events WHERE id = ?", (int(e),)).fetchone()[0])[:10]
+                for e in event_ids)
+    return f"{(date.fromisoformat(d) + timedelta(days=1)).isoformat()}T{SEND_TIME}"
 
 
 def auto_check(now: datetime | None = None, db_path=None) -> dict:

@@ -1838,7 +1838,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-course-merge:<loser_id>|<winner_id>[|apply]  fold a duplicate course row into the canonical one (tees collapse/move, rounds/events/items re-point, names aliased); dry run by default
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
-      scoring-results-email:preview|<event_id>|<cid>|<recap file>[|send[|<to>]][|html] / plan|<ids>|<recap> / schedule|<ids>|<YYYY-MM-DDTHH:MM>|<recap>|<kerry_ok_post> / cancel|<ids> / status — the personal RESULTS EMAIL (Kerry 10/14); previews go to staff or a chapter manager's own address; members only through a schedule, guards first
+      scoring-results-email:preview|<event_id>|<cid>|<recap file>[|send[|<to>]][|html] / plan|<ids>|<recap> / schedule|<ids>|<YYYY-MM-DDTHH:MM>|<recap>|<kerry_ok_post> / schedule-next|<ids>|<recap>|<kerry_ok_post> (6:00 AM the next morning, Kerry #1778) / cancel|<ids> / status — the personal RESULTS EMAIL (Kerry 10/14); previews go to staff or a chapter manager's own address; members only through a schedule, guards first
       scoring-card-parity:<event name or id>  READ-ONLY engine vs saved scorecards, every entered player: stored strokes vs the rule (own tee, the nine played) and the engine's card vs the stored card; any difference holds payouts + points
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
@@ -6558,13 +6558,18 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _op == "plan":
                 _ids = [int(x) for x in _b[1].split(",") if x.strip()]
                 return json.dumps(_re.deliver(_ids, _b[2], confirm=False), indent=2, default=str)
-            if _op == "schedule":
+            if _op in ("schedule", "schedule-next"):
+                # schedule-next|<ids>|<recap>|<post>: 6:00 AM the next
+                # morning, Kerry's standing rule (#1778).
                 from email_parser.customer_query import _kerry_ok
+                _post = _b[4] if _op == "schedule" else (_b[3] if len(_b) > 3 else None)
                 with db._connect() as _c:
-                    _ok, _why = _kerry_ok(_c, _b[4] if len(_b) > 4 else None)
+                    _ok, _why = _kerry_ok(_c, _post)
                 if not _ok:
                     return json.dumps({"refused": f"rule 3b: {_why}"})
                 _ids = [int(x) for x in _b[1].split(",") if x.strip()]
+                if _op == "schedule-next":
+                    return json.dumps(_re.schedule_send(_ids, _re.next_morning(_ids), _b[2], _why), indent=2)
                 return json.dumps(_re.schedule_send(_ids, _b[2], _b[3], _why), indent=2)
             if _op == "cancel":
                 _sch = _re._json_setting(_re.SCHEDULE_KEY)

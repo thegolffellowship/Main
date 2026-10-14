@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.565.1";
+window.TGF_VERSION = "2.565.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.565.2",
+    date: "2026-10-14",
+    title: "Results email goes at 6:00 AM the next morning (standing rule)",
+    changes: [
+      "Kerry 10/14 (#1778): \"Actually maybe the email recap is best at 6:00am the next morning\" — asked whether that is the standing rule for now: \"Yes\". It replaces the 30-minutes-after-the-last-score timing. New bridge op scoring-results-email:schedule-next|<ids>|<recap>|<post> schedules 6:00 AM Central the morning after the night's events; the 9 PM closeout routine runs it after a clean plan. The guards still run at send time.",
+    ],
+  },
   {
     version: "2.565.1",
     date: "2026-10-14",
