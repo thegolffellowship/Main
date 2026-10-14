@@ -854,8 +854,14 @@ days that are untethered from Golf Genius. On each event:
    `money_final_at`. contests.html's `evlbFinalNotice` prints the
    "not final yet" note.
 4. Once every group is final, it records with
-   `record_event_game_payouts(force=True)`. That is paid-safe, and an
-   event with manual payouts is refused.
+   `record_event_game_payouts(force=True)`, but only while app setting
+   `auto_payouts_record` reads `on`. It is OFF to start: 10/13 is
+   display only and Kerry records by hand (CoS #1760/#1761, Kerry "Go
+   with your conditions"). It goes on from 10/20 once
+   `scoring-auto-payouts` dry run matches the hand rows to the cent.
+   With the dial off, the state is `final_display_only` and the board
+   shows the money as final. The recording is paid-safe, and an event
+   with manual payouts is refused.
 
 Per-event state lives in app setting `auto_payouts_fp`:
 `{fp, v (score-entry version), final, final_at, mins, recorded | refused}`.

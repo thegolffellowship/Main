@@ -21,7 +21,10 @@ every run of the job (each minute):
      re-record never un-pays a paid row; an event with manually recorded
      payouts is left alone.
 
-Dial: app setting `auto_payouts` (on unless it reads "off"). Per-event
+Dials: app setting `auto_payouts` (on unless it reads "off") runs the job;
+`auto_payouts_record` (OFF unless it reads "on") lets step 3 record — off
+for 10/13 by CoS #1760/#1761, on from 10/20 once the dry-run diff against
+the hand-recorded rows matches to the cent. Per-event
 state (fingerprint, score-entry version, final) in app setting
 `auto_payouts_fp`; an event is not re-run until its version moves or its
 provisional money turns final. Bridge
@@ -40,6 +43,18 @@ DIAL = "auto_payouts"
 FP_SETTING = "auto_payouts_fp"
 PREVIEW_SETTING = "auto_payouts_preview"
 LOOKBACK_DAYS = 3
+
+
+RECORD_DIAL = "auto_payouts_record"
+
+
+def record_enabled(db_path=None) -> bool:
+    """Step 3 (recording) has its own dial, OFF unless it reads "on"
+    (CoS #1760/#1761, Kerry "Go with your conditions": 10/13 is display
+    only; auto-record turns on from 10/20 once a dry run matches the
+    hand-recorded rows to the cent)."""
+    from email_parser.database import get_app_setting
+    return (get_app_setting(RECORD_DIAL, db_path) or "off").strip().lower() == "on"
 
 
 def enabled(db_path=None) -> bool:
@@ -211,6 +226,12 @@ def run_event(ev: dict, apply: bool = False, db_path=None) -> dict:
     if not rows:
         _save(FP_SETTING, eid, {"fp": fp, "v": version, "final": True}, db_path)
         return {**res, "state": "nothing", "why": "nothing determined to pay"}
+    if not record_enabled(db_path):
+        _save(FP_SETTING, eid, {"fp": last.get("fp"), "v": version, "final": True,
+                                "recorded": last.get("recorded"),
+                                "display_only": True}, db_path)
+        return {**res, "state": "final_display_only", "fingerprint": fp,
+                "why": "auto_payouts_record is off: shown on the board, not recorded"}
     if last.get("fp") == fp and last.get("recorded"):
         _save(FP_SETTING, eid, {**last, "v": version, "final": True}, db_path)
         return {**res, "state": "unchanged", "fingerprint": fp}

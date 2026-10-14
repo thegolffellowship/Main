@@ -108,6 +108,7 @@ def _rec(name, rows, force=False, db_path=None):
 
 
 db.record_event_game_payouts = _rec
+check("recording is off unless the dial says on", ap.record_enabled(DB) is False)
 
 
 def n_rounds():
@@ -164,6 +165,14 @@ check("final cards publish with no submit or signature",
       len(pub["rounds"][0]["would_write"]) == 2 and not pub["rounds"][0]["held"], pub["rounds"][0]["held"])
 grp = se.get_entered_scores(EV, db_path=DB)["rounds"][0]["groups"][0]
 check("the read stamps the group final", grp["final"] is True and grp["final_at"], grp)
+off = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("record dial off: final money shows, nothing recorded",
+      off["state"] == "final_display_only" and not CALLS
+      and (ap.preview_for(EV, DB) or {}).get("final") is True, off)
+db.set_app_setting(ap.RECORD_DIAL, "on", DB)
+with se._closing(se._conn(DB)) as _c:
+    se._bump(_c, EV)
+    _c.commit()
 one = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
 check("records once every card is final", one["state"] == "recorded" and len(CALLS) == 1, one)
 check("re-record replaces auto rows (force)", CALLS and CALLS[0][2] is True, CALLS)
