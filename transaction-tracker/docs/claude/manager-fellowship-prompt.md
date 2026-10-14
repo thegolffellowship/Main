@@ -18,6 +18,17 @@ build for members to submit photos for inclusion and perhaps comments about
 anything else like fellowship location and details too."
 ("Leaning" — this design is for his ruling, not yet ratified.)
 
+**RULED, Kerry 2026-10-14:** "I want the recap emails typically sent 30 minutes
+after the last score is posted for an event. For this one let's send it at
+6:00a." So the deadline (open item 1) is **30 minutes after the last score is
+posted**. The 10/13 night (s9.27 + a9.27) is scheduled for 6:00 AM 10/14.
+BUILT v2.565.0: `email_parser/results_email.py` (the message, the audience, the
+guards, preview, the schedule and job `results_email_auto`); bridge
+`scoring-results-email`; guard `test_results_email.py`. Not built yet: the
+automatic schedule at last score + 30 (today a night is scheduled by bridge on
+Kerry's word) and the manager window, which a 30-minute deadline squeezes (see
+open items).
+
 ## The whole flow
 1. Event night, once the closeout's cross-check is clean and payouts are
    recorded: the Tracker builds ONE results email per person (samples sent to
@@ -86,7 +97,13 @@ Two ways to answer, whichever is easier:
   TGF Insider.
 
 ## Open for Kerry
-1. The deadline: 9:00 AM next morning, or another time?
+1. ~~The deadline~~ RULED 10/14: 30 minutes after the last score. That leaves
+   the recap story itself: today it is written at the 9 PM closeout, after the
+   last score + 30. Either the story is written the moment the cards are final
+   (the email waits for it), or the 30-minute email goes with the personal part
+   and the story follows in the next one. And a 30-minute window is short for a
+   manager to add photos — does the manager window go away, or move to a
+   follow-up?
 2. Email only, or email + text for the manager's prompt?
 3. Photos in the member email, or on the event's results page only?
 4. Should the manager also be able to add a short note ("great night, ask

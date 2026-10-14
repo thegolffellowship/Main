@@ -2219,6 +2219,28 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── THE RESULTS EMAIL (Kerry 2026-10-14: "I want the recap emails
+    #    typically sent 30 minutes after the last score is posted for an
+    #    event. For this one let's send it at 6:00a"). Every minute: a
+    #    scheduled night whose time has come is sent, once per person, only
+    #    if every guard passes (final, engine = cards, payouts recorded =
+    #    engine, no blanks). email_parser/results_email.py.
+    def results_email_job():
+        from email_parser.results_email import auto_check as _results_auto
+        try:
+            res = _results_auto()
+            if res:
+                logger.info("Results email: %s", res)
+        except Exception:
+            logger.exception("Results email job failed (non-fatal)")
+    scheduler.add_job(
+        results_email_job,
+        "interval", minutes=1,
+        id="results_email_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # ── PAIRINGS APPROVAL PROMPT (Kerry 2026-10-13: the manager reviews and
     #    approves the automated pairings, which sends the player emails).
     #    Every 15 min from :05 (so the 5:00 PM auto-generate has saved):

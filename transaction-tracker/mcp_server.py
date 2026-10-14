@@ -1838,6 +1838,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-course-merge:<loser_id>|<winner_id>[|apply]  fold a duplicate course row into the canonical one (tees collapse/move, rounds/events/items re-point, names aliased); dry run by default
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
+      scoring-results-email:preview|<event_id>|<cid>|<recap file>[|send[|<to>]][|html] / plan|<ids>|<recap> / schedule|<ids>|<YYYY-MM-DDTHH:MM>|<recap>|<kerry_ok_post> / cancel|<ids> / status — the personal RESULTS EMAIL (Kerry 10/14); previews go to staff or a chapter manager's own address; members only through a schedule, guards first
       scoring-card-parity:<event name or id>  READ-ONLY engine vs saved scorecards, every entered player: stored strokes vs the rule (own tee, the nine played) and the engine's card vs the stored card; any difference holds payouts + points
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
@@ -6536,6 +6537,42 @@ def _scoring_dispatch_inner(url: str, extract: str):
             finally:
                 _c.close()
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-results-email":
+            # Kerry 10/13-14: one personal results email per person.
+            #   preview|<event_id>|<customer_id>|<recap file>[|send[|<to>]][|html]
+            #   plan|<event_id,event_id>|<recap file>        dry run of the night
+            #   schedule|<event_ids>|<YYYY-MM-DDTHH:MM>|<recap file>|<kerry_ok_post>
+            #   cancel|<event_ids>      status
+            from email_parser import results_email as _re
+            _b = [b.strip() for b in (arg or "").split("|")]
+            _op = _b[0] if _b else ""
+            if _op == "status":
+                return json.dumps(_re._json_setting(_re.SCHEDULE_KEY), indent=2, default=str)
+            if _op == "preview":
+                _send = "send" in _b[4:]
+                _to = next((x for x in _b[5:] if "@" in x), None)
+                r = _re.preview(int(_b[1]), int(_b[2]), _b[3], to_address=_to, send=_send)
+                if "html" not in _b[4:]:
+                    r.pop("html", None)
+                return json.dumps(r, indent=2, default=str)
+            if _op == "plan":
+                _ids = [int(x) for x in _b[1].split(",") if x.strip()]
+                return json.dumps(_re.deliver(_ids, _b[2], confirm=False), indent=2, default=str)
+            if _op == "schedule":
+                from email_parser.customer_query import _kerry_ok
+                with db._connect() as _c:
+                    _ok, _why = _kerry_ok(_c, _b[4] if len(_b) > 4 else None)
+                if not _ok:
+                    return json.dumps({"refused": f"rule 3b: {_why}"})
+                _ids = [int(x) for x in _b[1].split(",") if x.strip()]
+                return json.dumps(_re.schedule_send(_ids, _b[2], _b[3], _why), indent=2)
+            if _op == "cancel":
+                _sch = _re._json_setting(_re.SCHEDULE_KEY)
+                if _b[1] in _sch:
+                    _sch[_b[1]]["state"] = "cancelled"
+                    db.set_app_setting(_re.SCHEDULE_KEY, json.dumps(_sch))
+                return json.dumps(_sch.get(_b[1]) or {"error": "not scheduled"}, indent=2)
+            return json.dumps({"error": "ops: preview | plan | schedule | cancel | status"})
         if cmd == "scoring-card-parity":
             # Kerry 10/14: the engine against the saved cards, every player.
             from email_parser.card_parity import engine_card_parity as _ecp

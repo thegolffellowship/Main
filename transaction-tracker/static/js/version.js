@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.564.0";
+window.TGF_VERSION = "2.565.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.565.0",
+    date: "2026-10-14",
+    title: "The results email: one personal email per person after an event night",
+    changes: [
+      "Kerry 10/13: \"one email that goes out to players with everything rather than several different emails. For those that didn't play, they'd get just the recap and what's next stuff.\" Kerry 10/14: \"I want the recap emails typically sent 30 minutes after the last score is posted for an event. For this one let's send it at 6:00a.\" email_parser/results_email.py builds it from the record: a player's card with pops, gross / net / points and birdies, winnings from the recorded payout rows, handicap before and after with the differential, fall race and month standings each linked to his own row; everyone else gets their standing if they have one. Then the chapter's recap story (docs/claude/recaps/, a bought-in reader without the buy-in line) and UP NEXT from the event rows (start time, signed up or not, an I'm in button).",
+      "Audience: everyone who played, the chapter's active members and anyone who played the chapter in the last 12 months, minus invitation opt-outs, roster removals, course staff, other chapters' members and anyone with no deliverable email. Leads are not included. One email per person per night.",
+      "Nothing goes out unless every guard passes: results final, the engine and the saved cards agree on every player, recorded payouts equal the engine's, and no blank, leftover tag or unrendered name in any message. A held night raises one HIGH COO item and is re-checked every 10 minutes. Sends are scheduled (results_email_schedule) and delivered by the every-minute job results_email_auto; previews go only to staff or a chapter manager's own address. Bridge scoring-results-email; guard test_results_email.py. The automatic schedule at last score + 30 and the manager window are next.",
+    ],
+  },
   {
     version: "2.564.0",
     date: "2026-10-14",
