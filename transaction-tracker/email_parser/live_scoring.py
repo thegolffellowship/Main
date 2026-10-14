@@ -432,7 +432,13 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
         # carries one covering every hole; else the round's card.
         own = {int(k): v for k, v in (p.get("stroke_index_by_hole") or {}).items()
                if v is not None}
-        si_p = own if own and all(h in own for h in si_by_hole) else si_by_hole
+        # Only the holes PLAYED: a tee's map covers all 18, and handing the
+        # allocator 18 indexes on a nine spreads the strokes over holes
+        # nobody played (s9.27, Kerry 10/13: Dan Stich on the Blues got 3 of
+        # his 6, net 41 for 38, and fell out of the Ind Net F2 tie). The
+        # nine's own indexes then collapse to 1-9 like the event's card.
+        si_p = ({h: own[h] for h in si_by_hole}
+                if own and all(h in own for h in si_by_hole) else si_by_hole)
         given = {int(k): v for k, v in (p.get("strokes_received") or {}).items()}
         if given:
             received = given

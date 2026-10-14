@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.563.3";
+window.TGF_VERSION = "2.563.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.563.4",
+    date: "2026-10-13",
+    title: "Payout engine: a player on another tee gets all his strokes on the nine played",
+    changes: [
+      "Found in the s9.27 closeout cross-check (Kerry 10/13: 'cross check results with games, flights and pairings ... to make sure it's correct and record it'). For a player on a different tee from the event's most-played tee, the payout engine handed the stroke allocator his tee's full 18-hole stroke-index map on a nine-hole round, so his strokes were spread over holes nobody played. Dan Stich (Blues, PH 6) got only 3 of his 6 strokes: net 41 instead of 38, and he dropped out of the Individual Net Flight 2 tie with Justin Angelone and Rob Burlingame. Austin's Bryce Doggett (Whites, 35 net) dropped out of the tie for Individual Net 2nd the same way.",
+      "The engine now gives the allocator only the holes played, from the player's own tee, so a nine collapses to 1-9 exactly as the event's card does (Kerry's CA #771 ruling). Stored cards, handicaps, MVP and points were never affected: they read the dots entry publish stores, which were already right. Only the engine's Individual Net / Individual Gross ranking derived its own. Team and Cart Net already used the nine's indexes. Guard test_own_tee_nine.py.",
+    ],
+  },
   {
     version: "2.563.3",
     date: "2026-10-13",
