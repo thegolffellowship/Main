@@ -383,6 +383,16 @@ now produce his layout, so lessons 62–64 are built in, not remembered):
     the draft is sent. Results links stay on Golf Genius until the
     cutover (lesson 66).
 
+68. **Every link goes to the specific place, never a list** (Kerry
+    2026-10-13: "if you provide links I want it to open up that event like
+    for full results, not just go to all events. Links need to go to
+    specific locations"). FULL EVENT RESULTS is
+    `https://tgf-tracker.up.railway.app/member/results/<event_id>` — it
+    opens that event's board, expanded and pinned (v2.563.5). Never the
+    bare `/member/results`. The same rule holds everywhere: a race link
+    names its race (`#race=fall_sa`), a player link his Spotlight, an Up
+    Next line that event's own store page.
+
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
 acquisition source per first-timer, links for every proper noun, both

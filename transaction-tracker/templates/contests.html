@@ -2928,6 +2928,7 @@
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
     {% if evlb_landing %}<script>window.EVLB_LANDING = true;</script>{% endif %}
+    {% if evlb_open %}<script>window.EVLB_OPEN = {{ evlb_open|tojson }};</script>{% endif %}
     {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
     {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }}; window.SOLO_T = {{ (SOLO_T or "")|tojson }};{% if SOLO_CUP %} window.SOLO_CUP = {{ SOLO_CUP|tojson }}; window.lscSel = window.SOLO_CUP;{% endif %}</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
@@ -3811,6 +3812,15 @@
                     evlbPinToTop(el);
                 });
             });
+            // ONE EVENT'S LINK (/member/results/<id>, Kerry 2026-10-13: "Links
+            // need to go to specific locations"): open that event, which loads
+            // its board and pins it to the top through the toggle above.
+            if (window.EVLB_OPEN && !window.SOLO_EVENT) {
+                const want = String(window.EVLB_OPEN).toLowerCase();
+                const el = [...box.querySelectorAll("details.evlb-ev")]
+                    .find(x => (x.dataset.ev || "").toLowerCase() === want);
+                if (el) el.open = true;
+            }
             // THE SCORER'S BOARD (Kerry 2026-10-02: "The leaderboard that they
             // would go to would be JUST for that event"): the other events
             // leave the page and his opens by itself.

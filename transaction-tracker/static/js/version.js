@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.563.4";
+window.TGF_VERSION = "2.563.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.563.5",
+    date: "2026-10-13",
+    title: "One event's results have their own link: /member/results/<event id>",
+    changes: [
+      "Kerry 10/13: 'if you provide links I want it to open up that event like for full results, not just go to all events. Links need to go to specific locations.' /member/results/<event id> opens the member Events results with that event expanded and pinned to the top. Its board loads at once, so a recap's FULL EVENT RESULTS lands on that night's results. An unknown id falls back to the full list. The bare /member/results still lands on every event.",
+      "Recap rule of record (event-recaps.md lesson 68): every link goes to the specific place. The 10/13 drafts now link /member/results/3307 and /member/results/3318. Guard test_events_leaderboard_all.py.",
+    ],
+  },
   {
     version: "2.563.4",
     date: "2026-10-13",
