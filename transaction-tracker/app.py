@@ -2172,11 +2172,12 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
-    # ── PAYOUTS RECORD THEMSELVES (Kerry 2026-10-13: "Payouts need to auto
+    # ── PRIZE MONEY RUNS ITSELF (Kerry 2026-10-13: "Payouts need to auto
     #    calculate and populate based on GAMES tabs immediately after scores
-    #    are all in"; a card is final 15 minutes after the scorer confirms
-    #    it). Every 2 min: publish final cards, and once every card in the
-    #    field is final record the GAMES-tab payouts (paid rows never
+    #    are all in"; the money shows the moment the last hole of the field
+    #    is in, "non-final until 15 minutes have passed" after each group's
+    #    last score). Every minute: preview the GAMES-tab money for the
+    #    board, record it once every card is final (paid rows never
     #    touched). Dial `auto_payouts`. email_parser/auto_payouts.py.
     def auto_payouts_job():
         from email_parser.auto_payouts import run as _auto_payouts
@@ -2190,7 +2191,7 @@ def start_scheduler():
             logger.exception("Auto payouts failed (non-fatal)")
     scheduler.add_job(
         auto_payouts_job,
-        "interval", minutes=2,
+        "interval", minutes=1,
         id="auto_payouts",
         replace_existing=True,
         max_instances=1, coalesce=True,

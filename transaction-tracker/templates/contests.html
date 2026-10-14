@@ -3823,7 +3823,8 @@
                 const off = $("evlb-official");
                 if (off) off.hidden = !ev || !!ev.live_entry || ev.gg_scored === false;
                 if (st && ev) {
-                    st.textContent = ev.money_visible === false ? "In play" : evlbDate(ev.event_date) + " · final";
+                    st.textContent = ev.money_visible === false ? "In play"
+                        : evlbDate(ev.event_date) + (ev.money_final === false ? " · not final" : " · final");
                     st.classList.toggle("posted", ev.money_visible !== false);
                 }
                 if (mine) { mine.open = true; }
@@ -3977,6 +3978,17 @@
         if (e.target.closest && e.target.closest("#evlb-hiw-close, #evlb-hiw-gotit, #evlb-hiw-scrim")) evlbCloseGuide();
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") evlbCloseGuide(); });
+    function evlbFinalNotice(d) {
+        // NOT FINAL YET (Kerry 2026-10-13: "amounts should show but
+        // non-final until 15 minutes have passed"). The field is in, the
+        // money shows; it locks 15 minutes after the last group's last score.
+        if (d && !d._moneyHeld && d.money_final === false && !evlbNoGames(d)) {
+            const t = d.money_final_at ? new Date(d.money_final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : "";
+            return `<div style="margin:0 0 8px;padding:7px 10px;border:1px solid #FCD34D;background:#FFFBEB;border-radius:6px;font-size:12px;color:#92400E;">
+                <strong>Winnings are not final yet.</strong> Every score is in. The money below is final${t ? " at " + escapeHtml(t) : " soon"}, 15 minutes after the last score, unless a score changes.</div>`;
+        }
+        return "";
+    }
     function evlbMoneyNotice(d) {
         if (!d || !d._moneyHeld || evlbNoGames(d)) return "";   // no games, no money to wait for
         const mins = d.money_hold_minutes || 10;
@@ -4671,7 +4683,7 @@
                ["points", "MVP/Points"], ["prox", "Proxies"]];
         const first = tabs[0][0];
         // no games, no money: nothing to hold or explain
-        const offNotes = noGames ? "" : evlbMoneyNotice(d) + (d.games_off || []).map(g =>
+        const offNotes = noGames ? "" : evlbMoneyNotice(d) + evlbFinalNotice(d) + (d.games_off || []).map(g =>
             `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
         // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
         // hole-by-hole gross plus totals. Wins highlight by the ratified

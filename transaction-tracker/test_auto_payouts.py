@@ -1,17 +1,20 @@
-"""A CONFIRMED CARD LOCKS, AND PAYOUTS RECORD THEMSELVES (Kerry 2026-10-13).
+"""PRIZE MONEY RUNS ITSELF; A CARD IS FINAL 15 MINUTES AFTER ITS LAST SCORE
+(Kerry 2026-10-13).
 
 Kerry: "Payouts need to auto calculate and populate based on GAMES tabs
-immediately after scores are all in" and "Time based. 15 minutes after
-scorer confirms scorecard, it locks and is considered final
-automatically".
+immediately after scores are all in"; "15 minutes after last score entered
+by each scorer"; "When last hole score is entered by last player in field,
+won Columns should unhide and amounts should show but non-final until 15
+minutes have passed".
 
-- card_final_at: the latest submit + the lock minutes; an unlock voids
-  earlier submits; no submit = never final.
+- card_final_at: last score + the lock minutes, only on a complete card;
+  an unlock later than the last score moves it.
 - A final card refuses phone writes (refused_final, kept in se_audit) and
-  publishes unsigned; an unlocked card takes writes again and is held.
-- auto_payouts: waits while any card is held, records the assembled rows
-  once, does nothing when they are unchanged, re-records when they change,
-  and a dry run never writes.
+  publishes without a submit or signatures; an unlocked card takes writes.
+- auto_payouts: waits (writes nothing) while any hole is out; once the
+  field is in, publishes provisionally and stores the board preview marked
+  not final; records once every card is final, never again while
+  unchanged, again when the cards change; a dry run never writes.
 
 Run: python3 test_auto_payouts.py
 """
@@ -45,15 +48,15 @@ def check(label, cond, detail=""):
 
 
 print("card_final_at (pure)")
-chk = [{"group_id": 7, "at": "2026-10-14T01:00:00Z"}, {"group_id": 7, "at": "2026-10-14T01:05:00Z"},
-       {"group_id": 8, "at": "2026-10-14T02:00:00Z"}]
-check("latest submit + 15 minutes", se.card_final_at(chk, 7) == "2026-10-14T01:20:00Z",
-      se.card_final_at(chk, 7))
-check("no submit, never final", se.card_final_at(chk, 9) is None)
-check("an unlock after the last submit voids it",
-      se.card_final_at(chk, 7, {"7": "2026-10-14T01:06:00Z"}) is None)
-check("a submit after the unlock starts the minutes over",
-      se.card_final_at(chk, 7, {"7": "2026-10-14T01:02:00Z"}) == "2026-10-14T01:20:00Z")
+check("last score + 15 minutes",
+      se.card_final_at("2026-10-14T01:05:00Z", True) == "2026-10-14T01:20:00Z",
+      se.card_final_at("2026-10-14T01:05:00Z", True))
+check("an incomplete card is never final", se.card_final_at("2026-10-14T01:05:00Z", False) is None)
+check("no score, never final", se.card_final_at(None, True) is None)
+check("an unlock after the last score moves it",
+      se.card_final_at("2026-10-14T01:05:00Z", True, "2026-10-14T01:30:00Z") == "2026-10-14T01:45:00Z")
+check("an older unlock changes nothing",
+      se.card_final_at("2026-10-14T01:05:00Z", True, "2026-10-14T01:00:00Z") == "2026-10-14T01:20:00Z")
 check("final once the time has passed",
       se.card_is_final("2026-10-14T01:20:00Z", "2026-10-14T01:20:00Z")
       and not se.card_is_final("2026-10-14T01:20:00Z", "2026-10-14T01:19:59Z"))
@@ -91,26 +94,57 @@ def ops(cid, holes, gross=5):
     return out
 
 
-for c in (301, 302):
-    se.write_scores(gid, "dev", 301, ops(c, range(1, 10)), db_path=DB)
+CALLS = []
+ROWS = [{"golferName": "Pat Youngs", "category": "team_net", "amount": 23.0,
+         "description": "TEAM Net 1st (team split)"}]
+_real_asm, _real_rec = db.assemble_event_game_payouts, db.record_event_game_payouts
+db.assemble_event_game_payouts = lambda name, db_path=None: {
+    "rows": [dict(x) for x in ROWS], "notes": [], "total": sum(x["amount"] for x in ROWS)}
 
-print("before the submit")
+
+def _rec(name, rows, force=False, db_path=None):
+    CALLS.append((name, len(rows), force))
+    return {"payouts_added": len(rows)}
+
+
+db.record_event_game_payouts = _rec
+
+
+def n_rounds():
+    return sqlite3.connect(DB).execute(
+        "SELECT COUNT(*) FROM scoring_rounds WHERE event_id = ?", (EV,)).fetchone()[0]
+
+
+print("mid-round")
+se.write_scores(gid, "dev", 301, ops(301, range(1, 10)), db_path=DB)
+se.write_scores(gid, "dev", 301, ops(302, range(1, 9)), db_path=DB)
 card = se.get_group_card(gid, "dev", db_path=DB)
-check("not final, no final time", not card["final"] and card["final_at"] is None, card.get("final_at"))
-pub = ep.publish_event(EV, db_path=DB)
-check("both held (not submitted)", len(pub["rounds"][0]["held"]) == 2, pub["rounds"][0]["held"])
+check("a card with a blank hole has no final time", card["final_at"] is None and not card["final"], card.get("final_at"))
 out = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
-check("auto payouts wait while cards are held", out["state"] == "waiting", out)
+check("money waits while a hole is out", out["state"] == "waiting", out)
+check("nothing published mid-round", n_rounds() == 0)
+check("no preview mid-round", ap.preview_for(EV, DB) is None)
 
-print("submitted, inside the 15 minutes")
-se.submit_card(gid, "dev", 301, print_scorer_name="Paper", db_path=DB)
+print("the last hole of the field is in")
+se.write_scores(gid, "dev", 301, ops(302, [9]), db_path=DB)
 card = se.get_group_card(gid, "dev", db_path=DB)
-check("final time set, not final yet", card["final_at"] and not card["final"], card.get("final_at"))
+check("final time set 15 minutes out, not final yet", card["final_at"] and not card["final"], card.get("final_at"))
 check("lock minutes reported", card["lock_minutes"] == 15, card.get("lock_minutes"))
 r = se.write_scores(gid, "dev", 301, ops(301, [1], 4), db_path=DB)
 check("the scorer can still fix a score", r["results"][0]["result"] == "ok", r)
-pub = ep.publish_event(EV, db_path=DB)
-check("unsigned cards still held", len(pub["rounds"][0]["held"]) == 2, pub["rounds"][0]["held"])
+dry = ap.run(apply=False, event_id=EV, db_path=DB)["events"][0]
+check("dry run says provisional and writes nothing",
+      dry["state"] == "provisional" and n_rounds() == 0 and ap.preview_for(EV, DB) is None, dry)
+out = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("money shows now, not final", out["state"] == "provisional" and out["final"] is False, out)
+pv = ap.preview_for(EV, DB)
+check("the preview carries the rows, not final, with a final time",
+      pv and pv["final"] is False and pv["final_at"] and len(pv["rows"]) == 1, pv)
+check("a team split gets its customer_id from the field", pv and pv["rows"][0]["customer_id"] == 301, pv)
+check("cards published provisionally", n_rounds() == 2)
+check("nothing recorded before final", not CALLS, CALLS)
+again = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("no re-run while unchanged and not yet final", again["state"] == "unchanged", again)
 
 print("15 minutes later (dial at 0): final")
 db.set_app_setting(se.CARD_LOCK_SETTING, "0", DB)
@@ -126,38 +160,16 @@ c.close()
 check("the refused write is kept for the manager", kept and kept[0] == "refused_final", kept)
 check("the card is unchanged", hole2 and hole2[0] == 5, hole2)
 pub = ep.publish_event(EV, db_path=DB)
-check("both publish unsigned", len(pub["rounds"][0]["would_write"]) == 2 and not pub["rounds"][0]["held"],
-      pub["rounds"][0]["held"])
+check("final cards publish with no submit or signature",
+      len(pub["rounds"][0]["would_write"]) == 2 and not pub["rounds"][0]["held"], pub["rounds"][0]["held"])
 grp = se.get_entered_scores(EV, db_path=DB)["rounds"][0]["groups"][0]
 check("the read stamps the group final", grp["final"] is True and grp["final_at"], grp)
-
-print("auto payouts")
-CALLS = []
-ROWS = [{"golferName": "Pat Youngs", "customer_id": 301, "category": "ctp", "amount": 23.0,
-         "description": "CTP hole 16"}]
-_real_asm, _real_rec = db.assemble_event_game_payouts, db.record_event_game_payouts
-db.assemble_event_game_payouts = lambda name, db_path=None: {
-    "rows": [dict(x) for x in ROWS], "notes": [], "total": sum(x["amount"] for x in ROWS)}
-
-
-def _rec(name, rows, force=False, db_path=None):
-    CALLS.append((name, len(rows), force))
-    return {"payouts_added": len(rows)}
-
-
-db.record_event_game_payouts = _rec
-dry = ap.run(apply=False, event_id=EV, db_path=DB)["events"][0]
-check("dry run says it would record", dry["state"] == "would_record", dry)
-check("dry run writes nothing", not CALLS, CALLS)
-check("dry run publishes nothing", sqlite3.connect(DB).execute(
-    "SELECT COUNT(*) FROM scoring_rounds WHERE event_id = ?", (EV,)).fetchone()[0] == 0)
 one = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
 check("records once every card is final", one["state"] == "recorded" and len(CALLS) == 1, one)
 check("re-record replaces auto rows (force)", CALLS and CALLS[0][2] is True, CALLS)
-check("the final cards were published", sqlite3.connect(DB).execute(
-    "SELECT COUNT(*) FROM scoring_rounds WHERE event_id = ?", (EV,)).fetchone()[0] == 2)
+check("the preview turns final", (ap.preview_for(EV, DB) or {}).get("final") is True)
 two = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
-check("unchanged rows are not recorded again", two["state"] == "unchanged" and len(CALLS) == 1, two)
+check("unchanged: not recorded again", two["state"] == "unchanged" and len(CALLS) == 1, two)
 ROWS.append({"golferName": "Dan Stich", "customer_id": 302, "category": "skins", "amount": 10.0,
              "description": "Skins hole 3"})
 with se._closing(se._conn(DB)) as _c:      # a card change (e.g. a CTP ruling) bumps the version
@@ -165,8 +177,8 @@ with se._closing(se._conn(DB)) as _c:      # a card change (e.g. a CTP ruling) b
     _c.commit()
 three = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
 check("changed rows re-record", three["state"] == "recorded" and len(CALLS) == 2, three)
-fps = json.loads(db.get_app_setting(ap.FP_SETTING, DB) or "{}")
-check("the fingerprint is kept per event", (fps.get(str(EV)) or {}).get("fp") == three["fingerprint"], fps)
+st = json.loads(db.get_app_setting(ap.FP_SETTING, DB) or "{}").get(str(EV)) or {}
+check("the fingerprint is kept per event", st.get("fp") == three["fingerprint"], st)
 ROWS.append({"golferName": "Pat Youngs", "customer_id": 301, "category": "skins", "amount": 5.0,
              "description": "Skins hole 4"})
 four = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
@@ -176,11 +188,11 @@ print("manager unlock")
 db.set_app_setting(se.CARD_LOCK_SETTING, "15", DB)
 se.unlock_card(gid, db_path=DB)
 card = se.get_group_card(gid, "dev", db_path=DB)
-check("unlocked card is not final", not card["final"] and card["final_at"] is None, card.get("final_at"))
+check("unlocked card is not final", not card["final"], card.get("final_at"))
 r = se.write_scores(gid, "dev", 301, ops(301, [2], 3), db_path=DB)
 check("the scorer can fix it again", r["results"][0]["result"] == "ok", r)
 out = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
-check("payouts wait for the resubmit", out["state"] == "waiting" and len(CALLS) == 2, out)
+check("money shows again, not final", out["state"] == "provisional" and len(CALLS) == 2, out)
 
 print("dial")
 db.set_app_setting(ap.DIAL, "off", DB)

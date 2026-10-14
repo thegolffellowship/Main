@@ -91,7 +91,7 @@ c.commit(); c.close()
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, status="open", sign=False))
 # Kerry 10/13: an unsigned confirmed card waits for its 15-minute lock.
 check("unsigned cards block, each player named", not f["final"] and any(
-    "Ann Able: card not signed" in b or "Ann Able: card confirmed, final at" in b
+    "Ann Able: card not signed" in b or "Ann Able: card final at" in b
     for b in f["blocking"]), f.get("blocking"))
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, hio=[{"hole": 3, "status": "witnessed"}]))
 check("a hole-in-one claim still in flight blocks", not f["final"] and any("hole-in-one" in b for b in f["blocking"]), f.get("blocking"))

@@ -806,41 +806,64 @@ sandbox has 3.45.1. The tables are still created lazily with `CREATE TABLE
 IF NOT EXISTS` (once per database), since the repo has no migration-file
 convention yet; that goes to CA with the hardening ruling.
 
-## A confirmed card is final after 15 minutes; payouts record themselves (v2.562.6, Kerry 2026-10-13)
+## Prize money runs itself; a card is final 15 minutes after its last score (v2.562.6, Kerry 2026-10-13)
 
-Kerry: "Payouts need to auto calculate and populate based on GAMES tabs
-immediately after scores are all in", and "Time based. 15 minutes after
-scorer confirms scorecard, it locks and is considered final automatically".
+What Kerry said, verbatim:
+- "Payouts need to auto calculate and populate based on GAMES tabs
+  immediately after scores are all in"
+- "15 minutes after last score entered by each scorer because scorer may
+  not finalize how they should"
+- "When last hole score is entered by last player in field, won Columns
+  should unhide and amounts should show but non-final until 15 minutes
+  have passed"
 
-- **Final card.** `score_entry.card_final_at` gives the time: the latest
-  `se_card_checks.at` for the group plus app setting `se_card_lock_minutes`
-  (default 15). Submits at or before a manager unlock don't count.
-  Unlocks are stored in app setting `se_card_unlocks`
-  (`{group_id: when}`), with no new table.
-- **What final does.**
-  - `write_scores` refuses phone writes with result `refused_final`, kept
-    in `se_audit`.
-  - `get_group_card` returns `final` / `final_at` / `lock_minutes`.
-  - `get_entered_scores` stamps each group with `final` / `final_at`.
-  - `entry_publish.publish_eligibility` treats a final card as eligible
-    without player signatures. Before final, an unsigned confirmed card is
-    held with the reason "card confirmed, final at …".
-- **Unlock.** `POST /api/score-entry/groups/<id>/unlock` (manager) calls
-  `unlock_card`. It is the Unlock button beside a final card on the Live
-  Scoring page.
-- **Auto payouts.** Module `email_parser/auto_payouts.py`; job
-  `auto_payouts`, every 2 minutes; dial app setting `auto_payouts`.
-  - It covers score-entry events of the last 3 days that are untethered
-    from Golf Genius.
-  - It publishes the final cards (`publish_event(apply=True)`).
-  - Once no player is held, it assembles with
-    `assemble_event_game_payouts` and records with
-    `record_event_game_payouts(force=True)`. That re-record is paid-safe,
-    and an event with manual payouts is refused.
-  - It records only when the assembled rows' fingerprint changed (app
-    setting `auto_payouts_fp`).
-  - Bridge `scoring-auto-payouts[:apply][|<event_id>]`. Guard
-    `test_auto_payouts.py`.
+**Final card.**
+- `score_entry.card_final_at(last_score_at, complete, unlocked_at,
+  minutes)`. Once every hole of every player in the group has a gross,
+  the card is final at the later of the group's last `se_hole_scores.server_ts`
+  and a manager unlock, plus app setting `se_card_lock_minutes` (default 15).
+- Unlocks are stored in app setting `se_card_unlocks` (`{group_id: when}`);
+  there is no new table.
+- `_group_card_state` gives the state for one group. `get_group_card`
+  returns `final` / `final_at` / `lock_minutes`, and `get_entered_scores`
+  stamps each group with `final` / `final_at`.
+- `write_scores` refuses phone writes to a final card. The result is
+  `refused_final`, kept in `se_audit`, and the version is not bumped.
+- `POST /api/score-entry/groups/<id>/unlock` (manager) calls `unlock_card`.
+
+**Publish.** `entry_publish.publish_eligibility` publishes a complete card
+in any of three cases:
+- it is final (no submit or signature needed);
+- the old way: submitted or the round closed, and the player signed;
+- `rnd["_provisional"]` is set (`publish_event(provisional=True)`). The
+  auto-payouts job uses this once the whole field is in.
+
+A complete card that is not final is held with the reason "card final at …".
+
+**Auto payouts** (`email_parser/auto_payouts.py`, job `auto_payouts` every
+minute, dial `auto_payouts`). It covers score-entry events of the last 3
+days that are untethered from Golf Genius. On each event:
+1. A dry run of the publish runs first, so nothing is written while a
+   hole is out ("waiting").
+2. Once the field is in, it publishes provisionally and assembles the
+   payouts with `assemble_event_game_payouts`. The rows, with
+   customer_id, become the board PREVIEW (app setting `auto_payouts_preview`):
+   `{rows, final, final_at, total, fp}`.
+3. `get_event_leaderboard` reads the preview when no payouts are recorded.
+   It sets `money_visible` (no 10-minute hold), `money_final` and
+   `money_final_at`. contests.html's `evlbFinalNotice` prints the
+   "not final yet" note.
+4. Once every group is final, it records with
+   `record_event_game_payouts(force=True)`. That is paid-safe, and an
+   event with manual payouts is refused.
+
+Per-event state lives in app setting `auto_payouts_fp`:
+`{fp, v (score-entry version), final, final_at, mins, recorded | refused}`.
+An event is not re-run until its version moves, its final time passes, or
+the lock dial changes.
+
+Bridge `scoring-auto-payouts[:apply][|<event_id>]`. Guard
+`test_auto_payouts.py`.
 
 ## Publishing entered scores (G-0 keystone, CA #786 GO 1)
 

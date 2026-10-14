@@ -1839,7 +1839,7 @@
                 const ph = cc.has_photo ? "photo saved" : photo && photo.submitted && !photo.sent ? "photo waiting to send" : "no photo";
                 actions = `<div class="se-status">${ICON.check}<span>Card submitted · ${ph}${cc.signed_for_group ? " · you signed for the group" : ""}</span></div>`;
             }
-            // A confirmed card is final 15 minutes after the submit (Kerry 10/13).
+            // A finished card is final 15 minutes after its last score (Kerry 10/13).
             if (card.final) {
                 actions += `<div class="se-status">${ICON.check}<span>This card is final. Ask your manager if a score needs fixing.</span></div>`;
             } else if (card.final_at) {

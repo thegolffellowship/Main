@@ -14444,9 +14444,17 @@ def get_events_leaderboard(chapter: str | None = None,
                     _fc = {**_fc, "complete": False, "pending": _fc["pending"] + _wt}
             r["field_complete"] = _fc["complete"]
             r["players_pending"] = len(_fc["pending"])
+            try:
+                from email_parser import auto_payouts as _apx
+                _pv = _apx.preview_for(r["id"], db_path) if r.get("live_entry") else None
+            except Exception:
+                _pv = None
             if not _fc["complete"]:
                 r["money_visible"] = False
                 r["money_reason"] = "scores"
+            elif _pv:
+                # the field is in: money shows now, final or not (Kerry 10/13)
+                r["money_final"] = bool(_pv.get("final"))
             elif r["last_score_at"] and _money_hold > 0:
                 try:
                     _rt = datetime.strptime(str(r["last_score_at"])[:19],
@@ -14763,7 +14771,18 @@ def get_event_leaderboard(event_name: str,
                 {"player": w.get("player_name"), "holes": 0, "of": _want} for w in waiting]
             field_state["holes_needed"] += len(waiting) * _want
             field_state["complete"] = False
-        if not field_state["complete"]:
+        _money_preview, money_final, money_final_at = None, True, None
+        try:
+            from email_parser import auto_payouts as _apx
+            _money_preview = _apx.preview_for(ev["id"], db_path)
+        except Exception:
+            logger.exception("Non-fatal: money preview unavailable for %s", ev["id"])
+        if _money_preview and field_state["complete"]:
+            # The job only writes a preview once every hole of the field is
+            # in; the money shows now, marked not final until it is.
+            money_final = bool(_money_preview.get("final"))
+            money_final_at = _money_preview.get("final_at")
+        elif not field_state["complete"]:
             money_visible, money_reason = False, "scores"
         elif last_score_at and _hold > 0:
             try:
@@ -14994,6 +15013,21 @@ def get_event_leaderboard(event_name: str,
                 "category": cat, "label": label,
                 "cents": round((pr["amount"] or 0) * 100),
                 "detail": " · ".join(_payout_detail_bits(cat, pr["d"]))})
+        # PRIZE MONEY THE MOMENT THE FIELD IS IN (Kerry 2026-10-13: "When
+        # last hole score is entered by last player in field, won Columns
+        # should unhide and amounts should show but non-final until 15
+        # minutes have passed"). Until the auto-payouts job records the
+        # final money, the board reads its preview (auto_payouts.py).
+        if not won and _money_preview:
+            for pr in _money_preview.get("rows") or []:
+                if not pr.get("customer_id") or not pr.get("amount"):
+                    continue
+                cat = pr.get("category") or "other"
+                label = _PAYOUT_CAT_LABELS.get(cat) or cat.replace("_", " ").title()
+                won.setdefault(int(pr["customer_id"]), []).append({
+                    "category": cat, "label": label,
+                    "cents": round(float(pr["amount"]) * 100),
+                    "detail": " · ".join(_payout_detail_bits(cat, pr.get("description") or ""))})
 
         # GG-recorded team + proxy boards
         team_rows, proxies, hio_rows = [], [], []
@@ -15813,6 +15847,8 @@ def get_event_leaderboard(event_name: str,
         "tee_by_player": tee_by_player,
         "tee_legend": tee_legend,
         "money_visible": money_visible,
+        "money_final": money_final,
+        "money_final_at": money_final_at,
         "money_at": money_at,
         "money_reason": money_reason,
         "money_hold_minutes": _hold,

@@ -1709,14 +1709,17 @@ def close_round(round_id: int, db_path=None) -> dict:
     return {"closed": round_id}
 
 
-# A CONFIRMED CARD LOCKS (Kerry 2026-10-13: "Time based. 15 minutes after
-# scorer confirms scorecard, it locks and is considered final
-# automatically"). Fifteen minutes after the scorekeeper submits the card
-# (se_card_checks.at), the group's card is FINAL: the phone can no longer
-# change a score, and the card publishes and pays without player
-# signatures. The manager can unlock a card (app setting
-# se_card_unlocks = {group_id: when}); a submit after the unlock starts a
-# new 15 minutes. Minutes are a dial: se_card_lock_minutes.
+# A CARD LOCKS 15 MINUTES AFTER ITS LAST SCORE (Kerry 2026-10-13, first
+# "15 minutes after scorer confirms scorecard, it locks and is considered
+# final automatically", then: "Actually, let's say 15 minutes after last
+# score entered by each scorer because scorer may not finalize how they
+# should"). Once every hole of every player in the group has a score, the
+# card is FINAL 15 minutes after the group's last score was saved: the
+# phone can no longer change it, and it publishes and pays without
+# signatures or a submit. The manager can unlock a card (app setting
+# se_card_unlocks = {group_id: when}); it is final again 15 minutes after
+# the later of the unlock and the next score. Minutes are a dial:
+# se_card_lock_minutes.
 CARD_LOCK_SETTING = "se_card_lock_minutes"
 CARD_LOCK_DEFAULT = 15
 CARD_UNLOCK_SETTING = "se_card_unlocks"
@@ -1741,26 +1744,18 @@ def _parse_utc(s):
         return None
 
 
-def card_final_at(checks: list, group_id: int, unlocks: dict | None = None,
+def card_final_at(last_score_at, complete: bool, unlocked_at=None,
                   minutes: int = CARD_LOCK_DEFAULT) -> str | None:
-    """When this group's card is (or will be) final: the latest submit
-    that is not older than a manager unlock, plus the lock minutes.
-    None = the card has not been confirmed since its last unlock.
-    `checks` are se_card_checks rows ({group_id, at})."""
+    """When a group's card is (or will be) final: the later of its last
+    saved score and a manager unlock, plus the lock minutes. None while
+    any hole of any player is still blank."""
     from datetime import timedelta
-    unlocked = _parse_utc((unlocks or {}).get(str(group_id)))
-    last = None
-    for c in checks or []:
-        if int(c.get("group_id") or 0) != int(group_id):
-            continue
-        at = _parse_utc(c.get("at"))
-        if at is None or (unlocked is not None and at <= unlocked):
-            continue
-        if last is None or at > last:
-            last = at
-    if last is None:
+    last = _parse_utc(last_score_at)
+    if not complete or last is None:
         return None
-    return (last + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    unl = _parse_utc(unlocked_at)
+    base = max(last, unl) if unl else last
+    return (base + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def card_is_final(final_at: str | None, now: str | None = None) -> bool:
@@ -1768,16 +1763,38 @@ def card_is_final(final_at: str | None, now: str | None = None) -> bool:
     return fa is not None and fa <= _parse_utc(now or _now())
 
 
+def _group_card_state(conn, group_id: int, db_path=None) -> dict:
+    """{last_score_at, complete, final_at, final} for one group."""
+    g = _group_ctx(conn, group_id)
+    if not g:
+        return {"last_score_at": None, "complete": False, "final_at": None, "final": False}
+    n = conn.execute("SELECT COUNT(*) FROM se_round_holes WHERE round_id = ?",
+                     (g["round_id"],)).fetchone()[0] or int(g["holes"] or 0)
+    subjects = [f"c:{r[0]}" for r in conn.execute(
+        "SELECT customer_id FROM se_players WHERE group_id = ?", (group_id,))]
+    if not subjects:
+        subjects = [f"t:{r[0]}" for r in conn.execute(
+            "SELECT id FROM se_teams WHERE group_id = ?", (group_id,))]
+    have = {r[0]: r[1] for r in conn.execute(
+        "SELECT subject_key, COUNT(*) FROM se_hole_scores WHERE group_id = ? "
+        "AND gross IS NOT NULL GROUP BY subject_key", (group_id,))}
+    complete = bool(subjects) and all((have.get(k) or 0) >= n for k in subjects)
+    last = conn.execute("SELECT MAX(server_ts) FROM se_hole_scores WHERE group_id = ?",
+                        (group_id,)).fetchone()[0]
+    fa = card_final_at(last, complete,
+                       _json_setting(CARD_UNLOCK_SETTING, db_path).get(str(group_id)),
+                       card_lock_minutes(db_path))
+    return {"last_score_at": last, "complete": complete, "final_at": fa,
+            "final": card_is_final(fa)}
+
+
 def _group_final_at(conn, group_id: int, db_path=None) -> str | None:
-    checks = [dict(r) for r in conn.execute(
-        "SELECT group_id, at FROM se_card_checks WHERE group_id = ?", (group_id,))]
-    return card_final_at(checks, group_id, _json_setting(CARD_UNLOCK_SETTING, db_path),
-                         card_lock_minutes(db_path))
+    return _group_card_state(conn, group_id, db_path)["final_at"]
 
 
 def unlock_card(group_id: int, db_path=None) -> dict:
-    """Manager: reopen a final card so the scorer can fix it. The scorer
-    submits again and the 15 minutes start over."""
+    """Manager: reopen a final card so the scorer can fix it. It is final
+    again 15 minutes after the later of the unlock and the next score."""
     from email_parser.database import set_app_setting
     with _closing(_conn(db_path)) as conn:
         g = _group_ctx(conn, group_id)
@@ -3661,8 +3678,19 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
             # after the scorer submits it and is final automatically).
             _unl = _json_setting(CARD_UNLOCK_SETTING, db_path)
             _mins = card_lock_minutes(db_path)
+            _n = len(course) or int(r["holes"] or 0)
+            _subs: dict = {}
+            for _p in players:
+                _subs.setdefault(_p["group_id"], []).append(len(_p["scores"]))
+            for _t in teams:
+                if _t["group_id"] not in _subs or not any(
+                        p["group_id"] == _t["group_id"] for p in players):
+                    _subs.setdefault(_t["group_id"], []).append(len(_t["scores"]))
             for _g in groups:
-                _g["final_at"] = card_final_at(checks, _g["group_id"], _unl, _mins)
+                _done = bool(_subs.get(_g["group_id"])) and all(
+                    k >= _n for k in _subs[_g["group_id"]])
+                _g["final_at"] = card_final_at(_g.get("last_write_at"), _done,
+                                               _unl.get(str(_g["group_id"])), _mins)
                 _g["final"] = card_is_final(_g["final_at"])
             ctp = {}
             contests = ctp_contests(conn, rid, db_path)
