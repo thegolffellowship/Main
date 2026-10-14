@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.565.0";
+window.TGF_VERSION = "2.565.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.565.1",
+    date: "2026-10-14",
+    title: "Results email: clearer preview line and tee-time wording",
+    changes: [
+      "The inbox preview line reads \"Kerry, you won $13.00. Your card, handicap and points inside.\" (was \"you won $13.00 and 2 birdies or better\"), and UP NEXT says \"tee times from 3:40 PM\" for a tee-time start (a shotgun still reads \"4:30 PM shotgun\"). Found reading the real 10/13 messages before the 6:00 AM send.",
+    ],
+  },
   {
     version: "2.565.0",
     date: "2026-10-14",

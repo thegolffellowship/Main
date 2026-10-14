@@ -384,7 +384,8 @@ def _up_next(facts, cid) -> str:
         when = d.strftime("%a %b %-d")
         t = _fmt_time(u.get("start_time"))
         if t:
-            when += f" · {t}{' shotgun' if (u.get('start_type') or '').lower().startswith('shotgun') else ''}"
+            when += (f" · {t} shotgun" if (u.get("start_type") or "").lower().startswith("shotgun")
+                     else f" · tee times from {t}")
         url = (u.get("registration_url") or "").strip()
         mine = cid in facts["registered"].get(u["id"], set())
         tag = ("You’re signed up" if mine else
@@ -456,14 +457,10 @@ def _your_night(facts, cid, person) -> tuple[str, str]:
             + (f'<div style="font-size:14px;">{sub}</div>' if sub else ""))
     html = card(None, stat_row(stats) + '<div style="height:12px"></div>' + scorecard(hn, pars, strokes, dots)
                 + note(legend + hl), head=head)
-    pre_bits = []
     won = sum(float(x["amount"] or 0) for x in facts["payouts"].get(cid, []))
-    if won > 0:
-        pre_bits.append(f"you won ${won:,.2f}")
-    if birdies:
-        pre_bits.append(f"{len(birdies)} birdie{'s' if len(birdies) > 1 else ''} or better")
-    return html, (f"{person['first_name']}, " + " and ".join(pre_bits) + "." if pre_bits else
-                  f"{person['first_name']}, your card, handicap and points inside.")
+    lead = f"{person['first_name']}, you won ${won:,.2f}. " if won > 0 else f"{person['first_name']}, "
+    return html, lead + ("Your card, handicap and points inside." if won > 0
+                         else "your card, handicap and points are inside.")
 
 
 def _winnings(facts, cid) -> str:

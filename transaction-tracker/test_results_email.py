@@ -81,7 +81,7 @@ check("...his winnings from the recorded rows", "Skins · Flight 1 · hole 11" i
 check("...links go to the specific places",
       "/member/results/3307" in h and "/member/spotlight?player=18" in h)
 check("...the San Antonio recap story, without its UP NEXT list", "first chapter night" in h and "UP NEXT." not in h)
-check("...UP NEXT from the event rows with the start time", "TPC Canyons" in h and "4:30 PM shotgun" in h, h[h.find("UP NEXT"):][:600])
+check("...UP NEXT from the event rows with the start time", "TPC Canyons" in h and "4:30 PM shotgun" in h and "tee times from" not in h[h.find("TPC Canyons")-200:h.find("TPC Canyons")], h[h.find("UP NEXT"):][:600])
 check("...not signed up yet, with the I'm in button", "You’re not signed up yet" in h and "I’m in for TPC Canyons" in h)
 check("...signed by Kerry, see you next Tuesday", "See you next Tuesday!" in h and "Kerry Niester<br>The Golf Fellowship" in h)
 d = rx.build_message(facts, {"customer_id": 298, "first_name": "Dan", "name": "Dan Stich"}, RECAP)
