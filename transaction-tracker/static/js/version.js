@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.562.5";
+window.TGF_VERSION = "2.562.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.562.6",
+    date: "2026-10-13",
+    title: "Payouts record themselves; a confirmed card is final after 15 minutes",
+    changes: [
+      "Kerry 10/13: \"Payouts need to auto calculate and populate based on GAMES tabs immediately after scores are all in\", and on when a card counts: \"Time based. 15 minutes after scorer confirms scorecard, it locks and is considered final automatically\".",
+      "A CONFIRMED CARD LOCKS. Fifteen minutes after the scorekeeper submits the card, the group's card is final. Player signatures are no longer needed for it to count. The phone shows \"Card locks and is final at 8:14 PM\", then \"This card is final\". A score changed from a phone after that is refused, kept on record for the manager, and the phone says to ask the manager. On the Live Scoring page each group shows when it goes final, and a final card has an Unlock button. After an unlock the scorer can fix the card and submits it again; it is final 15 minutes after that submit. The minutes are a dial (app setting se_card_lock_minutes).",
+      "PAYOUTS RECORD THEMSELVES. Every 2 minutes, for each Tracker-scored event of the last three days: the final cards are published to the scorecards; once every card in the field is final, the payouts the GAMES tab's Record Payouts button would record are recorded. That fills the EVENTS board's WON column and the PAYOUTS tab with no button press. The payouts are recorded again when anything changes (an unlocked card, a confirmed Closest to Pin). A payout already paid is never touched, and an event with hand-entered payouts is left alone. Dial: app setting auto_payouts (off stops it). Bridge scoring-auto-payouts[:apply][|<event_id>], a dry run by default.",
+      "Why the WON column was empty on 10/13: we are off Golf Genius, so nothing recorded payouts until close-out. Individual Net, Skins and Individual Gross also waited for every player's signature, and most cards were never signed. Guard: test_auto_payouts.py.",
+    ],
+  },
   {
     version: "2.562.5",
     date: "2026-10-13",

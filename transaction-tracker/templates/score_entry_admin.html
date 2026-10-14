@@ -118,12 +118,20 @@
                   <td>${g.players.map((p) => `<div><span class="nm">${esc(p.name)}</span>${p.signed ? ' <span class="ok" title="Signed">&#10003;</span>' : ""}</div>`).join("")}</td>
                   <td>${g.holes_in} / ${g.holes}</td>
                   <td>${g.scorer ? '<span class="nm">' + esc(g.scorer) + "</span>" : '<span class="muted">no one yet</span>'}</td>
-                  <td>${g.card_check ? '<span class="ok">Submitted</span>' + (g.card_check.has_photo ? ` · <a href="/api/score-entry/checks/${g.card_check.check_id}/photo.jpg" target="_blank">photo</a>` : " · no photo") : g.attested ? '<span class="ok">Attested</span>' : '<span class="muted">open</span>'}</td>
+                  <td>${g.card_check ? '<span class="ok">Submitted</span>' + (g.card_check.has_photo ? ` · <a href="/api/score-entry/checks/${g.card_check.check_id}/photo.jpg" target="_blank">photo</a>` : " · no photo") : g.attested ? '<span class="ok">Attested</span>' : '<span class="muted">open</span>'}${finalCell(g)}</td>
                   <td><div class="row-actions"><a class="btn go" href="${g.url}" target="_blank" rel="noopener">Open</a>
                       <button class="btn" data-copy="${esc(g.url)}">Copy link</button></div></td>
                 </tr>`).join("")}</tbody></table></div>
               ${mgrPanel(r)}
             </div>`).join("");
+    }
+    // FINAL CARDS (Kerry 10/13: "15 minutes after scorer confirms scorecard,
+    // it locks and is considered final automatically"). Unlock reopens it
+    // for the scorer; the next submit starts the 15 minutes again.
+    function finalCell(g) {
+        if (g.final) return `<div><b>Final</b> <button class="btn" style="padding:2px 10px;font-size:12px" data-unlock="${g.group_id}">Unlock</button></div>`;
+        if (g.final_at) return `<div class="muted" style="font-size:12px">Final at ${esc(new Date(g.final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}))}</div>`;
+        return "";
     }
     // THE MANAGER PANEL (CA #843): exactly four actions, each logged with who did it.
     // CTP VERIFICATION (Kerry 10/13, hole 16 at The Quarry: "We need to add a
@@ -201,6 +209,13 @@
         if (rs) {
             if (confirm("Start this preview over? Its scores are kept on record, and a fresh card with a new link opens.")) {
                 post(`/api/score-entry/rounds/${rs.dataset.restart}/restart-preview`, {});
+            }
+            return;
+        }
+        const ul = e.target.closest("[data-unlock]");
+        if (ul) {
+            if (confirm("Unlock this card? The scorer can change scores again, then submits it. It's final 15 minutes after that submit, and the payouts update.")) {
+                post(`/api/score-entry/groups/${ul.dataset.unlock}/unlock`, {});
             }
             return;
         }

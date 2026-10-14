@@ -108,8 +108,17 @@ def publish_eligibility(rnd: dict, player: dict) -> tuple[bool, str | None]:
         return False, "round still open and the group's card has not been submitted"
     signed = any(s.get("customer_id") == cid and s.get("kind") == "player"
                  for s in (rnd.get("signoffs") or []))
-    if not signed:
-        return False, "card not signed (no live player signature)"
+    # A confirmed card is final 15 minutes after the scorer submits it,
+    # signed or not (Kerry 2026-10-13: "Time based. 15 minutes after
+    # scorer confirms scorecard, it locks and is considered final
+    # automatically"). score_entry stamps `final` on each group.
+    final = any(g.get("group_id") == player.get("group_id") and g.get("final")
+                for g in (rnd.get("groups") or []))
+    if not signed and not final:
+        return False, ("card confirmed, final at " + str(next(
+            (g.get("final_at") for g in (rnd.get("groups") or [])
+             if g.get("group_id") == player.get("group_id")), "") or "?")
+            if submitted else "card not signed (no live player signature)")
     scores = player.get("scores") or {}
     holes = _round_holes(rnd)
     if holes:

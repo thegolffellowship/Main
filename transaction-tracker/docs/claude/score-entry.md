@@ -806,6 +806,42 @@ sandbox has 3.45.1. The tables are still created lazily with `CREATE TABLE
 IF NOT EXISTS` (once per database), since the repo has no migration-file
 convention yet; that goes to CA with the hardening ruling.
 
+## A confirmed card is final after 15 minutes; payouts record themselves (v2.562.6, Kerry 2026-10-13)
+
+Kerry: "Payouts need to auto calculate and populate based on GAMES tabs
+immediately after scores are all in", and "Time based. 15 minutes after
+scorer confirms scorecard, it locks and is considered final automatically".
+
+- **Final card.** `score_entry.card_final_at` gives the time: the latest
+  `se_card_checks.at` for the group plus app setting `se_card_lock_minutes`
+  (default 15). Submits at or before a manager unlock don't count.
+  Unlocks are stored in app setting `se_card_unlocks`
+  (`{group_id: when}`), with no new table.
+- **What final does.**
+  - `write_scores` refuses phone writes with result `refused_final`, kept
+    in `se_audit`.
+  - `get_group_card` returns `final` / `final_at` / `lock_minutes`.
+  - `get_entered_scores` stamps each group with `final` / `final_at`.
+  - `entry_publish.publish_eligibility` treats a final card as eligible
+    without player signatures. Before final, an unsigned confirmed card is
+    held with the reason "card confirmed, final at …".
+- **Unlock.** `POST /api/score-entry/groups/<id>/unlock` (manager) calls
+  `unlock_card`. It is the Unlock button beside a final card on the Live
+  Scoring page.
+- **Auto payouts.** Module `email_parser/auto_payouts.py`; job
+  `auto_payouts`, every 2 minutes; dial app setting `auto_payouts`.
+  - It covers score-entry events of the last 3 days that are untethered
+    from Golf Genius.
+  - It publishes the final cards (`publish_event(apply=True)`).
+  - Once no player is held, it assembles with
+    `assemble_event_game_payouts` and records with
+    `record_event_game_payouts(force=True)`. That re-record is paid-safe,
+    and an event with manual payouts is refused.
+  - It records only when the assembled rows' fingerprint changed (app
+    setting `auto_payouts_fp`).
+  - Bridge `scoring-auto-payouts[:apply][|<event_id>]`. Guard
+    `test_auto_payouts.py`.
+
 ## Publishing entered scores (G-0 keystone, CA #786 GO 1)
 
 Kerry's ruling: when a group's card is CLOSED AND SIGNED, its gross scores

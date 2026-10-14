@@ -276,6 +276,7 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
                 "scorer": next((p["name"] for p in ps if p["customer_id"] == g["scorer_customer_id"]), None),
                 "attested": any((p["customer_id"], "scorekeeper") in signed for p in ps),
                 "card_check": checks.get(g["group_id"]),
+                "final_at": g.get("final_at"), "final": g.get("final"),
                 "url": links.get(g["group_id"])})
         names = {p["customer_id"]: p["name"] for p in r["players"]}
         # THE MANAGER PANEL (CA #843): the four actions and what they act on.
@@ -1708,6 +1709,88 @@ def close_round(round_id: int, db_path=None) -> dict:
     return {"closed": round_id}
 
 
+# A CONFIRMED CARD LOCKS (Kerry 2026-10-13: "Time based. 15 minutes after
+# scorer confirms scorecard, it locks and is considered final
+# automatically"). Fifteen minutes after the scorekeeper submits the card
+# (se_card_checks.at), the group's card is FINAL: the phone can no longer
+# change a score, and the card publishes and pays without player
+# signatures. The manager can unlock a card (app setting
+# se_card_unlocks = {group_id: when}); a submit after the unlock starts a
+# new 15 minutes. Minutes are a dial: se_card_lock_minutes.
+CARD_LOCK_SETTING = "se_card_lock_minutes"
+CARD_LOCK_DEFAULT = 15
+CARD_UNLOCK_SETTING = "se_card_unlocks"
+
+
+def card_lock_minutes(db_path=None) -> int:
+    from email_parser.database import get_app_setting
+    try:
+        v = int(get_app_setting(CARD_LOCK_SETTING, db_path) or CARD_LOCK_DEFAULT)
+    except (TypeError, ValueError):
+        v = CARD_LOCK_DEFAULT
+    return max(0, v)
+
+
+def _parse_utc(s):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(str(s)[:19].replace(" ", "T"),
+                                 "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def card_final_at(checks: list, group_id: int, unlocks: dict | None = None,
+                  minutes: int = CARD_LOCK_DEFAULT) -> str | None:
+    """When this group's card is (or will be) final: the latest submit
+    that is not older than a manager unlock, plus the lock minutes.
+    None = the card has not been confirmed since its last unlock.
+    `checks` are se_card_checks rows ({group_id, at})."""
+    from datetime import timedelta
+    unlocked = _parse_utc((unlocks or {}).get(str(group_id)))
+    last = None
+    for c in checks or []:
+        if int(c.get("group_id") or 0) != int(group_id):
+            continue
+        at = _parse_utc(c.get("at"))
+        if at is None or (unlocked is not None and at <= unlocked):
+            continue
+        if last is None or at > last:
+            last = at
+    if last is None:
+        return None
+    return (last + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def card_is_final(final_at: str | None, now: str | None = None) -> bool:
+    fa = _parse_utc(final_at)
+    return fa is not None and fa <= _parse_utc(now or _now())
+
+
+def _group_final_at(conn, group_id: int, db_path=None) -> str | None:
+    checks = [dict(r) for r in conn.execute(
+        "SELECT group_id, at FROM se_card_checks WHERE group_id = ?", (group_id,))]
+    return card_final_at(checks, group_id, _json_setting(CARD_UNLOCK_SETTING, db_path),
+                         card_lock_minutes(db_path))
+
+
+def unlock_card(group_id: int, db_path=None) -> dict:
+    """Manager: reopen a final card so the scorer can fix it. The scorer
+    submits again and the 15 minutes start over."""
+    from email_parser.database import set_app_setting
+    with _closing(_conn(db_path)) as conn:
+        g = _group_ctx(conn, group_id)
+        if not g:
+            return {"error": "no such group"}
+        m = _json_setting(CARD_UNLOCK_SETTING, db_path)
+        m[str(group_id)] = _now()
+        set_app_setting(CARD_UNLOCK_SETTING, json.dumps(m, sort_keys=True), db_path)
+        _bump(conn, g["event_id"])
+        conn.commit()
+    return {"unlocked": group_id, "at": m[str(group_id)]}
+
+
 def clear_group(group_id: int, *, apply: bool = False, include_checks: bool = False,
                 db_path=None) -> dict:
     """START ONE GROUP'S CARD OVER (Kerry 2026-10-08: "Can you also clear
@@ -2160,6 +2243,7 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
         lock = conn.execute("SELECT * FROM se_group_locks WHERE group_id = ?",
                             (group_id,)).fetchone()
         extras = _card_extras(conn, g, group_id)
+        final_at = _group_final_at(conn, group_id, db_path)
         marks = _marks_by_subject(conn, group_id=group_id)
         try:
             match_status = _match_status(conn, g)
@@ -2190,7 +2274,9 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             "start_hole": g["start_hole"], "tee_time": g["tee_time"],
             "course": holes, "players": players, "teams": teams, "scores": scores,
             "marks": marks, "match_status": match_status, "cup_standings": cup, "matches": {str(k): v for k, v in round_matches(g["round_id"]).items()},
-            "lock": _lock_view(lock, device_id, names)}
+            "lock": _lock_view(lock, device_id, names),
+            "final_at": final_at, "final": card_is_final(final_at),
+            "lock_minutes": card_lock_minutes(db_path)}
 
 
 def claim_group(group_id: int, device_id: str, customer_id: int | None,
@@ -2308,6 +2394,26 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
         lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
                             (group_id,)).fetchone()
         holds = bool(lock and lock["device_id"] == device_id)
+        if card_is_final(_group_final_at(conn, group_id, db_path)):
+            # The confirmed card locked (Kerry 10/13): nothing changes it
+            # from a phone; the attempt is kept for the manager.
+            now = _now()
+            for op in ops:
+                op_id = str(op.get("op_id") or "").strip()
+                results.append({"op_id": op_id or None, "result": "refused_final"})
+                if op_id and not conn.execute("SELECT 1 FROM se_audit WHERE op_id = ?",
+                                              (op_id,)).fetchone():
+                    conn.execute(
+                        "INSERT INTO se_audit (round_id, group_id, kind, customer_id, device_id, "
+                        "op_id, result, detail, at) VALUES (?,?,?,?,?,?,?,?,?)",
+                        (g["round_id"], group_id, "write", entered_by, device_id, op_id,
+                         "refused_final",
+                         json.dumps({"hole": op.get("hole"), "gross": op.get("gross"),
+                                     "customer_id": op.get("customer_id"),
+                                     "team_id": op.get("team_id"),
+                                     "client_ts": op.get("client_ts")}), now))
+            conn.commit()
+            return {"results": results, "applied": 0, "final": True}
         members = {r[0] for r in conn.execute(
             "SELECT customer_id FROM se_players WHERE group_id = ?", (group_id,))}
         teams = {r[0]: (r[1], r[2]) for r in conn.execute(
@@ -3551,6 +3657,13 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                 "print_scorer_customer_id, print_scorer_name, signed_for_group, "
                 "photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
                 "WHERE round_id = ? ORDER BY id", (rid,))]
+            # Final cards (Kerry 10/13: a confirmed card locks 15 minutes
+            # after the scorer submits it and is final automatically).
+            _unl = _json_setting(CARD_UNLOCK_SETTING, db_path)
+            _mins = card_lock_minutes(db_path)
+            for _g in groups:
+                _g["final_at"] = card_final_at(checks, _g["group_id"], _unl, _mins)
+                _g["final"] = card_is_final(_g["final_at"])
             ctp = {}
             contests = ctp_contests(conn, rid, db_path)
             for hole, kind in contests["holes"].items():
