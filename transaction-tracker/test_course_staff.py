@@ -157,10 +157,14 @@ mcp = open(os.path.join(HERE, "mcp_server.py")).read()
 check("staff API: GET for managers, POST admin only",
       '@app.route("/api/courses/<int:course_id>/staff", methods=["GET", "POST"])' in app_src
       and 'if session.get("role") != "admin":\n        return jsonify({"error": "Admin access required."}), 403' in app_src)
+cs_js = open(os.path.join(HERE, "static", "js", "course-staff.js")).read()
 check("event setup shows the course's contacts", 'id="edit-event-course-staff"' in ev_src
       and 'id="add-event-course-staff"' in ev_src and "async function showCourseStaff(" in ev_src)
-check("Courses page manages them", "async function openStaff(" in cd_src and '"Contacts"' not in cd_src
-      and ">Contacts</button>" in cd_src)
+check("Manage contacts opens a window over the event editor, not a new tab (Kerry 10/13)",
+      "window.tgfCourseStaffModal(c.course_id" in ev_src and 'target="_blank" rel="noopener">Manage contacts' not in ev_src
+      and '<script src="/static/js/course-staff.js"></script>' in ev_src and "window.tgfCourseStaffModal = modal;" in cs_js)
+check("Courses page uses the same shared panel", "window.tgfCourseStaffPanel(row.querySelector" in cd_src
+      and '<script src="/static/js/course-staff.js"></script>' in cd_src and ">Contacts</button>" in cd_src)
 check("bridges: read, set (Kerry's word), seed", all(f'"{b}"' in mcp for b in
       ("scoring-course-staff", "scoring-course-staff-set", "scoring-course-staff-seed"))
       and '"scoring-course-contact"' not in mcp)

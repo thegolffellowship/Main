@@ -1,5 +1,83 @@
-window.TGF_VERSION = "2.562.2";
+window.TGF_VERSION = "2.563.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.563.2",
+    date: "2026-10-13",
+    title: "EVENTS list: the pot shows before the payouts are recorded",
+    changes: [
+      "Kerry 10/13: \"Why aren't total pots being shown.\" The events list's POT added up only RECORDED payouts, so a Tracker-scored event read $0.00 until someone pressed Record Payouts (auto-record is off for 10/13). Now, while nothing is recorded, the pot is the GAMES money the event board already shows (the auto-payouts preview); once payouts are recorded it reads them as before. Guard: test_auto_payouts.py.",
+    ],
+  },
+  {
+    version: "2.563.1",
+    date: "2026-10-13",
+    title: "LEADERBOARD: no more \"Refresh from Golf Genius\"",
+    changes: [
+      "Kerry 10/13: \"Refresh from Golf Genius should be gone now.\" The Tracker computes the Fall races and the Monthly points itself (points_source = tracker), so the button above every points race and the Refresh pill on the Monthly board are removed. The boards still load and update on their own.",
+    ],
+  },
+  {
+    version: "2.563.0",
+    date: "2026-10-13",
+    title: "Tracker event invitations + RSVPs (off Golf Genius)",
+    changes: [
+      "Kerry 10/13: \"RSVP's are the only thing that we might need to continue, but would rather switch completely on that too starting tomorrow for next week's events.\" New email_parser/invitations.py: one invitation per invitee per event with I'm in / Can't make it buttons. AUDIENCE as Kerry ruled (\"That audience works, go with it\"): the chapter's active members, plus anyone who played that chapter in the last 12 months, plus lead opt-ins; minus opted-out (membership roster remove, a lead's no, the email's own Stop event invitations link), undeliverable addresses, non-member profiles and anyone already registered.",
+      "Kerry: \"go straight to the event registration page if they click I'm In\". I'm in opens the event's registration link; the click is noted, and paying is what puts a player on the roster (a mail scanner can follow a link too). Kerry: \"The sequence for Can't make it is too long\": Can't make it lands straight on Thanks, with Changed my mind, I'm in (to registration, clearing the no), Remove me from invitations (straight to Done) and an optional one-tap reason (Schedule, Weather, Course or price, Injury, Other). The page writes the answer itself; the bare link GET never does, so a mail scanner can't answer for a player. With no registration link on the event, I'm in shows the confirm page and records PLAYING. Answers are rsvps rows with email_uid tracker:<event>:<customer_id>, so the roster, Events tab, RSVP log and pairings read them; gg_rsvps_off now hides only Golf Genius rows.",
+      "SCHEDULE (Kerry), 7:00 AM Central: Tuesday event = invitation Wednesday, reminders Friday and Sunday, last call Monday (\"Sign up by 5:00 PM tonight\"); weekend event = invitation the Friday two weeks out, reminders the next Friday and the Tuesday before, last call Wednesday. Reminders and the last call skip anyone registered or who answered either way. Job event_invite_auto does nothing until app setting event_invite_auto = on AND the wording carries Kerry's stamp (event_invite_approved = the template hash). Manual: bridge scoring-event-invite:<id>[|preview|send|<kerry-ok post>[|reminder|lastcall][|confirm]]. test_invitations.py.",
+      "Kerry 10/13: \"Yes, invite both chapters to the Fall Championship - And I want it sent tomorrow morning\" (then: \"Just 10/20 events and the Championship\"). A TGF event invites both chapters' lists and reads as 2026 Fall Championship @ Kissing Tree (Kerry: \"Remove the event id ... Can be 2026 Fall Championship @ Kissing Tree\"); app setting event_invite_early {event_id: date} sends an invitation early (3305 on 10/14).",
+      "Kerry 10/13: \"Make sure database is setup to recieve player selections of reasons they can't play. We'll want to track whatever people are willing to give us.\" Migration 0016 adds event_decline_reasons (event_id, customer_id, reason, one row per event and person, a later tap updates it); the Can't make it page's one-tap reason writes there, and scoring-event-invite:<id> reports the counts.",
+    ],
+  },
+  {
+    version: "2.562.7",
+    date: "2026-10-13",
+    title: "EVENTS board: every leaderboard from GAMES; Golf Genius is history only",
+    changes: [
+      "Kerry 10/13: \"It doesn't look like flights are showing where they should on the leaderboard\", then \"All leaderboards should be generated based on GAMES. Golf Genius doesn't have anything to do with anything now except for historical records.\"",
+      "FLIGHTS. For an event on or after the untether date, the NET, GROSS and SKINS boards are sectioned by the event's own flight board. That is the same selection the GAMES money is paid on: \"Flight 1 (HCP <12.0)\" / \"Flight 2 (HCP 12.0+)\". A one-flight game shows no sections. Before this, they read only Golf Genius flight lists, which a Tracker event doesn't have, so the whole field showed as one list while the payouts were paid by flight. A non-buyer is placed by their handicap index against the stated line, as before.",
+      "NO GOLF GENIUS ON A TRACKER EVENT. The board for such an event never reads a Golf Genius flight, team result or proxy, even one that was stored. Closest to Pin always comes from the phone claims (a manager ruling included). Each team's purse is its GAMES money: each real member's Team Net share times the team's slots, a blind included. Events played before the untether keep the Golf Genius record they were played under. Guards: test_board_engine_flights.py, test_board_phone_ctp.py.",
+      "TEAM BOARD: BLINDS AND TEAM MONEY (Kerry 10/13: \"What we're not doing a good job on the team leaderboard is showing who the blinds are\", and the rule: \"In the case where a blind helps their team win and they are on another team that wins the person takes the higher total and doesn't get any of the lower. The lower is divided equally amongst the rest of the team. In Stu's case he wins the full amount of $26. While Robert and Luke split the $52 for first.\"). A blind is named plainly in the team header (\"Stu Kirksey · Robert Straiton (blind)\", never \"Bl[...]\") and carries a BLIND tag on its row and in the team card. Each row's Won on the TEAM tab is what that slot earned from THIS team: Straiton shows $26 on his own cart and nothing on Kirksey's. Each team's purse is the sum of its slots ($52 / $26 at Forest Creek; $46 on the SA team McCormick filled as a blind). The payouts already follow the rule; the board now reads it back (team_slot_money, guard test_team_slot_money.py).",
+    ],
+  },
+  {
+    version: "2.562.6",
+    date: "2026-10-13",
+    title: "Prize money shows the moment the field is in; final 15 minutes after the last score",
+    changes: [
+      "Kerry 10/13: \"Payouts need to auto calculate and populate based on GAMES tabs immediately after scores are all in\"; \"15 minutes after last score entered by each scorer because scorer may not finalize how they should\"; \"When last hole score is entered by last player in field, won Columns should unhide and amounts should show but non-final until 15 minutes have passed\".",
+      "THE MONEY SHOWS AT ONCE. When the last hole of the last player in the field is entered, the EVENTS board's WON column appears within a minute. It shows the amounts the GAMES tab's Record Payouts would pay, under a note: \"Winnings are not final yet. Every score is in. The money below is final at 8:24 PM, 15 minutes after the last score, unless a score changes.\" The events list reads \"not final\" until then. The old 10-minute hold no longer applies to a Tracker-scored event.",
+      "A CARD IS FINAL 15 MINUTES AFTER ITS LAST SCORE. Once every hole of every player in a group has a score, the card locks 15 minutes after the group's last saved score. No submit or signature is needed (a scorer may never press Submit). A phone change after that is refused, kept on record for the manager, and the phone says to ask the manager. The phone shows \"Card locks and is final at 8:24 PM\", then \"This card is final\". The Live Scoring page shows each group's final time, and a final card has an Unlock button. An unlocked card is final again 15 minutes after the later of the unlock and its next score. The minutes are a dial (app setting se_card_lock_minutes).",
+      "THE MONEY RECORDS ITSELF. Every minute, for each Tracker-scored event of the last three days: once the field is in, the complete cards are published and the money is computed for the board. Once every card is final, the payouts are recorded, filling the PAYOUTS tab with no button press. They are recorded again whenever the cards change (an unlocked card, a Closest to Pin ruling). A payout already paid is never touched, and an event with hand-entered payouts is left alone. The recording step has its own dial, app setting auto_payouts_record, and it is OFF to start. On 10/13 the money is display only and the manager records it by hand (CoS #1760/#1761, Kerry: \"Go with your conditions\"). It turns on from 10/20 once a dry run matches the hand-recorded rows to the cent. Dial: app setting auto_payouts (off stops the whole job). Bridge scoring-auto-payouts[:apply][|<event_id>], a dry run by default.",
+      "Why the WON column was empty on 10/13: we are off Golf Genius, so nothing recorded payouts until close-out. Individual Net, Skins and Individual Gross also waited for player signatures, and most cards were never signed. Guard: test_auto_payouts.py.",
+    ],
+  },
+  {
+    version: "2.562.5",
+    date: "2026-10-13",
+    title: "Closest to Pin verification",
+    changes: [
+      "Kerry 10/13: \"Closest to Pin in 16 was actually Pat Youngs. Dan thought it was closest in their group. We need to add a verification step\", then \"Yes, build all three\".",
+      "1. A stale screen never overwrites a claim. The phone sends the holder it showed. If another group claimed the hole since, nothing is saved and the phone asks again: \"Pat Youngs (Group 6) claimed this hole while you were playing it. Check their marker.\"",
+      "2. The question names the marker to beat: \"Is anyone in your group closer than Pat Youngs's marker?\" (buttons: the players, or \"No one closer than Pat Youngs\"). The note under it says to pick only someone closer than the marker, not just the closest in your group.",
+      "3. The manager confirms a takeover before it is paid. When a phone claim takes a hole from a player in another group, the Live Scoring page shows \"Confirm hole 16: Dan Stich (Group 3) took it from Pat Youngs (Group 6)\" with a Confirm button, beside the hole's full claim history. To pick someone else, use the existing Settle. Until it is confirmed, Record Payouts skips that hole with a note, and the EVENTS board shows it \"to be confirmed\" with no dollar. No new tables: it reads the claims already stored.",
+    ],
+  },
+  {
+    version: "2.562.4",
+    date: "2026-10-13",
+    title: "EVENTS board: Closest to Pin winners from the phones",
+    changes: [
+      "Kerry 10/13: \"Why aren't closest to pins showing?\" The EVENTS leaderboard's Closest to Pin rows (the winner strips under OVERALL and the PROXIES tab) were read only from Golf Genius results, so an event Golf Genius does not score showed none, even with winners claimed on the phones (The Quarry: Adam Baker on 12, Dan Stich on 16). With no Golf Genius CTP rows, the board now reads the phone claims (a manager ruling included): the same holders Record Payouts uses, by customer_id with the customer's own name, the hole in the detail and the matrix's CTP amount for the field. Money still waits for the field like every other dollar on the board. A hole nobody holds reads \"No winner\". Guard test_board_phone_ctp.py.",
+    ],
+  },
+  {
+    version: "2.562.3",
+    date: "2026-10-13",
+    title: "Manage contacts opens a window in the event editor",
+    changes: [
+      "Kerry 10/13: \"Manage Contacts link in the Quarry event didn't take me to a manage contacts modal or page.\" The link in Add/Edit Event used to open the Courses page in a new tab, which does nothing useful in the installed app. It now opens a Contacts window over the event editor, where you can add a contact, make one primary, or remove and restore one. Closing it refreshes the contacts box under Course. The Courses page and this window share one panel (static/js/course-staff.js), so they can never drift. Guard test_course_staff.py.",
+    ],
+  },
   {
     version: "2.562.2",
     date: "2026-10-13",

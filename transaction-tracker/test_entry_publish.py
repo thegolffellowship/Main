@@ -137,7 +137,10 @@ r0 = dry["rounds"][0]
 would = {w["customer_id"]: w for w in r0["would_write"]}
 held = {h["customer_id"]: h["reason"] for h in r0["held"]}
 check("dry run would write the three signed players", sorted(would) == [201, 202, 203], r0)
-check("unsigned player is held", "signed" in (held.get(204) or ""), held)
+# Kerry 10/13: an unsigned card on a confirmed group waits for the 15-minute
+# lock (test_auto_payouts.py covers the lock itself).
+check("unsigned player is held until the card is final",
+      "final at" in (held.get(204) or ""), held)
 check("group 2 (not submitted, incomplete) is held", 205 in held, held)
 check("dry run writes nothing",
       q("SELECT COUNT(*) AS n FROM scoring_rounds")[0]["n"] == 0)

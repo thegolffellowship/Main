@@ -2172,6 +2172,53 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── EVENT INVITATIONS (Kerry 2026-10-13): 7:00 AM Central, Wed/Fri/Sun
+    #    before a Tuesday event; Friday two weeks out, the next Friday and the
+    #    Tuesday before for a weekend event. Does nothing unless app setting
+    #    event_invite_auto = on (Kerry's word) and the wording carries his
+    #    stamp. email_parser/invitations.py.
+    def event_invite_auto_job():
+        from email_parser.invitations import auto_check
+        try:
+            res = auto_check()
+            if res.get("ran"):
+                logger.info("Event invitations: %s", res["ran"])
+        except Exception:
+            logger.exception("Event invitations job failed (non-fatal)")
+    scheduler.add_job(
+        event_invite_auto_job,
+        "cron", hour="7-9", minute="2,17,32,47",
+        timezone="US/Central",
+        id="event_invite_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # ── PRIZE MONEY RUNS ITSELF (Kerry 2026-10-13: "Payouts need to auto
+    #    calculate and populate based on GAMES tabs immediately after scores
+    #    are all in"; the money shows the moment the last hole of the field
+    #    is in, "non-final until 15 minutes have passed" after each group's
+    #    last score). Every minute: preview the GAMES-tab money for the
+    #    board, record it once every card is final (paid rows never
+    #    touched). Dial `auto_payouts`. email_parser/auto_payouts.py.
+    def auto_payouts_job():
+        from email_parser.auto_payouts import run as _auto_payouts
+        try:
+            res = _auto_payouts(apply=True)
+            done = [e for e in res.get("events") or [] if e.get("state") == "recorded"]
+            if done:
+                logger.info("Auto payouts recorded: %s",
+                            [(e["event"], e.get("total")) for e in done])
+        except Exception:
+            logger.exception("Auto payouts failed (non-fatal)")
+    scheduler.add_job(
+        auto_payouts_job,
+        "interval", minutes=1,
+        id="auto_payouts",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # ── PAIRINGS APPROVAL PROMPT (Kerry 2026-10-13: the manager reviews and
     #    approves the automated pairings, which sends the player emails).
     #    Every 15 min from :05 (so the 5:00 PM auto-generate has saved):
@@ -4828,6 +4875,75 @@ def api_send_membership_notice(term_id):
     if not result.get("ok"):
         return jsonify(result), 400
     return jsonify(result)
+
+
+@app.route("/rsvp/<token>", methods=["GET", "POST"])
+def public_event_rsvp(token):
+    """TRACKER RSVP from an event invitation (Kerry 2026-10-13, Tracker-only
+    RSVPs). No login: the token is signed (email_parser/invitations.py).
+
+    Kerry 10/13: one tap. I'm in -> the event's registration page. Can't make
+    it -> straight to "Thanks for letting us know", with Changed my mind,
+    I'm in (-> registration), Remove me from invitations, and an optional
+    one-tap reason. Remove me -> straight to Done. The answer is written by
+    the page itself (a POST from the page's script, or its button when
+    scripts are off), never by the bare GET, so a mail scanner that only
+    fetches the link does not answer for a player."""
+    import html as _h
+    from email_parser import invitations as _inv
+    if request.method == "POST":
+        res = _inv.record_answer(token)
+        if not res.get("ok"):
+            return _public_page("RSVP link", f"<h2>{_h.escape(res['error'])}</h2>"), 400
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"ok": True})
+    else:
+        # "go straight to the event registration page if they click I'm In"
+        _go = _inv.click_in(token)
+        if _go.get("ok"):
+            return redirect(_go["redirect"])
+    info = _inv.describe_token(token)
+    if not info.get("ok"):
+        return _public_page("RSVP link", f"<h2>{_h.escape(info['error'])}</h2>"), 400
+    links = _inv.sibling_links(token)
+    done = request.method == "POST"
+    record = ("" if done else
+              "<script>fetch(location.href,{method:'POST',headers:{'X-Requested-With':'fetch'}})"
+              "</script><noscript><form method='post'><button type='submit' "
+              "style='margin-top:8px'>Confirm</button></form></noscript>")
+    btn = ("display:inline-block;border-radius:999px;padding:12px 22px;margin:6px 6px 0 0;"
+           "font:bold 16px Georgia,serif;text-decoration:none;")
+    if info["action"] == "unsub":
+        body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
+                "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>" + record)
+        return _public_page("Invitations", body)
+    if info["action"] == "in":           # no registration link on the event
+        body = (f"<h2>You're in. Thanks!</h2><p>{_h.escape(info['course'])}, "
+                f"{_h.escape(info['date_long'])}. {_h.escape(info['start_sentence'])}</p>" + record)
+        return _public_page("RSVP", body)
+    reasons = "".join(
+        f"<form method='post' action='/rsvp/{_h.escape(token)}/reason' style='display:inline'>"
+        f"<button name='r' value='{_h.escape(r)}' style='border:1px solid #D1D5DB;background:#fff;"
+        f"border-radius:999px;padding:6px 12px;margin:4px 4px 0 0;font-size:14px'>{_h.escape(r)}"
+        "</button></form>" for r in _inv.REASONS)
+    body = (f"<h2>Thanks for letting us know.</h2><p>We'll miss you at {_h.escape(info['course'])} "
+            f"on {_h.escape(info['date_long'])}.</p>"
+            f'<a href="{_h.escape(links.get("in", ""))}" style="{btn}background:#15803D;color:#fff;">'
+            "Changed my mind, I'm in</a>"
+            f'<a href="{_h.escape(links.get("unsub", ""))}" style="{btn}background:#E5E7EB;color:#1B1B1B;">'
+            "Remove me from invitations</a>"
+            "<p style='margin-top:22px;color:#6B7280;font-size:14px'>Mind sharing why? (optional)</p>"
+            + reasons + record)
+    return _public_page("RSVP", body)
+
+
+@app.route("/rsvp/<token>/reason", methods=["POST"])
+def public_event_rsvp_reason(token):
+    """The optional one-tap reason on the Can't make it page (Kerry 10/13)."""
+    from email_parser import invitations as _inv
+    ok = _inv.record_reason(token, (request.form.get("r") or "").strip())
+    return _public_page("RSVP", "<h2>Thanks, noted.</h2><p>See you next time.</p>"
+                        if ok else "<h2>That link has expired.</h2>"), (200 if ok else 400)
 
 
 @app.route("/m/roster/<token>")
@@ -12469,10 +12585,15 @@ def api_se_ctp():
     cid = b.get("customer_id")
     by = b.get("claimed_by")
     try:
+        kw = {}
+        if "seen_holder" in b:      # Kerry 10/13: a stale screen never overwrites a claim
+            kw["seen_holder"] = int(b["seen_holder"]) if b["seen_holder"] else None
         res = claim_ctp(gid, str(b.get("device_id") or ""), int(b["hole"]),
-                        int(cid) if cid else None, claimed_by=int(by) if by else None)
+                        int(cid) if cid else None, claimed_by=int(by) if by else None, **kw)
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "hole is required"}), 400
+    if res.get("stale"):
+        return jsonify(res), 409
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
@@ -12549,6 +12670,20 @@ def api_se_ctp_rule(round_id):
         res = rule_ctp(round_id, int(b["hole"]), int(b["customer_id"]), actor=_se_actor())
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "hole and customer_id are required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/groups/<int:group_id>/unlock", methods=["POST"])
+@require_role("manager")
+def api_se_unlock_card(group_id):
+    """Reopen a FINAL card (Kerry 10/13: a confirmed card locks 15 minutes
+    after the submit). The scorer fixes it and submits again; the 15
+    minutes start over and the payouts re-record."""
+    from email_parser.score_entry import unlock_card
+    gate = _se_event_gate("group", group_id)
+    if gate:
+        return gate
+    res = unlock_card(group_id)
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 

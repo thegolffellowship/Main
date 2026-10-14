@@ -104,6 +104,58 @@ Test: `test_event_links.py`.
 - `transferred` — transferred to another event, shown in **Inactive** section below table. Creates contra-revenue on source event + revenue on target event in `acct_transactions`, plus allocation at target.
 - `wd` — withdrawn, shown in **Inactive** section below table
 
+## Tracker event invitations + RSVPs (v2.563.0, Kerry 2026-10-13)
+
+Kerry: "would rather switch completely on that too starting tomorrow for next
+week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
+
+- **Audience** (Kerry: "That audience works, go with it"), per chapter event:
+  active members of the chapter (home chapter by id, else the text) + anyone
+  who played that chapter in the 12 months before the event + lead opt-ins
+  (`get_lead_export_rows`, mapped to customer_id); minus the invitation
+  opt-out list (app setting `event_invite_optout`), membership
+  `roster_choice = 'remove'`, `course_staff.non_member_ids`, undeliverable
+  addresses, and anyone already registered. `audience(event_id)` reports each
+  person's reasons and every exclusion count.
+- **Message**: words in module constants (SUBJECT/INTRO, REMINDER_*,
+  LASTCALL_*, CLOSING, FOOTER), structure in code, the event-day email's
+  `frame`. `template_hash()` must equal app setting `event_invite_approved`
+  (Kerry's stamp) before any member send.
+- **Links** `/rsvp/<token>` (signed, `make_token`/`verify_token`, expire the
+  day after the event; no login). **I'm in** redirects to the event's
+  `registration_url` and notes the click (`event_invite_clicks:<id>`), never
+  an RSVP (Kerry: "go straight to the event registration page"), and clears
+  an earlier Can't make it. **Can't make it** lands straight on "Thanks for
+  letting us know" with **Changed my mind, I'm in** (-> registration),
+  **Remove me from invitations** (-> straight to Done) and an optional one-tap
+  reason (`REASONS`, table `event_decline_reasons` from migration 0016, one
+  row per event + customer_id, a later tap updates it; `decline_reasons(id)`
+  reads the counts; route `/rsvp/<token>/reason`) (Kerry 10/13: "The sequence for Can't make it is too
+  long"). The page writes the answer itself (a script POST, or a button with
+  scripts off); the bare GET never does, so a mail scanner can't answer. An answer is an `rsvps` row with email_uid
+  `tracker:<event_id>:<customer_id>`, upserted (the latest answer wins).
+- **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
+  tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.
+- **Schedule** (Kerry), 7:00 AM Central, `schedule(event_date)`: weekday event
+  = invite the Wednesday before, reminders Friday and Sunday, **last call**
+  the day before ("Sign up by 5:00 PM tonight", Monday for a Tuesday event);
+  weekend event = invite the Friday two weeks out, reminders the next Friday
+  and the Tuesday before, last call the Wednesday before. Reminders and the
+  last call go only to invitees who are not registered and have no answer.
+  Sent slots per person in app setting `event_invite_sent:<id>`.
+- **TGF events** (Kerry 10/13: "Yes, invite both chapters to the Fall
+  Championship") invite both chapters' lists, signed by the San Antonio
+  manager; a named event shows as "2026 Fall Championship @ Kissing Tree" (no event code).
+- **Early invitation** on Kerry's word: app setting `event_invite_early`
+  `{event_id: "YYYY-MM-DD"}` adds an invite slot that morning (set for 3305 =
+  2026-10-14, Kerry: "Just 10/20 events and the Championship"); the regular
+  invite date then reaches only people added since.
+- **Locks**: job `event_invite_auto` (7-9 AM, every 15 min) does nothing
+  unless app setting `event_invite_auto` = `on` (Kerry's word) and the stamp
+  matches. By hand: bridge `scoring-event-invite:<id>` (audience, read-only),
+  `|preview[|<staff>][|reminder|lastcall]` (staff only),
+  `|send|<kerry-ok post>[|reminder|lastcall][|confirm]`.
+
 ## RSVP → event matching: multi-round GG events (v2.151.2, Kerry 2026-07-30)
 GG multi-round events name each round separately ("2026 TGF CHAMPIONSHIP
 round 1" / "round 2" / "Practice Round") while the tracker carries ONE
@@ -3053,7 +3105,8 @@ emailed to me."
   only, never bought or registered; Brevo sync, the pairings roster and
   `query_customers` read it), `seed_quarry`. Routes `GET /api/courses/<id>/staff`
   (manager) and `POST` (admin). UI: the Courses page's **Contacts** panel, and the
-  read-only contacts box under Course in Add/Edit Event. Bridges
+  contacts box under Course in Add/Edit Event, whose **Manage contacts** opens the same
+  panel in a window (`static/js/course-staff.js`: `tgfCourseStaffPanel` / `tgfCourseStaffModal`). Bridges
   `scoring-course-staff`, `scoring-course-staff-set`, `scoring-course-staff-seed`.
   Guard `test_course_staff.py`.
 - **One card per group** (v2.556.2, Kerry 10/13: "Scorecards should always be

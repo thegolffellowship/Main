@@ -6,3 +6,4 @@
 # rewritten from the first live run on 2026-09-09.
 .claude/*
 !.claude/skills/
+.claude/settings.local.json

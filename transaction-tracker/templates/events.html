@@ -2408,6 +2408,7 @@
 
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/course-staff.js"></script>
     <script src="/static/js/chat-widget.js"></script>
     <script src="/static/js/games-matrix.js"></script>
     <script>
@@ -6642,12 +6643,19 @@
             const files = d.print_to
                 ? `Course Files go to <b>${esc(d.print_to)}</b>${(d.print_cc || []).length ? ", cc " + esc(d.print_cc.join(", ")) : ""}.`
                 : `<span style="color:#b45309;">Course Files can't be sent: ${esc(d.print_why || "no primary TGF contact")}.</span>`;
+            // Opens the contacts in a window over the event editor (Kerry 10/13: the new-tab
+            // link "didn't take me to a manage contacts modal or page").
             const manage = currentRole === "admin"
-                ? ` <a href="/courses?course=${c.course_id}" target="_blank" rel="noopener">Manage contacts</a>` : "";
+                ? ` <a href="#" class="cs-manage" data-course="${c.course_id}">Manage contacts</a>` : "";
             box.innerHTML = `<div class="cs-head">Course contacts${manage}</div>`
                 + (rows || '<div class="cs-empty">No contacts on file for this course.</div>')
                 + `<div class="cs-files">${files}</div>`;
             box.style.display = "";
+            const mg = box.querySelector(".cs-manage");
+            if (mg) mg.addEventListener("click", ev => {
+                ev.preventDefault();
+                if (window.tgfCourseStaffModal) window.tgfCourseStaffModal(c.course_id, c.name, () => showCourseStaff(inputId));
+            });
         } catch (e) { box.style.display = "none"; }
     }
     ["edit-event-course", "add-event-course"].forEach(id => {

@@ -625,6 +625,9 @@
         .evlb-nm-stack > span { font-weight: 700; letter-spacing: .01em; }
         .evlb-holes th.nm { color: #fff; }
         .evlb-holes tr.mute td { color: #9CA3AF; }
+        .evlb-blind { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+            background: #FEF3C7; color: #92400E; font: 700 10px/1.4 -apple-system, "Helvetica Neue", sans-serif;
+            letter-spacing: .04em; vertical-align: middle; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
             border-top: 2px solid #1B1B1B; }
         /* POPS — strokes received on the hole, house standard: dots
@@ -2667,7 +2670,8 @@
                         <!-- starts hidden: the landing race is a Fall NET (chip is for the
      season cups/city races; race clicks + deep links toggle it) -->
                         <span id="pr-phase-chip" style="margin-left:auto;display:none;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;Regular Season &middot; best 10 + City Championship</span>
-                        <button class="btn manager-only" id="pr-refresh-btn" style="font-size:0.78rem;">&#8635; Refresh from Golf Genius</button>
+                        <!-- "Refresh from Golf Genius" removed (Kerry 2026-10-13: "Refresh from
+                             Golf Genius should be gone now"). The Tracker computes the races. -->
                     </div>
                     <!-- Mobile: everything between the race name and the
                          table folds behind one slim chip (Kerry 2026-08-01,
@@ -3823,7 +3827,8 @@
                 const off = $("evlb-official");
                 if (off) off.hidden = !ev || !!ev.live_entry || ev.gg_scored === false;
                 if (st && ev) {
-                    st.textContent = ev.money_visible === false ? "In play" : evlbDate(ev.event_date) + " · final";
+                    st.textContent = ev.money_visible === false ? "In play"
+                        : evlbDate(ev.event_date) + (ev.money_final === false ? " · not final" : " · final");
                     st.classList.toggle("posted", ev.money_visible !== false);
                 }
                 if (mine) { mine.open = true; }
@@ -3977,6 +3982,17 @@
         if (e.target.closest && e.target.closest("#evlb-hiw-close, #evlb-hiw-gotit, #evlb-hiw-scrim")) evlbCloseGuide();
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") evlbCloseGuide(); });
+    function evlbFinalNotice(d) {
+        // NOT FINAL YET (Kerry 2026-10-13: "amounts should show but
+        // non-final until 15 minutes have passed"). The field is in, the
+        // money shows; it locks 15 minutes after the last group's last score.
+        if (d && !d._moneyHeld && d.money_final === false && !evlbNoGames(d)) {
+            const t = d.money_final_at ? new Date(d.money_final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : "";
+            return `<div style="margin:0 0 8px;padding:7px 10px;border:1px solid #FCD34D;background:#FFFBEB;border-radius:6px;font-size:12px;color:#92400E;">
+                <strong>Winnings are not final yet.</strong> Every score is in. The money below is final${t ? " at " + escapeHtml(t) : " soon"}, 15 minutes after the last score, unless a score changes.</div>`;
+        }
+        return "";
+    }
     function evlbMoneyNotice(d) {
         if (!d || !d._moneyHeld || evlbNoGames(d)) return "";   // no games, no money to wait for
         const mins = d.money_hold_minutes || 10;
@@ -4168,6 +4184,15 @@
     //    These live out here rather than inside evlbEventHtml so the
     //    headless guard runs the REAL mapping, not a copy of it — a
     //    duplicated copy is exactly what went stale before.
+    // A blind slot arrives as "Bl[Robert Straiton]" (the GG convention) with
+    // blind: true; the board names the player and says "(blind)".
+    function evlbIsBlind(x) {
+        return !!(x && (x.blind || /^Bl\[/.test(x.player_name || "")));
+    }
+    function evlbTeamMemberName(x) {
+        const nm = String((x && x.player_name) || "").replace(/^Bl\[(.*)\]$/, "$1");
+        return evlbIsBlind(x) ? nm + " (blind)" : nm;
+    }
     function evlbOvOf(ovIx, x, note) {
         const base = x && ovIx[String(x.scoring_round_id)];
         if (!base) return null;
@@ -4285,7 +4310,11 @@
             && (r.win_skins
                 || ((d.skin_cells || {})[String(r.scoring_round_id)] || []).length > 0);
         const shM = (!game || game === "points") && r.win_mvp;
-        const money = evlbGameMoney(r, game);
+        // On the TEAM tab a row's Won is what that SLOT earned from this
+        // team (Kerry 10/13: a blind on two winning teams takes the higher
+        // and nothing from the lower), not the player's whole Team Net money.
+        const money = (game === "team" && r._teamWon !== undefined)
+            ? (r._teamWon || 0) : evlbGameMoney(r, game);
         const skinHoles = shS
             ? (((d.skin_cells || {})[String(r.scoring_round_id)]) || []) : [];
         const skC = evlbFlightColor(r.skins_flight);
@@ -4350,7 +4379,7 @@
             // the row's name for sorting and lookups
             `<td class="nm">${Array.isArray(r._name_lines) && r._name_lines.length
                 ? `<span class="evlb-nm-stack" title="${escapeHtml(r.player_name)}">${r._name_lines.map(x => `<span>${escapeHtml(x)}</span>`).join("")}</span>`
-                : escapeHtml(r.player_name)}${evlbTeeDot(d, r, "right")}` +
+                : escapeHtml(r.player_name)}${r._blind ? ' <span class="evlb-blind" title="Blind draw: this player\'s card fills an open slot on this team">BLIND</span>' : ""}${evlbTeeDot(d, r, "right")}` +
             (game ? "" : evlbMvpBadges(r)) +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
@@ -4671,7 +4700,7 @@
                ["points", "MVP/Points"], ["prox", "Proxies"]];
         const first = tabs[0][0];
         // no games, no money: nothing to hold or explain
-        const offNotes = noGames ? "" : evlbMoneyNotice(d) + (d.games_off || []).map(g =>
+        const offNotes = noGames ? "" : evlbMoneyNotice(d) + evlbFinalNotice(d) + (d.games_off || []).map(g =>
             `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
         // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
         // hole-by-hole gross plus totals. Wins highlight by the ratified
@@ -4707,7 +4736,7 @@
         const ovTeamWins = (d.teams || []).filter(t => t.purse != null && t.purse > 0)
             .map(t => `<div class="evlb-winline team"><span class="cat">TEAM NET</span>` +
                 `<span class="who">${t.position ? escapeHtml(t.position) + " · " : ""}` +
-                `${t.players.map(p => escapeHtml(p.player_name)).join(" · ")}` +
+                `${t.players.map(p => escapeHtml(evlbTeamMemberName(p))).join(" · ")}` +
                 `${t.gg_total != null ? ` · <b>${t.gg_total}</b>` : ""}</span>` +
                 `<span class="amt">$${Number(t.purse).toFixed(2)}</span></div>`);
         const ovProxWins = (d.proxies || [])
@@ -4824,8 +4853,12 @@
                 // of the band carries the per-hole score, the total and
                 // the purse, so those numbers are stated ONCE
                 sections: (d.teams || []).map(t => ({
+                    // BLINDS NAMED PLAINLY (Kerry 10/13: "What we're not
+                    // doing a good job on the team leaderboard is showing
+                    // who the blinds are"): "Robert Straiton (blind)", never
+                    // the raw "Bl[...]" key.
                     label: `${t.position ? t.position + " · " : ""}` +
-                        `${t.players.map(p => p.player_name).join(" · ")}`,
+                        `${t.players.map(evlbTeamMemberName).join(" · ")}`,
                     // PH on this tab is the TEAM handicap (Kerry
                     // 2026-09-15: "For team/cart net, PH should show
                     // their team/cart net handicap for that game, not
@@ -4834,9 +4867,12 @@
                     // shared row renderer stays one function.
                     rows: (t.players || []).map(x => {
                         const base = ovOf(x);
-                        return (base && x.team_hcp != null)
-                            ? Object.assign({}, base, { _teamHcp: x.team_hcp })
-                            : base;
+                        if (!base) return base;
+                        const extra = {};
+                        if (x.team_hcp != null) extra._teamHcp = x.team_hcp;
+                        if (evlbIsBlind(x)) extra._blind = true;
+                        if ("team_won" in x) extra._teamWon = x.team_won;
+                        return Object.keys(extra).length ? Object.assign({}, base, extra) : base;
                     }).filter(Boolean),
                 })).filter(sec => sec.rows.length),
                 sort: "keep",
@@ -4855,7 +4891,7 @@
                 : `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions and purses are the recorded Golf Genius result (the money of record). The total shown is our best-ball reconstruction from each player's own card — the official Team Net game plays a 75% off-lowest allowance, so the two can differ.</div>`) +
               d.teams.map((t, ti) => {
                 const names = t.players.map(p =>
-                    escapeHtml(p.player_name) + evlbTeeDot(d, p)).join(" &middot; ");
+                    escapeHtml(evlbTeamMemberName(p)) + evlbTeeDot(d, p)).join(" &middot; ");
                 const win = !d._moneyHeld && /^T?1$/.test(t.position || "");   // no winner tint mid-round
                 // GG's posted board total is the score of record; a team
                 // GG didn't post (shouldn't happen on a walked board)
@@ -4962,7 +4998,7 @@
         const netOf = (rid, n) => evlbNetOf(d, rid, n, t);
         const mins = evlbTeamMins(d, t);
         const rows = t.players.map(p =>
-            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}${evlbTeeDot(d, p, "right")}</td>` +
+            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(evlbTeamMemberName(p).replace(/ \(blind\)$/, ""))}${evlbIsBlind(p) ? ' <span class="evlb-blind">BLIND</span>' : ""}${evlbTeeDot(d, p, "right")}</td>` +
             cols.map(n => {
                 const v = netOf(p.scoring_round_id, n);
                 if (v == null) return '<td class="h"></td>';
@@ -9309,12 +9345,9 @@
         return ` <span title="${escapeHtml(ch)}" style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:0.6rem;font-weight:700;letter-spacing:0.04em;background:${bg};color:${fg};vertical-align:1px;">${label}</span>`;
     }
 
-    $("pr-refresh-btn").addEventListener("click", () => prLoadStandings(true));
 
     async function prLoadStandings(force = false) {
         const kind = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
-        // monthly swaps the header refresh button for an inline one
-        $("pr-refresh-btn").style.display = kind === "monthly" ? "none" : "";
         // Fall boards are LIVE (2026-09-01): they load through the normal
         // standings path below via PR_RACE_BY_TAB. prRenderFallPreview
         // stays only as the fallback when the board can't be read.
@@ -10747,10 +10780,6 @@
             : "";
         cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
-                <button id="pr-monthly-refresh" class="manager-only" title="Refresh from Golf Genius${prMonthlyData.fetched_at ? ` (last: ${prMonthlyData.fetched_at})` : ""}"
-                    style="display:${userRole === "admin" || userRole === "manager" ? "" : "none"};padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;
-                           border:1px solid var(--border);border-radius:999px;background:var(--surface);
-                           color:var(--text-muted);margin-left:auto;">&#8635; Refresh</button>
                 ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}
             </div>${statusChip}${monthPlaque}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
