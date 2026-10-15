@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 import time
 from datetime import datetime
@@ -408,3 +409,106 @@ def run_archive_backup(db_path=None, force: bool = False, dry_run: bool = False)
         return res
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ── manifest and checksums (read-only; CoS #1906 step 0, Front Desk 10/15) ──
+#
+# "Report portal count, page count and bytes, and a checksum list stored with
+# the archive." The rows are fetched responses, not site pages, so the manifest
+# says what KIND of fetch each row is (the address with its numbers and portal
+# name blanked), how many are distinct, and how many bytes they hold. Nothing
+# here writes; a checksum list is paged by row id so a call stays under the
+# MCP client's 60 s limit.
+
+_NUM_RE = re.compile(r"\d+")
+
+
+def url_pattern(url: str) -> str:
+    """'https://tgf-sa2024.golfgenius.com/leagues/395571/widgets/season_points_v2
+    ?page_id=4582854&shared=false' -> '*.golfgenius.com/leagues/#/widgets/
+    season_points_v2?page_id=#&shared=false'. Hosts other than golfgenius.com
+    keep their name; digits in the path and query values become '#'."""
+    from urllib.parse import urlsplit
+    u = urlsplit(str(url or ""))
+    host = u.netloc.lower()
+    if host.endswith(".golfgenius.com"):
+        host = "*.golfgenius.com"
+    q = "&".join(f"{k}={_NUM_RE.sub('#', v)}" for k, _, v in
+                 (kv.partition("=") for kv in u.query.split("&") if kv))
+    return f"{host}{_NUM_RE.sub('#', u.path)}" + (f"?{q}" if q else "")
+
+
+def _portal_of(url: str) -> str:
+    from urllib.parse import urlsplit
+    host = urlsplit(str(url or "")).netloc.lower()
+    return host[:-len(".golfgenius.com")] if host.endswith(".golfgenius.com") else host
+
+
+def manifest(db_path=None, top: int = 40) -> dict:
+    """Read-only inventory of the raw archive: totals, rows per fetch kind
+    (address pattern) with distinct addresses and bytes, and rows and bytes per
+    portal. ``bytes`` is the stored (gzipped) size."""
+    from .database import DB_PATH, get_connection
+    p = Path(str(db_path or DB_PATH))
+    conn = get_connection(p)
+    try:
+        t = archive_table(conn)
+        tot = conn.execute(
+            f"SELECT COUNT(*), COALESCE(SUM(LENGTH(body_gz)), 0), "
+            f"COUNT(DISTINCT url), MIN(fetched_at), MAX(fetched_at), "
+            f"MIN(id), MAX(id) FROM {t}").fetchone()
+        kinds: dict = {}
+        portals: dict = {}
+        for url, n in conn.execute(
+                f"SELECT url, COALESCE(LENGTH(body_gz), 0) FROM {t}"):
+            k = kinds.setdefault(url_pattern(url), {"rows": 0, "bytes": 0, "urls": set()})
+            k["rows"] += 1
+            k["bytes"] += n
+            k["urls"].add(url)
+            pt = portals.setdefault(_portal_of(url), {"rows": 0, "bytes": 0})
+            pt["rows"] += 1
+            pt["bytes"] += n
+    finally:
+        conn.close()
+    by_kind = sorted(({"pattern": k, "rows": v["rows"], "distinct_urls": len(v["urls"]),
+                       "bytes": v["bytes"]} for k, v in kinds.items()),
+                     key=lambda x: -x["rows"])
+    by_portal = sorted(({"portal": k, **v} for k, v in portals.items()),
+                       key=lambda x: -x["rows"])
+    return {"rows": tot[0], "bytes": tot[1], "distinct_urls": tot[2],
+            "first_fetched": tot[3], "last_fetched": tot[4],
+            "min_id": tot[5], "max_id": tot[6],
+            "kinds": len(by_kind), "portals": len(by_portal),
+            "by_kind": by_kind[:max(1, int(top))],
+            "by_portal": by_portal}
+
+
+def checksums(from_id: int = 0, to_id: int | None = None, limit: int = 2000,
+              db_path=None) -> dict:
+    """Read-only, paged: ``[id, sha256 of the stored bytes]`` for rows with
+    from_id < id <= to_id, oldest first, at most ``limit``. ``next_from`` is the
+    last id returned (pass it back as from_id); ``digest`` is the sha256 of the
+    joined 'id:sha' lines of THIS page, so two pages can be compared whole."""
+    import hashlib
+    from .database import DB_PATH, get_connection
+    p = Path(str(db_path or DB_PATH))
+    limit = max(1, min(int(limit or 2000), 5000))
+    conn = get_connection(p)
+    try:
+        t = archive_table(conn)
+        q = f"SELECT id, body_gz FROM {t} WHERE id > ?"
+        args: list = [int(from_id or 0)]
+        if to_id is not None:
+            q += " AND id <= ?"
+            args.append(int(to_id))
+        q += " ORDER BY id LIMIT ?"
+        args.append(limit)
+        rows = [(r[0], hashlib.sha256(r[1] or b"").hexdigest())
+                for r in conn.execute(q, args)]
+    finally:
+        conn.close()
+    lines = [f"{i}:{h}" for i, h in rows]
+    return {"count": len(rows), "from_id": int(from_id or 0),
+            "next_from": rows[-1][0] if rows else int(from_id or 0),
+            "digest": hashlib.sha256("\n".join(lines).encode()).hexdigest(),
+            "rows": [[i, h] for i, h in rows]}

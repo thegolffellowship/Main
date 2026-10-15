@@ -52,9 +52,12 @@ SEED_PORTALS = [
     *[(f"tgf-champ{y}", None, f"20{y}", "oneoff", "TGF", "alive")
       for y in (20, 21, 22, 23, 24, 25)],
     # Lone Star Cups (naming chaos is real — see gg-history.md)
-    ("tgf-lonestarcup21", None, "2021", "oneoff", "TGF", "alive"),
-    ("tgf-lonestarcup22", None, "2022", "oneoff", "TGF", "alive"),
-    ("lonestarcup",       None, "2023", "oneoff", "TGF", "alive"),
+    # Kerry renamed the 2021-2023 sites on 2026-10-15; the old subdomains now
+    # redirect to Golf Genius corporate (the walk marks them 'gone'), so the
+    # registry follows the new names.
+    ("lonestarcup21",     None, "2021", "oneoff", "TGF", "alive"),
+    ("lonestarcup22",     None, "2022", "oneoff", "TGF", "alive"),
+    ("lonestarcup23",     None, "2023", "oneoff", "TGF", "alive"),
     ("lonestarcup24",     None, "2024", "oneoff", "TGF", "alive"),
     ("tgf-lonestarcup25", None, "2025", "oneoff", "TGF", "alive"),
     # Road Trips
@@ -2812,7 +2815,7 @@ def _sync_pending_action_item(conn) -> int:
     return n
 
 
-def review_queue(db_path=None, limit: int = 300) -> dict:
+def review_queue(db_path=None, limit: int = 300, offset: int = 0) -> dict:
     """The pending-names queue with per-name context + candidate matches."""
     from email_parser.database import _connect, DB_PATH
     with _connect(db_path or DB_PATH) as conn:
@@ -2840,8 +2843,8 @@ def review_queue(db_path=None, limit: int = 300) -> dict:
                WHERE l.matched_by = 'pending' AND l.reviewed = 0
                  AND l.raw_name NOT LIKE 'Bl[%'
                ORDER BY (standings_rows + result_rows + hole_rounds) DESC,
-                        l.raw_name
-               LIMIT ?""", (limit,)).fetchall()
+                        l.raw_name, l.id
+               LIMIT ? OFFSET ?""", (limit, max(0, int(offset or 0)))).fetchall()
         out = []
         for r in rows:
             d = dict(r)
@@ -2873,7 +2876,8 @@ def review_queue(db_path=None, limit: int = 300) -> dict:
         reviewed = conn.execute(
             """SELECT matched_by, COUNT(*) AS n FROM gg_history_name_links
                WHERE reviewed=1 GROUP BY matched_by""").fetchall()
-        return {"pending_total": total, "shown": len(out), "names": out,
+        return {"pending_total": total, "shown": len(out),
+                "offset": max(0, int(offset or 0)), "names": out,
                 "blind_set_aside": blinds,
                 "reviewed_counts": {r["matched_by"]: r["n"]
                                     for r in reviewed}}

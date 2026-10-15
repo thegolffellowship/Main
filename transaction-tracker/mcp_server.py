@@ -3672,7 +3672,23 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _step == "backup":
                 _res = _ga.run_archive_backup(force=_flag.strip().lower() == "force")
                 return json.dumps(_res, indent=2, default=str)
-            return json.dumps({"error": "usage: scoring-gg-archive[:plan|migrate|verify|cutover|vacuum|backup][|go]"})
+            if _step.startswith("manifest"):
+                # manifest[=<top>] — read-only inventory: rows per fetch kind
+                # (address pattern), distinct addresses, bytes, per portal
+                _top = _step.partition("=")[2].strip()
+                return json.dumps(_ga.manifest(top=int(_top) if _top.isdigit() else 40),
+                                  indent=2, default=str)
+            if _step.startswith("checksums"):
+                # checksums[=<from_id>[-<to_id>][@<limit>]] — read-only, paged
+                # sha256 of the stored bytes, oldest first
+                _a, _, _lim = _step.partition("=")[2].partition("@")
+                _f, _, _t = _a.partition("-")
+                return json.dumps(_ga.checksums(
+                    from_id=int(_f) if _f.strip().isdigit() else 0,
+                    to_id=int(_t) if _t.strip().isdigit() else None,
+                    limit=int(_lim) if _lim.strip().isdigit() else 2000),
+                    indent=2, default=str)
+            return json.dumps({"error": "usage: scoring-gg-archive[:plan|migrate|verify|cutover|vacuum|backup|manifest[=<top>]|checksums[=<from>[-<to>][@<limit>]]][|go]"})
         if cmd == "scoring-dashboard":
             # Read-only: the landing dashboard's payload (Kerry
             # 2026-09-21). Only cards with something in them come back —
@@ -7141,6 +7157,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
             #       ALL Net/ALL Gross boards + calendar dates; field-bg=
             #       runs it in a daemon thread (poll holes-status).
             #   scoring-gg-history:calendar=<subdomain>   read-only parse
+            #   scoring-gg-history:pending[=<limit>[@<offset>]]  read-only review
+            #       queue (names, counts, affiliation, candidates); links nothing
             #   scoring-gg-history:participation[=<from>-<to>]
             #       season × chapter participation series (docs:
             #       gg-history.md "Participation series")
@@ -7232,6 +7250,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if sub == "overview":
                 # per-portal coverage incl. Phase-B rounds + hole counts
                 return json.dumps(ggh.portal_overview(), indent=2)
+            if sub == "pending":
+                # pending[=<limit>[@<offset>]] — READ-ONLY: the review queue's
+                # payload (raw name, portal, season, chapter, brand, standings /
+                # result / hole-round counts, printed affiliation, same-surname
+                # candidates) without the admin login. Nothing is linked here.
+                _l, _, _o = rest.partition("@")
+                return json.dumps(ggh.review_queue(
+                    limit=int(_l) if _l.strip().isdigit() else 100,
+                    offset=int(_o) if _o.strip().isdigit() else 0),
+                    indent=2, default=str)
             if sub == "roster":
                 # roster=report (dry-run match report) | roster=apply
                 # (write gg_member_map + backfill standings/name-links)
@@ -7277,7 +7305,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                "field-reset=<subdomain> | holes-reset=<subdomain> | "
                                "calendar=<subdomain> | "
                                "participation[=<from>-<to>] | cohort[=<A>-<B>] | "
-                               "roster=report|apply"})
+                               "roster=report|apply | pending[=<limit>[@<offset>]]"})
         if cmd == "scoring-payouts-bulk-paid":
             # "scoring-payouts-bulk-paid:<YYYY-MM-DD>" — one-time cleanup:
             # mark every pending payout group from events before the date

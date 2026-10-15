@@ -1097,3 +1097,15 @@ the qualified name (`arc.gg_raw_archive` after the cutover, `main.…` before).
 `_archive_raw` and the affiliation-audit join already use it; any NEW reader
 or writer of the archive must too. Schema.md "The GG raw archive lives in
 its own file" has the move steps and the backup rule.
+
+## GG Retirement lane read-only bridges (v2.568.1, 2026-10-15)
+
+CTO > GG Retirement & History Integration (CoS #1906). All read-only:
+`scoring-gg-archive:manifest[=<top>]` (rows, bytes, distinct addresses per
+fetch kind and per portal; kinds blank digits so portals and ids group),
+`scoring-gg-archive:checksums[=<from>[-<to>][@<limit>]]` (sha256 of stored
+bytes, paged by row id, `next_from` cursor, page `digest`; limit capped 5000),
+`scoring-gg-history:pending[=<limit>[@<offset>]]` (the review queue paged,
+largest names first). Registry: Lone Star Cup 2021-2023 are now
+`lonestarcup21/22/23` (Kerry renamed the sites). Guard
+`test_gg_retirement_bridges.py`.

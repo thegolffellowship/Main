@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.568.0";
+window.TGF_VERSION = "2.568.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.568.1",
+    date: "2026-10-15",
+    title: "GG Retirement lane: read-only archive manifest and checksums, pending-names bridge, Lone Star Cup renames",
+    changes: [
+      "CTO > GG Retirement & History Integration (CoS #1906; Kerry 10/15: \"We need clean data\"). Read-only bridges, nothing written: scoring-gg-archive:manifest[=<top>] (rows, bytes, distinct addresses per fetch kind and per portal) and scoring-gg-archive:checksums[=<from>[-<to>][@<limit>]] (sha256 of the stored bytes, paged by row id, with a page digest) give Front Desk the coverage matrix and checksum list; scoring-gg-history:pending[=<limit>[@<offset>]] pages the review queue so the pending names can be read without the admin screen.",
+      "Registry follows Kerry's rename of the 2021-2023 Lone Star Cup sites to lonestarcup21/22/23. test_gg_retirement_bridges.py. Built on a branch; not deployed (no push before the 10/20 event; deploy on Kerry's \"Deploy\").",
+    ],
+  },
   {
     version: "2.568.0",
     date: "2026-10-15",
