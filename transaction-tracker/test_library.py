@@ -69,7 +69,7 @@ def count():
 print("== migration 0008 ==")
 with db._connect(DB) as c:
     secs = [r[0] for r in c.execute("SELECT code FROM library_sections ORDER BY code")]
-check("six sections seeded", secs == ["audits", "context", "decisions", "specs", "standards", "strategy"], str(secs))
+check("seven sections seeded (0008 + 0022 published)", secs == ["audits", "context", "decisions", "published", "specs", "standards", "strategy"], str(secs))
 
 print("== refusals ==")
 check("unknown author", "refused" in put(author="somebody"))
