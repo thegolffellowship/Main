@@ -150,7 +150,8 @@ def status(db_path=None, cache_s: float = 900.0, timeout: float = 25.0, fresh: b
         out["error"] = f"generations timed out after {int(timeout)} s"
     except Exception as e:  # noqa: BLE001 — a status read must never raise
         out["error"] = f"{type(e).__name__}: {e}"[:200]
-    _CACHE.update(at=now, val=out)
+    if not out.get("error"):
+        _CACHE.update(at=now, val=out)   # a failed read is not remembered: the next call tries again
     return out
 
 

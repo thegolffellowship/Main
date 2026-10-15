@@ -75,7 +75,7 @@ def _replication_status(db_path, fresh: bool = False) -> dict:
     a status read must never break the report."""
     try:
         from . import replication
-        return replication.status(db_path, fresh=fresh)
+        return replication.status(db_path, fresh=fresh, timeout=(75.0 if fresh else 25.0))
     except Exception as e:  # noqa: BLE001
         return {"configured": False, "error": f"{type(e).__name__}: {e}"[:200]}
 
