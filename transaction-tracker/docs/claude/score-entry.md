@@ -855,18 +855,45 @@ days that are untethered from Golf Genius. On each event:
    "not final yet" note.
 4. Once every group is final, it records with
    `record_event_game_payouts(force=True)`, but only while app setting
-   `auto_payouts_record` reads `on`. It is OFF to start: 10/13 is
-   display only and Kerry records by hand (CoS #1760/#1761, Kerry "Go
-   with your conditions"). It goes on from 10/20 once
-   `scoring-auto-payouts` dry run matches the hand rows to the cent.
-   With the dial off, the state is `final_display_only` and the board
-   shows the money as final. The recording is paid-safe, and an event
-   with manual payouts is refused.
+   `auto_payouts_record` reads `on` AND the event is dated on or after
+   app setting `auto_payouts_record_from` (default `2026-10-20`). 10/13
+   was display only (CoS #1760/#1761); the dry run matched the recorded
+   rows to the cent (#1781), so it goes on for the 10/20 events (CoS
+   #1797). With recording off for an event, the state is
+   `final_display_only` and the board shows the money as final. That
+   state is not sticky: once recording is allowed, the next run records.
+   The recording is paid-safe: a re-record never un-pays a paid row.
+
+**One writer; Closeout verifies (CoS #1797, v2.566.0).** From 10/20 this
+job is the ONLY thing that records payouts; Closeout no longer presses
+Record. It never pays. It does not record while any hold the verifier
+relies on is open:
+- **card parity** (engine vs saved card, `card_parity`) and **manually
+  recorded rows**. Both are refused inside `record_event_game_payouts`,
+  the one writer, so every path is held the same way;
+- **a closest-to-the-pin takeover the manager has not confirmed**
+  (`score_entry.event_ctp_holders` → `needs_confirm`). Before this, the
+  hole was dropped from the rows and the rest recorded as if final;
+- **a hold placed by the verifier or Kerry**: app setting
+  `auto_payouts_hold` `{event_id: {reason, by, at}}`, through
+  `auto_payouts.hold` / `release` and the bridge
+  `scoring-auto-payouts:hold|<event_id>|<reason>`,
+  `scoring-auto-payouts:release|<event_id>`, `scoring-auto-payouts:holds`.
+  Rows already recorded stay as they are (pending); release re-checks at
+  once.
+
+Every hold reaches Kerry as ONE COO action item `PAYOUTS HELD: <event>`
+(deduped by subject); card parity raises its own `SCORING HOLD`. A held or
+refused event is re-checked when its cards change (a CTP confirm bumps the
+version) and every 15 minutes (`retry_at`), so a fix that does not touch
+the cards (a code fix, a manual row removed) still lands. The dry run
+reports the same `held` state.
 
 Per-event state lives in app setting `auto_payouts_fp`:
-`{fp, v (score-entry version), final, final_at, mins, recorded | refused}`.
-An event is not re-run until its version moves, its final time passes, or
-the lock dial changes.
+`{fp, v (score-entry version), final, final_at, mins, recorded,
+refused | held, retry_at, display_only}`.
+An event is not re-run until its version moves, its final time passes,
+the lock dial changes, or its retry time comes.
 
 Bridge `scoring-auto-payouts[:apply][|<event_id>]`. Guard
 `test_auto_payouts.py`.

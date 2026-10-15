@@ -148,6 +148,18 @@ check("GG era: a tee-less card blocks too", not f["final"] and any("no tee" in b
 c = sqlite3.connect(tmp); c.execute("UPDATE scoring_rounds SET tee_id = 1 WHERE event_id = 773"); c.commit(); c.close()
 check("an unknown event is refused", "error" in cc.closeout_final_check("nope", db_path=tmp, _read={"rounds": []}))
 
+print("\nF4: an untethered event never falls back to Golf Genius's rulebook (Kerry 10/14)")
+c = sqlite3.connect(tmp)
+c.execute("INSERT INTO events (id, item_name, event_date, chapter, status) VALUES (774, 's9.41 New Links', '2026-10-20', 'San Antonio', 'active')")
+c.commit(); c.close()
+f = cc.closeout_final_check(774, db_path=tmp, _read={"rounds": []})
+check("no entered rounds on a 10/20 event: entry era, 'no entered cards', no Golf Genius wording",
+      f["era"] == "entry" and not f["final"]
+      and any("no entered cards" in b for b in f["blocking"])
+      and not any("Golf Genius" in b or "scorecards imported" in b for b in f["blocking"]), f)
+f = cc.closeout_final_check(773, db_path=tmp, _read={"rounds": []})
+check("a GG-era event (9/22) keeps GG's rulebook", f["era"] == "gg", f.get("era"))
+
 src = open(os.path.join(os.path.dirname(__file__), "email_parser", "closeout_checks.py"), encoding="utf-8").read()
 import re
 check("entered scores are read only through score_entry (no se_* table names here)",

@@ -1,5 +1,25 @@
-window.TGF_VERSION = "2.565.6";
+window.TGF_VERSION = "2.566.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.566.0",
+    date: "2026-10-14",
+    title: "Auto payouts: one writer from 10/20 with every hold; Golf Genius out of the GAMES tab, flight board, pairings and closeout",
+    changes: [
+      "CoS #1797 (acceptance passed to the cent, #1781): from the 10/20 events the auto_payouts job is the only thing that records payouts, and Closeout becomes the verifier. Recording needs app setting auto_payouts_record = on AND an event dated on or after auto_payouts_record_from (default 2026-10-20), so turning the dial on never reaches back to an event closed out by hand. Nothing is ever paid by the job.",
+      "The job no longer records while a closest-to-the-pin takeover waits for the manager's confirm. Before, that hole was left out and the rest recorded as if final. Card parity and manually recorded rows still refuse inside record_event_game_payouts.",
+      "New per-event hold for the verifier or Kerry: app setting auto_payouts_hold, bridge scoring-auto-payouts:hold|<event_id>|<reason>, release|<event_id>, holds. Every hold reaches Kerry as one COO item PAYOUTS HELD: <event>.",
+      "A held or refused event is re-checked when its cards change and every 15 minutes, so a fix that does not touch the cards still lands; a display-only event records on the next run once recording is allowed. test_auto_payouts.py covers the date gate, a verifier hold and release, a CTP hold, and a refused record retried.",
+      "Golf Genius out of four more places for events on or after the untether date (Kerry 10/14: \"Yes, build all four\", #1817). F1: the GAMES tab's Ind Net / Ind Gross / Skins winner rows come from the Tracker's engine on the event's own flight board, the same numbers the payouts use (before, they read Golf Genius flight labels and showed nothing or 'flights pending GG import'). F2: the flight board names the Tracker as payer of record and shows no Golf Genius line; the empty PAYOUTS tab says payouts record once every card is final. F3: the PAIRINGS 'GG sheet' listing and import refuse before any call to Golf Genius. F4: the closeout 'results are final' check never falls back to Golf Genius's rulebook; with no entered cards it says so.",
+    ],
+  },
+  {
+    version: "2.565.7",
+    date: "2026-10-14",
+    title: "San Antonio picker dot is #8FA8B8",
+    changes: [
+      "Kerry 10/14: the San Antonio dot in the chapter picker now uses the Brand Messaging Standards v1.6 San Antonio color #8FA8B8 (was #4B6274). The Lone Star Cup card colors are unchanged."
+    ]
+  },
   {
     version: "2.565.6",
     date: "2026-10-14",
