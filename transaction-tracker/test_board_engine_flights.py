@@ -9,7 +9,7 @@ Run: python3 test_board_engine_flights.py
 import contextlib
 import io
 import logging
-import os
+import json, os
 import sqlite3
 import sys
 import tempfile
@@ -96,6 +96,44 @@ check("a Tracker-scored event ignores a stored Golf Genius flight (GAMES only)",
       "LOW FLIGHT" not in [s["label"] for s in lb.get("net_board") or []]
       and [s["label"] for s in lb.get("net_board") or []][:2] == ["Flight 1 (HCP <12.0)", "Flight 2 (HCP 12.0+)"],
       [s["label"] for s in lb.get("net_board") or []])
+
+# F1 (Kerry 10/14, #1817): the Games tab's winner rows come from the engine
+# on the flight board for a Tracker-scored event, never from GG flight labels.
+_real_buyers = db._event_game_buyers
+db._event_game_buyers = lambda conn, name, kind: (
+    {"buyers": {601, 602, 603, 604}, "no_customer_id": []} if name == NAME else _real_buyers(conn, name, kind))
+gr0 = db.determine_event_game_results(NAME, "individual_net", flights=2, db_path=DB)
+check("F1: no tee on the cards → awaiting results with the engine's reason, never GG",
+      gr0.get("source") == "engine" and gr0.get("status") == "awaiting_results" and "tee" in (gr0.get("why") or ""), gr0)
+# The engine itself is covered elsewhere; here, its board → the Games tab shape.
+from email_parser import live_scoring as _lsm
+_real_state, _real_lb = db.event_engine_state, _lsm.compute_leaderboard
+db.event_engine_state = lambda name, db_path=None: {"players": [{"key": "c:601"}], "meta": {}}
+def _row(cid, nm, place, score, ph):
+    return {"customer_id": cid, "name": nm, "place": place, "score": score,
+            "playing_handicap": ph, "complete": True}
+_lsm.compute_leaderboard = lambda st, f: {"games": {
+    "individual_net": {"active": True, "flight_source": "frozen", "flights": [
+        {"flight": 1, "players": 2, "rows": [_row(601, "Low One", 1, 43, 2), _row(602, "Low Two", 2, 39 + 5, 6)]},
+        {"flight": 2, "players": 2, "rows": [_row(603, "High One", 1, 30, 15), _row(604, "High Two", 1, 30, 18)]}]},
+    "skins": {"active": True, "flights": [
+        {"flight": 1, "players": 4, "tally": [{"name": "Low One", "skins": 2}, {"name": "High Two", "skins": 1}]}]}}}
+gr = db.determine_event_game_results(NAME, "individual_net", flights=2, db_path=DB)
+check("F1: Games tab Ind Net winners come from the engine on the flight board",
+      gr.get("source") == "engine" and gr.get("status") == "determined"
+      and [f["flight"] for f in gr.get("flights") or []] == ["Flight 1", "Flight 2"]
+      and sorted(r["customer_id"] for r in gr["flights"][0]["ranking"]) == [601, 602], gr)
+check("F1: no Golf Genius flight label reaches the Games tab",
+      "LOW FLIGHT" not in json.dumps(gr) and gr.get("status") != "flights_unknown", gr)
+sk = db.determine_event_game_results(NAME, "skins", flights=1, db_path=DB)
+check("F1: skins come back in the Games tab's shape (skin_count, per_player)",
+      sk.get("source") == "engine" and sk.get("status") == "determined"
+      and all("per_player" in f and "skin_count" in f for f in sk.get("flights") or []), sk)
+check("F1: a tie keeps its shared place", [r["position"] for r in gr["flights"][1]["ranking"]] == [1, 1], gr)
+check("F1: skins tally per player", sk["flights"][0]["per_player"] == {"Low One": 2, "High Two": 1}
+      and sk["flights"][0]["skin_count"] == 3, sk)
+db._event_game_buyers = _real_buyers
+db.event_engine_state, _lsm.compute_leaderboard = _real_state, _real_lb
 
 # A GG-era event (before the untether date) keeps the record it was played under.
 OLD, OLD_NAME = 952, "s9.1 Old Links"

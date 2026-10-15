@@ -22,6 +22,20 @@ routine into the closeout lane the morning after every Tuesday nine and
 Saturday 18. It posts handicaps and drafts the recaps; Kerry's two steps
 (3.3 the handicap-card send, 3.4 the GG upload) stay his.
 
+**CHANGES OF RECORD, 10/14 (read these first; they override the phases below):**
+- **From 10/20 Closeout VERIFIES payouts, it does not record them** (CoS #1797-1, after the
+  #1760-4 acceptance passed to the cent in #1781). One writer: the `auto_payouts` job records
+  once every card is final. Closeout checks `scoring-card-parity:<id>` (ok), the recorded `auto:`
+  rows = `scoring-payouts-preview` row for row, and the GAMES / FLIGHTS / PAIRINGS / CTP / ties
+  cross-check, then reports any mismatch or hold to Kerry. Never `scoring-record-payouts` for an
+  event on/after 10/20; never change a payout row. Kerry keeps Unlock and override.
+- **Per-player handicap card emails are retired** (Kerry via CoS #1799-4: "the new event recap
+  emails remove the need for those individual handicap card emails except on demand"). Phase 3.3
+  sends only on demand. Handicaps still post every night (3.1–3.2).
+- **The member results email goes at 6:00 AM the next morning** (Kerry #1778): after the recap
+  is deployed, `scoring-results-email:plan|<ids>|<md>` (0 held) then
+  `scoring-results-email:schedule-next|<ids>|<md>|1778`. See `email_parser/results_email.py`.
+
 **Rule 3d applies.** An instruction to close out applies to every chapter
 that played that day unless Kerry names one. Report per chapter.
 

@@ -24,7 +24,20 @@ every run of the job (each minute):
 Dials: app setting `auto_payouts` (on unless it reads "off") runs the job;
 `auto_payouts_record` (OFF unless it reads "on") lets step 3 record — off
 for 10/13 by CoS #1760/#1761, on from 10/20 once the dry-run diff against
-the hand-recorded rows matches to the cent. Per-event
+the hand-recorded rows matches to the cent (it did, #1781). It records only
+events dated on or after `auto_payouts_record_from` (default 2026-10-20).
+
+ONE WRITER, CLOSEOUT VERIFIES (CoS #1797): this job is the only thing that
+records; nothing is ever paid by it. It does not record while any hold the
+verifier relies on is open, and each reaches Kerry as one COO item
+"PAYOUTS HELD: <event>" (card parity raises its own "SCORING HOLD"):
+  - card parity (engine vs saved card) and manually recorded rows, both
+    refused inside `record_event_game_payouts`;
+  - a closest-to-the-pin takeover the manager has not confirmed;
+  - a hold placed by the verifier or Kerry (app setting `auto_payouts_hold`,
+    bridge `scoring-auto-payouts:hold|<event_id>|<reason>` / `release|<id>`).
+A held or refused event is re-checked when its cards change and every
+15 minutes. Per-event
 state (fingerprint, score-entry version, final) in app setting
 `auto_payouts_fp`; an event is not re-run until its version moves or its
 provisional money turns final. Bridge
@@ -46,15 +59,92 @@ LOOKBACK_DAYS = 3
 
 
 RECORD_DIAL = "auto_payouts_record"
+RECORD_FROM = "auto_payouts_record_from"
+RECORD_FROM_DEFAULT = "2026-10-20"
+HOLD_SETTING = "auto_payouts_hold"
+RETRY_MINUTES = 15
 
 
-def record_enabled(db_path=None) -> bool:
+def record_enabled(db_path=None, event_date: str | None = None) -> bool:
     """Step 3 (recording) has its own dial, OFF unless it reads "on"
     (CoS #1760/#1761, Kerry "Go with your conditions": 10/13 is display
     only; auto-record turns on from 10/20 once a dry run matches the
-    hand-recorded rows to the cent)."""
+    hand-recorded rows to the cent). With an event date, the event must
+    also fall on or after app setting `auto_payouts_record_from` (default
+    2026-10-20, CoS #1797), so turning the dial on never reaches back to an
+    event closed out by hand."""
     from email_parser.database import get_app_setting
-    return (get_app_setting(RECORD_DIAL, db_path) or "off").strip().lower() == "on"
+    if (get_app_setting(RECORD_DIAL, db_path) or "off").strip().lower() != "on":
+        return False
+    if event_date is None:
+        return True
+    start = (get_app_setting(RECORD_FROM, db_path) or RECORD_FROM_DEFAULT).strip()
+    return (event_date or "")[:10] >= start
+
+
+def holds(db_path=None) -> dict:
+    """Per-event holds placed by the verifier (Closeout) or Kerry (CoS
+    #1797: "Any hold goes to Kerry. Kerry keeps the Unlock and override"):
+    {event_id: {reason, by, at}}."""
+    from email_parser.database import get_app_setting
+    try:
+        return json.loads(get_app_setting(HOLD_SETTING, db_path) or "{}") or {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def hold(event_id: int, reason: str, by: str = "", db_path=None) -> dict:
+    """Stop the job recording one event (the preview still shows). Rows
+    already recorded stay as they are, pending; only Kerry pays."""
+    from email_parser import score_entry as se
+    reason = (reason or "").strip()
+    if not reason:
+        return {"error": "a hold needs a reason"}
+    _save(HOLD_SETTING, int(event_id), {"reason": reason, "by": by, "at": se._now()}, db_path)
+    _alarm(int(event_id), f"held by {by or 'the verifier'}: {reason}", db_path)
+    return {"held": int(event_id), "reason": reason}
+
+
+def release(event_id: int, by: str = "", db_path=None) -> dict:
+    """Lift a hold; the next run re-checks the event at once."""
+    was = holds(db_path).get(str(int(event_id)))
+    _save(HOLD_SETTING, int(event_id), None, db_path)
+    _save(FP_SETTING, int(event_id), None, db_path)
+    return {"released": int(event_id), "was": was, "by": by}
+
+
+def _alarm(event_id: int, why: str, db_path=None) -> None:
+    """One COO action item per event while open (deduped by subject): every
+    hold reaches Kerry (CoS #1797)."""
+    from email_parser import database as db
+    try:
+        with db._connect(db_path) as conn:
+            r = conn.execute("SELECT item_name FROM events WHERE id = ?", (event_id,)).fetchone()
+        name = r["item_name"] if r else f"event {event_id}"
+        db.save_action_item({
+            "subject": f"PAYOUTS HELD: {name}",
+            "from_name": "Auto payouts",
+            "summary": ("The payouts for this event were not recorded automatically.\n"
+                        f"Why: {why}\nNothing is paid. Clear the cause (or release the "
+                        "hold) and the job records on its next run."),
+            "urgency": "high", "category": "scoring"}, db_path=db_path)
+    except Exception:
+        logger.exception("auto payouts alarm failed for %s", event_id)
+
+
+def _ctp_pending(event_id: int, db_path=None) -> list[str]:
+    """Contest holes whose holder took them from another group and the
+    manager has not confirmed (CTP verification, Kerry 10/13). The money is
+    not recorded while any is open: recording without that hole would look
+    final."""
+    from email_parser import score_entry as se
+    out = []
+    for h in se.event_ctp_holders(event_id, db_path=db_path):
+        nc = h.get("needs_confirm")
+        if nc:
+            out.append(f"hole {h['hole']}: {nc['to'].get('name')} took it from "
+                       f"{nc['from'].get('name')}; confirm it on Live Scoring")
+    return out
 
 
 def enabled(db_path=None) -> bool:
@@ -160,6 +250,16 @@ def _save(key: str, eid, value, db_path=None):
     set_app_setting(key, json.dumps(m, sort_keys=True), db_path)
 
 
+def _later(minutes: int) -> str:
+    from datetime import datetime, timezone
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _due(at: str | None) -> bool:
+    from email_parser import score_entry as se
+    return not at or at <= se._now()
+
+
 def preview_for(event_id, db_path=None) -> dict | None:
     """The board's money before (and after) the record: {rows, final,
     final_at}. None when the field is not complete."""
@@ -182,8 +282,12 @@ def run_event(ev: dict, apply: bool = False, db_path=None) -> dict:
     version = se.event_version(eid, db_path=db_path)
     last = _fps(db_path).get(str(eid))
     last = last if isinstance(last, dict) else {"fp": last}
+    _rec_now = record_enabled(db_path, ev.get("event_date"))
+    _waiting = (last.get("refused") or last.get("held")) and not _due(last.get("retry_at"))
     if apply and last.get("v") == version and (
-            last.get("final") or last.get("refused")
+            (last.get("final") and not (last.get("display_only") and _rec_now)
+             and not last.get("held") and not last.get("refused"))
+            or _waiting
             or (last.get("final_at") and not se.card_is_final(last["final_at"])
                 and last.get("mins") == se.card_lock_minutes(db_path))):
         return {**res, "state": "unchanged", "fingerprint": last.get("fp")}
@@ -214,30 +318,59 @@ def run_event(ev: dict, apply: bool = False, db_path=None) -> dict:
     fp = fingerprint(rows)
     preview = {"rows": _with_ids(rows, read, db_path), "final": final, "final_at": final_at,
                "total": asm.get("total"), "fp": fp, "at": se._now()}
-    if not apply:
-        return {**res, "state": "would_record" if final else "provisional",
-                "fingerprint": fp, "payouts": preview["rows"]}
-    _save(PREVIEW_SETTING, eid, preview, db_path)
+    if not apply and not final:
+        return {**res, "state": "provisional", "fingerprint": fp, "payouts": preview["rows"]}
+    if apply:
+        _save(PREVIEW_SETTING, eid, preview, db_path)
     if not final:
         _save(FP_SETTING, eid, {"fp": last.get("fp"), "v": version, "final": False,
                                 "final_at": final_at, "recorded": last.get("recorded"),
                                 "mins": se.card_lock_minutes(db_path)}, db_path)
         return {**res, "state": "provisional", "fingerprint": fp}
     if not rows:
-        _save(FP_SETTING, eid, {"fp": fp, "v": version, "final": True}, db_path)
+        if apply:
+            _save(FP_SETTING, eid, {"fp": fp, "v": version, "final": True}, db_path)
         return {**res, "state": "nothing", "why": "nothing determined to pay"}
-    if not record_enabled(db_path):
-        _save(FP_SETTING, eid, {"fp": last.get("fp"), "v": version, "final": True,
-                                "recorded": last.get("recorded"),
-                                "display_only": True}, db_path)
+    if not _rec_now:
+        if apply:
+            _save(FP_SETTING, eid, {"fp": last.get("fp"), "v": version, "final": True,
+                                    "recorded": last.get("recorded"),
+                                    "display_only": True}, db_path)
         return {**res, "state": "final_display_only", "fingerprint": fp,
-                "why": "auto_payouts_record is off: shown on the board, not recorded"}
+                "why": "auto_payouts_record is off for this event: shown on the board, not recorded",
+                **({} if apply else {"payouts": preview["rows"]})}
+    # Every hold the verifier relies on, checked before the one writer
+    # (CoS #1797). Card parity / SCORING HOLD and manual rows are refused
+    # inside record_event_game_payouts itself.
+    why = None
+    h = holds(db_path).get(str(eid))
+    if h:
+        why = f"held by {h.get('by') or 'the verifier'}: {h.get('reason')}"
+    else:
+        pend = _ctp_pending(eid, db_path)
+        if pend:
+            why = "closest to the pin waits for the manager: " + "; ".join(pend)
+    if why:
+        if not apply:
+            return {**res, "state": "held", "why": why, "fingerprint": fp}
+        _save(FP_SETTING, eid, {"fp": last.get("fp"), "v": version, "held": why,
+                                "recorded": last.get("recorded"),
+                                "retry_at": _later(RETRY_MINUTES)}, db_path)
+        if not h:
+            _alarm(eid, why, db_path)
+        return {**res, "state": "held", "why": why, "fingerprint": fp}
+    if not apply:
+        return {**res, "state": "would_record", "fingerprint": fp, "payouts": preview["rows"]}
     if last.get("fp") == fp and last.get("recorded"):
-        _save(FP_SETTING, eid, {**last, "v": version, "final": True}, db_path)
+        _save(FP_SETTING, eid, {"fp": fp, "v": version, "final": True, "recorded": True}, db_path)
         return {**res, "state": "unchanged", "fingerprint": fp}
     rec = db.record_event_game_payouts(name, rows, force=True, db_path=db_path)
     if rec.get("error"):
-        _save(FP_SETTING, eid, {"fp": None, "v": version, "refused": rec["error"]}, db_path)
+        _save(FP_SETTING, eid, {"fp": last.get("fp"), "v": version, "refused": rec["error"],
+                                "recorded": last.get("recorded"),
+                                "retry_at": _later(RETRY_MINUTES)}, db_path)
+        if not rec.get("parity"):          # card parity raises its own SCORING HOLD
+            _alarm(eid, rec["error"], db_path)
         return {**res, "state": "refused", "why": rec["error"]}
     _save(FP_SETTING, eid, {"fp": fp, "v": version, "final": True, "recorded": True}, db_path)
     try:

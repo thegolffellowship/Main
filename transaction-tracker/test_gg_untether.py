@@ -86,5 +86,25 @@ c = sqlite3.connect(tmp)
 check("nothing was deleted (reversible)", c.execute("SELECT COUNT(*) FROM rsvps").fetchone()[0] == 2)
 c.close()
 
+print("F3: pairings never call Golf Genius for an untethered event (Kerry 10/14)")
+import golf_genius_sync as _ggs                                   # noqa: E402
+_calls = []
+_real_fetch, _real_rounds = _ggs.fetch_public_page, db.gg_teesheet_rounds
+_ggs.fetch_public_page = lambda *a, **k: _calls.append(a) or {"html": ""}
+db.gg_teesheet_rounds = lambda portal: _calls.append(portal) or {"rounds": [], "widget": "w"}
+c = sqlite3.connect(tmp)
+c.execute("INSERT INTO events (id, item_name, event_date, chapter) VALUES (530, 's9.28 TPC Canyons', '2026-10-20', 'San Antonio')")
+c.execute("INSERT INTO events (id, item_name, event_date, chapter) VALUES (531, 's9.20 Old Course', '2026-09-22', 'San Antonio')")
+c.commit(); c.close()
+r = db.gg_teesheet_round_options(530, db_path=tmp)
+check("GG rounds listing refused before the network", r.get("untethered") and not _calls, r)
+r = db.import_gg_pairings_for_event(530, db_path=tmp)
+check("pull-from-GG pairings refused before the network", r.get("untethered") and not _calls, r)
+r = db.import_gg_teesheet_round("sa", "123", apply=True, event_override="530", db_path=tmp)
+check("a direct tee-sheet import for the event fetches nothing", r.get("untethered") and not _calls, r)
+db.gg_teesheet_round_options(531, db_path=tmp)
+check("a GG-era event still lists its rounds", _calls == ["sa"], _calls)
+_ggs.fetch_public_page, db.gg_teesheet_rounds = _real_fetch, _real_rounds
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILED: {F}"))
 sys.exit(1 if F else 0)

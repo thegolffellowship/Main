@@ -1,5 +1,70 @@
-window.TGF_VERSION = "2.565.2";
+window.TGF_VERSION = "2.566.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.566.1",
+    date: "2026-10-13",
+    title: "Health: Spotlight single-builder, steadier replica check, send-job slow lines",
+    changes: [
+      "Digest #1877 (10/15). (1) Spotlight: on 10/14 at 6:06 AM, six members opened their results-email link within one second; the Spotlight's saved pieces were cold (the refresher had gone idle after a quiet day) and all six rebuilt the same 6 s piece at once on a host at load 110, so each open took 7-10 s. Now one thread builds an entry; the others share its result (waiting if the entry is cold, or seeing the previous copy at once if it is under 15 minutes old), and the background refresher stays on for a week of quiet instead of a day. (2) The 5:00 report's off-site replica check timed out at 25 s under load 98 and the failure was remembered for 15 minutes; a failed read is no longer remembered, and the scheduled read now waits up to 75 s. (3) The two jobs that send mail to a roster (event_invite_auto, results_email_auto) get a 15-minute slow line instead of 2 minutes: 346 s and 233 s were normal sends under load. No figure, email or member-facing wording changes."
+    ]
+  },
+  {
+    version: "2.566.0",
+    date: "2026-10-14",
+    title: "Auto payouts: one writer from 10/20 with every hold; Golf Genius out of the GAMES tab, flight board, pairings and closeout",
+    changes: [
+      "CoS #1797 (acceptance passed to the cent, #1781): from the 10/20 events the auto_payouts job is the only thing that records payouts, and Closeout becomes the verifier. Recording needs app setting auto_payouts_record = on AND an event dated on or after auto_payouts_record_from (default 2026-10-20), so turning the dial on never reaches back to an event closed out by hand. Nothing is ever paid by the job.",
+      "The job no longer records while a closest-to-the-pin takeover waits for the manager's confirm. Before, that hole was left out and the rest recorded as if final. Card parity and manually recorded rows still refuse inside record_event_game_payouts.",
+      "New per-event hold for the verifier or Kerry: app setting auto_payouts_hold, bridge scoring-auto-payouts:hold|<event_id>|<reason>, release|<event_id>, holds. Every hold reaches Kerry as one COO item PAYOUTS HELD: <event>.",
+      "A held or refused event is re-checked when its cards change and every 15 minutes, so a fix that does not touch the cards still lands; a display-only event records on the next run once recording is allowed. test_auto_payouts.py covers the date gate, a verifier hold and release, a CTP hold, and a refused record retried.",
+      "Golf Genius out of four more places for events on or after the untether date (Kerry 10/14: \"Yes, build all four\", #1817). F1: the GAMES tab's Ind Net / Ind Gross / Skins winner rows come from the Tracker's engine on the event's own flight board, the same numbers the payouts use (before, they read Golf Genius flight labels and showed nothing or 'flights pending GG import'). F2: the flight board names the Tracker as payer of record and shows no Golf Genius line; the empty PAYOUTS tab says payouts record once every card is final. F3: the PAIRINGS 'GG sheet' listing and import refuse before any call to Golf Genius. F4: the closeout 'results are final' check never falls back to Golf Genius's rulebook; with no entered cards it says so.",
+    ],
+  },
+  {
+    version: "2.565.7",
+    date: "2026-10-14",
+    title: "San Antonio picker dot is #8FA8B8",
+    changes: [
+      "Kerry 10/14: the San Antonio dot in the chapter picker now uses the Brand Messaging Standards v1.6 San Antonio color #8FA8B8 (was #4B6274). The Lone Star Cup card colors are unchanged."
+    ]
+  },
+  {
+    version: "2.565.6",
+    date: "2026-10-14",
+    title: "Can't make it: season report by chapter, and a collapsed list on the phone",
+    changes: [
+      "Kerry 10/14: \"Yes, add the season-wide view by chapter\". The RSVP Log page opens with a Can't make it card for the season: San Antonio, Austin and Combined events, each with how many said Can't make it, the reasons they picked (and how many gave none), and a By event table. GET /api/invitations/declines (manager+), bridge scoring-event-invite:declines[|year]; invitations.season_decline_report. A player who later registered or changed their mind no longer counts.",
+      "Kerry 10/14: \"add a mobile view of can't make its/declines … collapsed on landing\". Each event's ROSTER on the phone now ends with a collapsed Can't make it (N) line; tap it for the reason counts and the players. Desktop and phone share one list and one renderer (notPlayingRsvpsFor / renderNotPlayingSection in events.html).",
+    ],
+  },
+  {
+    version: "2.565.5",
+    date: "2026-10-14",
+    title: "ROSTER: decline reasons on the Not Playing list",
+    changes: [
+      "Kerry 10/14: \"Where can I see a report on schedule decline reasons? Can that show in ROSTER under EVENTS\". The ROSTER's Not Playing list now opens with the counts (\"Reasons given: Schedule 2 · Weather 1 (3 gave none)\"), and each player's card shows the reason they picked on the invitation's Can't make it page. An answer to our own email invitation is badged TGF instead of GG. The RSVP reads (get_rsvps_for_event, get_all_rsvps_bulk) carry source and decline_reason from event_decline_reasons.",
+    ],
+  },
+  {
+    version: "2.565.4",
+    date: "2026-10-14",
+    title: "Invitations: mail-scanner filter on every button; previews show Kerry's own invite",
+    changes: [
+      "Kerry 10/14: \"yes on the scanner filter\" (CoS #1793/#1794). Security scanners (Defender, Mimecast, Proofpoint, Barracuda) open every link when an email arrives. A tap on I'm in, Can't make it or Remove me is now ignored when it comes within 2 minutes of the email going out, and a tap on I'm in or Can't make it is ignored when the other button of the same email was hit within 30 seconds (no person does that); a burst also undoes the earlier tap. Nothing a scanner does can now mark anyone NOT PLAYING, cut their reminders or take them off invitations.",
+      "Remove me gets the 2-minute grace only (a person goes Can't make it then Remove me in seconds), and a Remove me tap inside the grace asks again rather than saying Done. The I'm in click log keeps the latest click time.",
+      "The staff preview now shows a staff member's own invitation (app setting event_invite_preview_cid, default Kerry), never a member's. test_invitations.py section 6g.",
+    ],
+  },
+  {
+    version: "2.565.3",
+    date: "2026-10-14",
+    title: "Invitations: Remove me needs a real tap; preview buttons record nothing",
+    changes: [
+      "Kerry 10/14: \"Yes, restore them and ship the fix\". Within minutes of the first 7 AM send, mail scanners that run page scripts opened every button, and the Remove me page, which saved itself, took seven members off invitations (Tanner Chalfant, Chris Kelm, Chris Best, Gus Vasquez, Eric Taft, Derek Chandler, Mark Parker). The Remove me page now asks \"Remove you from event invitations?\" and only its Yes, remove me button saves.",
+      "Staff preview links carry a preview mark: they open the same pages and record nothing. Taps on the 10/13 preview had answered for its sample person, Todd McConahy.",
+      "New restore_answers (bridge scoring-event-invite 0|restore|<Kerry-OK post>|<ids>[|confirm], dry run by default) puts people back on invitations and removes the Tracker NOT PLAYING rows and decline reasons they did not give on upcoming events, so their reminders go out. Can't make it still saves from the page as Kerry ruled. test_invitations.py.",
+    ],
+  },
   {
     version: "2.565.2",
     date: "2026-10-14",

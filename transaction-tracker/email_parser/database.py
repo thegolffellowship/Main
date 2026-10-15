@@ -16044,7 +16044,11 @@ _SPOTLIGHT_LAST_USED: dict = {"at": 0.0, "cid": None, "db_path": None}
 # Tracker Health digest #1008). The warmer reads it back after a restart.
 _SPOTLIGHT_PERSIST_EVERY_S = 600.0
 _SPOTLIGHT_PERSISTED_AT: dict = {"at": 0.0}
-_SPOTLIGHT_WARM_ACTIVE_S = 24 * 3600      # warm only if opened in the last day
+_SPOTLIGHT_WARM_ACTIVE_S = 7 * 24 * 3600  # warm only if opened in the last week (was a day: after a quiet day the
+                                          # 6 AM recap links met a cold cache, digest #1877; a warm tick costs ~0.8 s)
+_SPOTLIGHT_STALE_MAX_S = 900.0            # an entry this old may be served while another thread rebuilds it
+_SPOTLIGHT_BUILD_LOCKS: dict = {}
+_SPOTLIGHT_BUILD_GUARD = threading.Lock()
 _SPOTLIGHT_WARM_AGE_S = 90.0              # rebuild entries older than this
 _SPOTLIGHT_REFRESHING: dict = {"on": False}   # True while the warmer rebuilds
 _SPOTLIGHT_WARMER_TLS = threading.local()      # set only on the warmer's own thread
@@ -16064,21 +16068,36 @@ def _spotlight_shared(name: str, builder, db_path) -> object:
     # expired (at most ~2.5 min old) and never builds.
     if hit is not None and _SPOTLIGHT_REFRESHING["on"] and not getattr(_SPOTLIGHT_WARMER_TLS, "active", False):
         return hit[1]
-    # A COLD build: lap it on the request's stopwatch under its own name
-    # so the digest shows exactly which builder the open paid for.
-    try:
-        from . import perf as _perf
-        _sw = _perf.current()
+    # ONE builder per entry (digest #1877, 10/14 6:06 AM: six members opened
+    # their recap link in the same second, the entries were cold, and all
+    # six rebuilt the same 6 s piece at once on a saturated host). The first
+    # thread builds; a thread that arrives meanwhile serves the old entry if
+    # it is under _SPOTLIGHT_STALE_MAX_S old, else waits for the builder and
+    # reads what it built.
+    with _SPOTLIGHT_BUILD_GUARD:
+        lock = _SPOTLIGHT_BUILD_LOCKS.setdefault(ck, threading.Lock())
+    if (hit is not None and lock.locked() and _t.time() - hit[0] < _SPOTLIGHT_STALE_MAX_S
+            and not getattr(_SPOTLIGHT_WARMER_TLS, "active", False)):
+        return hit[1]
+    with lock:
+        hit = _SPOTLIGHT_SHARED_CACHE.get(ck)
+        if hit and _t.time() - hit[0] < _SPOTLIGHT_SHARED_TTL:
+            return hit[1]            # the builder we waited for filled it
+        # A COLD build: lap it on the request's stopwatch under its own name
+        # so the digest shows exactly which builder the open paid for.
+        try:
+            from . import perf as _perf
+            _sw = _perf.current()
+            if _sw:
+                _sw.lap("player")          # close whatever per-player work ran before
+                _sw.note(cold=True)
+        except Exception:
+            _sw = None
+        val = builder()
         if _sw:
-            _sw.lap("player")          # close whatever per-player work ran before
-            _sw.note(cold=True)
-    except Exception:
-        _sw = None
-    val = builder()
-    if _sw:
-        _sw.lap(f"shared:{name}")
-    _SPOTLIGHT_SHARED_CACHE[ck] = (_t.time(), val)
-    return val
+            _sw.lap(f"shared:{name}")
+        _SPOTLIGHT_SHARED_CACHE[ck] = (_t.time(), val)
+        return val
 
 
 def warm_spotlight(db_path=None, force: bool = False) -> dict:
@@ -18453,6 +18472,13 @@ def determine_event_game_results(event_name: str, game: str,
         if not ev:
             return {"error": f"event not found: {event_name}"}
         ev = dict(ev)
+    # F1 (Kerry 10/14, #1817): an event untethered from Golf Genius reads its
+    # winners from the Tracker's engine on the event's own flight board, the
+    # same numbers the payouts use, never GG flight labels.
+    from email_parser.gg_untether import gg_allowed
+    if not gg_allowed(str(ev.get("event_date") or "")[:10], db_path):
+        return _engine_game_results(ev, game, kind, db_path=db_path)
+    with _connect(db_path) as conn:
         binfo = _event_game_buyers(conn, ev["item_name"], kind)
         out = {"event_name": ev["item_name"], "game": game, "kind": kind,
                "buyers": len(binfo["buyers"]),
@@ -18588,6 +18614,67 @@ def determine_event_game_results(event_name: str, game: str,
         out["flights"] = result_flights
         out["status"] = "determined"
         return out
+
+
+def _engine_game_results(ev: dict, game: str, kind: str, db_path=None) -> dict:
+    """The Games tab's winner rows for an untethered event, in the shape
+    `determine_event_game_results` returns (flights → ranking / per_player),
+    computed by the engine with the flight board's flights pinned, exactly
+    as `engine_game_payouts` pays them. Read-only."""
+    from . import live_scoring as _ls
+    out = {"event_name": ev["item_name"], "game": game, "kind": kind,
+           "source": "engine"}
+    with _connect(db_path) as conn:
+        binfo = _event_game_buyers(conn, ev["item_name"], kind)
+    out["buyers"] = len(binfo["buyers"])
+    out["buyers_without_customer_id"] = binfo["no_customer_id"]
+    if not binfo["buyers"]:
+        out["status"] = "no_buyers"
+        return out
+    st = event_engine_state(ev["item_name"], db_path=db_path)
+    if st.get("error") or not st.get("players"):
+        out["status"] = "awaiting_results"
+        if st.get("error"):
+            out["why"] = st["error"]
+        return out
+    fb = event_flights_board(ev["id"], db_path=db_path)
+    if fb:
+        st = dict(st, flight_pins=_flight_pins_for(fb, st["players"]),
+                  variant_pins=_variant_pins_for(fb))
+    formulas = (get_championship_formulas(db_path=db_path)
+                if st["meta"].get("championship") else get_scoring_formulas(db_path))
+    res = (_ls.compute_leaderboard(st, formulas).get("games") or {}).get(game) or {}
+    if not res.get("active", True) or not res.get("flights"):
+        out["status"] = "awaiting_results"
+        out["warnings"] = list(res.get("warnings") or [])
+        return out
+    metric = "net" if game == "individual_net" else "gross"
+    flights, awaiting = [], set()
+    for f in res["flights"]:
+        label = f"Flight {f['flight']}" if len(res["flights"]) > 1 else "Overall"
+        if game == "skins":
+            per = {t["name"]: t["skins"] for t in f.get("tally") or []}
+            flights.append({"flight": label, "players": f.get("players"),
+                            "skin_count": sum(per.values()), "per_player": per})
+        else:
+            ranking = []
+            for r in f.get("rows") or []:
+                if not r.get("complete"):
+                    awaiting.add(r.get("name"))
+                if r.get("score") is None:
+                    continue
+                ranking.append({"position": r["place"], "player": r["name"],
+                                "customer_id": r.get("customer_id"),
+                                metric: r["score"]})
+            hcps = [r["playing_handicap"] for r in f.get("rows") or []
+                    if r.get("playing_handicap") is not None]
+            flights.append({"flight": label, "players": f.get("players"),
+                            "hcp_range": [min(hcps), max(hcps)] if hcps else None,
+                            "ranking": ranking})
+    out.update(flights=flights, awaiting=sorted(a for a in awaiting if a),
+               flight_source=res.get("flight_source"), status="determined",
+               warnings=list(res.get("warnings") or []))
+    return out
 
 
 def skins_audit(event_query: str, db_path: str | Path | None = None) -> dict:
@@ -39095,6 +39182,31 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
         return _rsvps_for_event(conn, event_name)
 
 
+def _tag_tracker_rsvp(rsvp: dict, reasons: dict) -> None:
+    """A Tracker invitation answer (email_uid 'tracker:<event>:<cid>') says so
+    (`source`) and carries the player's optional decline reason (Kerry 10/14:
+    the reasons show on the ROSTER's Not Playing list)."""
+    uid = str(rsvp.get("email_uid") or "")
+    rsvp["source"] = "tracker" if uid.startswith("tracker:") else "gg"
+    if rsvp["source"] == "tracker":
+        parts = uid.split(":")
+        try:
+            rsvp["decline_reason"] = reasons.get((int(parts[1]), int(parts[2])))
+        except (IndexError, ValueError):
+            rsvp["decline_reason"] = None
+
+
+def _decline_reason_map(conn, event_id=None) -> dict:
+    """{(event_id, customer_id): reason} from event_decline_reasons (migration 0016)."""
+    try:
+        sql = "SELECT event_id, customer_id, reason FROM event_decline_reasons"
+        rows = (conn.execute(sql + " WHERE event_id = ?", (int(event_id),)) if event_id
+                else conn.execute(sql)).fetchall()
+    except Exception:
+        return {}
+    return {(int(r[0]), int(r[1])): r[2] for r in rows}
+
+
 def _rsvps_for_event(conn: sqlite3.Connection, event_name: str,
                      tracker_only: bool = False) -> list[dict]:
     """Body of get_rsvps_for_event on a caller-supplied connection, so the
@@ -39122,8 +39234,10 @@ def _rsvps_for_event(conn: sqlite3.Connection, event_name: str,
     # (authoritative for RSVP-only players who never bought a ticket);
     # fall back to items.customer by email; last fall back to player_name.
     results = []
+    reasons = _decline_reason_map(conn)
     for r in rows:
         rsvp = dict(r)
+        _tag_tracker_rsvp(rsvp, reasons)
         rsvp["resolved_name"] = rsvp.get("player_name")
         rsvp["has_player_card"] = False
         rsvp["customer_status"] = None
@@ -39243,8 +39357,10 @@ def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
                     cust_status_map[c["customer_id"]] = status_label[c["current_player_status"]]
 
         rsvps_by_event = {}
+        reasons = _decline_reason_map(conn)
         for r in rows:
             rsvp = dict(r)
+            _tag_tracker_rsvp(rsvp, reasons)
             email = (rsvp.get("player_email") or "").strip().lower()
             cid = rsvp.get("customer_id")
             rsvp["resolved_name"] = (
@@ -63128,6 +63244,13 @@ def _decorate_flights_board(board: dict, inp: dict) -> dict:
         for u in entry["selection"].get("unflighted") or []:
             u["sort_name"] = _sort_name(u.get("name"))
         entry["gg_recorded"] = inp["gg"].get(entry["game"]) or {"rows": [], "total": 0.0}
+    # F2 (Kerry 10/14, #1817): an untethered event is paid by the Tracker
+    # (auto payouts records from this board), never by Golf Genius.
+    from email_parser.gg_untether import gg_allowed
+    _gg_era = gg_allowed(str(ev.get("event_date") or "")[:10])
+    if not _gg_era:
+        for entry in board["games"]:
+            entry["gg_recorded"] = {"rows": [], "total": 0.0}
     board.update({
         "event_id": ev["id"], "event_name": ev.get("item_name"),
         "event_date": ev.get("event_date"), "chapter": ev.get("chapter"),
@@ -63143,7 +63266,7 @@ def _decorate_flights_board(board: dict, inp: dict) -> dict:
         "places_by_flight_size": inp["rules"]["places_by_flight_size"],
         "event_started": inp["started"], "event_completed": inp["completed"],
         "dry_run": True,
-        "payer_of_record": "Golf Genius",
+        "payer_of_record": "Golf Genius" if _gg_era else "The Tracker (auto payouts)",
         "file_stub": print_file_stub(ev),
     })
     return board
@@ -67723,6 +67846,13 @@ def gg_teesheet_round_options(event_id: int,
             "WHERE id = ?", (int(event_id),)).fetchone()
     if not ev:
         return {"error": f"no event {event_id}"}
+    # F3 (Kerry 10/14, #1817): an event untethered from Golf Genius never
+    # calls Golf Genius, not even to list its rounds. Refused BEFORE the
+    # network, so the pull-from-GG import (which starts here) is too.
+    from email_parser.gg_untether import gg_allowed
+    if not gg_allowed(str(ev["event_date"] or "")[:10], db_path):
+        return {"error": "this event is untethered from Golf Genius: its pairings "
+                         "come from the Tracker's own generator", "untethered": True}
     chapter = (ev["chapter"] or "").strip().lower()
     portal = "austin" if chapter.startswith("austin") else "sa"
     listing = gg_teesheet_rounds(portal)
@@ -68001,6 +68131,16 @@ def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
     ruled source of truth). Players resolve through the scoring cascade;
     rode pairs = tee-sheet sequence 1&2 / 3&4 (Kerry ruling)."""
     from golf_genius_sync import fetch_public_page
+    if event_override and str(event_override).isdigit():
+        # F3: a named untethered event is refused before any GG call.
+        from email_parser.gg_untether import gg_allowed
+        with _connect(db_path) as _c:
+            _r = _c.execute("SELECT event_date FROM events WHERE id = ?",
+                            (int(event_override),)).fetchone()
+        if _r and not gg_allowed(str(_r["event_date"] or "")[:10], db_path):
+            return {"portal": portal, "round_id": round_id, "applied": False,
+                    "untethered": True,
+                    "error": "this event is untethered from Golf Genius; nothing fetched"}
     widget = _gg_teesheet_widget(portal)
     joiner = "&" if "?" in widget else "?"
     page = fetch_public_page(f"{widget}{joiner}round_id={round_id}", xhr=False)

@@ -274,3 +274,6 @@ brief (COO lane).
 
 ## Addendum 2026-10-10: Spotlight opens during the warmer's refresh
 `warm_spotlight` expires the shared entries (timestamp 0) and rebuilds them (~10 s, the Fellowship Cup piece ~8 s). Before v2.556.3 an open inside that window rebuilt them itself (10.9 s opens, digest #1567). `_SPOTLIGHT_REFRESHING` + the warmer thread's `_SPOTLIGHT_WARMER_TLS` make every other thread serve the just-expired entry while the warmer works. Held-open-rebuild guard in `test_perf.py`.
+
+## Addendum 2026-10-15: one builder per Spotlight entry
+`_spotlight_shared` now takes a per-entry lock: the first thread builds, others serve the previous copy (under `_SPOTLIGHT_STALE_MAX_S` = 15 min) or wait for the result; the warmer stays on for 7 days of quiet (`_SPOTLIGHT_WARM_ACTIVE_S`). Cause: six simultaneous opens from the 6 AM results email on a cold cache (digest #1877). `replication.status` no longer caches a failed read; the scheduled digest allows 75 s. `event_invite_auto` / `results_email_auto` slow lines 900 s. Guards in `test_perf.py` and `test_replication.py`.

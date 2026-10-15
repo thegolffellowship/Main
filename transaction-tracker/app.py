@@ -4907,12 +4907,18 @@ def public_event_rsvp(token):
     Kerry 10/13: one tap. I'm in -> the event's registration page. Can't make
     it -> straight to "Thanks for letting us know", with Changed my mind,
     I'm in (-> registration), Remove me from invitations, and an optional
-    one-tap reason. Remove me -> straight to Done. The answer is written by
-    the page itself (a POST from the page's script, or its button when
-    scripts are off), never by the bare GET, so a mail scanner that only
-    fetches the link does not answer for a player."""
+    one-tap reason. The answer is written by the page itself (a POST from
+    the page's script, or its button when scripts are off), never by the
+    bare GET, so a mail scanner that only fetches the link does not answer
+    for a player.
+
+    Remove me needs a real TAP (Kerry 10/14): on 10/14 mail scanners that
+    run page scripts opened every link within minutes of the 7 AM send and
+    the self-saving page took seven members off invitations. The Remove me
+    page now asks, and only its button saves."""
     import html as _h
     from email_parser import invitations as _inv
+    res = {}
     if request.method == "POST":
         res = _inv.record_answer(token)
         if not res.get("ok"):
@@ -4936,8 +4942,22 @@ def public_event_rsvp(token):
     btn = ("display:inline-block;border-radius:999px;padding:12px 22px;margin:6px 6px 0 0;"
            "font:bold 16px Georgia,serif;text-decoration:none;")
     if info["action"] == "unsub":
-        body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
-                "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>" + record)
+        if done and res.get("ignored"):
+            # Tapped within the scanner grace (Kerry 10/14): never claim it
+            # was done; ask again so a real person can confirm.
+            body = ("<h2>Remove you from event invitations?</h2>"
+                    "<p>Please tap the button once more to confirm.</p>"
+                    f"<form method='post'><button type='submit' style='{btn}border:0;"
+                    "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
+            return _public_page("Invitations", body)
+        if done:
+            body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
+                    "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>")
+            return _public_page("Invitations", body)
+        body = ("<h2>Remove you from event invitations?</h2>"
+                "<p>You'll stop getting our event invitations and reminders.</p>"
+                f"<form method='post'><button type='submit' style='{btn}border:0;"
+                "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
         return _public_page("Invitations", body)
     if info["action"] == "in":           # no registration link on the event
         body = (f"<h2>You're in. Thanks!</h2><p>{_h.escape(info['course'])}, "
@@ -4957,6 +4977,16 @@ def public_event_rsvp(token):
             "<p style='margin-top:22px;color:#6B7280;font-size:14px'>Mind sharing why? (optional)</p>"
             + reasons + record)
     return _public_page("RSVP", body)
+
+
+@app.route("/api/invitations/declines")
+@require_role("manager")
+def api_invitation_declines():
+    """Season-wide Can't make it answers + reasons by chapter (Kerry 10/14),
+    the RSVP Log's report card. ?year=YYYY, default this year."""
+    from email_parser import invitations as _inv
+    y = request.args.get("year", "")
+    return jsonify(_inv.season_decline_report(int(y) if y.isdigit() else None))
 
 
 @app.route("/rsvp/<token>/reason", methods=["POST"])

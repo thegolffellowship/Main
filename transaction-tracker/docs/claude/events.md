@@ -137,6 +137,41 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   long"). The page writes the answer itself (a script POST, or a button with
   scripts off); the bare GET never does, so a mail scanner can't answer. An answer is an `rsvps` row with email_uid
   `tracker:<event_id>:<customer_id>`, upserted (the latest answer wins).
+- **Mail scanners and previews (Kerry 10/14).** On the first send, scanners that
+  RUN page scripts opened every button within minutes, and the self-saving
+  Remove me page took seven members off invitations; taps on a staff preview
+  answered for its sample person (Todd McConahy). Now **Remove me asks first**
+  ("Yes, remove me") and only its button saves. **Preview links** carry a
+  preview mark (`make_token(..., preview=True)`): they open the same pages and
+  record nothing (no RSVP, opt-out, reason or click). Can't make it still saves
+  from the page's script, as Kerry ruled, so a scanner can still mark a NOT
+  PLAYING. `restore_answers` (bridge `0|restore|<kerry-ok post>|<cids>[|confirm]`)
+  undoes answers a person did not give: back on invitations, their Tracker
+  NOT PLAYING rows and decline reasons on upcoming events removed.
+- **Scanner filter (Kerry 10/14: "yes on the scanner filter", CoS #1793/#1794).**
+  Each sent link carries its send time (`s` in the token). A tap is ignored
+  (the page looks normal, nothing is recorded, `agent_action_log`
+  `event_invite_scanner_ignored`) when it comes within `SCANNER_GRACE_S`
+  (120 s) of the send, or when the OTHER of I'm in / Can't make it was tapped
+  within `BURST_S` (30 s); a burst also undoes that earlier tap (its NOT
+  PLAYING row or its click). Remove me gets the grace only, never the burst
+  (a person goes Can't make it -> Remove me in seconds), and an ignored
+  Remove me asks again instead of saying Done. `event_invite_clicks:<id>` now
+  keeps the LATEST click time. **Previews** show a staff member's own
+  invitation (`event_invite_preview_cid`, default 18 = Kerry), never a member's.
+  **Where the reasons show (Kerry 10/14):** EVENTS → ROSTER → Not Playing:
+  the counts head the list and each card carries its reason chip; an answer
+  to our invitation is badged TGF (GG = a Golf Genius RSVP). Fields `source`
+  and `decline_reason` on every RSVP read (`_tag_tracker_rsvp`). On the phone
+  the same list sits collapsed at the end of the ROSTER ("Can't make it (N)",
+  `renderNotPlayingSection(list, true)`). **Season report** (Kerry 10/14): the
+  RSVP Log page's Can't make it card, by the event's chapter (TGF events =
+  Combined), reasons + "no reason" + a By event table, from
+  `season_decline_report(year)`, `GET /api/invitations/declines` (manager+),
+  bridge `scoring-event-invite:declines[|year]`. Only STANDING answers count.
+  Research behind it (CAN-SPAM, Gmail/Yahoo/Outlook bulk rules, why no
+  RFC 8058 header through Graph): mailbox #1792/#1793. Footer postal address:
+  on HOLD for Kerry's virtual mailbox (#1795).
 - **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
   tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.
 - **Schedule** (Kerry), 7:00 AM Central, `schedule(event_date)`: weekday event

@@ -173,6 +173,18 @@ check("record dial off: final money shows, nothing recorded",
       off["state"] == "final_display_only" and not CALLS
       and (ap.preview_for(EV, DB) or {}).get("final") is True, off)
 db.set_app_setting(ap.RECORD_DIAL, "on", DB)
+check("the dial alone records nothing before 10/20 (CoS #1797)",
+      ap.record_enabled(DB) and not ap.record_enabled(DB, "2026-10-13")
+      and ap.record_enabled(DB, "2026-10-20"))
+early = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("a 10/13 event stays display only with the dial on",
+      early["state"] in ("final_display_only", "unchanged") and not CALLS, early)
+db.set_app_setting(ap.RECORD_FROM, "2026-10-01", DB)
+nxt = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("display-only is not sticky once recording is allowed for the event",
+      nxt["state"] == "recorded" and len(CALLS) == 1, nxt)
+CALLS.clear()
+db.set_app_setting(ap.FP_SETTING, "{}", DB)
 with se._closing(se._conn(DB)) as _c:
     se._bump(_c, EV)
     _c.commit()
@@ -196,7 +208,57 @@ ROWS.append({"golferName": "Pat Youngs", "customer_id": 301, "category": "skins"
 four = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
 check("no card change since the record: not re-run", four["state"] == "unchanged" and len(CALLS) == 2, four)
 
+print("holds the verifier relies on (CoS #1797)")
+_n_calls = len(CALLS)
+_ver = lambda: (se._bump(_c2 := se._conn(DB), EV), _c2.commit(), _c2.close())
+ap.hold(EV, "flight 2 tie needs a ruling", by="closeout", db_path=DB)
+_ver()
+h1 = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("a verifier hold stops the record", h1["state"] == "held" and len(CALLS) == _n_calls, h1)
+check("the hold reaches Kerry as a COO item",
+      sqlite3.connect(DB).execute("SELECT COUNT(*) FROM action_items WHERE subject LIKE "
+                                  "'PAYOUTS HELD:%'").fetchone()[0] >= 1)
+h2 = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("held: not re-run every minute", h2["state"] == "unchanged" and len(CALLS) == _n_calls, h2)
+ap.release(EV, by="kerry", db_path=DB)
+h3 = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("release: records on the next run", h3["state"] == "recorded" and len(CALLS) == _n_calls + 1, h3)
+
+_real_holders = se.event_ctp_holders
+se.event_ctp_holders = lambda eid, db_path=None: [
+    {"hole": 7, "kind": "ctp", "customer_id": 302, "name": "Dan S",
+     "needs_confirm": {"from": {"name": "Pat Y", "group_num": 2},
+                       "to": {"name": "Dan S", "group_num": 1}}}]
+_ver()
+c1 = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("an unconfirmed CTP takeover holds the record", c1["state"] == "held"
+      and "hole 7" in c1["why"] and len(CALLS) == _n_calls + 1, c1)
+dry = ap.run(apply=False, event_id=EV, db_path=DB)["events"][0]
+check("the dry run reports the same hold", dry["state"] == "held", dry)
+se.event_ctp_holders = _real_holders
+_ver()                                       # the manager's confirm bumps the version
+c2 = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("confirmed: records", c2["state"] in ("recorded", "unchanged"), c2)
+
+_good_rec = db.record_event_game_payouts
+db.record_event_game_payouts = lambda name, rows, force=False, db_path=None: {
+    "error": "2 manually recorded payout(s) exist for this event"}
+ROWS.append({"golferName": "Dan Stich", "customer_id": 302, "category": "ctp", "amount": 7.0,
+             "description": "CTP hole 7"})
+_ver()
+r1 = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("a refused record is reported", r1["state"] == "refused" and "manually" in r1["why"], r1)
+r2 = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("refused: waits for a change or 15 minutes", r2["state"] == "unchanged", r2)
+st = json.loads(db.get_app_setting(ap.FP_SETTING, DB))[str(EV)]
+st["retry_at"] = "2000-01-01T00:00:00Z"
+db.set_app_setting(ap.FP_SETTING, json.dumps({str(EV): st}), DB)
+db.record_event_game_payouts = _good_rec
+r3 = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
+check("refused: retried after 15 minutes with no card change", r3["state"] == "recorded", r3)
+
 print("manager unlock")
+_n_unlock = len(CALLS)
 db.set_app_setting(se.CARD_LOCK_SETTING, "15", DB)
 se.unlock_card(gid, db_path=DB)
 card = se.get_group_card(gid, "dev", db_path=DB)
@@ -204,7 +266,7 @@ check("unlocked card is not final", not card["final"], card.get("final_at"))
 r = se.write_scores(gid, "dev", 301, ops(301, [2], 3), db_path=DB)
 check("the scorer can fix it again", r["results"][0]["result"] == "ok", r)
 out = ap.run(apply=True, event_id=EV, db_path=DB)["events"][0]
-check("money shows again, not final", out["state"] == "provisional" and len(CALLS) == 2, out)
+check("money shows again, not final", out["state"] == "provisional" and len(CALLS) == _n_unlock, out)
 
 print("dial")
 db.set_app_setting(ap.DIAL, "off", DB)

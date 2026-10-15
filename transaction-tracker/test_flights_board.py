@@ -76,6 +76,9 @@ c.execute("INSERT INTO gg_game_results (event_id, game, game_label, customer_id,
 c.commit()
 
 print("\n== the board reads the roster, the index of record and the matrix ==")
+# This fixture is dated yesterday; the GG comparison below is GG-era
+# behaviour, so pin the untether date past it (F2 covers the other side).
+db.set_app_setting("gg_untether_from", "2099-12-31", tmp)
 board = db.event_flights_board(EV, db_path=tmp)
 check("a board comes back for the event", bool(board) and board["event_id"] == EV)
 check("state is LIVE and it is a dry run naming GG as payer of record",
@@ -116,6 +119,13 @@ check("...the skins pot is the matrix's, split equally per flight ($144 → $72 
       sk["amounts"]["total_pot"] == 144.0 and [f["pot"] for f in sk["amounts"]["flights"]] == [72.0, 72.0], str(sk["amounts"]))
 check("...beside what Golf Genius recorded for Skins ($130 across 2 rows; the CTP row is not this game's)",
       sk["gg_recorded"]["total"] == 130.0 and len(sk["gg_recorded"]["rows"]) == 2, str(sk["gg_recorded"]))
+db.set_app_setting("gg_untether_from", "2026-10-07", tmp)
+_ub = db.event_flights_board(EV, db_path=tmp)
+_usk = next(e for e in _ub["games"] if e["game"] == "skins")
+check("F2: an untethered event names the Tracker as payer of record and shows no Golf Genius line",
+      _ub["payer_of_record"] == "The Tracker (auto payouts)" and _usk["gg_recorded"]["rows"] == [],
+      (_ub["payer_of_record"], _usk["gg_recorded"]))
+db.set_app_setting("gg_untether_from", "2099-12-31", tmp)
 
 inn = g["individual_net"]
 check("Individual Net: 13 buyers on a nine → 2 flights split down the middle by default, the SMALLER half in Flight 1: 6/7 (Kerry 2026-09-22: 'the lower number should go to the Flight 1')",

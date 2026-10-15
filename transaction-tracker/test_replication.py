@@ -181,6 +181,12 @@ try:
     check("...a second read inside the cache window makes no R2 call", warm < 0.2 and len(_calls) == 2, f"{warm:.2f}s {_calls}")
     rp.status(_d / "transactions.db", fresh=True)
     check("...and the scheduled digest's fresh=True always re-reads", len(_calls) == 4, _calls)
+    def _timeout_gen(b, path, timeout, db_path=None): raise subprocess.TimeoutExpired("litestream", timeout)
+    rp._generations = _timeout_gen; rp._CACHE.update(at=0.0, val=None)
+    bad = rp.status(_d / "transactions.db", fresh=True)
+    rp._generations = _slow_gen
+    check("a timed-out read reports the error but is NOT cached (10/14: the 5:00 error would have stood 15 min)",
+          "timed out" in (bad.get("error") or "") and rp._CACHE["val"] is None, bad)
     rp.running = lambda: False
     check("...a cached read still re-checks that the process is running", rp.status(_d / "transactions.db")["running"] is False)
 finally:
