@@ -679,3 +679,13 @@ us." The optional one-tap reason on an invitation's Can't make it page
 Injury, Other; a new reason is a new migration), `source` ('invitation'),
 created_at / updated_at. UNIQUE (event_id, customer_id): a later tap updates the
 row. Writer `record_reason`, reader `decline_reasons`.
+
+## advisors (migration 0024, Kerry 2026-10-15 "Yep B", CoS #1905)
+
+Outside advisors on a signed per-person link (`email_parser/advisors.py`).
+`advisor_id`, `name`, `email` (Kerry's record only; the Tracker never emails it),
+`token_version` (bumped on revoke: every link and open session of that advisor
+stops), `created_at`, `created_by`, `revoked_at`, `last_seen_at`. Pages opened are
+`agent_action_log` rows (agent `advisor:<id>`, action `advisor_concept_open`), not
+a second table. Reversible: drop the table. Library sections added beside it:
+`published` (0022) and `concepts` (0023, served by `/concepts`).

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link not active — The Golf Fellowship</title>
+  <style>
+    /* ADVISOR LINK (CoS #1905): a revoked, replaced or broken advisor link. */
+    body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      background:#1B1B1B; font-family:"Helvetica Neue", Arial, system-ui, sans-serif; }
+    .box { background:#fff; border-radius:12px; padding:28px 24px; width:min(360px, 92vw); text-align:center; }
+    img { width:72px; height:72px; }
+    h1 { font-family:Georgia, serif; font-size:20px; margin:10px 0 6px; }
+    p { color:#4B5563; font-size:14px; margin:0; line-height:1.45; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <img src="/static/tgf-logo-r.svg" alt="TGF">
+    {% if why == "invalid" %}
+    <h1>This link isn't valid</h1>
+    <p>Please check you opened the whole link, or ask Kerry for a new one.</p>
+    {% else %}
+    <h1>This link is no longer active</h1>
+    <p>Please ask Kerry for a new link.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

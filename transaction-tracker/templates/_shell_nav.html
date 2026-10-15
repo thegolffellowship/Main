@@ -27,7 +27,18 @@
     {# SHELL_SLIM (Kerry 2026-09-29: "If players click PLAYERS, LEADERBOARD or
        HANDICAPS, how will they get back to the LIVE SCORING? I'd say hide that
        for now."): the score-entry page keeps only the mark, no way off the card. #}
-    {% if not SHELL_SLIM %}
+    {% if advisor_name %}
+    {# ADVISOR LINK (Kerry 2026-10-15 "Yep B", CoS #1905): the member shell
+       reduced to CONCEPTS | Leaderboard | Handicaps, the advisor's own name
+       instead of the sign-up CTA, no login modal. #}
+    <nav class="shell-member-tabs">
+        <a href="/concepts" class="{{ 'active' if SHELL_ACTIVE == 'concepts' else '' }}">Concepts</a>
+        <a href="/member/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Leaderboard</a>
+        <a href="/member/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
+    </nav>
+    <span class="shell-advisor-name" title="Advisor access">{{ advisor_name }}</span>
+</header>
+    {% elif not SHELL_SLIM %}
     <nav class="shell-member-tabs">
         {# Order + labels (Kerry 2026-07-14): Spotlight first (member landing
            = the individual player), Season Contests renamed Leaderboard. #}
@@ -168,6 +179,10 @@
            admin orange nor the Two Man Tour gold, both of which already
            mean something else. #}
         <a href="/member" class="admin-nav shell-members-pill" style="display:none;" title="Open the pinless member view">Members</a>
+        {# CONCEPTS (Kerry 2026-10-15, CoS #1904): manager and admin. Not an
+           admin-nav link, and not in view-only's three tabs, so auth.js
+           shows it to managers and admins only. #}
+        <a href="/concepts" class="{{ 'active' if SHELL_ACTIVE == 'concepts' else '' }}">Concepts</a>
     </nav>
     <div class="shell-nav-right">
         <a class="shell-admin-link admin-nav" href="/accounting" title="Admin dashboard" style="display:none;"><span class="shell-admin-pill{{ ' active' if SHELL_ACTIVE == 'admin' else '' }}">Admin</span></a>
@@ -199,6 +214,7 @@
         <a href="/tgf" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'tgf' else '' }}" style="display:none;">Payouts <span class="shell-admin-pill shell-pill-inline">Admin</span></a>
         <a href="/admin/ca-queue" class="admin-nav" style="display:none;">Queue</a>
         <a href="/member" class="admin-nav" style="display:none;">Members</a>
+        <a href="/concepts" class="{{ 'active' if SHELL_ACTIVE == 'concepts' else '' }}">Concepts</a>
         <a href="/accounting" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'admin' else '' }}" style="display:none;">Admin</a>
         <a href="/twomantour" class="admin-nav shell-tmt-drawer" style="display:none;">Two Man Tour</a>
     </nav>

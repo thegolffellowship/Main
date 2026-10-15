@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Advisors</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <style>
+        /* ADVISORS, admin only (Kerry 2026-10-15 "Yep B", CoS #1905): outside
+           advisors open CONCEPTS and the member pages on a signed per-person
+           link. Kerry copies the link here and hands it over himself; the
+           Tracker never emails it. Revoke ends that advisor's links at once. */
+        .adv-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:4px 0 10px; }
+        .adv-head h2 { font-family:'Bitter',serif; font-size:1.5rem; margin:0; }
+        .adv-sub { color:var(--text-muted,#6B7280); font-size:.85rem; }
+        .adv-add { display:flex; gap:8px; flex-wrap:wrap; align-items:center; background:#fff;
+                   border:1px solid var(--border,#E5E7EB); border-radius:12px; padding:12px; margin-bottom:14px; }
+        .adv-add input { padding:8px 10px; border:1px solid var(--border,#E5E7EB); border-radius:8px; font-size:.95rem; min-width:0; }
+        .adv-add input[name=name] { flex:1 1 180px; } .adv-add input[name=email] { flex:1 1 220px; }
+        .adv-list { display:grid; gap:10px; }
+        .adv-row { background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:12px; padding:12px 14px; }
+        .adv-row.revoked { background:#F9FAFB; color:#6B7280; }
+        .adv-top { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+        .adv-name { font-family:'Bitter',serif; font-weight:700; font-size:1.05rem; }
+        .adv-email { color:var(--text-muted,#6B7280); font-size:.85rem; }
+        .adv-chip { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; padding:2px 8px;
+                    border-radius:999px; background:#DCFCE7; color:#15803D; }
+        .adv-row.revoked .adv-chip { background:#FEE2E2; color:#B91C1C; }
+        .adv-seen { color:var(--text-muted,#6B7280); font-size:.82rem; margin-top:4px; }
+        .adv-pages { margin:6px 0 0; padding:0; list-style:none; font-size:.85rem; }
+        .adv-pages li { padding:2px 0; white-space:normal; }
+        .adv-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+        .adv-link { width:100%; margin-top:8px; font-size:.8rem; padding:6px 8px; border:1px dashed var(--border,#D1D5DB);
+                    border-radius:8px; background:#F9FAFB; word-break:break-all; display:none; }
+        .adv-msg { font-size:.85rem; margin:6px 0 0; }
+        @media (max-width: 560px) {
+            .adv-add input, .adv-add button { flex:1 1 100%; }
+            .adv-actions .btn { flex:1 1 auto; }
+        }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Advisors' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% endif %}
+    <main>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/admin/health">Health</a>
+            <a href="/spotlight">Spotlight</a>
+            <a href="/admin/gg-history">GG History</a>
+            <a href="/admin/test-center">Test Center</a>
+            <a href="/admin/lsc-teams">Cup Teams</a>
+            <a href="/admin/advisors" class="active">Advisors</a>
+        </nav>
+        <div class="adv-head"><h2>Advisors</h2>
+            <span class="adv-sub">Outside advisors see CONCEPTS, the Leaderboard and Handicaps on their own link. No member details. The Tracker never emails a link: copy it and send it yourself.</span></div>
+        <form class="adv-add" id="adv-add">
+            <input name="name" placeholder="Name" autocomplete="off" required maxlength="120">
+            <input name="email" type="email" placeholder="Email (optional, for your records)" autocomplete="off" maxlength="200">
+            <button class="btn btn-primary" type="submit">Add advisor</button>
+        </form>
+        <p class="adv-msg" id="adv-msg"></p>
+        <div class="adv-list" id="adv-list"><p style="color:var(--text-muted);">Loading&hellip;</p></div>
+    </main>
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+    function when(ts) {
+        if (!ts) return "never";
+        const d = new Date(String(ts).replace(" ", "T") + "Z");
+        return isNaN(d) ? ts : d.toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
+    }
+    async function post(url, body) {
+        const r = await fetch(url, {method:"POST", credentials:"same-origin",
+            headers:{"Content-Type":"application/json"}, body: JSON.stringify(body || {})});
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+        return j;
+    }
+    async function load() {
+        const box = document.getElementById("adv-list");
+        try {
+            const r = await fetch("/api/advisors", {credentials:"same-origin"});
+            const j = await r.json();
+            if (!r.ok) throw new Error(j.error || r.status);
+            const rows = j.advisors || [];
+            if (!rows.length) { box.innerHTML = '<p style="color:var(--text-muted);">No advisors yet.</p>'; return; }
+            box.innerHTML = rows.map(a => {
+                const rev = !!a.revoked_at;
+                const pages = (a.pages_opened || []).map(p =>
+                    `<li>${esc(p.doc_id)} &middot; opened ${p.count}&times;, last ${esc(when(p.last))}</li>`).join("")
+                    || '<li style="color:var(--text-muted);">No pages opened yet.</li>';
+                return `<div class="adv-row${rev ? " revoked" : ""}" data-id="${a.advisor_id}">
+                    <div class="adv-top"><span class="adv-name">${esc(a.name)}</span>
+                        <span class="adv-chip">${rev ? "Revoked" : "Active"}</span>
+                        ${a.email ? `<span class="adv-email">${esc(a.email)}</span>` : ""}</div>
+                    <div class="adv-seen">Last seen ${esc(when(a.last_seen_at))}${rev ? " &middot; revoked " + esc(when(a.revoked_at)) : ""}</div>
+                    <ul class="adv-pages">${pages}</ul>
+                    <div class="adv-actions">
+                        ${rev ? `<button class="btn" data-act="reinstate">Reinstate</button>`
+                              : `<button class="btn btn-primary" data-act="link">Copy link</button>
+                                 <button class="btn btn-danger" data-act="revoke">Revoke</button>`}
+                    </div>
+                    <input class="adv-link" readonly>
+                </div>`;
+            }).join("");
+        } catch (e) {
+            box.innerHTML = `<p style="color:#B91C1C;">Couldn't load advisors (${esc(e.message)}).</p>`;
+        }
+    }
+    document.getElementById("adv-add").addEventListener("submit", async ev => {
+        ev.preventDefault();
+        const f = ev.target, msg = document.getElementById("adv-msg");
+        try {
+            const r = await post("/api/advisors", {name: f.name.value, email: f.email.value});
+            msg.textContent = `Added ${r.name}. Use Copy link to get their link.`;
+            f.reset(); load();
+        } catch (e) { msg.textContent = e.message; }
+    });
+    document.getElementById("adv-list").addEventListener("click", async ev => {
+        const b = ev.target.closest("button[data-act]");
+        if (!b) return;
+        const row = b.closest(".adv-row"), id = row.dataset.id, act = b.dataset.act;
+        const name = row.querySelector(".adv-name").textContent;
+        try {
+            if (act === "revoke" && !confirm(`Revoke ${name}? Every link they have stops working now.`)) return;
+            if (act === "reinstate" && !confirm(`Reinstate ${name}? Their old links stay dead; copy a new one.`)) return;
+            const r = await post(`/api/advisors/${id}/${act}`);
+            if (act === "link") {
+                const out = row.querySelector(".adv-link");
+                out.value = r.url; out.style.display = "block"; out.select();
+                try { await navigator.clipboard.writeText(r.url); b.textContent = "Copied"; }
+                catch (e) { b.textContent = "Select and copy"; }
+                setTimeout(() => { b.textContent = "Copy link"; }, 2500);
+                return;
+            }
+            load();
+        } catch (e) { alert(e.message); }
+    });
+    document.addEventListener("DOMContentLoaded", () => { initAuth(); load(); });
+    </script>
+</body>
+</html>

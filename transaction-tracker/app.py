@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 import anthropic as _anthropic
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session
+from flask import Flask, Response, g, jsonify, redirect, render_template, request, send_file, session
 from email_parser.http_headers import content_disposition
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -449,6 +449,19 @@ def _inject_shell_flag():
     redeploy needed (rollback structure per mailbox #53).
     """
     return {"shell_v2": os.environ.get("SHELL_V2", "1").strip().lower() not in ("0", "false", "off")}
+
+
+@app.context_processor
+def _inject_advisor():
+    """`advisor_name` on every template while an advisor link session is
+    open (CoS #1905): the member shell then shows CONCEPTS | Leaderboard |
+    Handicaps and the advisor's name instead of the member tabs."""
+    try:
+        if session.get("role") == "advisor":
+            return {"advisor_name": session.get("advisor_name") or "Advisor"}
+    except Exception:
+        pass
+    return {"advisor_name": None}
 
 
 @app.context_processor
@@ -1452,7 +1465,12 @@ def validate_json_fields(data: dict, required: list[str] = None,
 # Role-based access helpers
 # ---------------------------------------------------------------------------
 # Role hierarchy: each rank includes the capabilities of the ranks below it.
-_ROLE_RANK = {"member": 0, "view-only": 1, "manager": 2, "admin": 3}
+_ROLE_RANK = {"member": 0, "advisor": 0.5, "view-only": 1, "manager": 2, "admin": 3}
+# `advisor` (Kerry 2026-10-15 "Yep B", CoS #1905): outside advisors on a
+# signed per-person link (email_parser/advisors.py). Above the public member
+# tier, below view-only, so every endpoint declaring view-only or more
+# refuses them; they reach CONCEPTS and the PII-free /member pages only.
+_ADVISOR_PAGES = ("/concepts", "/member", "/advisor/", "/static/")
 
 
 def _wants_page(req) -> bool:
@@ -1499,6 +1517,49 @@ def require_role(role):
             return f(*args, **kwargs)
         return decorated
     return decorator
+
+
+@app.before_request
+def _advisor_gate():
+    """An advisor session (CoS #1905): re-checked against its row on every
+    request, so a revoke ends it at once; outside CONCEPTS and /member a
+    PAGE gets the sign-in gate, exactly as an anonymous visitor would."""
+    if session.get("role") != "advisor":
+        return None
+    path = request.path or ""
+    from email_parser import advisors as _adv
+    who = _adv.session_advisor(session)
+    if not who:
+        for k in ("role", "advisor_id", "advisor_tv", "advisor_name", "chapter"):
+            session.pop(k, None)
+        if path.startswith("/advisor/"):
+            return None
+        if _wants_page(request) and path.startswith(("/concepts", "/member")):
+            return render_template("advisor_inactive.html", why="inactive"), 401
+        return None
+    g.advisor = who
+    if path == "/":
+        return redirect("/concepts")
+    if _wants_page(request) and not path.startswith(_ADVISOR_PAGES):
+        return render_template("login_gate.html"), 401
+    return None
+
+
+def require_concepts(f):
+    """CONCEPTS (CoS #1904/#1905): manager and admin, or an advisor link.
+    A page without a role gets the sign-in gate; view-only gets the gate
+    too (it can sign in as a manager), never the page."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        role = session.get("role")
+        if role == "advisor" or _ROLE_RANK.get(role, 0) >= _ROLE_RANK["manager"]:
+            return f(*args, **kwargs)
+        if _wants_page(request):
+            return render_template("login_gate.html"), 401
+        if not role:
+            return jsonify({"error": "Not authenticated. Please log in."}), 401
+        return jsonify({"error": "Manager access required."}), 403
+    return decorated
 
 
 # ---------------------------------------------------------------------------
@@ -14483,6 +14544,130 @@ def api_member_metric():
 # page is /admin/health. The digest job posts the same report to the
 # mailbox once a day and files findings as COO action items.
 # ---------------------------------------------------------------------------
+# ── CONCEPTS (CoS #1904, Kerry 2026-10-15) + ADVISOR LINKS (#1905) ─────────
+# Self-contained HTML concept pages filed in the Library under `concepts/`,
+# read here and never edited here. Manager/admin, or an advisor on a signed
+# link (email_parser/advisors.py). A page is served inside the Tracker shell
+# in a sandboxed frame: its own styles stay in its own document, and its
+# inline scripts run with no access to the Tracker's cookies or pages.
+
+def _concept_pages() -> list:
+    from email_parser.library import library_list
+    rows = (library_list(section="concepts") or {}).get("documents") or []
+    return [{"doc_id": r["doc_id"], "title": r["title"], "version": r["version"],
+             "status": r["status"], "filed_at": r["filed_at"]} for r in rows]
+
+
+def _concept_doc(doc_id: str) -> dict | None:
+    """The live concept page, or None. Only the concepts section is served:
+    a doc_id from another section never comes back through here."""
+    from email_parser.library import library_get
+    d = library_get(doc_id)
+    if d.get("error") or (d.get("meta") or {}).get("section") != "concepts":
+        return None
+    return d
+
+
+@app.route("/concepts")
+@require_concepts
+def concepts_page():
+    adv = session.get("role") == "advisor"
+    return render_template("concepts.html", member_mode=adv, pages=_concept_pages(),
+                           doc=None, SHELL_ACTIVE="concepts")
+
+
+@app.route("/concepts/<doc_id>")
+@require_concepts
+def concept_view(doc_id):
+    d = _concept_doc(doc_id)
+    if not d:
+        return render_template("concepts.html", member_mode=session.get("role") == "advisor",
+                               pages=_concept_pages(), doc=None, missing=doc_id,
+                               SHELL_ACTIVE="concepts"), 404
+    if session.get("role") == "advisor" and session.get("advisor_id"):
+        from email_parser import advisors as _adv
+        _adv.log_open(session["advisor_id"], d["meta"]["doc_id"])
+    return render_template("concepts.html", member_mode=session.get("role") == "advisor",
+                           pages=_concept_pages(), doc=d["meta"], SHELL_ACTIVE="concepts")
+
+
+@app.route("/concepts/<doc_id>/raw")
+@require_concepts
+def concept_raw(doc_id):
+    d = _concept_doc(doc_id)
+    if not d:
+        return Response("Not found", status=404, mimetype="text/plain")
+    resp = Response(d["body"], mimetype="text/html")
+    # Sandboxed: scripts may run, but as an opaque origin with no Tracker
+    # cookies, storage or same-origin access; links open a new tab.
+    resp.headers["Content-Security-Policy"] = (
+        "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; "
+        "default-src 'none'; img-src * data:; style-src 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com data:; script-src 'unsafe-inline'; frame-ancestors 'self'")
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/concepts")
+@require_concepts
+def api_concepts():
+    return jsonify({"pages": _concept_pages()})
+
+
+@app.route("/advisor/<token>")
+def advisor_link(token):
+    """An advisor's signed link (#1905): identity from the token only."""
+    from email_parser import advisors as _adv
+    res = _adv.resolve_token(token)
+    if not res.get("ok"):
+        return render_template("advisor_inactive.html", why=res.get("why")), 401
+    a = res["advisor"]
+    for k in ("chapter",):
+        session.pop(k, None)
+    session["role"] = "advisor"
+    session["advisor_id"] = a["advisor_id"]
+    session["advisor_tv"] = a["token_version"]
+    session["advisor_name"] = a["name"]
+    session.permanent = True
+    return redirect("/concepts")
+
+
+@app.route("/admin/advisors")
+def admin_advisors_page():
+    if session.get("role") != "admin":
+        if _wants_page(request) and not session.get("role"):
+            return render_template("login_gate.html"), 401
+        return redirect("/events")
+    return render_template("admin_advisors.html")
+
+
+@app.route("/api/advisors", methods=["GET", "POST"])
+@require_role("admin")
+def api_advisors():
+    from email_parser import advisors as _adv
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        res = _adv.add(data.get("name") or "", data.get("email") or "", by="admin")
+        return (jsonify(res), 400) if res.get("error") else jsonify(res)
+    return jsonify({"advisors": _adv.list_all()})
+
+
+@app.route("/api/advisors/<int:advisor_id>/<action>", methods=["POST"])
+@require_role("admin")
+def api_advisor_action(advisor_id, action):
+    from email_parser import advisors as _adv
+    if action == "link":
+        res = _adv.link(advisor_id, base_url=request.host_url)
+    elif action == "revoke":
+        res = _adv.revoke(advisor_id, by="admin")
+    elif action == "reinstate":
+        res = _adv.reinstate(advisor_id, by="admin")
+    else:
+        return jsonify({"error": "unknown action"}), 404
+    return (jsonify(res), 400) if res.get("error") else jsonify(res)
+
+
 @app.route("/admin/lsc-teams")
 def lsc_teams_page():
     """LONE STAR CUP TEAMS, admin only (Kerry 2026-10-09): the rosters,

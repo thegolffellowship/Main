@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.567.0";
+window.TGF_VERSION = "2.568.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.568.0",
+    date: "2026-10-15",
+    title: "CONCEPTS section and advisor links; Library section 'published'",
+    changes: [
+      "Kerry 10/15 (CoS #1904): \"Are you able to wire that into my Tracker so it's visible on the internet? For manager/admin view only... Probably need a new section that I can click in the Nav Bar to access it.\" New CONCEPTS nav link (manager and admin; not shown to view-only or on member pages) listing the self-contained HTML pages filed in the Library's new concepts/ section (migration 0023). A page opens inside the Tracker shell in a sandboxed frame: its own styles stay in its own document and its inline scripts run with no access to the Tracker. The Library stays the source and the versioning; nothing is edited here. A direct link with no role gets the sign-in page.",
+      "Kerry 10/15, rule 3b \"Yep B\" (CoS #1905): advisor access. New role advisor, ranked between the public member tier and view-only, so every view-only-or-higher endpoint refuses it. Each advisor gets a signed per-person link (/advisor/<token>, the /me pattern: HMAC with the advisor's own token_version, season-long expiry, identity from the token only). The link opens CONCEPTS with the member shell reduced to Concepts | Leaderboard | Handicaps and the advisor's name; any staff page gets the sign-in page. New table advisors (migration 0024). Admin → Advisors adds an advisor, copies the link, revokes (every link and open session of that advisor stops at once; the same link then reads \"This link is no longer active\") and shows last seen and pages opened (logged in agent_action_log). The Tracker never emails a link. test_concepts_advisors.py.",
+      "Library section 'published' (Kerry to the Librarian 10/14, #1854; db-claude PASS #1883), migration 0022.",
+    ],
+  },
   {
     version: "2.567.0",
     date: "2026-10-15",

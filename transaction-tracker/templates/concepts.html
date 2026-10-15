@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Concepts{% if doc %} · {{ doc.title }}{% endif %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <style>
+        /* CONCEPTS (Kerry 2026-10-15, CoS #1904/#1905): concept pages filed in
+           the Library's concepts/ section, read-only. Each page is served in a
+           sandboxed frame so its own styles and scripts stay inside it. */
+        .cx-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:6px 0 10px; }
+        .cx-head h2 { font-family:'Bitter',serif; font-size:1.45rem; margin:0; }
+        .cx-sub { color:var(--text-muted,#6B7280); font-size:.85rem; }
+        .cx-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+        .cx-card { display:block; background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:12px;
+                   padding:14px 16px; color:inherit; text-decoration:none; }
+        .cx-card:hover { border-color:var(--primary,#E87C3E); }
+        .cx-card h3 { font-family:'Bitter',serif; font-size:1.02rem; margin:0 0 6px; white-space:normal; }
+        .cx-meta { color:var(--text-muted,#6B7280); font-size:.78rem; }
+        .cx-chip { display:inline-block; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+                   padding:2px 7px; border-radius:999px; background:#F3F4F6; color:#4B5563; margin-left:6px; }
+        .cx-empty { color:var(--text-muted,#6B7280); padding:24px 0; }
+        .cx-back { font-size:.85rem; color:var(--link,#2563eb); text-decoration:none; }
+        .cx-frame { display:block; width:100%; border:0; background:#fff; border-radius:10px;
+                    height:calc(100vh - 170px); min-height:420px; box-shadow:0 0 0 1px var(--border,#E5E7EB); }
+        main.cx-main { padding-bottom: 12px; }
+        @media (max-width: 560px) {
+            main.cx-main { padding-left: 8px !important; padding-right: 8px !important; }
+            .cx-head h2 { font-size:1.2rem; }
+            .cx-frame { height:calc(100vh - 150px); border-radius:6px; }
+            .cx-list { grid-template-columns:1fr; }
+        }
+    </style>
+</head>
+<body>
+    {% if shell_v2 or member_mode %}
+    {% set SHELL_TITLE = 'Concepts' %}{% set SHELL_ACTIVE = 'concepts' %}
+    {% include '_shell_nav.html' %}
+    {% endif %}
+    <main class="cx-main">
+        {% if doc %}
+        <div class="cx-head">
+            <a class="cx-back" href="/concepts">&larr; All concepts</a>
+            <h2>{{ doc.title }}</h2>
+            <span class="cx-sub">v{{ doc.version }}<span class="cx-chip">{{ doc.status }}</span></span>
+        </div>
+        <iframe class="cx-frame" src="/concepts/{{ doc.doc_id }}/raw" title="{{ doc.title }}"
+                sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="eager"></iframe>
+        {% else %}
+        <div class="cx-head">
+            <h2>Concepts</h2>
+            <span class="cx-sub">{% if member_mode %}Pages shared with you for review.{% else %}Concept pages filed in the Library. Managers and advisors only.{% endif %}</span>
+        </div>
+        {% if missing %}<p class="cx-empty">That page isn't filed under Concepts.</p>{% endif %}
+        {% if pages %}
+        <div class="cx-list">
+            {% for p in pages %}
+            <a class="cx-card" href="/concepts/{{ p.doc_id }}">
+                <h3>{{ p.title }}</h3>
+                <div class="cx-meta">v{{ p.version }}<span class="cx-chip">{{ p.status }}</span>
+                    {% if p.filed_at %} &middot; filed {{ p.filed_at[:10] }}{% endif %}</div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="cx-empty">No concept pages are filed yet.</p>
+        {% endif %}
+        {% endif %}
+    </main>
+    {% if member_mode %}<script>window.MEMBER_MODE = true;</script>{% endif %}
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    document.addEventListener("DOMContentLoaded", () => { if (typeof initAuth === "function") initAuth(); });
+    </script>
+</body>
+</html>
