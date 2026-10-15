@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.566.0";
+window.TGF_VERSION = "2.567.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.567.0",
+    date: "2026-10-15",
+    title: "Gender from tees: a player with no gender on Forward tees is marked F, as inferred (behind a dial)",
+    changes: [
+      "Kerry 10/14 (rule 3b, approved with migration 0019, db-claude PASS #1855): \"Should automatically know this if they select Forward tees … 95% of the time or greater it's probably a woman.\" A person with no gender on file is set to F with customers.gender_source = 'inferred_from_tees' when their scorecards are majority on F-rated tees, or they registered on the Forward band with no rated rounds yet. A Forward registration whose rounds are on M-rated tees (a senior man on the men's Forward tee) is a conflict and is left for the manager. A gender already on file is never overwritten.",
+      "One writer, email_parser/customers_gender.py: bridge scoring-gender-infer[:apply][|ids], dry run by default; job gender_infer_auto every 30 minutes does nothing until app setting gender_infer reads on (after Kerry has seen the backfill list). The July boot step that fills blank genders from ladies tees now marks what it fills as inferred too. Temporary by Kerry's word: retires when registration asks gender up front (path in the migration comment). test_gender_infer.py.",
+    ],
+  },
   {
     version: "2.566.0",
     date: "2026-10-14",

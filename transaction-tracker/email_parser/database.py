@@ -28817,12 +28817,17 @@ def _migrate_gender_v1(conn: sqlite3.Connection) -> None:
     try:
         conn.execute(r"UPDATE course_tees SET is_ladies = 1 "
                      r"WHERE tee_name LIKE '%(L)%' AND is_ladies != 1")
+        # From migration 0019 (Kerry 10/14, #1840): what this step fills is
+        # an inference, and says so (gender_source = 'inferred_from_tees').
+        _src = any(r[1] == "gender_source" for r in
+                   conn.execute("PRAGMA table_info(customers)"))
         filled = conn.execute("""
             UPDATE customers SET gender = (
                 SELECT CASE WHEN SUM(ct.is_ladies) > 0 THEN 'F' ELSE 'M' END
                   FROM scoring_rounds sr
                   JOIN course_tees ct ON ct.tee_id = sr.tee_id
-                 WHERE sr.customer_id = customers.customer_id)
+                 WHERE sr.customer_id = customers.customer_id)""" + (
+                ", gender_source = 'inferred_from_tees'" if _src else "") + """
              WHERE gender IS NULL AND EXISTS (
                 SELECT 1 FROM scoring_rounds sr2
                  WHERE sr2.customer_id = customers.customer_id

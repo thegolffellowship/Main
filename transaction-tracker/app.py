@@ -2211,6 +2211,26 @@ def start_scheduler():
                             [(e["event"], e.get("total")) for e in done])
         except Exception:
             logger.exception("Auto payouts failed (non-fatal)")
+    # ── GENDER FROM TEES (Kerry 2026-10-14, #1815/#1840): new players with
+    #    no gender, inferred from Forward band / F-rated rounds, marked
+    #    inferred. Does nothing unless app setting gender_infer = on.
+    #    email_parser/customers_gender.py.
+    def gender_infer_job():
+        try:
+            from email_parser.customers_gender import run_job as _gi_run
+            res = _gi_run()
+            if res.get("set"):
+                logger.info("Gender inferred from tees: %d", res["set"])
+        except Exception:
+            logger.exception("Gender inference failed (non-fatal)")
+    scheduler.add_job(
+        gender_infer_job,
+        "interval", minutes=30,
+        id="gender_infer_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.add_job(
         auto_payouts_job,
         "interval", minutes=1,
