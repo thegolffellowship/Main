@@ -158,7 +158,7 @@ Read from the Frost 0341 statements in `TGF Financial/.../Statements/TGF LLC Che
 - Interest starts 61 days after the due date.
 - The timely-filing discount is lost.
 - WebFile works these out on the payment screen. Its figure is the one to pay.
-- For August 2026 (due 9/20), filing and paying by **10/20/2026** keeps the penalty at 5% rather than 10%.
+- For August 2026 (due 9/20), filing and paying by **10/20/2026** keeps the penalty at 5% rather than 10%. *(Done: August was filed and paid 10/6/26 with a $58.56 penalty, the 5% tier.)*
 
 ## Procedure (the routine follows this)
 
@@ -184,3 +184,13 @@ Read from the Frost 0341 statements in `TGF Financial/.../Statements/TGF LLC Che
 
 - **The 2026 TGF Championship has 13 August allocation rows still `pending`,** all at $0 taxable, so the Tracker figure understates August. Compute the Championship from the Pricing Master; don't rely on the allocations.
 - **The live `margin_model_cutover` setting is 8/27, but Standard v1.1 §2 says 9/5.** August orders dated 8/27–8/31 were therefore allocated on the residual model, which produces negative first-timer rows. The filing method (the rate card, per the skill) is not affected.
+
+## Run log
+
+- **2026-10-15 (the 15th, reminder run):** `sales_tax_filings` has a row for every month through 2026-09.
+  - 2026-08 was filed late on 10/6 and paid $229.75. 2026-09 was filed on 10/6 and paid $243.30 on time.
+  - Nothing is unfiled, so **no reminder email was sent**, per the routine.
+  - 2026-01 is still `kerry_word` (no confirmation on file). It is housekeeping and not a late month.
+  - **Next return: 2026-10, due 11/20.** The obligation email goes out on 11/1.
+  - The October return must carry the Lone Star Cup markup ($55 per entry, plus the practice-round markup per the event config). The Cup was played 10/9–10, so the deposits stop being a liability that month.
+  - Whether the LSC shirts are a taxable resale is CPA Q12 (lane `claude/cpa-questions-m7j3i9`). Settle it before 11/1.
