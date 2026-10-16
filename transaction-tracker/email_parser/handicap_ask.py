@@ -81,13 +81,16 @@ VENMO_WHY = ("If you win the team game, a closest to the pin, or a side game you
 VENMO_GET = "No Venmo? It's free and takes a couple of minutes."
 VENMO_URL = "https://venmo.com/"
 DONE_VENMO = "Venmo saved: @{venmo}. Winnings go there."
-DONE_NO_VENMO = "When you set up Venmo, reply to our email with your username so we can pay your winnings."
+DONE_NO_VENMO = ("When you set up Venmo, tap the button in our email again to add your username, "
+                 "so we can pay your winnings.")
+VENMO_ONLY_HEAD = "Add your Venmo"
+VENMO_ONLY = "We have your handicap answer. Add your Venmo username so we can pay any winnings."
 DONE_LABEL = "Your temporary starting handicap"
 DONE_SET = "75% of the {index} index you entered."
 DONE_CHECK = "75% of the {index} index you entered. The chapter manager will confirm it before {day}."
 DONE_TEMP = ("This is temporary. After 27 holes with TGF, your own TGF handicap replaces it, "
              "figured from your rounds with us.")
-DONE_NEED = ("Thanks. The chapter manager will set your temporary starting handicap before {day}. "
+DONE_NEED = ("The chapter manager will set your temporary starting handicap before {day}. "
              "After 27 holes with TGF, you'll have your own TGF handicap.")
 
 
@@ -95,7 +98,7 @@ def template_hash() -> str:
     raw = "\x1f".join((SUBJECT, REMINDER_SUBJECT, BODY, REMINDER_BODY, WHY, BUTTON, NO_HCP,
                        SIGN, PAGE_NOTE_HEAD, PAGE_NOTE, GHIN_NOTE, NONE_NOTE, DONE_LABEL, DONE_SET,
                        DONE_CHECK, DONE_TEMP, DONE_NEED, VENMO_WHY, VENMO_GET, VENMO_URL,
-                       DONE_VENMO, DONE_NO_VENMO))
+                       DONE_VENMO, DONE_NO_VENMO, VENMO_ONLY_HEAD, VENMO_ONLY))
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -577,6 +580,44 @@ def record(token: str, form: dict, db_path=None) -> dict:
                             + (f", index {ans['index']} -> starting {start}" if start is not None
                                else f", usually shoots {ans.get('score_low')}-{ans.get('score_high')} for 18")
                             + (f", venmo @{venmo}" if venmo else (", no Venmo yet" if no_venmo else "")),
+                            db_path=db_path)
+    except Exception:
+        pass
+    return out
+
+
+def record_venmo(token: str, form: dict, db_path=None) -> dict:
+    """Coming back to the same link later (Kerry 10/16) to add Venmo only:
+    the handicap answer stands; the username goes straight onto the profile
+    where payouts read it (never replacing one on file)."""
+    from email_parser import database as db
+    info = describe(token, db_path)
+    if not info.get("ok"):
+        return info
+    try:
+        venmo = parse_venmo(form.get("venmo"))
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "form_error": True}
+    if not venmo:
+        return {"ok": False, "error": "Please enter your Venmo username.", "form_error": True}
+    out = {"ok": True, "venmo_only": True, "venmo": venmo, "preview": info["preview"]}
+    if info["preview"]:
+        return out
+    cid = info["customer_id"]
+    conn = db.get_connection(db_path)
+    try:
+        conn.execute("UPDATE customers SET venmo_username = ? WHERE customer_id = ? "
+                     "AND (venmo_username IS NULL OR trim(venmo_username) = '')", (venmo, cid))
+        conn.commit()
+    finally:
+        conn.close()
+    state = load_state(db_path)
+    rec = state.setdefault(str(cid), {})
+    ans = rec.setdefault("answer", {})
+    ans["venmo"], ans["no_venmo"] = venmo, False
+    _save_state(state, db_path)
+    try:
+        db.log_agent_action("handicap-ask", "handicap_ask_venmo", f"customer {cid}: venmo @{venmo}",
                             db_path=db_path)
     except Exception:
         pass

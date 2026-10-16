@@ -29,6 +29,23 @@ def _cart(p: dict) -> str:
     return "A" if pos in (1, 2) else ("B" if pos in (3, 4) else "")
 
 
+def _fmt_index(v) -> str:
+    """14.24 -> '14.2'; a plus handicap (-1.5) -> '+1.5'; None -> ''."""
+    try:
+        f = round(float(v), 1)
+    except (TypeError, ValueError):
+        return ""
+    return f"+{abs(f)}" if f < 0 else f"{f}"
+
+
+def _dot(color: str) -> str:
+    if not color:
+        return ""
+    white = color.lower() in ("#ffffff", "#fff")
+    return (f'<span class="dot" style="background:{_e("#fff" if white else color)};'
+            f'border-color:{_e("#9CA3AF" if white else color)};"></span>')
+
+
 def build_teesheet(event_id: int, db_path=None) -> dict | None:
     """The page's data, PII-free. None for an unknown event."""
     from email_parser import database as db
@@ -59,23 +76,39 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
     # Before the pairings are set, the page still shows WHO is registered
     # (Kerry 10/16: "You could still show who is registered"). Names only,
     # from THE pairings roster; "playing, not paid" RSVP rows are left out.
+    # Each name links to the player's Spotlight and shows the index in
+    # effect for this event (THE roster index map) and the tee they play at
+    # this course with its colour (Kerry 10/16).
     registered = []
     if not groups:
         conn = db.get_connection(db_path)
         try:
+            evrow = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+            try:
+                idx_map = db._roster_handicap_index_map(
+                    conn, as_of=db._event_index_as_of(dict(evrow) if evrow else None), db_path=db_path)
+            except Exception:
+                idx_map = {}
             seen = set()
             for r in db._event_roster_rows(conn, int(event_id)):
                 name = (r.get("customer") or r.get("name") or "").strip()
                 if not name or r.get("rsvp_only"):
                     continue
-                key = ("c", int(r["customer_id"])) if r.get("customer_id") else ("n", name.lower())
+                cid = r.get("customer_id")
+                key = ("c", int(cid)) if cid else ("n", name.lower())
                 if key in seen:
                     continue
                 seen.add(key)
-                registered.append(name)
+                idx = idx_map.get(("c", int(cid))) if cid else None
+                if idx is None:
+                    idx = idx_map.get(name.lower())
+                t = tees.get(str((r.get("tee_choice") or "").strip())) or {}
+                registered.append({"name": name, "customer_id": int(cid) if cid else None,
+                                   "index": _fmt_index(idx), "tee": t.get("name") or "",
+                                   "color": t.get("color") or ""})
         finally:
             conn.close()
-        registered.sort(key=lambda n: (n.split()[-1].lower(), n.lower()))
+        registered.sort(key=lambda p: (p["name"].split()[-1].lower(), p["name"].lower()))
     return {"event_id": int(event_id),
             "registered": registered,
             "title": event_short_name(ev.get("item_name"), ev.get("course")),
@@ -93,9 +126,14 @@ def render_teesheet(data: dict) -> str:
         body = (f'<p style="color:{MUTED};margin:0;">The tee sheet for this event '
                 f'is not posted yet. Check back after the pairings are set.</p>')
         if reg:
+            rows = []
+            for p in reg:
+                nm = (f'<a class="n" href="/member/spotlight?player={p["customer_id"]}">{_e(p["name"])}</a>'
+                      if p.get("customer_id") else f'<span class="n">{_e(p["name"])}</span>')
+                meta = " · ".join(x for x in (p.get("tee"), f"HCP {p['index']}" if p.get("index") else "") if x)
+                rows.append(f'<div class="p">{nm}<span class="m">{_dot(p.get("color"))}{_e(meta)}</span></div>')
             body += (f'<section class="g"><div class="s">Registered so far · {len(reg)}</div>'
-                     + "".join(f'<div class="p"><span class="n">{_e(n)}</span></div>' for n in reg)
-                     + "</section>")
+                     + "".join(rows) + "</section>")
     else:
         cards = []
         for g in data["groups"]:
@@ -135,6 +173,7 @@ main {{ max-width:640px; margin:0 auto; padding:16px; display:grid; gap:12px; }}
 .p {{ display:flex; justify-content:space-between; gap:12px; padding:9px 14px; border-top:1px solid var(--line); }}
 .p:first-of-type {{ border-top:0; }}
 .n {{ font-weight:600; }}
+a.n {{ color:#2563eb; text-decoration:none; }}
 .m {{ color:var(--muted); font-size:14px; white-space:nowrap; display:flex; align-items:center; gap:6px; }}
 .dot {{ width:11px; height:11px; border-radius:50%; border:2px solid; display:inline-block; }}
 footer {{ text-align:center; color:var(--muted); font-size:13px; padding:8px 16px 24px; }}

@@ -5030,6 +5030,15 @@ def public_handicap_ask(token):
     if not info.get("ok"):
         ctx["error_page"] = info.get("error") or "This link isn't valid any more."
         return render_template("handicap_ask.html", **ctx), 400
+    ctx.update(venmo_only_head=_ha.VENMO_ONLY_HEAD, venmo_only=_ha.VENMO_ONLY)
+    if request.method == "POST" and request.form.get("venmo_only"):
+        # Back on the same link later to add Venmo only (Kerry 10/16).
+        res = _ha.record_venmo(token, request.form.to_dict())
+        if not res.get("ok"):
+            ctx.update(form=request.form.to_dict(), form_error=res.get("error"))
+            return render_template("handicap_ask.html", **ctx), 400
+        ctx["done"] = {"venmo_only": True, "venmo_line": _ha.DONE_VENMO.format(venmo=res["venmo"])}
+        return render_template("handicap_ask.html", **ctx)
     if request.method == "POST":
         f = request.form.to_dict()
         # The ticked choice wins: the keyboard's Go submits with the FIRST

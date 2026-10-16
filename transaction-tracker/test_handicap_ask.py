@@ -150,11 +150,20 @@ check("other service: 13.4 applied, manager will confirm",
 check("the thanks page shows the temporary starting handicap and the 27-hole rule",
       b"temporary starting handicap" in r.data and b"27 holes" in r.data and b"17.8 index you entered" in r.data)
 r = cl.post(f"/handicap/{tok[3]}", data={"go": "none", "score_low": "90", "score_high": "100", "no_venmo": "1"})
-check("no Venmo yet: told how to send it later, with the link", b"set up Venmo" in r.data
-      and b"Get Venmo" in r.data)
+check("no Venmo yet: told to tap the same email button later, with the link",
+      b"tap the button in our email again" in r.data and b"Get Venmo" in r.data)
+check("no doubled Thanks", b"Thanks. The chapter" not in r.data)
+
 check("no handicap: manager will set it", r.status_code == 200 and b"chapter manager will set" in r.data)
 check("...and nothing was set", con.execute("SELECT starting_handicap_18 FROM customers WHERE customer_id = 3")
       .fetchone()[0] is None)
+pg = cl.get(f"/handicap/{tok[3]}").data.decode()
+check("back on the same link: only the Venmo question", "Add your Venmo" in pg
+      and "I have a GHIN number" not in pg, pg[-800:])
+r = cl.post(f"/handicap/{tok[3]}", data={"venmo_only": "1", "venmo": "@Nora-None"})
+check("adding Venmo later saves it to the profile", r.status_code == 200
+      and con.execute("SELECT venmo_username FROM customers WHERE customer_id = 3").fetchone()[0] == "Nora-None"
+      and ha.load_state(DB)["3"]["answer"]["venmo"] == "Nora-None")
 m = hw.missing_handicaps(9001, db_path=DB)
 st = {a["customer_id"]: a["status"] for a in m["asks"]}
 check("the manager banner: Set from GHIN / Check this one / Needs a number",
@@ -165,7 +174,7 @@ check("the banner line names the range", "usually shoots 90–100 for 18" in
       next(a["line"] for a in m["asks"] if a["customer_id"] == 3))
 check("the banner shows Venmo or that they have none",
       "Venmo @Gus-Ghin-7" in next(a["line"] for a in m["asks"] if a["customer_id"] == 1)
-      and "no Venmo yet" in next(a["line"] for a in m["asks"] if a["customer_id"] == 3))
+      and "Venmo @Nora-None" in next(a["line"] for a in m["asks"] if a["customer_id"] == 3))
 check("a handle already on file: the page doesn't ask again",
       'name="venmo"' not in cl.get(f"/handicap/{tok[1]}").data.decode())
 pv = ha.make_token(4, 9001, preview=True)

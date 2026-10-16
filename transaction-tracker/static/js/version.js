@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.569.4";
+window.TGF_VERSION = "2.569.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.569.5",
+    date: "2026-10-16",
+    title: "Registered list: Spotlight links, handicap index and tee; Venmo can be added later on the same link",
+    changes: [
+      "Kerry 10/16 on the member tee sheet's registered list: \"Add links to member player spotlights. Add current handicap index and tee they'll be playing at that events course with the color circle.\" Each name links to /member/spotlight?player=<id>; beside it the tee for their band at this event's course with its colour circle (the Starter Sheet's own tee legend) and HCP (THE roster index map, locked to the event date once it starts; a plus handicap reads +1.5).",
+      "Kerry asked how \"reply to our email with your username\" would work: it wouldn't (nothing reads those replies). Now: \"When you set up Venmo, tap the button in our email again to add your username.\" Reopening the link after answering shows only \"Add your Venmo\" with one Save; the username goes straight onto the profile where payouts read it. Also removed the doubled \"Thanks\" on the no-handicap thank-you page.",
+    ],
+  },
   {
     version: "2.569.4",
     date: "2026-10-16",

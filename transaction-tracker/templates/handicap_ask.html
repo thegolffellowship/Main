@@ -70,7 +70,8 @@
     <div class="done">
         <div class="tick">&#10003;</div>
         <h1>Thanks, {{ info.first_name or 'golfer' }}.{% if done.status == 'set' %} You're set.{% endif %}</h1>
-        {% if done.starting is not none %}
+        {% if done.venmo_only %}
+        {% elif done.starting is not none %}
             <p class="mut">{{ done_label }}</p>
             <div class="big">{{ done.starting_text }}</div>
             <p class="mut">{{ done_check if done.status == 'check' else done_set }}</p>
@@ -78,9 +79,23 @@
         {% else %}
             <p class="mut">{{ done_need }}</p>
         {% endif %}
-        {% if done.venmo_line %}<p class="mut">{{ done.venmo_line }}{% if done.answer.no_venmo %} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a>{% endif %}</p>{% endif %}
+        {% if done.venmo_line %}<p class="mut">{{ done.venmo_line }}{% if done.answer and done.answer.no_venmo %} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a>{% endif %}</p>{% endif %}
         <a class="ghost" href="/member/teesheet/{{ info.event_id }}">See the tee sheet</a>
     </div>
+{% elif info.answer and not info.has_venmo %}
+    {% if info.preview %}<p class="pv">Preview link: the page works and saves nothing.</p>{% endif %}
+    <h1>{{ venmo_only_head }}, {{ info.first_name or 'golfer' }}</h1>
+    <p class="mut">{{ venmo_only }}</p>
+    {% if form_error %}<p class="err" role="alert">{{ form_error }}</p>{% endif %}
+    <form method="post" autocomplete="off" class="sec" style="display:flex;">
+        <input type="hidden" name="venmo_only" value="1">
+        <p class="mut" style="margin:0;">{{ venmo_why }}</p>
+        <label class="f" for="venmo">Venmo username
+            <input id="venmo" name="venmo" autocapitalize="none" autocorrect="off" spellcheck="false"
+                   value="{{ form.venmo or '' }}" placeholder="@your-name"></label>
+        <p class="mut" style="margin:0;">{{ venmo_get }} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a></p>
+        <button type="submit">Save</button>
+    </form>
 {% else %}
     {% if info.preview %}<p class="pv">Preview link: the page works and saves nothing.</p>{% endif %}
     <h1>Your handicap, {{ info.first_name or 'golfer' }}</h1>
