@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.569.5";
+window.TGF_VERSION = "2.569.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.569.6",
+    date: "2026-10-16",
+    title: "Registered list: Spotlight links for members only, with a tease",
+    changes: [
+      "Kerry 10/16: \"don't put links in for non-TGF Members. That's a perk that I want to tease.\" On the member tee sheet's registered list only active members' names link to their Player Spotlight; a non-member's name is plain text (tee and HCP still shown). Under the list: \"Names in blue are TGF members: tap one to see their Player Spotlight. Members get their own.\"",
+    ],
+  },
   {
     version: "2.569.5",
     date: "2026-10-16",

@@ -17,6 +17,9 @@ import html as _html
 import re
 from datetime import datetime
 
+MEMBER_STATUSES = ("active_member", "member_plus")
+SPOTLIGHT_TEASE = ("Names in blue are TGF members: tap one to see their Player Spotlight. "
+                   "Members get their own.")
 INK, MUTED, LINE, ORANGE = "#1B1B1B", "#6B7280", "#E5E7EB", "#E87C3E"
 
 
@@ -103,7 +106,11 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
                 if idx is None:
                     idx = idx_map.get(name.lower())
                 t = tees.get(str((r.get("tee_choice") or "").strip())) or {}
+                # The Spotlight is a MEMBER perk (Kerry 10/16: "don't put links in for
+                # non-TGF Members. That's a perk that I want to tease").
+                member = (r.get("current_player_status") or "") in MEMBER_STATUSES
                 registered.append({"name": name, "customer_id": int(cid) if cid else None,
+                                   "member": member,
                                    "index": _fmt_index(idx), "tee": t.get("name") or "",
                                    "color": t.get("color") or ""})
         finally:
@@ -129,11 +136,13 @@ def render_teesheet(data: dict) -> str:
             rows = []
             for p in reg:
                 nm = (f'<a class="n" href="/member/spotlight?player={p["customer_id"]}">{_e(p["name"])}</a>'
-                      if p.get("customer_id") else f'<span class="n">{_e(p["name"])}</span>')
+                      if p.get("customer_id") and p.get("member") else f'<span class="n">{_e(p["name"])}</span>')
                 meta = " · ".join(x for x in (p.get("tee"), f"HCP {p['index']}" if p.get("index") else "") if x)
                 rows.append(f'<div class="p">{nm}<span class="m">{_dot(p.get("color"))}{_e(meta)}</span></div>')
             body += (f'<section class="g"><div class="s">Registered so far · {len(reg)}</div>'
                      + "".join(rows) + "</section>")
+            if any(p.get("member") for p in reg):
+                body += f'<p class="tease">{_e(SPOTLIGHT_TEASE)}</p>'
     else:
         cards = []
         for g in data["groups"]:
@@ -174,6 +183,7 @@ main {{ max-width:640px; margin:0 auto; padding:16px; display:grid; gap:12px; }}
 .p:first-of-type {{ border-top:0; }}
 .n {{ font-weight:600; }}
 a.n {{ color:#2563eb; text-decoration:none; }}
+.tease {{ color:var(--muted); font-size:14px; margin:0; text-align:center; }}
 .m {{ color:var(--muted); font-size:14px; white-space:nowrap; display:flex; align-items:center; gap:6px; }}
 .dot {{ width:11px; height:11px; border-radius:50%; border:2px solid; display:inline-block; }}
 footer {{ text-align:center; color:var(--muted); font-size:13px; padding:8px 16px 24px; }}

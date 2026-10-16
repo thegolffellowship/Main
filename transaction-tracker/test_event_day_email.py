@@ -195,7 +195,17 @@ check("an event with no saved sheet says so", "not posted yet" in _pre)
 check("...and still shows who is registered (Kerry 10/16), names only",
       "Registered so far" in _pre and "Ann Able" in _pre and "Gus Gray" in _pre and "7 registered" in _pre
       and "@" not in _pre.replace("@media", "") and "$" not in _pre, _pre[-1500:])
-check("...each name links to the player's Spotlight", '/member/spotlight?player=880001' in _pre)
+check("...a MEMBER's name links to their Spotlight", '/member/spotlight?player=880001' in _pre)
+with db._connect(DB) as conn:
+    conn.execute("UPDATE customers SET current_player_status = 'first_timer' WHERE customer_id = 880002")
+    conn.commit()
+_pre2 = mts.render_teesheet(mts.build_teesheet(EV2, db_path=DB))
+check("...a non-member's name is plain text (the Spotlight is a member perk, Kerry 10/16)",
+      '/member/spotlight?player=880002' not in _pre2 and "Bob Baker" in _pre2
+      and "Members get their own" in _pre2)
+with db._connect(DB) as conn:
+    conn.execute("UPDATE customers SET current_player_status = 'active_member' WHERE customer_id = 880002")
+    conn.commit()
 check("index shown with a plus for a plus handicap", mts._fmt_index(-1.46) == "+1.5"
       and mts._fmt_index(14.24) == "14.2" and mts._fmt_index(None) == "")
 
