@@ -29,6 +29,13 @@
     .choices { display:flex; flex-direction:column; gap:10px; }
     .sec { display:none; flex-direction:column; gap:12px; background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:14px; }
     #k-ghin:checked ~ .sec-ghin, #k-other:checked ~ .sec-other, #k-none:checked ~ .sec-none { display:flex; }
+    .savebar { display:none; margin-top:14px; }
+    .savebar button { width:100%; }
+    #k-ghin:checked ~ .sec-pay, #k-other:checked ~ .sec-pay, #k-none:checked ~ .sec-pay,
+    #k-ghin:checked ~ .savebar, #k-other:checked ~ .savebar, #k-none:checked ~ .savebar { display:flex; }
+    .chk { display:flex; gap:8px; align-items:center; font-size:.95rem; }
+    .chk input { width:20px; height:20px; position:static; opacity:1; pointer-events:auto; }
+    .sec a { color:#2563eb; font-weight:600; }
     .sec h2 { font-family:'Bitter',Georgia,serif; font-size:1.1rem; margin:0; }
     label.f { display:flex; flex-direction:column; gap:4px; font-weight:600; font-size:.95rem; }
     label.f input, label.f select { font-size:16px; padding:10px; border:1px solid #C9CDD3; border-radius:8px; background:#fff; color:#1B1B1B; }
@@ -67,6 +74,7 @@
         {% else %}
             <p class="mut">{{ done_need }}</p>
         {% endif %}
+        {% if done.venmo_line %}<p class="mut">{{ done.venmo_line }}{% if done.answer.no_venmo %} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a>{% endif %}</p>{% endif %}
         <a class="ghost" href="/member/teesheet/{{ info.event_id }}">See the tee sheet</a>
     </div>
 {% else %}
@@ -92,7 +100,6 @@
             <label class="f" for="index-ghin">Your latest handicap index
                 <input id="index-ghin" name="index_ghin" inputmode="decimal" value="{{ form.index_ghin or '' }}" placeholder="14.2">
                 <span class="hint">The number on the front of your GHIN app, e.g. 14.2. Use + for a plus handicap.</span></label>
-            <button type="submit" name="go" value="ghin">Save</button>
             <p class="mut">{{ ghin_note }}</p>
         </div>
         <div class="sec sec-other" style="margin-top:14px;">
@@ -106,7 +113,6 @@
                 <input id="service-name" name="service_name" value="{{ form.service_name or '' }}" placeholder="e.g. Oak Hills CC"></label>
             <label class="f" for="index-other">Your latest handicap index
                 <input id="index-other" name="index_other" inputmode="decimal" value="{{ form.index_other or '' }}" placeholder="17.8"></label>
-            <button type="submit" name="go" value="other">Save</button>
         </div>
         <div class="sec sec-none" style="margin-top:14px;">
             <h2>What do you usually shoot?</h2>
@@ -114,9 +120,21 @@
                 <input id="score18" name="score18" inputmode="numeric" value="{{ form.score18 or '' }}" placeholder="95"></label>
             <label class="f" for="rounds-year">Rounds you play a year (optional)
                 <input id="rounds-year" name="rounds_year" inputmode="numeric" value="{{ form.rounds_year or '' }}" placeholder="About how many?"></label>
-            <button type="submit" name="go" value="none">Save</button>
             <p class="mut">{{ none_note }}</p>
         </div>
+        {% if not info.has_venmo %}
+        <div class="sec sec-pay" style="margin-top:14px;">
+            <h2>Your Venmo, for winnings</h2>
+            <p class="mut" style="margin:0;">When your team wins, we pay by Venmo.</p>
+            <label class="f" for="venmo">Venmo username
+                <input id="venmo" name="venmo" autocapitalize="none" autocorrect="off" spellcheck="false"
+                       value="{{ form.venmo or '' }}" placeholder="@your-name"></label>
+            <label class="chk" for="no-venmo"><input type="checkbox" id="no-venmo" name="no_venmo" value="1"
+                {% if form.no_venmo %}checked{% endif %}> I don't have Venmo yet</label>
+            <p class="mut" style="margin:0;">{{ venmo_get }} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a></p>
+        </div>
+        {% endif %}
+        <div class="savebar"><button type="submit">Save</button></div>
     </form>
 {% endif %}
 </main>

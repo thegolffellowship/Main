@@ -5024,6 +5024,7 @@ def public_handicap_ask(token):
     info = _ha.describe(token)
     ctx = {"services": _ha.SERVICES, "page_note": _ha.PAGE_NOTE, "page_note_head": _ha.PAGE_NOTE_HEAD,
            "done_label": _ha.DONE_LABEL, "done_temp": _ha.DONE_TEMP, "ghin_note": _ha.GHIN_NOTE,
+           "venmo_get": _ha.VENMO_GET, "venmo_url": _ha.VENMO_URL,
            "none_note": _ha.NONE_NOTE.format(day=info.get("day") or "the event"),
            "info": info, "form": {}, "done": None, "form_error": None, "error_page": None}
     if not info.get("ok"):
@@ -5046,6 +5047,9 @@ def public_handicap_ask(token):
         idx = (res.get("answer") or {}).get("index")
         idx_txt = ("+" + str(abs(idx))) if (idx is not None and idx < 0) else str(idx)
         res["starting_text"] = start_txt
+        _a = res.get("answer") or {}
+        res["venmo_line"] = (_ha.DONE_VENMO.format(venmo=_a["venmo"]) if _a.get("venmo")
+                             else (_ha.DONE_NO_VENMO if _a.get("no_venmo") else ""))
         ctx.update(done=res,
                    done_set=_ha.DONE_SET.format(index=idx_txt),
                    done_check=_ha.DONE_CHECK.format(start=start_txt, index=idx_txt, day=info["day"]),

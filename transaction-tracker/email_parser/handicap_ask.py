@@ -76,6 +76,10 @@ GHIN_NOTE = ("We start new players at 75% of their index for their first rounds 
              "It's used for your group's team score.")
 NONE_NOTE = ("The chapter manager uses this to set your starting handicap before {day}. "
              "You don't need to do anything else.")
+VENMO_GET = "No Venmo? It's free and takes a couple of minutes."
+VENMO_URL = "https://venmo.com/"
+DONE_VENMO = "Venmo saved: @{venmo}. Winnings go there."
+DONE_NO_VENMO = "When you set up Venmo, reply to our email with your username so we can pay your winnings."
 DONE_LABEL = "Your temporary starting handicap"
 DONE_SET = "75% of the {index} index you entered."
 DONE_CHECK = "75% of the {index} index you entered. The chapter manager will confirm it before {day}."
@@ -88,7 +92,8 @@ DONE_NEED = ("Thanks. The chapter manager will set your temporary starting handi
 def template_hash() -> str:
     raw = "\x1f".join((SUBJECT, REMINDER_SUBJECT, BODY, REMINDER_BODY, WHY, BUTTON, NO_HCP,
                        SIGN, PAGE_NOTE_HEAD, PAGE_NOTE, GHIN_NOTE, NONE_NOTE, DONE_LABEL, DONE_SET,
-                       DONE_CHECK, DONE_TEMP, DONE_NEED))
+                       DONE_CHECK, DONE_TEMP, DONE_NEED, VENMO_GET, VENMO_URL,
+                       DONE_VENMO, DONE_NO_VENMO))
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -230,6 +235,24 @@ def validate(form: dict) -> dict:
         rounds = str(form.get("rounds_year") or "").strip()[:20]
         return {"kind": "none", "score18": score, "rounds_year": rounds}
     return {"error": "Please pick one of the three choices."}
+
+
+def parse_venmo(text) -> str | None:
+    """A Venmo username, bare (no @): 5-30 letters, numbers, - or _.
+    '' -> None (not given); a bad value -> raises ValueError."""
+    import re
+    t = str(text or "").strip()
+    if t.lower().startswith("https://venmo.com/"):
+        t = t.split("venmo.com/", 1)[1].split("?")[0].strip("/")
+        if t.lower().startswith("u/"):
+            t = t[2:]
+    t = t.lstrip("@").strip()
+    if not t:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_-]{5,30}", t):
+        raise ValueError("That doesn't look like a Venmo username. It's the @name in your Venmo app, "
+                         "for example @Jane-Smith-12.")
+    return t
 
 
 # ---------------------------------------------------------------------------
@@ -461,16 +484,17 @@ def describe(token: str, db_path=None) -> dict:
         return {"ok": False, "error": "This link isn't valid any more."}
     conn = db.get_connection(db_path)
     try:
-        r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
-                         (p["c"],)).fetchone()
+        r = conn.execute("SELECT first_name, last_name, venmo_username, payment_handle "
+                         "FROM customers WHERE customer_id = ?", (p["c"],)).fetchone()
     finally:
         conn.close()
     ev = _event_row(p["v"], db_path) or {}
+    has_venmo = bool(r and ((r[2] or "").strip() or (r[3] or "").strip()))
     rec = load_state(db_path).get(str(p["c"])) or {}
     return {"ok": True, "customer_id": p["c"], "event_id": p["v"], "preview": bool(p.get("p")),
             "first_name": (r[0] if r else "") or "", "event": ev.get("item_name") or "",
             "event_date": str(ev.get("event_date") or "")[:10], "day": _day(ev.get("event_date")),
-            "answer": rec.get("answer"), "status": rec.get("status")}
+            "answer": rec.get("answer"), "status": rec.get("status"), "has_venmo": has_venmo}
 
 
 def record(token: str, form: dict, db_path=None) -> dict:
@@ -483,6 +507,15 @@ def record(token: str, form: dict, db_path=None) -> dict:
     ans = validate(form)
     if ans.get("error"):
         return {"ok": False, "error": ans["error"], "form_error": True}
+    venmo, no_venmo = None, False
+    if not info.get("has_venmo"):
+        try:
+            venmo = parse_venmo(form.get("venmo"))
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc), "form_error": True}
+        no_venmo = not venmo and str(form.get("no_venmo") or "") in ("1", "on", "true")
+    ans["venmo"] = venmo
+    ans["no_venmo"] = no_venmo
     cid = info["customer_id"]
     start = starting_from_index(ans["index"]) if "index" in ans else None
     status = {"ghin": "set", "other": "check", "none": "need"}[ans["kind"]]
@@ -511,11 +544,18 @@ def record(token: str, form: dict, db_path=None) -> dict:
             applied = not res.get("error")
         else:
             out["kept_manager_value"] = r[0]
-    if ans["kind"] == "ghin":
+    if ans["kind"] == "ghin" or venmo:
         conn = db.get_connection(db_path)
         try:
-            conn.execute("UPDATE customers SET ghin_number = ? WHERE customer_id = ?",
-                         (ans["ghin"], cid))
+            if ans["kind"] == "ghin":
+                conn.execute("UPDATE customers SET ghin_number = ? WHERE customer_id = ?",
+                             (ans["ghin"], cid))
+            if venmo:
+                # Payouts read customers.venmo_username (bare, no @). Never
+                # replaces a handle already on file.
+                conn.execute("UPDATE customers SET venmo_username = ? WHERE customer_id = ? "
+                             "AND (venmo_username IS NULL OR trim(venmo_username) = '')",
+                             (venmo, cid))
             conn.commit()
         finally:
             conn.close()
@@ -528,7 +568,9 @@ def record(token: str, form: dict, db_path=None) -> dict:
         db.log_agent_action("handicap-ask", "handicap_ask_answer",
                             f"customer {cid}: {ans['kind']}"
                             + (f", index {ans['index']} -> starting {start}" if start is not None
-                               else f", usual 18 {ans.get('score18')}"), db_path=db_path)
+                               else f", usual 18 {ans.get('score18')}")
+                            + (f", venmo @{venmo}" if venmo else (", no Venmo yet" if no_venmo else "")),
+                            db_path=db_path)
     except Exception:
         pass
     return out
@@ -594,5 +636,9 @@ def status_rows(customer_ids, missing_ids=(), db_path=None) -> list[dict]:
                     + (f" · plays {a['rounds_year']} rounds a year" if a.get("rounds_year") else ""))
         else:
             line = ""
+        if a.get("venmo"):
+            line += f" · Venmo @{a['venmo']}"
+        elif a.get("no_venmo"):
+            line += " · no Venmo yet"
         rows.append({"customer_id": int(cid), "status": st, "line": line})
     return rows

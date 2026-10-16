@@ -1030,6 +1030,10 @@ their team and them can compete together."
   form POST saves. A starting handicap a manager typed is never overwritten.
   The Tracker cannot look an index up from a GHIN number (GHIN shows it only
   to a logged-in account), so the page asks for both.
+- **Venmo (v2.569.2, Kerry: "add Venmo to that same form. If they don't have it
+  provide a link to get it")**: optional username box under the chosen path, saved
+  bare to `customers.venmo_username` only when empty; "I don't have Venmo yet" plus
+  a Get Venmo link (venmo.com); not asked when a handle is already on file.
 - **Manager:** the missing-handicap banner lists every emailed player: Set
   from GHIN / Check this one (Looks right, `POST /api/handicap-ask/<cid>/confirm`)
   / Needs a number / Asked, no answer (`missing_handicaps(...)["asks"]`).

@@ -119,12 +119,22 @@ check("a bad link says so", cl.get("/handicap/abc.def").status_code == 400)
 r = cl.post(f"/handicap/{tok[1]}", data={"go": "ghin", "ghin": "1234567", "index_ghin": ""})
 check("a missing index is refused with the reason", r.status_code == 400
       and b"latest handicap index" in r.data)
-r = cl.post(f"/handicap/{tok[1]}", data={"go": "ghin", "ghin": "1234567", "index_ghin": "14.2"})
+check("the page asks for Venmo, with a link to get it", 'name="venmo"' in page
+      and "I don't have Venmo yet" in page and "https://venmo.com/" in page)
+r = cl.post(f"/handicap/{tok[1]}", data={"go": "ghin", "ghin": "1234567", "index_ghin": "14.2",
+                                          "venmo": "not a handle!"})
+check("a bad Venmo username is refused with the reason", r.status_code == 400
+      and b"Venmo username" in r.data)
+r = cl.post(f"/handicap/{tok[1]}", data={"go": "ghin", "ghin": "1234567", "index_ghin": "14.2",
+                                          "venmo": "@Gus-Ghin-7"})
 check("GHIN answer: thanks page with 10.7", r.status_code == 200 and b"10.7" in r.data
       and b"27 holes" in r.data, r.data[:300])
 con = sqlite3.connect(DB)
 row = con.execute("SELECT starting_handicap_18, starting_handicap_set_by, ghin_number FROM customers "
                   "WHERE customer_id = 1").fetchone()
+check("Venmo saved bare (no @) where payouts read it",
+      con.execute("SELECT venmo_username FROM customers WHERE customer_id = 1").fetchone()[0] == "Gus-Ghin-7")
+check("the thanks page confirms the Venmo", b"Venmo saved: @Gus-Ghin-7" in r.data)
 check("starting handicap 10.7 set, GHIN saved", row[0] == 10.7 and row[1].startswith("handicap_ask")
       and row[2] == "1234567", row)
 r = cl.post(f"/handicap/{tok[2]}", data={"kind": "other", "go": "ghin", "service": "TheGrint",
@@ -135,7 +145,9 @@ check("other service: 13.4 applied, manager will confirm",
       r.status_code == 200 and b"13.4" in r.data and b"confirm" in r.data)
 check("the thanks page shows the temporary starting handicap and the 27-hole rule",
       b"temporary starting handicap" in r.data and b"27 holes" in r.data and b"17.8 index you entered" in r.data)
-r = cl.post(f"/handicap/{tok[3]}", data={"go": "none", "score18": "95"})
+r = cl.post(f"/handicap/{tok[3]}", data={"go": "none", "score18": "95", "no_venmo": "1"})
+check("no Venmo yet: told how to send it later, with the link", b"set up Venmo" in r.data
+      and b"Get Venmo" in r.data)
 check("no handicap: manager will set it", r.status_code == 200 and b"chapter manager will set" in r.data)
 check("...and nothing was set", con.execute("SELECT starting_handicap_18 FROM customers WHERE customer_id = 3")
       .fetchone()[0] is None)
@@ -147,6 +159,11 @@ check("Nora (score only) is still in the missing list", [p["customer_id"] for p 
       or {p["customer_id"] for p in m["players"]} == {3, 5}, m["players"])
 check("the banner line names the score", "usually shoots 95 for 18" in
       next(a["line"] for a in m["asks"] if a["customer_id"] == 3))
+check("the banner shows Venmo or that they have none",
+      "Venmo @Gus-Ghin-7" in next(a["line"] for a in m["asks"] if a["customer_id"] == 1)
+      and "no Venmo yet" in next(a["line"] for a in m["asks"] if a["customer_id"] == 3))
+check("a handle already on file: the page doesn't ask again",
+      'name="venmo"' not in cl.get(f"/handicap/{tok[1]}").data.decode())
 pv = ha.make_token(4, 9001, preview=True)
 cl.post(f"/handicap/{pv}", data={"go": "ghin", "ghin": "7654321", "index_ghin": "2.0"})
 check("a preview link saves nothing", con.execute("SELECT starting_handicap_18, ghin_number FROM customers "
