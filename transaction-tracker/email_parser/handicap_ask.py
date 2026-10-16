@@ -1,0 +1,589 @@
+"""THE HANDICAP ASK (Kerry 2026-10-16: "We need some kind of automatic ask
+for new people that we don't have handicap for" ... "Build it").
+
+Why: a non-member cannot enter the individual net games or MVP; the
+handicap is for the TEAM game, "so that their team and them can compete
+together" (Kerry). Mockups approved 10/16 (artifact 7GeWZuGQEaG1iHBDGgmwDC).
+
+WHO: a player on an upcoming event's roster with no TGF index and no
+starting handicap (`handicap_warnings.missing_handicaps`, cases `new` and
+`few_rounds`, a customer_id and a sendable address). Asked ONCE per person,
+whatever events they are on; one reminder when their next event is two days
+out and they have not answered.
+
+THE PAGE (`/handicap/<token>`, a signed link, no login; signed links are not
+member logins, CA #731). Three answers:
+  ghin   GHIN number AND latest index (Kerry: "Along with their GHIN number IT
+         SHOULD ASK WHAT THEIR LATEST INDEX IS"). The Tracker cannot look an
+         index up: GHIN shows it only to a logged-in account. Sets the
+         starting handicap to 75% of the index (the intro rule) and saves the
+         GHIN number on the profile. Status `set`.
+  other  another service (TheGrint, club, Golf Genius, 18Birdies, Other) and
+         its index. 75% applied so they can play; status `check` until a
+         manager taps Looks right (Kerry: "you'd want to vet that").
+  none   their usual 18-hole score (Kerry: "for 18 holes not just for nine").
+         Nothing set; status `need`, the manager sets the number.
+The answer is written only by the page's form POST, never by a GET, so a mail
+scanner that opens the link answers nothing.
+
+STATE: app setting `handicap_ask` (JSON by customer_id), no new table.
+
+SENDS are locked twice: dial `handicap_ask_auto` = on AND the wording carries
+Kerry's stamp (`handicap_ask_approved` = `template_hash()`). Previews go to
+staff only (bridge `scoring-handicap-ask`).
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import html
+import json
+import logging
+from datetime import date, datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+STATE_KEY = "handicap_ask"
+AUTO_DIAL = "handicap_ask_auto"
+APPROVAL_KEY = "handicap_ask_approved"
+DEFAULT_PREVIEW_TO = "kerry@thegolffellowship.com"
+INTRO_PCT = 0.75
+LOOKAHEAD_DAYS = 21
+REMIND_DAYS_BEFORE = 2
+TOKEN_DAYS = 60
+SEND_HOURS = (7, 20)          # Central; never mails at night
+SERVICES = ("TheGrint", "Club handicap", "Golf Genius", "18Birdies", "Other")
+ASK_CASES = ("new", "few_rounds")
+
+# The words. Structure is in code; changing any of these changes the hash and
+# locks the send until Kerry stamps the new hash.
+SUBJECT = "One quick thing before {day}, {first_name}"
+REMINDER_SUBJECT = "Reminder: your handicap for {day}, {first_name}"
+BODY = ("Hi {first_name},<br><br>Thanks for signing up. We're glad you're coming out.")
+REMINDER_BODY = ("Hi {first_name},<br><br>We're looking forward to {day}. We still "
+                 "don't have a handicap for you.")
+WHY = ("We don't have a handicap for you yet. It sets your strokes in the team game, "
+       "so you and your group can compete on even terms. It takes about 30 seconds.")
+BUTTON = "Add my handicap"
+NO_HCP = "No handicap? No problem. Tap the button and tell us what you usually shoot."
+SIGN = "See you on the course,<br>The Golf Fellowship"
+PAGE_NOTE = ("This is only a starting point. After just 27 holes with TGF, you'll have "
+             "your own TGF handicap.")
+GHIN_NOTE = ("We start new players at 75% of their index for their first rounds with us. "
+             "It's used for your group's team score.")
+NONE_NOTE = ("The chapter manager uses this to set your starting handicap before {day}. "
+             "You don't need to do anything else.")
+DONE_SET = "75% of your {index} index. After 27 holes with TGF, your own TGF handicap takes over."
+DONE_CHECK = ("We've set {start} for now (75% of your {index} index). The chapter manager "
+              "will confirm it before {day}.")
+DONE_NEED = "Thanks. The chapter manager will set your starting handicap before {day}."
+
+
+def template_hash() -> str:
+    raw = "\x1f".join((SUBJECT, REMINDER_SUBJECT, BODY, REMINDER_BODY, WHY, BUTTON, NO_HCP,
+                       SIGN, PAGE_NOTE, GHIN_NOTE, NONE_NOTE, DONE_SET, DONE_CHECK, DONE_NEED))
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _e(s) -> str:
+    return html.escape(str(s if s is not None else ""), quote=True)
+
+
+def _setting(key, db_path=None):
+    from email_parser import database as db
+    try:
+        return db.get_app_setting(key, db_path=db_path)
+    except Exception:
+        return None
+
+
+def approval_state(db_path=None) -> dict:
+    h = template_hash()
+    return {"template_hash": h, "approval_key": APPROVAL_KEY,
+            "approved": (_setting(APPROVAL_KEY, db_path) or "").strip() == h}
+
+
+def load_state(db_path=None) -> dict:
+    try:
+        s = json.loads(_setting(STATE_KEY, db_path) or "{}")
+        return s if isinstance(s, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_state(state: dict, db_path=None) -> None:
+    from email_parser import database as db
+    db.set_app_setting(STATE_KEY, json.dumps(state, sort_keys=True), db_path=db_path)
+
+
+def _now_iso() -> str:
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+# ---------------------------------------------------------------------------
+# Signed links
+# ---------------------------------------------------------------------------
+
+def _secret() -> bytes:
+    from email_parser.memberships import _secret as s
+    return s()
+
+
+def make_token(customer_id: int, event_id: int, preview: bool = False,
+               now: datetime | None = None) -> str:
+    now = now or datetime.utcnow()
+    p = {"c": int(customer_id), "v": int(event_id),
+         "x": int((now + timedelta(days=TOKEN_DAYS)).timestamp())}
+    if preview:
+        p["p"] = 1
+    body = base64.urlsafe_b64encode(json.dumps(p, separators=(",", ":")).encode()
+                                    ).rstrip(b"=").decode()
+    sig = hmac.new(_secret(), b"hcp." + body.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{body}.{sig}"
+
+
+def verify_token(token: str) -> dict | None:
+    token = (token or "").strip()
+    if "." not in token:
+        return None
+    body, sig = token.rsplit(".", 1)
+    want = hmac.new(_secret(), b"hcp." + body.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, want):
+        return None
+    try:
+        p = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if int(p.get("x", 0)) < int(datetime.utcnow().timestamp()):
+        return None
+    return p
+
+
+def ask_url(token: str) -> str:
+    from email_parser.score_entry import _base_url
+    return f"{_base_url()}/handicap/{token}"
+
+
+# ---------------------------------------------------------------------------
+# Parsing an answer (pure)
+# ---------------------------------------------------------------------------
+
+def parse_index(text) -> float | None:
+    """'14.2' -> 14.2; '+2.1' (a plus handicap) -> -2.1. None when not an index."""
+    t = str(text or "").strip().replace(",", ".")
+    if not t:
+        return None
+    plus = t.startswith("+")
+    try:
+        v = float(t.lstrip("+"))
+    except ValueError:
+        return None
+    if plus:
+        v = -abs(v)
+    return round(v, 1) if -10.0 <= v <= 54.0 else None
+
+
+def starting_from_index(index: float) -> float:
+    """75% to the tenth, half away from zero (14.2 -> 10.7, never the
+    float's 10.6; +2.1 -> +1.6)."""
+    from decimal import Decimal, ROUND_HALF_UP
+    v = (Decimal(str(abs(index))) * Decimal(str(INTRO_PCT))).quantize(Decimal("0.1"), ROUND_HALF_UP)
+    return float(-v if index < 0 else v)
+
+
+def validate(form: dict) -> dict:
+    """The page's form -> a clean answer, or {"error": ...}."""
+    kind = (form.get("kind") or "").strip()
+    if kind == "ghin":
+        ghin = "".join(ch for ch in str(form.get("ghin") or "") if ch.isdigit())
+        if not (5 <= len(ghin) <= 10):
+            return {"error": "Please enter your GHIN number (digits only)."}
+        idx = parse_index(form.get("index"))
+        if idx is None:
+            return {"error": "Please enter your latest handicap index, for example 14.2."}
+        return {"kind": "ghin", "ghin": ghin, "index": idx}
+    if kind == "other":
+        svc = (form.get("service") or "").strip()
+        if svc not in SERVICES:
+            return {"error": "Please pick your handicap service."}
+        name = " ".join(str(form.get("service_name") or "").split())[:80]
+        if svc == "Other" and not name:
+            return {"error": "Please tell us the name of the club or service."}
+        idx = parse_index(form.get("index"))
+        if idx is None:
+            return {"error": "Please enter your latest handicap index, for example 17.8."}
+        return {"kind": "other", "service": svc, "service_name": name, "index": idx}
+    if kind == "none":
+        try:
+            score = int(str(form.get("score18") or "").strip())
+        except ValueError:
+            return {"error": "Please enter your usual score for 18 holes, for example 95."}
+        if not 60 <= score <= 160:
+            return {"error": "Please enter your usual score for 18 holes, for example 95."}
+        rounds = str(form.get("rounds_year") or "").strip()[:20]
+        return {"kind": "none", "score18": score, "rounds_year": rounds}
+    return {"error": "Please pick one of the three choices."}
+
+
+# ---------------------------------------------------------------------------
+# Who to ask
+# ---------------------------------------------------------------------------
+
+def _upcoming_events(conn, today: str, days: int = LOOKAHEAD_DAYS) -> list[dict]:
+    end = (date.fromisoformat(today) + timedelta(days=days)).isoformat()
+    return [dict(r) for r in conn.execute(
+        "SELECT * FROM events WHERE COALESCE(status, 'active') = 'active' "
+        "AND substr(event_date, 1, 10) > ? AND substr(event_date, 1, 10) <= ? "
+        "ORDER BY event_date, id", (today, end)).fetchall()]
+
+
+def candidates(today: str | None = None, db_path=None) -> list[dict]:
+    """One row per person with no handicap on an upcoming roster (earliest
+    event first), with their address. Read-only."""
+    from email_parser import database as db
+    from email_parser.handicap_warnings import missing_handicaps
+    from email_parser.invitations import _send_email
+    from email_parser.timezone_utils import today_central_str
+    today = today or today_central_str()
+    conn = db.get_connection(db_path)
+    try:
+        evs = _upcoming_events(conn, today)
+        out, seen = [], set()
+        for ev in evs:
+            try:
+                m = missing_handicaps(ev["id"], db_path=db_path)
+            except Exception:
+                logger.exception("handicap ask: missing read failed for event %s", ev["id"])
+                continue
+            for p in m.get("players") or []:
+                cid = p.get("customer_id")
+                if not cid or p.get("case") not in ASK_CASES or int(cid) in seen:
+                    continue
+                seen.add(int(cid))
+                r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                                 (int(cid),)).fetchone()
+                out.append({"customer_id": int(cid), "name": p.get("name"),
+                            "first_name": (r[0] if r else "") or "",
+                            "email": _send_email(conn, int(cid)),
+                            "event_id": int(ev["id"]), "event": ev.get("item_name"),
+                            "event_date": str(ev.get("event_date") or "")[:10]})
+        return out
+    finally:
+        conn.close()
+
+
+def plan(today: str | None = None, db_path=None) -> dict:
+    """What the job would send now: first asks and reminders."""
+    from email_parser.timezone_utils import today_central_str
+    today = today or today_central_str()
+    state = load_state(db_path)
+    asks, reminders, skipped = [], [], []
+    for c in candidates(today, db_path):
+        rec = state.get(str(c["customer_id"])) or {}
+        if rec.get("answer"):
+            continue
+        if not c["email"]:
+            skipped.append({**c, "why": "no sendable email"})
+            continue
+        if not rec.get("sent_at"):
+            asks.append(c)
+            continue
+        days_out = (date.fromisoformat(c["event_date"]) - date.fromisoformat(today)).days
+        sent_day = str(rec.get("sent_at"))[:10]
+        if (not rec.get("reminded_at") and days_out <= REMIND_DAYS_BEFORE
+                and sent_day < today):
+            reminders.append(c)
+    return {"today": today, "asks": asks, "reminders": reminders, "skipped": skipped,
+            **approval_state(db_path)}
+
+
+# ---------------------------------------------------------------------------
+# The email
+# ---------------------------------------------------------------------------
+
+def _day(event_date: str) -> str:
+    try:
+        return date.fromisoformat(str(event_date)[:10]).strftime("%A")
+    except ValueError:
+        return "your round"
+
+
+def build_message(person: dict, ev: dict, kind: str = "ask", preview: bool = False,
+                  db_path=None) -> dict:
+    from email_parser.event_day_email import frame
+    from email_parser.invitations import _display_name
+    day = _day(ev.get("event_date"))
+    first = person.get("first_name") or "there"
+    link = ask_url(make_token(person["customer_id"], ev["id"], preview=preview))
+    try:
+        d = date.fromisoformat(str(ev.get("event_date"))[:10])
+        when = f"{d.strftime('%A, %b')} {d.day}"
+    except ValueError:
+        when = ""
+    course = ev.get("course") or ""
+    subj_t, body_t = ((REMINDER_SUBJECT, REMINDER_BODY) if kind == "reminder"
+                      else (SUBJECT, BODY))
+    subject = subj_t.format(day=day, first_name=first)
+    evbox = (f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+             f'style="width:100%;margin:12px 0;"><tr><td style="background:#F8F8F8;'
+             f'border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px;font-size:15px;">'
+             f'<b style="font-family:Georgia,serif;">{_e(ev.get("item_name"))}</b><br>'
+             f'{_e(when)}{" &middot; " + _e(course) if course else ""}</td></tr></table>')
+    button = (f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+              f'style="margin:16px 0;"><tr><td><a href="{_e(link)}" style="display:inline-block;'
+              f'background:#E87C3E;color:#ffffff;font:bold 16px Georgia,serif;text-decoration:none;'
+              f'padding:12px 24px;border-radius:999px;">{_e(BUTTON)}</a></td></tr></table>')
+    inner = (f"<p>{body_t.format(first_name=_e(first), day=_e(day))}</p>{evbox}"
+             f"<p>{WHY}</p>{button}"
+             f'<p style="color:#6B7280;font-size:14px;">{NO_HCP}</p><p>{SIGN}</p>')
+    html_body = frame(inner, "THE GOLF FELLOWSHIP", f"{day} at {_display_name(ev)}")
+    held = []
+    if "{" in subject + html_body:
+        held.append("leftover {tag}")
+    return {"subject": subject, "html": html_body, "link": link, "held": held}
+
+
+def _event_row(event_id: int, db_path=None) -> dict | None:
+    from email_parser import database as db
+    conn = db.get_connection(db_path)
+    try:
+        r = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        return dict(r) if r else None
+    finally:
+        conn.close()
+
+
+def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:
+    from email_parser import database as db
+    if sender is None:
+        from email_parser.event_day_email import _creds, _graph_send
+        creds = _creds()
+        if not creds:
+            return {"error": "Email credentials not configured on server"}
+        sender = lambda to, s, h: _graph_send(creds, to, s, h)   # noqa: E731
+    sent, failed, held = [], [], []
+    for p in people:
+        ev = _event_row(p["event_id"], db_path)
+        if not ev:
+            continue
+        msg = build_message(p, ev, kind, db_path=db_path)
+        if msg["held"]:
+            held.append({"customer_id": p["customer_id"], "why": msg["held"]})
+            continue
+        good = False
+        try:
+            good = bool(sender(p["email"], msg["subject"], msg["html"]))
+        except Exception:
+            logger.exception("handicap ask send failed for cid %s", p["customer_id"])
+        (sent if good else failed).append({"customer_id": p["customer_id"], "name": p["name"]})
+        if good:
+            state = load_state(db_path)
+            rec = state.setdefault(str(p["customer_id"]), {})
+            rec["event_id"] = p["event_id"]
+            rec["sent_at" if kind == "ask" else "reminded_at"] = _now_iso()
+            _save_state(state, db_path)
+        try:
+            db.log_message({"event_name": p.get("event"), "channel": "email",
+                            "recipient_name": p["name"], "recipient_address": p["email"],
+                            "subject": msg["subject"], "body_preview": f"handicap ask ({kind})",
+                            "status": "sent" if good else "failed",
+                            "sent_by": f"handicap_ask_{kind}"}, db_path=db_path)
+        except Exception:
+            pass
+    return {"sent": sent, "failed": failed, "held": held}
+
+
+def auto_check(now: datetime | None = None, db_path=None, sender=None) -> dict:
+    """The job (every 15 minutes, 7 AM-8 PM Central). Nothing unless the dial
+    is on and the wording carries Kerry's stamp."""
+    from email_parser.timezone_utils import now_central
+    if (_setting(AUTO_DIAL, db_path) or "").strip().lower() != "on":
+        return {"skipped": f"{AUTO_DIAL} is not on"}
+    if not approval_state(db_path)["approved"]:
+        return {"skipped": "wording not approved"}
+    now = now or now_central()
+    if not SEND_HOURS[0] <= now.hour < SEND_HOURS[1]:
+        return {"skipped": "outside sending hours"}
+    pl = plan(now.date().isoformat(), db_path)
+    a = _deliver(pl["asks"], "ask", db_path, sender) if pl["asks"] else {}
+    r = _deliver(pl["reminders"], "reminder", db_path, sender) if pl["reminders"] else {}
+    return {"asks": a, "reminders": r}
+
+
+def send_preview(event_id: int, to_address: str | None = None, kind: str = "ask",
+                 db_path=None) -> dict:
+    """ONE sample email to STAFF only, for Kerry's wording approval. Its link
+    is a preview link: the page works and saves nothing."""
+    from email_parser.event_day_email import _creds, _graph_send
+    from email_parser.recap_mail import staff_only, _addrs
+    to = _addrs(to_address) or [DEFAULT_PREVIEW_TO]
+    bad = staff_only(to, lambda k: _setting(k, db_path))
+    if bad:
+        return {"error": f"a handicap-ask preview goes to TGF staff only; refused {bad}"}
+    ev = _event_row(event_id, db_path)
+    if not ev:
+        return {"error": f"no event {event_id}"}
+    sample = {"customer_id": 18, "first_name": "Kerry", "name": "Kerry Niester"}
+    msg = build_message(sample, ev, kind, preview=True, db_path=db_path)
+    pl = plan(db_path=db_path)
+    head = (f"<p><strong>Handicap ask PREVIEW ({kind})</strong>. Nothing has been sent to any "
+            f"player. The button opens the real page; a preview link saves nothing.</p>"
+            f"<p>Would ask now: {len(pl['asks'])}; reminders now: {len(pl['reminders'])}. "
+            f"Wording <code>{pl['template_hash']}</code>: "
+            f"{'APPROVED' if pl['approved'] else 'NOT approved'}.</p><hr>")
+    creds = _creds()
+    if not creds:
+        return {"error": "Email credentials not configured on server"}
+    subject = f"PREVIEW: {msg['subject']}"
+    ok = _graph_send(creds, ",".join(to), subject, head + msg["html"])
+    return {"status": "sent" if ok else "failed", "to": to, "subject": subject,
+            "link": msg["link"], "approved": pl["approved"], "template_hash": pl["template_hash"]}
+
+
+# ---------------------------------------------------------------------------
+# Recording an answer
+# ---------------------------------------------------------------------------
+
+def describe(token: str, db_path=None) -> dict:
+    from email_parser import database as db
+    p = verify_token(token)
+    if not p:
+        return {"ok": False, "error": "This link isn't valid any more."}
+    conn = db.get_connection(db_path)
+    try:
+        r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                         (p["c"],)).fetchone()
+    finally:
+        conn.close()
+    ev = _event_row(p["v"], db_path) or {}
+    rec = load_state(db_path).get(str(p["c"])) or {}
+    return {"ok": True, "customer_id": p["c"], "event_id": p["v"], "preview": bool(p.get("p")),
+            "first_name": (r[0] if r else "") or "", "event": ev.get("item_name") or "",
+            "event_date": str(ev.get("event_date") or "")[:10], "day": _day(ev.get("event_date")),
+            "answer": rec.get("answer"), "status": rec.get("status")}
+
+
+def record(token: str, form: dict, db_path=None) -> dict:
+    """The page's POST. Applies the answer (or, on a preview link, only
+    reports what it would do)."""
+    from email_parser import database as db
+    info = describe(token, db_path)
+    if not info.get("ok"):
+        return info
+    ans = validate(form)
+    if ans.get("error"):
+        return {"ok": False, "error": ans["error"], "form_error": True}
+    cid = info["customer_id"]
+    start = starting_from_index(ans["index"]) if "index" in ans else None
+    status = {"ghin": "set", "other": "check", "none": "need"}[ans["kind"]]
+    out = {"ok": True, "status": status, "starting": start, "answer": ans,
+           "day": info["day"], "event_id": info["event_id"], "preview": info["preview"]}
+    if info["preview"]:
+        return out
+    applied = False
+    if start is not None:
+        conn = db.get_connection(db_path)
+        try:
+            r = conn.execute("SELECT starting_handicap_18, starting_handicap_set_by FROM customers "
+                             "WHERE customer_id = ?", (cid,)).fetchone()
+        finally:
+            conn.close()
+        # A number a manager typed is never overwritten by the player's answer.
+        by = (r[1] if r else "") or ""
+        if r is None or r[0] is None or by.startswith("handicap_ask"):
+            if ans["kind"] == "ghin":
+                note = f"Player: GHIN {ans['ghin']}, index {ans['index']}, 75%"
+            else:
+                svc = ans["service"] + (f" ({ans['service_name']})" if ans.get("service_name") else "")
+                note = f"Player: {svc}, index {ans['index']}, 75%, manager to check"
+            res = db.set_starting_handicap(cid, start, set_by="handicap_ask (player)", note=note,
+                                           db_path=db_path)
+            applied = not res.get("error")
+        else:
+            out["kept_manager_value"] = r[0]
+    if ans["kind"] == "ghin":
+        conn = db.get_connection(db_path)
+        try:
+            conn.execute("UPDATE customers SET ghin_number = ? WHERE customer_id = ?",
+                         (ans["ghin"], cid))
+            conn.commit()
+        finally:
+            conn.close()
+    state = load_state(db_path)
+    rec = state.setdefault(str(cid), {})
+    rec.update({"answer": ans, "answered_at": _now_iso(), "status": status,
+                "event_id": rec.get("event_id") or info["event_id"], "applied": applied})
+    _save_state(state, db_path)
+    try:
+        db.log_agent_action("handicap-ask", "handicap_ask_answer",
+                            f"customer {cid}: {ans['kind']}"
+                            + (f", index {ans['index']} -> starting {start}" if start is not None
+                               else f", usual 18 {ans.get('score18')}"), db_path=db_path)
+    except Exception:
+        pass
+    return out
+
+
+def confirm(customer_id: int, by: str = "", db_path=None) -> dict:
+    """A manager's Looks right on a `check` answer."""
+    state = load_state(db_path)
+    rec = state.get(str(int(customer_id)))
+    if not rec or rec.get("status") != "check":
+        return {"error": "nothing to confirm for this player"}
+    rec.update({"status": "confirmed", "confirmed_by": by or "manager", "confirmed_at": _now_iso()})
+    _save_state(state, db_path)
+    return {"customer_id": int(customer_id), "status": "confirmed"}
+
+
+# ---------------------------------------------------------------------------
+# For the manager's banner
+# ---------------------------------------------------------------------------
+
+def _when(iso) -> str:
+    try:
+        from email_parser.timezone_utils import now_central  # noqa: F401
+        import pytz
+        d = datetime.fromisoformat(str(iso).rstrip("Z")).replace(tzinfo=pytz.utc)
+        d = d.astimezone(pytz.timezone("America/Chicago"))
+        return d.strftime("%a %-I:%M %p")
+    except Exception:
+        return str(iso or "")[:16]
+
+
+def status_rows(customer_ids, missing_ids=(), db_path=None) -> list[dict]:
+    """One row per roster player the ask has touched, for the banner.
+    `missing_ids` are the players still without a handicap."""
+    state = load_state(db_path)
+    missing = {int(c) for c in missing_ids if c}
+    rows = []
+    for cid in customer_ids:
+        if not cid:
+            continue
+        rec = state.get(str(int(cid)))
+        if not rec:
+            continue
+        a = rec.get("answer") or {}
+        st = rec.get("status") or ("asked" if rec.get("sent_at") else "")
+        if not st:
+            continue
+        if st == "asked":
+            if int(cid) not in missing:
+                continue          # a manager set it meanwhile
+            line = (f"Emailed {_when(rec.get('sent_at'))}"
+                    + (f"; reminded {_when(rec.get('reminded_at'))}" if rec.get("reminded_at")
+                       else f"; reminder {REMIND_DAYS_BEFORE} days before the event"))
+        elif a.get("kind") == "ghin":
+            line = (f"GHIN {a.get('ghin')} · index {a.get('index')} → starting "
+                    f"{starting_from_index(a['index'])} · answered {_when(rec.get('answered_at'))}")
+        elif a.get("kind") == "other":
+            svc = a.get("service") + (f" ({a['service_name']})" if a.get("service_name") else "")
+            line = (f"{svc} · index {a.get('index')} → starting "
+                    f"{starting_from_index(a['index'])} (applied)")
+        elif a.get("kind") == "none":
+            line = (f"No handicap · usually shoots {a.get('score18')} for 18"
+                    + (f" · plays {a['rounds_year']} rounds a year" if a.get("rounds_year") else ""))
+        else:
+            line = ""
+        rows.append({"customer_id": int(cid), "status": st, "line": line})
+    return rows

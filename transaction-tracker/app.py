@@ -2246,6 +2246,27 @@ def start_scheduler():
                 logger.info("Event invitations: %s", res["ran"])
         except Exception:
             logger.exception("Event invitations job failed (non-fatal)")
+    # ── THE HANDICAP ASK (Kerry 2026-10-16): email a new player with no
+    #    handicap a signed link to give it; one reminder two days before.
+    #    Nothing unless app setting handicap_ask_auto = on AND the wording
+    #    carries Kerry's stamp. email_parser/handicap_ask.py.
+    def handicap_ask_job():
+        from email_parser.handicap_ask import auto_check
+        try:
+            res = auto_check()
+            if res.get("asks") or res.get("reminders"):
+                logger.info("Handicap ask: %s", res)
+        except Exception:
+            logger.exception("Handicap ask job failed (non-fatal)")
+    scheduler.add_job(
+        handicap_ask_job,
+        "cron", hour="7-19", minute="5,20,35,50",
+        timezone="US/Central",
+        id="handicap_ask_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.add_job(
         event_invite_auto_job,
         "cron", hour="7-9", minute="2,17,32,47",
@@ -4978,6 +4999,51 @@ def api_send_membership_notice(term_id):
     if not result.get("ok"):
         return jsonify(result), 400
     return jsonify(result)
+
+
+@app.route("/handicap/<token>", methods=["GET", "POST"])
+def public_handicap_ask(token):
+    """THE HANDICAP ASK page (Kerry 2026-10-16, email_parser/handicap_ask.py):
+    a new player with no handicap gives their GHIN number and latest index,
+    another service's index, or their usual 18-hole score. Signed link, no
+    login. Only the form POST saves, so a mail scanner opening the link
+    answers nothing."""
+    from email_parser import handicap_ask as _ha
+    info = _ha.describe(token)
+    ctx = {"services": _ha.SERVICES, "page_note": _ha.PAGE_NOTE, "ghin_note": _ha.GHIN_NOTE,
+           "none_note": _ha.NONE_NOTE.format(day=info.get("day") or "the event"),
+           "info": info, "form": {}, "done": None, "form_error": None, "error_page": None}
+    if not info.get("ok"):
+        ctx["error_page"] = info.get("error") or "This link isn't valid any more."
+        return render_template("handicap_ask.html", **ctx), 400
+    if request.method == "POST":
+        f = request.form.to_dict()
+        kind = (f.get("go") or f.get("kind") or "").strip()
+        f["kind"] = kind
+        f["index"] = f.get("index_ghin") if kind == "ghin" else f.get("index_other")
+        res = _ha.record(token, f)
+        if not res.get("ok"):
+            ctx.update(form=f, form_error=res.get("error"))
+            return render_template("handicap_ask.html", **ctx), 400
+        st = res.get("starting")
+        start_txt = ("+" + str(abs(st))) if (st is not None and st < 0) else str(st)
+        idx = (res.get("answer") or {}).get("index")
+        idx_txt = ("+" + str(abs(idx))) if (idx is not None and idx < 0) else str(idx)
+        res["starting_text"] = start_txt
+        ctx.update(done=res,
+                   done_set=_ha.DONE_SET.format(index=idx_txt),
+                   done_check=_ha.DONE_CHECK.format(start=start_txt, index=idx_txt, day=info["day"]),
+                   done_need=_ha.DONE_NEED.format(day=info["day"]))
+    return render_template("handicap_ask.html", **ctx)
+
+
+@app.route("/api/handicap-ask/<int:customer_id>/confirm", methods=["POST"])
+@require_role("manager")
+def api_handicap_ask_confirm(customer_id):
+    """A manager's Looks right on a player's other-service handicap."""
+    from email_parser.handicap_ask import confirm
+    res = confirm(customer_id, by=session.get("role") or "manager")
+    return jsonify(res), (400 if res.get("error") else 200)
 
 
 @app.route("/rsvp/<token>", methods=["GET", "POST"])

@@ -1009,6 +1009,34 @@ them to the Tracker and that's why there was a discrepancy."
   from today through N days ahead that has any: the Front Desk brief's read.
 - Guard: `test_missing_handicaps.py`. Read-only; nothing is written.
 
+### The handicap ask (v2.569.0, Kerry 2026-10-16 "Build it")
+
+Kerry: "We need some kind of automatic ask for new people that we don't have
+handicap for." The handicap is for the TEAM game: a non-member can't enter
+individual net or MVP, "so this is just about giving them a handicap so that
+their team and them can compete together."
+
+- **Who:** a `new` or `few_rounds` player from the missing-handicap read with a
+  customer_id and a sendable address, on any active event in the next 21
+  days. Asked ONCE per person; one reminder when their event is 2 days out and
+  they have not answered. Sends 7 AM-8 PM Central only (job `handicap_ask_auto`,
+  every 15 minutes).
+- **The page** `/handicap/<token>` (signed, 60 days, no login): GHIN number AND
+  latest index -> starting handicap 75% (half up: 14.2 -> 10.7) and
+  `customers.ghin_number`; another service -> 75% applied, status `check`;
+  no handicap -> usual 18-hole score, status `need`, nothing set. Only the
+  form POST saves. A starting handicap a manager typed is never overwritten.
+  The Tracker cannot look an index up from a GHIN number (GHIN shows it only
+  to a logged-in account), so the page asks for both.
+- **Manager:** the missing-handicap banner lists every emailed player: Set
+  from GHIN / Check this one (Looks right, `POST /api/handicap-ask/<cid>/confirm`)
+  / Needs a number / Asked, no answer (`missing_handicaps(...)["asks"]`).
+- **Locks:** dial `handicap_ask_auto` = on AND `handicap_ask_approved` = the
+  wording hash (`handicap_ask.template_hash()`); any wording change re-locks.
+  Bridge `scoring-handicap-ask` (status) / `:preview|<event_id>[|addr][|reminder]`
+  (staff only) / `:state`. State in app setting `handicap_ask`, no table.
+- Guard `test_handicap_ask.py`.
+
 ### The N/H flag (v2.522.53, Kerry "Good on both", CoS #1078 / #1079)
 
 - **What:** a manager marks a player with no handicap as N/H for one event.
