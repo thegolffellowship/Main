@@ -303,6 +303,29 @@ try:
 finally:
     db.get_fellowship_cup_projection = _orig_build; _gate.set()
     db._SPOTLIGHT_REFRESHING["on"] = False
+# 10/14 6:06 AM (digest #1877): six opens in one second on a cold cache all rebuilt the same piece.
+_calls = []
+def _mk(delay):
+    def b():
+        _calls.append(1); _tm.sleep(delay); return {"v": len(_calls)}
+    return b
+db._SPOTLIGHT_SHARED_CACHE.clear(); db._SPOTLIGHT_BUILD_LOCKS.clear()
+_res, _ts = [], []
+def _open(): 
+    t0 = _tm.time(); _res.append(db._spotlight_shared("herd", _mk(0.6), tmp)); _ts.append(_tm.time() - t0)
+_th_list = [_th.Thread(target=_open) for _ in range(6)]
+[t.start() for t in _th_list]; [t.join(10) for t in _th_list]
+check("six simultaneous COLD opens build the piece once (the other five wait for it and share it)",
+      len(_calls) == 1 and len(_res) == 6 and all(r == _res[0] for r in _res), (len(_calls), _res))
+# expired but not ancient entry + a builder already running -> others serve the old entry at once
+_calls.clear(); _res.clear(); _ts.clear()
+db._SPOTLIGHT_SHARED_CACHE[("herd", str(tmp))] = (_tm.time() - 300, {"v": "old"})
+_th_list = [_th.Thread(target=_open) for _ in range(5)]
+_th_list[0].start(); _tm.sleep(0.15)
+[t.start() for t in _th_list[1:]]; [t.join(10) for t in _th_list]
+check("expired entry: one rebuild; the four who arrive meanwhile get the old entry in well under the build time",
+      len(_calls) == 1 and sorted(_ts)[3] < 0.3 and _res.count({"v": "old"}) == 4, (len(_calls), _ts, _res))
+check("the warmer now stays on for a week of quiet (was a day)", db._SPOTLIGHT_WARM_ACTIVE_S == 7 * 24 * 3600)
 check("the scheduler carries the spotlight_warm job", appmod.scheduler.get_job("spotlight_warm") is not None or os.getenv("EMAIL_ADDRESS") is None)
 for nm in ("spotlight_search", "contests_list", "points_race", "handicap_rounds", "payouts_list", "leads_list", "rsvps_list", "expense_queue", "ca_queue_list", "gg_history_overview", "action_items_list", "scoring_rounds", "matrix_get", "parse_warnings", "coo_action_items", "recon_unreconciled", "monthly_points"):
     pass

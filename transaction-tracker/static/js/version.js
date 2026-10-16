@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.568.0";
+window.TGF_VERSION = "2.568.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.568.1",
+    date: "2026-10-13",
+    title: "Health: Spotlight single-builder, steadier replica check, send-job slow lines",
+    changes: [
+      "Digest #1877 (10/15). (1) Spotlight: on 10/14 at 6:06 AM, six members opened their results-email link within one second; the Spotlight's saved pieces were cold (the refresher had gone idle after a quiet day) and all six rebuilt the same 6 s piece at once on a host at load 110, so each open took 7-10 s. Now one thread builds an entry; the others share its result (waiting if the entry is cold, or seeing the previous copy at once if it is under 15 minutes old), and the background refresher stays on for a week of quiet instead of a day. (2) The 5:00 report's off-site replica check timed out at 25 s under load 98 and the failure was remembered for 15 minutes; a failed read is no longer remembered, and the scheduled read now waits up to 75 s. (3) The two jobs that send mail to a roster (event_invite_auto, results_email_auto) get a 15-minute slow line instead of 2 minutes: 346 s and 233 s were normal sends under load. No figure, email or member-facing wording changes. Also (10/16): the staff bridges scoring-gg-history (Golf Genius archive ingest, one fetch per call) and scoring-import-orders (order-email import) get a 60 s slow line instead of 10 s; on 10/15 the first took 10-39 s on 13 of 131 calls with the host at load 100, normal for a fetch from Golf Genius."
+    ]
+  },
   {
     version: "2.568.0",
     date: "2026-10-15",

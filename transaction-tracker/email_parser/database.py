@@ -16044,7 +16044,11 @@ _SPOTLIGHT_LAST_USED: dict = {"at": 0.0, "cid": None, "db_path": None}
 # Tracker Health digest #1008). The warmer reads it back after a restart.
 _SPOTLIGHT_PERSIST_EVERY_S = 600.0
 _SPOTLIGHT_PERSISTED_AT: dict = {"at": 0.0}
-_SPOTLIGHT_WARM_ACTIVE_S = 24 * 3600      # warm only if opened in the last day
+_SPOTLIGHT_WARM_ACTIVE_S = 7 * 24 * 3600  # warm only if opened in the last week (was a day: after a quiet day the
+                                          # 6 AM recap links met a cold cache, digest #1877; a warm tick costs ~0.8 s)
+_SPOTLIGHT_STALE_MAX_S = 900.0            # an entry this old may be served while another thread rebuilds it
+_SPOTLIGHT_BUILD_LOCKS: dict = {}
+_SPOTLIGHT_BUILD_GUARD = threading.Lock()
 _SPOTLIGHT_WARM_AGE_S = 90.0              # rebuild entries older than this
 _SPOTLIGHT_REFRESHING: dict = {"on": False}   # True while the warmer rebuilds
 _SPOTLIGHT_WARMER_TLS = threading.local()      # set only on the warmer's own thread
@@ -16064,21 +16068,36 @@ def _spotlight_shared(name: str, builder, db_path) -> object:
     # expired (at most ~2.5 min old) and never builds.
     if hit is not None and _SPOTLIGHT_REFRESHING["on"] and not getattr(_SPOTLIGHT_WARMER_TLS, "active", False):
         return hit[1]
-    # A COLD build: lap it on the request's stopwatch under its own name
-    # so the digest shows exactly which builder the open paid for.
-    try:
-        from . import perf as _perf
-        _sw = _perf.current()
+    # ONE builder per entry (digest #1877, 10/14 6:06 AM: six members opened
+    # their recap link in the same second, the entries were cold, and all
+    # six rebuilt the same 6 s piece at once on a saturated host). The first
+    # thread builds; a thread that arrives meanwhile serves the old entry if
+    # it is under _SPOTLIGHT_STALE_MAX_S old, else waits for the builder and
+    # reads what it built.
+    with _SPOTLIGHT_BUILD_GUARD:
+        lock = _SPOTLIGHT_BUILD_LOCKS.setdefault(ck, threading.Lock())
+    if (hit is not None and lock.locked() and _t.time() - hit[0] < _SPOTLIGHT_STALE_MAX_S
+            and not getattr(_SPOTLIGHT_WARMER_TLS, "active", False)):
+        return hit[1]
+    with lock:
+        hit = _SPOTLIGHT_SHARED_CACHE.get(ck)
+        if hit and _t.time() - hit[0] < _SPOTLIGHT_SHARED_TTL:
+            return hit[1]            # the builder we waited for filled it
+        # A COLD build: lap it on the request's stopwatch under its own name
+        # so the digest shows exactly which builder the open paid for.
+        try:
+            from . import perf as _perf
+            _sw = _perf.current()
+            if _sw:
+                _sw.lap("player")          # close whatever per-player work ran before
+                _sw.note(cold=True)
+        except Exception:
+            _sw = None
+        val = builder()
         if _sw:
-            _sw.lap("player")          # close whatever per-player work ran before
-            _sw.note(cold=True)
-    except Exception:
-        _sw = None
-    val = builder()
-    if _sw:
-        _sw.lap(f"shared:{name}")
-    _SPOTLIGHT_SHARED_CACHE[ck] = (_t.time(), val)
-    return val
+            _sw.lap(f"shared:{name}")
+        _SPOTLIGHT_SHARED_CACHE[ck] = (_t.time(), val)
+        return val
 
 
 def warm_spotlight(db_path=None, force: bool = False) -> dict:
