@@ -5,7 +5,7 @@ window.TGF_CHANGELOG = [
     date: "2026-10-16",
     title: "Handicap ask also asks for Venmo, with a link to get it",
     changes: [
-      "Kerry 10/16: \"Yes add Venmo to that same form. If they don't have it provide a link to get it.\" Under whichever handicap choice they pick: \"Your Venmo, for winnings\" (when your team wins, we pay by Venmo), a username box, \"I don't have Venmo yet\", and a Get Venmo link (venmo.com). One Save button for the whole page. The handle is stored bare in customers.venmo_username, where payouts read it, and never replaces one already on file; a player who already has a handle is not asked. The manager banner line shows the Venmo or \"no Venmo yet\". Optional: a player can answer the handicap without it.",
+      "Kerry 10/16: \"Yes add Venmo to that same form. If they don't have it provide a link to get it.\" Under whichever handicap choice they pick: \"Your Venmo, for winnings\" (when your team wins, we pay by Venmo), a username box, \"I don't have Venmo yet\", and a Get Venmo link (venmo.com). One Save button for the whole page. The handle is stored bare in customers.venmo_username, where payouts read it, and never replaces one already on file; a player who already has a handle is not asked (a staff preview always shows the question). The manager banner line shows the Venmo or \"no Venmo yet\". Optional: a player can answer the handicap without it.",
     ],
   },
   {

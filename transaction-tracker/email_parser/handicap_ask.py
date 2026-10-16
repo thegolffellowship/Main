@@ -489,7 +489,8 @@ def describe(token: str, db_path=None) -> dict:
     finally:
         conn.close()
     ev = _event_row(p["v"], db_path) or {}
-    has_venmo = bool(r and ((r[2] or "").strip() or (r[3] or "").strip()))
+    # A staff PREVIEW always shows the Venmo question (Kerry's own is on file).
+    has_venmo = (not p.get("p")) and bool(r and ((r[2] or "").strip() or (r[3] or "").strip()))
     rec = load_state(db_path).get(str(p["c"])) or {}
     return {"ok": True, "customer_id": p["c"], "event_id": p["v"], "preview": bool(p.get("p")),
             "first_name": (r[0] if r else "") or "", "event": ev.get("item_name") or "",
