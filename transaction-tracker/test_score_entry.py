@@ -793,7 +793,10 @@ check("...and nothing on a par 3 where he gets no team stroke anyway",
 print("cart-sign QR (Kerry #666 B), behind the score_entry_qr dial")
 pack = db.get_event_print_pack(900)
 res = se.attach_cart_sign_qr(pack)
-check("no dial, no code", res["groups"] == 0 and not any(g.get("score_qr") for g in pack["groups"]), res)
+check("no dial, every group gets a code (Kerry 10/16)", res["groups"] == len(pack["groups"]) and res["groups"] > 0
+      and all(g.get("score_qr") for g in pack["groups"]), res)
+db.set_app_setting("score_entry_qr", '{"900": "off"}')
+check("an explicit off prints no code", se.attach_cart_sign_qr(db.get_event_print_pack(900))["groups"] == 0)
 db.set_app_setting("score_entry_qr", '{"900": [3]}')
 pack = db.get_event_print_pack(900)
 res = se.attach_cart_sign_qr(pack, base_url="https://x.test")

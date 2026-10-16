@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.570.0";
+window.TGF_VERSION = "2.570.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.570.1",
+    date: "2026-10-16",
+    title: "Cart signs print the live-scoring QR by default",
+    changes: [
+      "Kerry 10/16: \"QR Codes didn't print on cart signs this week.\" A cart sign carried a code only when the score_entry_qr app setting named the event, and live scoring that switches itself on (5 PM the day before) never wrote that setting, so Tuesday's signs printed without one. Now an event the setting does not name gets every group's code whenever live scoring is on for it; set the event's entry to \"off\" to leave codes off. Live scoring off still means no code. Guard test_score_entry.py.",
+    ],
+  },
   {
     version: "2.570.0",
     date: "2026-10-16",

@@ -1991,13 +1991,23 @@ def event_group_links(event_id: int, holes: str = "9", base_url: str | None = No
 # ---------------------------------------------------------------------------
 
 def _qr_dial(event_id: int, db_path=None):
+    """Which groups' cart signs carry the score QR. An event the dial does
+    not name gets EVERY group ("all"): live scoring now switches itself on
+    for every event (live_scoring_default), and the scorecards already print
+    a QR on every group by default, so a cart sign must too (Kerry 10/16:
+    "QR Codes didn't print on cart signs this week"). Callers still require
+    live scoring to be on for the event. To leave codes off one event, set
+    its entry to "off" (or an empty list)."""
     from email_parser.database import get_app_setting
     try:
         raw = get_app_setting("score_entry_qr", db_path) or ""
         dial = json.loads(raw) if raw.strip() else {}
     except (ValueError, TypeError):
         return None
-    return dial.get(str(event_id))
+    v = dial.get(str(event_id), "all")
+    if v in ("off", "none", [], None, ""):
+        return None
+    return v
 
 
 #: THE SHORT QR LINK (Kerry 2026-10-06: "Are there by chance less dense QR
