@@ -56,6 +56,22 @@ def playing_handicap(index: float, slope: float, rating: float, par: float,
     return whs_round(ch)
 
 
+# THE MAX PLAYING HANDICAP (Kerry 2026-10-16): "playing handicaps can be max
+# 18 for 9 and 36 for 18 regardless of gender and what calculations are.
+# Means that no one ever gets more than 2 pops per hole. This is because of
+# our max triple rule and how points work. We don't want a triple earning
+# points and the best they can get with a triple with two pops is a net
+# bogey which is not worth any points." The allocator already stops at 2
+# pops a hole (`allocate_strokes`, max_pops=2); this caps the NUMBER itself,
+# so a round-level net, a team handicap or a printed PH never carries more.
+MAX_POPS_PER_HOLE = 2
+
+
+def max_playing_handicap(holes: int) -> int:
+    """18 on a nine, 36 on an eighteen: two pops a hole."""
+    return MAX_POPS_PER_HOLE * int(holes)
+
+
 def ruled_allocation_mode(mode: str, si_by_hole: dict) -> str:
     """Resolve the "ruled" stroke-allocation mode to a concrete one.
 

@@ -694,6 +694,17 @@ publishes the `game_*` view BESIDE the true one because
 `verify_scoring_round` compares GG's markings against `net_vs_par`.
 Details + the full call-site table: `docs/claude/side-games.md`.
 
+## Max playing handicap: 18 on a nine, 36 on an eighteen (v2.570.0)
+
+Kerry 2026-10-16: "playing handicaps can be max 18 for 9 and 36 for 18
+regardless of gender and what calculations are" (two pops a hole; with the
+max-triple rule a triple with two pops is a net bogey, no points). Every
+source of a playing handicap passes `max_hcp=event_ph_cap(ev, nine)`
+(database.py): the print pack / Starter Sheet, the FLIGHTS tab, the
+score-entry preview. A NEW place that computes a playing handicap must do the
+same. Forward from app setting `ph_cap_from` (default 2026-10-20). Guard
+`test_ph_cap.py`; handicaps.md.
+
 ## Pairings roster: ONE builder (v2.410.0)
 
 `_event_roster_rows(conn, event_id)` is the only source of "who is on

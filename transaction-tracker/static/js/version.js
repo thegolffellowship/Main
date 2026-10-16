@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.569.7";
+window.TGF_VERSION = "2.570.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.570.0",
+    date: "2026-10-16",
+    title: "Max playing handicap: 18 on a nine, 36 on an eighteen",
+    changes: [
+      "Kerry 10/16: \"playing handicaps can be max 18 for 9 and 36 for 18 regardless of gender and what calculations are. Means that no one ever gets more than 2 pops per hole. This is because of our max triple rule and how points work. We don't want a triple earning points and the best they can get with a triple with two pops is a net bogey which is not worth any points.\" The stroke allocator already stopped at 2 pops a hole; now the playing handicap NUMBER is capped too (handicap_calc.max_playing_handicap, database.event_ph_cap), at every source: the Starter Sheet / print pack (which seeds score entry, the scorecards and their dots, the stored rounds and the engine), the FLIGHTS tab and the score-entry preview. So a round-level net, a team handicap and off-the-lowest never carry more than 18 / 36. The index itself is not capped.",
+      "Forward only: events on/after app setting ph_cap_from (2026-10-20, Tuesday's events first), so past handicaps, points and payouts stay as played. The Handicaps page's how-it-works step 7 now says 18 on a nine and 36 on an eighteen. Guard test_ph_cap.py.",
+    ],
+  },
   {
     version: "2.569.7",
     date: "2026-10-16",

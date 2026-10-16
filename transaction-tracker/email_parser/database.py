@@ -63073,6 +63073,27 @@ def _handicap_index_18_by_customer(db_path=None, as_of: str | None = None) -> di
     return out
 
 
+PH_CAP_FROM_DEFAULT = "2026-10-20"
+
+
+def event_ph_cap(ev: dict | None, nine: bool, db_path=None) -> int | None:
+    """THE MAX PLAYING HANDICAP for this event's card (Kerry 2026-10-16):
+    18 on a nine, 36 on an eighteen (two pops a hole), for every player
+    whatever the tee or the arithmetic. Forward only: events on/after app
+    setting `ph_cap_from` (default 2026-10-20, the first event after the
+    ruling), so a past event's handicaps, points and payouts stay as they
+    were played (principle 4). None = no cap for this event."""
+    from email_parser.handicap_calc import max_playing_handicap
+    d = str((ev or {}).get("event_date") or "")[:10]
+    try:
+        start = (get_app_setting("ph_cap_from", db_path=db_path) or PH_CAP_FROM_DEFAULT).strip()[:10]
+    except Exception:
+        start = PH_CAP_FROM_DEFAULT
+    if not d or d < start:
+        return None
+    return max_playing_handicap(9 if nine else 18)
+
+
 def _event_player_ph_map(conn, ev: dict, idx18: dict) -> tuple[dict, str, str]:
     """{customer_id: playing_handicap} for everyone on the roster — THE
     starter sheet's own number (same tee band from the ROSTER row, same
@@ -63108,7 +63129,8 @@ def _event_player_ph_map(conn, ev: dict, idx18: dict) -> tuple[dict, str, str]:
         # A nine-hole card takes the nine-hole index (half the 18).
         idx_scoped = idx if (tee["rating"] or 0) >= 50 else round(idx / 2.0, 1)
         try:
-            out[int(cid)] = _ph_fn(idx_scoped, tee["slope"], tee["rating"], tee["par"])
+            out[int(cid)] = _ph_fn(idx_scoped, tee["slope"], tee["rating"], tee["par"],
+                                   max_hcp=event_ph_cap(ev, (tee["rating"] or 0) < 50))
         except Exception:                        # noqa: BLE001
             continue
     return out, basis, note
@@ -66118,7 +66140,9 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             idx_scoped = idx if (tee["rating"] or 0) >= 50 else round(idx / 2.0, 1)
             try:
                 p["playing_handicap"] = _ph_fn(idx_scoped, tee["slope"],
-                                               tee["rating"], tee["par"])
+                                               tee["rating"], tee["par"],
+                                               max_hcp=event_ph_cap(ev, (tee["rating"] or 0) < 50,
+                                                                    db_path=db_path))
                 p["course_handicap_raw"] = _ch_fn(idx_scoped, tee["slope"],
                                                   tee["rating"], tee["par"])
             except Exception:

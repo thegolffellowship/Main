@@ -1009,6 +1009,28 @@ them to the Tracker and that's why there was a discrepancy."
   from today through N days ahead that has any: the Front Desk brief's read.
 - Guard: `test_missing_handicaps.py`. Read-only; nothing is written.
 
+### The MAX PLAYING HANDICAP (v2.570.0, Kerry 2026-10-16)
+
+Kerry: "playing handicaps can be max 18 for 9 and 36 for 18 regardless of
+gender and what calculations are. Means that no one ever gets more than 2
+pops per hole. This is because of our max triple rule and how points work.
+We don't want a triple earning points and the best they can get with a
+triple with two pops is a net bogey which is not worth any points."
+
+- `handicap_calc.max_playing_handicap(holes)` = 2 x holes
+  (`MAX_POPS_PER_HOLE`); `allocate_strokes` already stopped at 2 pops a hole,
+  and now the NUMBER is capped too, so a round-level net, a team handicap or
+  off-the-lowest never carries more.
+- `database.event_ph_cap(ev, nine)` is the one rule every source of a
+  playing handicap passes as `max_hcp`: the print pack / Starter Sheet (which
+  seeds score entry, the cards, the dots and the engine), the FLIGHTS tab
+  (`_event_player_ph_map`) and the score-entry preview (`_preview_handicaps`).
+  The index itself is never capped (a 38.2 index stays 38.2).
+- Forward only: events on/after app setting `ph_cap_from` (default
+  2026-10-20), so past handicaps, points and payouts stay as played. The Lone
+  Star Cup's locked course handicaps (`lsc_handicap_lock`) are not touched.
+- Guard `test_ph_cap.py`. The Handicaps page's how-it-works step 7 states it.
+
 ### The handicap ask (v2.569.0, Kerry 2026-10-16 "Build it")
 
 Kerry: "We need some kind of automatic ask for new people that we don't have

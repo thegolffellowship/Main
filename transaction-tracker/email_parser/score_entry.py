@@ -1640,7 +1640,8 @@ def _preview_handicaps(event_id: int, ids: list, tees: dict, holes: int, db_path
             if holes == 18 and nine:
                 rating, par = rating * 2, par * 2
             use = round(idx / 2.0, 1) if (holes == 9 and nine) else idx
-            p["playing_handicap"] = ph_fn(use, slope, rating, par)
+            p["playing_handicap"] = ph_fn(use, slope, rating, par,
+                                          max_hcp=db.event_ph_cap(ev, holes == 9, db_path=db_path))
             p["course_handicap_raw"] = ch_fn(use, slope, rating, par)
             out["ph"][c] = p["playing_handicap"]
         unit = "cart" if len(ids) < 16 else "group"
