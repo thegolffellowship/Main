@@ -74,6 +74,8 @@ SLOW_MS = {
     "scoring-print-pack-pdf": 60_000,
     "scoring-scorecards": 60_000,    # |pdf|all binds 24 layout combos in Chromium (21-26 s on 9/29)
     "scoring-spotlight": 20_000,     # staff bridge; a cold Player Spotlight build took 13 s on 10/5, by design after >24 h idle
+    "scoring-gg-history": 60_000,     # staff GG-archive ingest: each call fetches Golf Genius pages (p50 1.5 s, 10-39 s at host load 100 on 10/15)
+    "scoring-import-orders": 60_000,  # staff order-email import through Graph (19.8 s on 10/15)
     "event_invite_auto": 900_000,     # job: sends mail to a roster through Graph (346 s on 10/14 at host load 110)
     "results_email_auto": 900_000,    # job: the 6 AM results email, one message per recipient (233 s for 209 on 10/14)
     "scoring-event-day-email": 60_000, # sends one email per roster player through Graph: p50 6.7 s, 12 s on 10/12

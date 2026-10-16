@@ -401,3 +401,13 @@ header.shell-nav.shell-member.shell-slim .shell-wordmark { display: none; }
 .se-toggle a.amber { background: #FFFBEB; border-color: #D97706; color: #92400E; }
 .se-toggle .se-tg-s { font: 600 10.5px/1 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .02em; text-transform: none; margin-top: 3px; }
 .se-toggle .se-tg-s:empty { display: none; }
+
+/* ADVISOR LINK (CoS #1905): the advisor's own name where the member CTA sits. */
+.shell-member .shell-advisor-name {
+    margin-left: 18px; flex: 0 0 auto; color: #D1D5DB;
+    font: 600 12px/1 'Bitter', serif; letter-spacing: .4px; white-space: nowrap;
+    max-width: 30vw; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 560px) {
+    .shell-member .shell-advisor-name { margin-left: auto; max-width: 45vw; }
+}

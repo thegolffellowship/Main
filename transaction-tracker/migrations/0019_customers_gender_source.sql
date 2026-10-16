@@ -1,0 +1,24 @@
+-- GENDER SOURCE (Kerry 2026-10-14, rule 3b, via Front Desk: "Yes, approve the
+-- rule and the column even though this should basically be temporary since
+-- when we go to our own payment platform we'll be able to ask those questions
+-- up front."; spec tracker-claude #1815, CoS #1799-2).
+--
+-- Where a customers.gender value came from, so an INFERRED gender is never
+-- mistaken for one a person or manager stated, and is never allowed to
+-- overwrite one:
+--   'stated'             the person told us (registration, a form, Kerry)
+--   'inferred_from_tees' set by the Tracker from Forward tees / F-rated
+--                        rounds; the manager sees a "confirm" chip
+--   'manager'            a manager confirmed or corrected it
+--   NULL                 legacy: set before this column existed. Note that
+--                        _migrate_gender_v1 (2026-07-20) has filled NULL
+--                        genders from played tees at every boot since, so a
+--                        legacy value is NOT known to be stated.
+-- No backfill here: legacy rows stay NULL rather than be called 'stated'.
+--
+-- RETIREMENT PATH (Kerry: temporary): when registration on the TGF payment
+-- platform asks gender up front, every new value arrives 'stated'; once no
+-- row reads 'inferred_from_tees', the inference (customers_gender.py) and
+-- the chip are removed, and this column may be dropped in its own migration.
+ALTER TABLE customers ADD COLUMN gender_source TEXT
+    CHECK (gender_source IN ('stated', 'inferred_from_tees', 'manager'));

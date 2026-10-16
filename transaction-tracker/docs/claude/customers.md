@@ -1432,3 +1432,26 @@ handicap round through the player link — all by `customer_id`. The
 window is the `members_active_days` dial (default 60). The Customers
 page's MEMBERS card shows "N active · P% played in the last 60 days" and,
 per chapter, "total · active (share)". Guard: `test_members_active.py`.
+
+## Gender from tees (Kerry 2026-10-14, v2.567.0, TEMPORARY)
+
+Kerry: "Should automatically know this if they select Forward tees … 95% of the
+time or greater it's probably a woman." Approved with migration 0019
+(`customers.gender_source`: `stated` | `inferred_from_tees` | `manager`, NULL =
+set before the column). `email_parser/customers_gender.py` is the one writer:
+- a person with NO gender is set F, `inferred_from_tees`, when their scorecards
+  are majority on F-rated tees (`scoring_rounds` → `course_tees.gender`), or they
+  registered on the Forward band and have no rated rounds yet;
+- Forward band but M-rated rounds (a senior man on the men's Forward tee) is a
+  CONFLICT: nothing is set, the manager decides;
+- a gender already on file is never overwritten (the UPDATE re-checks NULL).
+Bridge `scoring-gender-infer[:apply][|ids]` (dry run default); job
+`gender_infer_auto` behind dial `gender_infer` (off until Kerry has seen the
+backfill list). The July boot step `_migrate_gender_v1` (ladies-tee rounds → F,
+else M) marks what it fills `inferred_from_tees` once 0019 exists. Nothing in the
+handicap or course-rating path reads `customers.gender`; readers are pairings R-F,
+the ambassador list, customer queries and the score-entry tee ring. Still to
+build: the manager's "F? confirm" chip (Confirm or M → source `manager`).
+Retirement: when registration asks gender up front, turn the dial off, remove the
+module and chip, and drop the column once no row reads `inferred_from_tees`.
+Guard `test_gender_infer.py`.

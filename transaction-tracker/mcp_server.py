@@ -5384,6 +5384,14 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps({"assembled": asm,
                                "result": db.record_event_game_payouts(
                                    arg, asm["rows"], force=True)}, indent=2)
+        if cmd == "scoring-gender-infer":
+            # Kerry 10/14 (#1815/#1840): gender from tees, dry run by default.
+            # "scoring-gender-infer[:apply][|<id>,<id>]".
+            from email_parser.customers_gender import infer as _gi
+            _bits = [b.strip() for b in (arg or "").split("|") if b.strip()]
+            _ids = [int(x) for b in _bits if b != "apply" for x in b.split(",") if x.strip().isdigit()]
+            return json.dumps(_gi(apply=("apply" in _bits), customer_ids=_ids or None),
+                              indent=2, default=str)
         if cmd == "scoring-auto-payouts":
             # Kerry 10/13: payouts record themselves once every card is
             # final. "scoring-auto-payouts" = dry run over the recent

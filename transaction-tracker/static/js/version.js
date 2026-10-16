@@ -1,12 +1,31 @@
-window.TGF_VERSION = "2.566.1";
+window.TGF_VERSION = "2.568.1";
 window.TGF_CHANGELOG = [
   {
-    version: "2.566.1",
+    version: "2.568.1",
     date: "2026-10-13",
     title: "Health: Spotlight single-builder, steadier replica check, send-job slow lines",
     changes: [
-      "Digest #1877 (10/15). (1) Spotlight: on 10/14 at 6:06 AM, six members opened their results-email link within one second; the Spotlight's saved pieces were cold (the refresher had gone idle after a quiet day) and all six rebuilt the same 6 s piece at once on a host at load 110, so each open took 7-10 s. Now one thread builds an entry; the others share its result (waiting if the entry is cold, or seeing the previous copy at once if it is under 15 minutes old), and the background refresher stays on for a week of quiet instead of a day. (2) The 5:00 report's off-site replica check timed out at 25 s under load 98 and the failure was remembered for 15 minutes; a failed read is no longer remembered, and the scheduled read now waits up to 75 s. (3) The two jobs that send mail to a roster (event_invite_auto, results_email_auto) get a 15-minute slow line instead of 2 minutes: 346 s and 233 s were normal sends under load. No figure, email or member-facing wording changes."
+      "Digest #1877 (10/15). (1) Spotlight: on 10/14 at 6:06 AM, six members opened their results-email link within one second; the Spotlight's saved pieces were cold (the refresher had gone idle after a quiet day) and all six rebuilt the same 6 s piece at once on a host at load 110, so each open took 7-10 s. Now one thread builds an entry; the others share its result (waiting if the entry is cold, or seeing the previous copy at once if it is under 15 minutes old), and the background refresher stays on for a week of quiet instead of a day. (2) The 5:00 report's off-site replica check timed out at 25 s under load 98 and the failure was remembered for 15 minutes; a failed read is no longer remembered, and the scheduled read now waits up to 75 s. (3) The two jobs that send mail to a roster (event_invite_auto, results_email_auto) get a 15-minute slow line instead of 2 minutes: 346 s and 233 s were normal sends under load. No figure, email or member-facing wording changes. Also (10/16): the staff bridges scoring-gg-history (Golf Genius archive ingest, one fetch per call) and scoring-import-orders (order-email import) get a 60 s slow line instead of 10 s; on 10/15 the first took 10-39 s on 13 of 131 calls with the host at load 100, normal for a fetch from Golf Genius."
     ]
+  },
+  {
+    version: "2.568.0",
+    date: "2026-10-15",
+    title: "CONCEPTS section and advisor links; Library section 'published'",
+    changes: [
+      "Kerry 10/15 (CoS #1904): \"Are you able to wire that into my Tracker so it's visible on the internet? For manager/admin view only... Probably need a new section that I can click in the Nav Bar to access it.\" New CONCEPTS nav link (manager and admin; not shown to view-only or on member pages) listing the self-contained HTML pages filed in the Library's new concepts/ section (migration 0023). A page opens inside the Tracker shell in a sandboxed frame: its own styles stay in its own document and its inline scripts run with no access to the Tracker. The Library stays the source and the versioning; nothing is edited here. A direct link with no role gets the sign-in page.",
+      "Kerry 10/15, rule 3b \"Yep B\" (CoS #1905): advisor access. New role advisor, ranked between the public member tier and view-only, so every view-only-or-higher endpoint refuses it. Each advisor gets a signed per-person link (/advisor/<token>, the /me pattern: HMAC with the advisor's own token_version, season-long expiry, identity from the token only). The link opens CONCEPTS with the member shell reduced to Concepts | Leaderboard | Handicaps and the advisor's name; any staff page gets the sign-in page. New table advisors (migration 0024). Admin → Advisors adds an advisor, copies the link, revokes (every link and open session of that advisor stops at once; the same link then reads \"This link is no longer active\") and shows last seen and pages opened (logged in agent_action_log). The Tracker never emails a link. test_concepts_advisors.py.",
+      "Library section 'published' (Kerry to the Librarian 10/14, #1854; db-claude PASS #1883), migration 0022.",
+    ],
+  },
+  {
+    version: "2.567.0",
+    date: "2026-10-15",
+    title: "Gender from tees: a player with no gender on Forward tees is marked F, as inferred (behind a dial)",
+    changes: [
+      "Kerry 10/14 (rule 3b, approved with migration 0019, db-claude PASS #1855): \"Should automatically know this if they select Forward tees … 95% of the time or greater it's probably a woman.\" A person with no gender on file is set to F with customers.gender_source = 'inferred_from_tees' when their scorecards are majority on F-rated tees, or they registered on the Forward band with no rated rounds yet. A Forward registration whose rounds are on M-rated tees (a senior man on the men's Forward tee) is a conflict and is left for the manager. A gender already on file is never overwritten.",
+      "One writer, email_parser/customers_gender.py: bridge scoring-gender-infer[:apply][|ids], dry run by default; job gender_infer_auto every 30 minutes does nothing until app setting gender_infer reads on (after Kerry has seen the backfill list). The July boot step that fills blank genders from ladies tees now marks what it fills as inferred too. Temporary by Kerry's word: retires when registration asks gender up front (path in the migration comment). test_gender_infer.py.",
+    ],
   },
   {
     version: "2.566.0",
