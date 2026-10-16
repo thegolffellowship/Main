@@ -1,6 +1,9 @@
 """THE MEMBER TEE SHEET (Kerry 2026-10-13, on the tee sheet email: "what
 about links for their live scoring and for the full tee sheet?").
 
+Before the pairings are saved it lists who is registered so far (names
+only; Kerry 10/16).
+
 A public, read-only page at /member/teesheet/<event_id>: every group's
 start, its players, carts and tees, from the saved sheet
 (`get_event_print_pack`, the Starter Sheet's own reader). Names, starts,
@@ -53,7 +56,28 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
     except ValueError:
         date = ""
     chap = (ev.get("chapter") or "").strip()
+    # Before the pairings are set, the page still shows WHO is registered
+    # (Kerry 10/16: "You could still show who is registered"). Names only,
+    # from THE pairings roster; "playing, not paid" RSVP rows are left out.
+    registered = []
+    if not groups:
+        conn = db.get_connection(db_path)
+        try:
+            seen = set()
+            for r in db._event_roster_rows(conn, int(event_id)):
+                name = (r.get("customer") or r.get("name") or "").strip()
+                if not name or r.get("rsvp_only"):
+                    continue
+                key = ("c", int(r["customer_id"])) if r.get("customer_id") else ("n", name.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                registered.append(name)
+        finally:
+            conn.close()
+        registered.sort(key=lambda n: (n.split()[-1].lower(), n.lower()))
     return {"event_id": int(event_id),
+            "registered": registered,
             "title": event_short_name(ev.get("item_name"), ev.get("course")),
             "day": _weekday(ev.get("event_date")), "date": date,
             "course": ev.get("course") or "",
@@ -65,8 +89,13 @@ def render_teesheet(data: dict) -> str:
     """One self-contained, phone-first page."""
     eyebrow = "THE GOLF FELLOWSHIP" + (f" · {data['chapter'].upper()}" if data["chapter"] else "")
     if not data["groups"]:
-        body = (f'<p style="color:{MUTED};padding:16px;">The tee sheet for this event '
+        reg = data.get("registered") or []
+        body = (f'<p style="color:{MUTED};margin:0;">The tee sheet for this event '
                 f'is not posted yet. Check back after the pairings are set.</p>')
+        if reg:
+            body += (f'<section class="g"><div class="s">Registered so far · {len(reg)}</div>'
+                     + "".join(f'<div class="p"><span class="n">{_e(n)}</span></div>' for n in reg)
+                     + "</section>")
     else:
         cards = []
         for g in data["groups"]:
@@ -84,7 +113,9 @@ def render_teesheet(data: dict) -> str:
         body = "".join(cards)
     title = f"{data['day']} at {data['title']}" if data["day"] else data["title"]
     sub = " · ".join(x for x in (data["date"], data["course"],
-                                     f"{data['player_count']} players" if data["player_count"] else "") if x)
+                                     f"{data['player_count']} players" if data["player_count"] else
+                                     (f"{len(data.get('registered') or [])} registered"
+                                      if data.get("registered") else "")) if x)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">

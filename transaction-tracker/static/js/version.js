@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.569.2";
+window.TGF_VERSION = "2.569.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.569.3",
+    date: "2026-10-16",
+    title: "Member tee sheet shows who is registered before the pairings are set",
+    changes: [
+      "Kerry 10/16, on /member/teesheet before Tuesday's pairings: \"You could still show who is registered.\" Until the groups are saved the page now lists \"Registered so far · N\" (names only, by last name, from THE pairings roster; unpaid RSVP rows left out) under the not-posted-yet note, and the header reads \"N registered\". Once the pairings are saved it shows the groups as before. Guard test_event_day_email.py.",
+    ],
+  },
   {
     version: "2.569.2",
     date: "2026-10-16",

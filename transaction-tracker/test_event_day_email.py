@@ -190,7 +190,11 @@ check("the member tee sheet lists every group with its anchor and players",
       and "Hole 1A \u00b7 8:00 AM" in page, page[:300])
 check("…and carries no email, phone or money",
       "@" not in page.replace("@media", "") and "$" not in page, page)
-check("an event with no saved sheet says so", "not posted yet" in mts.render_teesheet(mts.build_teesheet(EV2, db_path=DB)))
+_pre = mts.render_teesheet(mts.build_teesheet(EV2, db_path=DB))
+check("an event with no saved sheet says so", "not posted yet" in _pre)
+check("...and still shows who is registered (Kerry 10/16), names only",
+      "Registered so far" in _pre and "Ann Able" in _pre and "Gus Gray" in _pre and "7 registered" in _pre
+      and "@" not in _pre.replace("@media", "") and "$" not in _pre, _pre[-1500:])
 
 print("1c. A template still written the v1 way keeps working (Kerry may edit in the UI)")
 V1 = ("<p>Hi {first_name},</p><p><strong>Your start:</strong> {start_line}</p>"
