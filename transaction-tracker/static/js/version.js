@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.569.6";
+window.TGF_VERSION = "2.569.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.569.7",
+    date: "2026-10-16",
+    title: "Registered list shows the 18-hole index",
+    changes: [
+      "Kerry 10/16: \"Your handicaps on the tee sheet are showing 9 hole handicaps not 18 hole handicaps right? They should show 18.\" They were the 9-hole index. The member tee sheet's registered list now shows the 18-hole index by the roster's own rule: twice the 9-hole index, or a starting handicap exactly as typed (12.5, never 12.4).",
+    ],
+  },
   {
     version: "2.569.6",
     date: "2026-10-16",

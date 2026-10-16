@@ -87,9 +87,25 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
         conn = db.get_connection(db_path)
         try:
             evrow = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+            # The 18-HOLE index (Kerry 10/16: "They should show 18"), the
+            # same number the roster shows (api_handicap_index_map's rule):
+            # double the 9-hole index, or the starting handicap as typed.
+            idx_map = {}
             try:
-                idx_map = db._roster_handicap_index_map(
-                    conn, as_of=db._event_index_as_of(dict(evrow) if evrow else None), db_path=db_path)
+                as_of = db._event_index_as_of(dict(evrow) if evrow else None)
+                for hp in db.get_all_handicap_players(db_path, as_of=as_of):
+                    i9 = hp.get("handicap_index")
+                    if i9 is None:
+                        continue
+                    i18 = (hp.get("starting_handicap_18")
+                           if (hp.get("handicap_source") == "starting"
+                               and hp.get("starting_handicap_18") is not None)
+                           else round(float(i9) * 2, 1))
+                    if hp.get("customer_id") is not None:
+                        idx_map.setdefault(("c", int(hp["customer_id"])), i18)
+                    for nm in (hp.get("customer_name"), hp.get("player_name")):
+                        if nm:
+                            idx_map.setdefault(nm.strip().lower(), i18)
             except Exception:
                 idx_map = {}
             seen = set()

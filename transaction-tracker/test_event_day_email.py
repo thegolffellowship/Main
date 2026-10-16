@@ -206,6 +206,11 @@ check("...a non-member's name is plain text (the Spotlight is a member perk, Ker
 with db._connect(DB) as conn:
     conn.execute("UPDATE customers SET current_player_status = 'active_member' WHERE customer_id = 880002")
     conn.commit()
+db.set_starting_handicap(880003, 12.5, set_by="test", db_path=DB)
+_pre3 = mts.render_teesheet(mts.build_teesheet(EV2, db_path=DB))
+check("the registered list shows the 18-HOLE index (Kerry 10/16), as typed: 12.5 not 6.2",
+      "HCP 12.5" in _pre3 and "HCP 6.2" not in _pre3 and "HCP 6.3" not in _pre3, _pre3[-1200:])
+db.set_starting_handicap(880003, None, db_path=DB)
 check("index shown with a plus for a plus handicap", mts._fmt_index(-1.46) == "+1.5"
       and mts._fmt_index(14.24) == "14.2" and mts._fmt_index(None) == "")
 
