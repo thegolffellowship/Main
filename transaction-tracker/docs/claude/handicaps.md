@@ -1019,8 +1019,10 @@ their team and them can compete together."
 - **Who:** a `new` or `few_rounds` player from the missing-handicap read with a
   customer_id and a sendable address, on any active event in the next 21
   days. Asked ONCE per person; one reminder when their event is 2 days out and
-  they have not answered. Sends 7 AM-8 PM Central only (job `handicap_ask_auto`,
-  every 15 minutes).
+  they have not answered. The first ask goes the moment the order is saved
+  (the inbox check runs it right after `save_items`; Kerry: "as soon as we get
+  a registration"), any hour; the job `handicap_ask_auto` (every 15 minutes)
+  catches players added other ways. Reminders only 7 AM-8 PM Central.
 - **The page** `/handicap/<token>` (signed, 60 days, no login): GHIN number AND
   latest index -> starting handicap 75% (half up: 14.2 -> 10.7) and
   `customers.ghin_number`; another service -> 75% applied, status `check`;

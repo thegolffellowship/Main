@@ -615,6 +615,17 @@ def check_inbox():
         except Exception:
             logger.exception("Event-link backfill failed (non-fatal)")
 
+        # THE HANDICAP ASK the moment the order lands (Kerry 10/16: "I'd like
+        # the email sent as soon as we get a registration from someone we
+        # don't have a handicap for"). Same locks as the job.
+        try:
+            from email_parser.handicap_ask import auto_check as _hcp_ask
+            _r = _hcp_ask()
+            if _r.get("asks") or _r.get("reminders"):
+                logger.info("Handicap ask after new orders: %s", _r)
+        except Exception:
+            logger.exception("Handicap ask after new orders failed (non-fatal)")
+
     _inbox_check_status["message"] = f"Done — saved {total_saved} items from {len(new_emails)} new emails ({len(emails)} total scanned)"
     logger.info("Done — saved %d total new items from %d new emails", total_saved, len(new_emails))
 
@@ -2248,6 +2259,8 @@ def start_scheduler():
             logger.exception("Event invitations job failed (non-fatal)")
     # ── THE HANDICAP ASK (Kerry 2026-10-16): email a new player with no
     #    handicap a signed link to give it; one reminder two days before.
+    #    The inbox check also runs it the moment a new order is saved; this
+    #    catches players added any other way (manual adds, RSVPs).
     #    Nothing unless app setting handicap_ask_auto = on AND the wording
     #    carries Kerry's stamp. email_parser/handicap_ask.py.
     def handicap_ask_job():
@@ -2260,8 +2273,7 @@ def start_scheduler():
             logger.exception("Handicap ask job failed (non-fatal)")
     scheduler.add_job(
         handicap_ask_job,
-        "cron", hour="7-19", minute="5,20,35,50",
-        timezone="US/Central",
+        "interval", minutes=15,
         id="handicap_ask_auto",
         replace_existing=True,
         max_instances=1, coalesce=True,

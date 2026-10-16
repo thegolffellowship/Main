@@ -89,10 +89,12 @@ db.set_app_setting("handicap_ask_auto", "on", db_path=DB)
 check("dial on but wording not stamped: nothing",
       ha.auto_check(now=noon, db_path=DB, sender=fake).get("skipped") == "wording not approved" and not SENT)
 db.set_app_setting("handicap_ask_approved", ha.template_hash(), db_path=DB)
-check("never at night", ha.auto_check(now=noon.replace(hour=22), db_path=DB, sender=fake).get("skipped")
-      and not SENT)
-res = ha.auto_check(now=noon, db_path=DB, sender=fake)
-check("stamped and on: one email each", len(SENT) == 3 and len(res["asks"]["sent"]) == 3, res)
+res = ha.auto_check(now=noon.replace(hour=22), db_path=DB, sender=fake)
+check("the first ask goes at once, any hour (Kerry: as soon as we get a registration)",
+      len(SENT) == 3 and len(res["asks"]["sent"]) == 3, res)
+src_app = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")).read()
+check("the inbox check runs the ask right after saving new orders",
+      "from email_parser.handicap_ask import auto_check as _hcp_ask" in src_app)
 subj = SENT[0][1]
 check("the subject is personal", subj.startswith("One quick thing before") and "{" not in subj, subj)
 body = SENT[0][2]
@@ -174,6 +176,8 @@ far = noon
 ha.auto_check(now=far, db_path=DB, sender=fake)
 check("no reminder while the event is 4 days out", not SENT, SENT)
 near = datetime.combine(TODAY + timedelta(days=2), datetime.min.time()).replace(hour=9)
+ha.auto_check(now=near.replace(hour=23), db_path=DB, sender=fake)
+check("no reminder at night", not SENT, SENT)
 ha.auto_check(now=near, db_path=DB, sender=fake)
 check("one reminder, 2 days before, only to who has not answered",
       [s[0] for s in SENT] == ["p6@example.com"] and SENT[0][1].startswith("Reminder"), SENT)

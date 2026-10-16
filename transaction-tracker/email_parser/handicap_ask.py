@@ -8,6 +8,7 @@ together" (Kerry). Mockups approved 10/16 (artifact 7GeWZuGQEaG1iHBDGgmwDC).
 WHO: a player on an upcoming event's roster with no TGF index and no
 starting handicap (`handicap_warnings.missing_handicaps`, cases `new` and
 `few_rounds`, a customer_id and a sendable address). Asked ONCE per person,
+the moment their order is saved (Kerry: "as soon as we get a registration"),
 whatever events they are on; one reminder when their next event is two days
 out and they have not answered.
 
@@ -52,7 +53,7 @@ INTRO_PCT = 0.75
 LOOKAHEAD_DAYS = 21
 REMIND_DAYS_BEFORE = 2
 TOKEN_DAYS = 60
-SEND_HOURS = (7, 20)          # Central; never mails at night
+SEND_HOURS = (7, 20)          # Central; reminders only by day
 SERVICES = ("TheGrint", "Club handicap", "Golf Genius", "18Birdies", "Other")
 ASK_CASES = ("new", "few_rounds")
 
@@ -395,19 +396,22 @@ def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:
 
 
 def auto_check(now: datetime | None = None, db_path=None, sender=None) -> dict:
-    """The job (every 15 minutes, 7 AM-8 PM Central). Nothing unless the dial
-    is on and the wording carries Kerry's stamp."""
+    """Runs right after the inbox check saves new orders, and every 15
+    minutes. Nothing unless the dial is on and the wording carries Kerry's
+    stamp."""
     from email_parser.timezone_utils import now_central
     if (_setting(AUTO_DIAL, db_path) or "").strip().lower() != "on":
         return {"skipped": f"{AUTO_DIAL} is not on"}
     if not approval_state(db_path)["approved"]:
         return {"skipped": "wording not approved"}
     now = now or now_central()
-    if not SEND_HOURS[0] <= now.hour < SEND_HOURS[1]:
-        return {"skipped": "outside sending hours"}
     pl = plan(now.date().isoformat(), db_path)
+    # The first ask goes the moment the registration lands, any hour (Kerry
+    # 10/16: "as soon as we get a registration"); a reminder only by day.
     a = _deliver(pl["asks"], "ask", db_path, sender) if pl["asks"] else {}
-    r = _deliver(pl["reminders"], "reminder", db_path, sender) if pl["reminders"] else {}
+    by_day = SEND_HOURS[0] <= now.hour < SEND_HOURS[1]
+    r = (_deliver(pl["reminders"], "reminder", db_path, sender)
+         if pl["reminders"] and by_day else {})
     return {"asks": a, "reminders": r}
 
 
