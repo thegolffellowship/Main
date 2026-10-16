@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.569.0";
+window.TGF_VERSION = "2.569.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.569.1",
+    date: "2026-10-16",
+    title: "Handicap ask: TGF's own handicap up front; temporary number on the thank-you page",
+    changes: [
+      "Kerry 10/16, on the preview: \"Need to highlight this statement more because it's important for them to realize we have our own handicap system.\" The 27-hole note is now an orange box at the top of the page: \"TGF keeps its own handicaps\" — what they enter is only a temporary starting point; after 27 holes with TGF they have their own TGF handicap.",
+      "Kerry: \"show them what their starting handicap index will be based off what they entered and remind them this is a temporary handicap until they establish one after 27 holes with us.\" The thank-you page shows \"Your temporary starting handicap\" with the number (75% of the index they entered) and a highlighted line that it is temporary until 27 holes with TGF, for GHIN and other-service answers alike; a no-handicap answer is told the manager will set the temporary number.",
+      "Fixed: on a phone, the keyboard's Go submitted the form with the first Save button (GHIN), so an \"another service\" answer came back \"Please enter your GHIN number\" (Kerry's preview). The ticked choice now decides. The wording hash changed; the send stays locked until Kerry approves.",
+    ],
+  },
   {
     version: "2.569.0",
     date: "2026-10-16",

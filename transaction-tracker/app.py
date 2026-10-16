@@ -5022,7 +5022,8 @@ def public_handicap_ask(token):
     answers nothing."""
     from email_parser import handicap_ask as _ha
     info = _ha.describe(token)
-    ctx = {"services": _ha.SERVICES, "page_note": _ha.PAGE_NOTE, "ghin_note": _ha.GHIN_NOTE,
+    ctx = {"services": _ha.SERVICES, "page_note": _ha.PAGE_NOTE, "page_note_head": _ha.PAGE_NOTE_HEAD,
+           "done_label": _ha.DONE_LABEL, "done_temp": _ha.DONE_TEMP, "ghin_note": _ha.GHIN_NOTE,
            "none_note": _ha.NONE_NOTE.format(day=info.get("day") or "the event"),
            "info": info, "form": {}, "done": None, "form_error": None, "error_page": None}
     if not info.get("ok"):
@@ -5030,7 +5031,10 @@ def public_handicap_ask(token):
         return render_template("handicap_ask.html", **ctx), 400
     if request.method == "POST":
         f = request.form.to_dict()
-        kind = (f.get("go") or f.get("kind") or "").strip()
+        # The ticked choice wins: the keyboard's Go submits with the FIRST
+        # Save button (the GHIN one) even when "another service" is ticked
+        # (Kerry's phone, 10/16).
+        kind = (f.get("kind") or f.get("go") or "").strip()
         f["kind"] = kind
         f["index"] = f.get("index_ghin") if kind == "ghin" else f.get("index_other")
         res = _ha.record(token, f)

@@ -69,21 +69,26 @@ WHY = ("We don't have a handicap for you yet. It sets your strokes in the team g
 BUTTON = "Add my handicap"
 NO_HCP = "No handicap? No problem. Tap the button and tell us what you usually shoot."
 SIGN = "See you on the course,<br>The Golf Fellowship"
-PAGE_NOTE = ("This is only a starting point. After just 27 holes with TGF, you'll have "
-             "your own TGF handicap.")
+PAGE_NOTE_HEAD = "TGF keeps its own handicaps"
+PAGE_NOTE = ("What you enter here is only a temporary starting point. After just 27 holes "
+             "with TGF, you'll have your own TGF handicap, figured from your rounds with us.")
 GHIN_NOTE = ("We start new players at 75% of their index for their first rounds with us. "
              "It's used for your group's team score.")
 NONE_NOTE = ("The chapter manager uses this to set your starting handicap before {day}. "
              "You don't need to do anything else.")
-DONE_SET = "75% of your {index} index. After 27 holes with TGF, your own TGF handicap takes over."
-DONE_CHECK = ("We've set {start} for now (75% of your {index} index). The chapter manager "
-              "will confirm it before {day}.")
-DONE_NEED = "Thanks. The chapter manager will set your starting handicap before {day}."
+DONE_LABEL = "Your temporary starting handicap"
+DONE_SET = "75% of the {index} index you entered."
+DONE_CHECK = "75% of the {index} index you entered. The chapter manager will confirm it before {day}."
+DONE_TEMP = ("This is temporary. After 27 holes with TGF, your own TGF handicap replaces it, "
+             "figured from your rounds with us.")
+DONE_NEED = ("Thanks. The chapter manager will set your temporary starting handicap before {day}. "
+             "After 27 holes with TGF, you'll have your own TGF handicap.")
 
 
 def template_hash() -> str:
     raw = "\x1f".join((SUBJECT, REMINDER_SUBJECT, BODY, REMINDER_BODY, WHY, BUTTON, NO_HCP,
-                       SIGN, PAGE_NOTE, GHIN_NOTE, NONE_NOTE, DONE_SET, DONE_CHECK, DONE_NEED))
+                       SIGN, PAGE_NOTE_HEAD, PAGE_NOTE, GHIN_NOTE, NONE_NOTE, DONE_LABEL, DONE_SET,
+                       DONE_CHECK, DONE_TEMP, DONE_NEED))
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 

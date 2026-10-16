@@ -110,6 +110,8 @@ tok = {cid: ha.make_token(cid, 9001) for cid in (1, 2, 3)}
 r = cl.get(f"/handicap/{tok[1]}")
 page = r.data.decode()
 check("the link opens the page", r.status_code == 200 and "Your handicap, Gus" in page, r.status_code)
+check("the TGF-handicap note is the highlighted box at the top", 'class="tgf-hcp"' in page
+      and page.index('class="tgf-hcp"') < page.index("I have a GHIN number"))
 check("the three choices and the 27-hole note", "I have a GHIN number" in page
       and "another handicap service" in page and "27 holes" in page)
 check("opening it saves nothing (mail scanners)", not (ha.load_state(DB).get("1") or {}).get("answer"))
@@ -125,9 +127,14 @@ row = con.execute("SELECT starting_handicap_18, starting_handicap_set_by, ghin_n
                   "WHERE customer_id = 1").fetchone()
 check("starting handicap 10.7 set, GHIN saved", row[0] == 10.7 and row[1].startswith("handicap_ask")
       and row[2] == "1234567", row)
-r = cl.post(f"/handicap/{tok[2]}", data={"go": "other", "service": "TheGrint", "index_other": "17.8"})
+r = cl.post(f"/handicap/{tok[2]}", data={"kind": "other", "go": "ghin", "service": "TheGrint",
+                                          "index_other": "17.8"})
+check("the ticked choice wins over the keyboard's Go (it submits the first Save)",
+      r.status_code == 200, r.data[-400:])
 check("other service: 13.4 applied, manager will confirm",
       r.status_code == 200 and b"13.4" in r.data and b"confirm" in r.data)
+check("the thanks page shows the temporary starting handicap and the 27-hole rule",
+      b"temporary starting handicap" in r.data and b"27 holes" in r.data and b"17.8 index you entered" in r.data)
 r = cl.post(f"/handicap/{tok[3]}", data={"go": "none", "score18": "95"})
 check("no handicap: manager will set it", r.status_code == 200 and b"chapter manager will set" in r.data)
 check("...and nothing was set", con.execute("SELECT starting_handicap_18 FROM customers WHERE customer_id = 3")

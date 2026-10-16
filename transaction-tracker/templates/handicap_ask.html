@@ -40,6 +40,10 @@
     .tick { width:56px; height:56px; border-radius:50%; background:#DCFCE7; color:#15803D; font-size:30px; font-weight:800; display:grid; place-items:center; }
     .big { font-family:'Bitter',Georgia,serif; font-size:2.2rem; font-weight:800; }
     a.ghost { display:inline-block; border:2px solid #1B1B1B; color:#1B1B1B; border-radius:999px; padding:10px 18px; text-decoration:none; font-family:'Bitter',Georgia,serif; font-weight:700; }
+    .tgf-hcp { background:#FDF0E6; border:2px solid #E87C3E; border-radius:12px; padding:12px 14px; margin:0; }
+    .tgf-hcp b { display:block; font-family:'Bitter',Georgia,serif; font-size:1.1rem; color:#B4561F; margin-bottom:2px; }
+    .tgf-hcp span { font-size:1rem; }
+    .temp { background:#FDF0E6; border-left:4px solid #E87C3E; border-radius:8px; padding:10px 12px; text-align:left; margin:6px 0 0; }
     .pv { background:#FEF3C7; color:#92400E; border-radius:10px; padding:8px 12px; font-size:.9rem; margin:0; }
     @media (max-width: 560px) { main { padding-top:14px; } }
 </style>
@@ -54,16 +58,13 @@
     {% if info.preview %}<p class="pv">Preview link: nothing was saved.</p>{% endif %}
     <div class="done">
         <div class="tick">&#10003;</div>
-        {% if done.status == 'set' %}
-            <h1>Thanks, {{ info.first_name or 'golfer' }}. You're set.</h1>
-            <p class="mut">Your starting handicap for {{ info.day }}'s team game</p>
+        <h1>Thanks, {{ info.first_name or 'golfer' }}.{% if done.status == 'set' %} You're set.{% endif %}</h1>
+        {% if done.starting is not none %}
+            <p class="mut">{{ done_label }}</p>
             <div class="big">{{ done.starting_text }}</div>
-            <p class="mut">{{ done_set }}</p>
-        {% elif done.status == 'check' %}
-            <h1>Thanks, {{ info.first_name or 'golfer' }}.</h1>
-            <p class="mut">{{ done_check }}</p>
+            <p class="mut">{{ done_check if done.status == 'check' else done_set }}</p>
+            <p class="temp">{{ done_temp }}</p>
         {% else %}
-            <h1>Thanks, {{ info.first_name or 'golfer' }}.</h1>
             <p class="mut">{{ done_need }}</p>
         {% endif %}
         <a class="ghost" href="/member/teesheet/{{ info.event_id }}">See the tee sheet</a>
@@ -72,6 +73,7 @@
     {% if info.preview %}<p class="pv">Preview link: the page works and saves nothing.</p>{% endif %}
     <h1>Your handicap, {{ info.first_name or 'golfer' }}</h1>
     <p class="mut">For {{ info.event }}{% if info.day %}, {{ info.day }}{% endif %}</p>
+    <p class="tgf-hcp"><b>{{ page_note_head }}</b><span>{{ page_note }}</span></p>
     {% if form_error %}<p class="err" role="alert">{{ form_error }}</p>{% endif %}
     {% if info.answer %}<p class="note">We already have your answer. Send it again only if something changed.</p>{% endif %}
     <form method="post" autocomplete="off">
@@ -82,7 +84,6 @@
             <label class="choice" for="k-ghin"><b>I have a GHIN number</b><span>USGA handicap, most common</span></label>
             <label class="choice" for="k-other"><b>I use another handicap service</b><span>TheGrint, a club handicap, Golf Genius&hellip;</span></label>
             <label class="choice" for="k-none"><b>I don't have a handicap</b><span>Just tell us what you usually shoot</span></label>
-            <p class="note">{{ page_note }}</p>
         </div>
         <div class="sec sec-ghin" style="margin-top:14px;">
             <h2>Your GHIN details</h2>
