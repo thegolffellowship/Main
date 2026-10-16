@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.568.0";
+window.TGF_VERSION = "2.568.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.568.2",
+    date: "2026-10-16",
+    title: "Who referred them: name box no longer locks on iPhone",
+    changes: [
+      "Kerry 10/16, on his phone, on the dashboard's 1st-Timer attribution (Ale Dimas): \"This is locking when I'm trying to type into it.\" The name box was backed by a native <datalist> of the whole roster (~440 names), which iOS Safari filters on every keystroke and froze on. The shared control (referral_control.js: dashboard modal, Leads band, customer Info tab) now shows its own short list of at most 8 matches (every typed word must appear; names starting with the text first), tap or arrow+Enter picks one, and the tapped row's customer_id is what Save sends even when two people share a name. The box is 16px so iOS no longer zooms on focus. Guard test_referred_by_ui.js.",
+    ],
+  },
   {
     version: "2.568.0",
     date: "2026-10-15",

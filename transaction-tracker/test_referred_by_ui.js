@@ -101,5 +101,17 @@ check("...and renders the saved answer", T.currentHtml(
       { referred_by_name: "Justin Angelone", referred_by_source: "member_claim" })
       .includes("Justin Angelone"));
 
+console.log("The phone picker (Kerry 2026-10-16: typing locked on iPhone)");
+check("no native datalist backs the name box (iOS froze on ~440 options)",
+      !/<datalist/.test(T.render({ customer_id: 829 })) && !/ list="/.test(T.render({ customer_id: 829 })));
+check("the box is 16px so iOS does not zoom", /data-refinput[^>]*font-size:16px/.test(T.render({ customer_id: 829 })));
+check("it names its own short list for the arrow keys", /aria-controls="ref-sugg-829"/.test(T.render({ customer_id: 829 })));
+check("typing 'just' finds Justin", T.matchPeople("just", 829).map(c => c.customer_id).join() === "709");
+check("every word must match ('rob str')", T.matchPeople("rob str", 829).map(c => c.customer_id).join() === "31");
+check("the person themselves is never offered", T.matchPeople("ty", 829).every(c => c.customer_id !== 829));
+T.setPeople(Array.from({ length: 500 }, (_, i) => ({ customer_id: 2000 + i, customer_name: "Sam Member" + i })));
+check("never more than 8 rows, whatever the roster", T.matchPeople("sam", 1).length === 8);
+check("a tapped row's id wins over a name lookup", /data-refcid/.test(js));
+
 console.log(FAIL.length ? `\n${FAIL.length} FAILURE(S): ${FAIL}` : "\nALL PASS");
 process.exit(FAIL.length ? 1 : 0);
