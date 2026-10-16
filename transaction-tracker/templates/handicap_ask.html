@@ -33,6 +33,10 @@
     .savebar button { width:100%; }
     #k-ghin:checked ~ .sec-pay, #k-other:checked ~ .sec-pay, #k-none:checked ~ .sec-pay,
     #k-ghin:checked ~ .savebar, #k-other:checked ~ .savebar, #k-none:checked ~ .savebar { display:flex; }
+    div.f { display:flex; flex-direction:column; gap:6px; font-weight:600; font-size:.95rem; }
+    .range { display:flex; align-items:center; gap:10px; font-weight:400; }
+    .range input { flex:1; min-width:0; font-size:16px; padding:10px; border:1px solid #C9CDD3; border-radius:8px; text-align:center; }
+    .range input:focus { outline:2px solid #E87C3E; outline-offset:1px; }
     .chk { display:flex; gap:8px; align-items:center; font-size:.95rem; }
     .chk input { width:20px; height:20px; position:static; opacity:1; pointer-events:auto; }
     .sec a { color:#2563eb; font-weight:600; }
@@ -116,8 +120,14 @@
         </div>
         <div class="sec sec-none" style="margin-top:14px;">
             <h2>What do you usually shoot?</h2>
-            <label class="f" for="score18">Your usual score for 18 holes
-                <input id="score18" name="score18" inputmode="numeric" value="{{ form.score18 or '' }}" placeholder="95"></label>
+            <div class="f" role="group" aria-labelledby="range-label">
+                <span id="range-label">For 18 holes, I typically shoot between</span>
+                <div class="range">
+                    <input id="score-low" name="score_low" inputmode="numeric" aria-label="Low score" value="{{ form.score_low or '' }}" placeholder="90">
+                    <span>and</span>
+                    <input id="score-high" name="score_high" inputmode="numeric" aria-label="High score" value="{{ form.score_high or '' }}" placeholder="100">
+                </div>
+            </div>
             <label class="f" for="rounds-year">Rounds you play a year (optional)
                 <input id="rounds-year" name="rounds_year" inputmode="numeric" value="{{ form.rounds_year or '' }}" placeholder="About how many?"></label>
             <p class="mut">{{ none_note }}</p>
@@ -125,7 +135,7 @@
         {% if not info.has_venmo %}
         <div class="sec sec-pay" style="margin-top:14px;">
             <h2>Your Venmo, for winnings</h2>
-            <p class="mut" style="margin:0;">When your team wins, we pay by Venmo.</p>
+            <p class="mut" style="margin:0;">{{ venmo_why }}</p>
             <label class="f" for="venmo">Venmo username
                 <input id="venmo" name="venmo" autocapitalize="none" autocorrect="off" spellcheck="false"
                        value="{{ form.venmo or '' }}" placeholder="@your-name"></label>

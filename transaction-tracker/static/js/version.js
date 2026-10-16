@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.569.3";
+window.TGF_VERSION = "2.569.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.569.4",
+    date: "2026-10-16",
+    title: "Handicap ask: a score range for no-handicap players; Venmo names every way to win",
+    changes: [
+      "Kerry 10/16: \"for the I don't have a handicap section it should give a range. I typically shoot between x and x.\" The no-handicap answer is now \"For 18 holes, I typically shoot between [90] and [100]\" (60-160, a backwards range is put right); the manager banner reads \"usually shoots 90–100 for 18\".",
+      "Kerry: \"They can also win for CTPs or for the side games they entered.\" The Venmo box now reads: \"If you win the team game, a closest to the pin, or a side game you entered, we pay you by Venmo.\" The wording hash changed; the send stays locked until Kerry approves.",
+    ],
+  },
   {
     version: "2.569.3",
     date: "2026-10-16",

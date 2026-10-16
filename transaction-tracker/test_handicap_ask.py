@@ -69,9 +69,11 @@ check("GHIN needs the number AND the latest index",
 check("another service must be one of the list",
       ha.validate({"kind": "other", "service": "Made Up", "index": "10"}).get("error"))
 check("Other needs a name", ha.validate({"kind": "other", "service": "Other", "index": "10"}).get("error"))
-check("no handicap asks the usual 18-hole score (60-160)",
-      ha.validate({"kind": "none", "score18": "45"}).get("error")
-      and ha.validate({"kind": "none", "score18": "95"}).get("score18") == 95)
+check("no handicap asks a RANGE for 18 holes (Kerry: between x and x)",
+      ha.validate({"kind": "none", "score_low": "45", "score_high": "50"}).get("error")
+      and ha.validate({"kind": "none", "score_low": "90", "score_high": "100"}).get("score_high") == 100)
+check("a range typed backwards is put right", ha.validate(
+      {"kind": "none", "score_low": "105", "score_high": "95"}).get("score_low") == 95)
 
 print("who is asked")
 pl = ha.plan(db_path=DB)
@@ -119,6 +121,8 @@ check("a bad link says so", cl.get("/handicap/abc.def").status_code == 400)
 r = cl.post(f"/handicap/{tok[1]}", data={"go": "ghin", "ghin": "1234567", "index_ghin": ""})
 check("a missing index is refused with the reason", r.status_code == 400
       and b"latest handicap index" in r.data)
+check("the Venmo box says what they can win: team game, closest to the pin, side games",
+      "team game, a closest to the pin, or a side game you entered" in page)
 check("the page asks for Venmo, with a link to get it", 'name="venmo"' in page
       and "I don't have Venmo yet" in page and "https://venmo.com/" in page)
 r = cl.post(f"/handicap/{tok[1]}", data={"go": "ghin", "ghin": "1234567", "index_ghin": "14.2",
@@ -145,7 +149,7 @@ check("other service: 13.4 applied, manager will confirm",
       r.status_code == 200 and b"13.4" in r.data and b"confirm" in r.data)
 check("the thanks page shows the temporary starting handicap and the 27-hole rule",
       b"temporary starting handicap" in r.data and b"27 holes" in r.data and b"17.8 index you entered" in r.data)
-r = cl.post(f"/handicap/{tok[3]}", data={"go": "none", "score18": "95", "no_venmo": "1"})
+r = cl.post(f"/handicap/{tok[3]}", data={"go": "none", "score_low": "90", "score_high": "100", "no_venmo": "1"})
 check("no Venmo yet: told how to send it later, with the link", b"set up Venmo" in r.data
       and b"Get Venmo" in r.data)
 check("no handicap: manager will set it", r.status_code == 200 and b"chapter manager will set" in r.data)
@@ -157,7 +161,7 @@ check("the manager banner: Set from GHIN / Check this one / Needs a number",
       st == {1: "set", 2: "check", 3: "need"}, m["asks"])
 check("Nora (score only) is still in the missing list", [p["customer_id"] for p in m["players"]] == [3, 5]
       or {p["customer_id"] for p in m["players"]} == {3, 5}, m["players"])
-check("the banner line names the score", "usually shoots 95 for 18" in
+check("the banner line names the range", "usually shoots 90–100 for 18" in
       next(a["line"] for a in m["asks"] if a["customer_id"] == 3))
 check("the banner shows Venmo or that they have none",
       "Venmo @Gus-Ghin-7" in next(a["line"] for a in m["asks"] if a["customer_id"] == 1)

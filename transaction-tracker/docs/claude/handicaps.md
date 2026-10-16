@@ -1026,7 +1026,7 @@ their team and them can compete together."
 - **The page** `/handicap/<token>` (signed, 60 days, no login): GHIN number AND
   latest index -> starting handicap 75% (half up: 14.2 -> 10.7) and
   `customers.ghin_number`; another service -> 75% applied, status `check`;
-  no handicap -> usual 18-hole score, status `need`, nothing set. Only the
+  no handicap -> the range they usually shoot for 18 ("between 90 and 100"), status `need`, nothing set. Only the
   form POST saves. A starting handicap a manager typed is never overwritten.
   The Tracker cannot look an index up from a GHIN number (GHIN shows it only
   to a logged-in account), so the page asks for both.

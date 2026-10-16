@@ -76,6 +76,8 @@ GHIN_NOTE = ("We start new players at 75% of their index for their first rounds 
              "It's used for your group's team score.")
 NONE_NOTE = ("The chapter manager uses this to set your starting handicap before {day}. "
              "You don't need to do anything else.")
+VENMO_WHY = ("If you win the team game, a closest to the pin, or a side game you entered, "
+             "we pay you by Venmo.")
 VENMO_GET = "No Venmo? It's free and takes a couple of minutes."
 VENMO_URL = "https://venmo.com/"
 DONE_VENMO = "Venmo saved: @{venmo}. Winnings go there."
@@ -92,7 +94,7 @@ DONE_NEED = ("Thanks. The chapter manager will set your temporary starting handi
 def template_hash() -> str:
     raw = "\x1f".join((SUBJECT, REMINDER_SUBJECT, BODY, REMINDER_BODY, WHY, BUTTON, NO_HCP,
                        SIGN, PAGE_NOTE_HEAD, PAGE_NOTE, GHIN_NOTE, NONE_NOTE, DONE_LABEL, DONE_SET,
-                       DONE_CHECK, DONE_TEMP, DONE_NEED, VENMO_GET, VENMO_URL,
+                       DONE_CHECK, DONE_TEMP, DONE_NEED, VENMO_WHY, VENMO_GET, VENMO_URL,
                        DONE_VENMO, DONE_NO_VENMO))
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
@@ -226,14 +228,18 @@ def validate(form: dict) -> dict:
             return {"error": "Please enter your latest handicap index, for example 17.8."}
         return {"kind": "other", "service": svc, "service_name": name, "index": idx}
     if kind == "none":
+        # A RANGE for 18 holes (Kerry 10/16: "I typically shoot between x and x").
+        msg = "Please enter the range you usually shoot for 18 holes, for example 90 to 100."
         try:
-            score = int(str(form.get("score18") or "").strip())
+            lo = int(str(form.get("score_low") or "").strip())
+            hi = int(str(form.get("score_high") or "").strip() or lo)
         except ValueError:
-            return {"error": "Please enter your usual score for 18 holes, for example 95."}
-        if not 60 <= score <= 160:
-            return {"error": "Please enter your usual score for 18 holes, for example 95."}
+            return {"error": msg}
+        lo, hi = min(lo, hi), max(lo, hi)
+        if not (60 <= lo <= 160 and 60 <= hi <= 160):
+            return {"error": msg}
         rounds = str(form.get("rounds_year") or "").strip()[:20]
-        return {"kind": "none", "score18": score, "rounds_year": rounds}
+        return {"kind": "none", "score_low": lo, "score_high": hi, "rounds_year": rounds}
     return {"error": "Please pick one of the three choices."}
 
 
@@ -569,7 +575,7 @@ def record(token: str, form: dict, db_path=None) -> dict:
         db.log_agent_action("handicap-ask", "handicap_ask_answer",
                             f"customer {cid}: {ans['kind']}"
                             + (f", index {ans['index']} -> starting {start}" if start is not None
-                               else f", usual 18 {ans.get('score18')}")
+                               else f", usually shoots {ans.get('score_low')}-{ans.get('score_high')} for 18")
                             + (f", venmo @{venmo}" if venmo else (", no Venmo yet" if no_venmo else "")),
                             db_path=db_path)
     except Exception:
@@ -633,7 +639,9 @@ def status_rows(customer_ids, missing_ids=(), db_path=None) -> list[dict]:
             line = (f"{svc} · index {a.get('index')} → starting "
                     f"{starting_from_index(a['index'])} (applied)")
         elif a.get("kind") == "none":
-            line = (f"No handicap · usually shoots {a.get('score18')} for 18"
+            rng = (f"{a['score_low']}–{a['score_high']}" if a.get("score_low") is not None
+                   else str(a.get("score18")))
+            line = (f"No handicap · usually shoots {rng} for 18"
                     + (f" · plays {a['rounds_year']} rounds a year" if a.get("rounds_year") else ""))
         else:
             line = ""
