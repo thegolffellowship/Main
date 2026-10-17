@@ -61,32 +61,51 @@ of pairings but perhaps just a redistribution as needed. Definitely needs
 manager notification ... Manager may have to be the one that gets a phone
 call for someone canceling and has to manually remove them himself."
 
-Principles proposed:
+Kerry 10/17 (RULED):
+- 7 AM → noon: "System makes change. Manager and affiliated player notified.
+  I don't think we want to make the manager the bottleneck. Unless we want to
+  do a 15 minute window of opportunity for the manager to respond before the
+  system automatically makes the change."
+- After noon: "Anything that I see that says manual is potentially
+  problematic ... We need to always be prepared for the manager not to be
+  available to make the change and the system needs to be able to do it
+  itself."
+- Re-lock (13 → 12): fold one threesome into the others "doing the minimum
+  disruption to existing pairings", allowed until 7 AM on event day, not after.
+- Twosome fix must honour every pairing rule (never move a player in a match
+  or a requested partner).
+- Host withdraws: guest told "hopefully you still want to play but understand
+  if you don't."
+- Phone-call cancel: the manager's path to "Remove player" must be very few
+  taps (manager interface to be designed).
+- Event full + add: consider the system talking to the course contact
+  directly instead of the manager as middle man.
+- Player-initiated cancellation (future build): walk through.
+- Spot transfer: mechanism to be defined.
+
+Principles (PROPOSAL, revised to the rulings):
 1. After lock, never regenerate; REDISTRIBUTE with the fewest moves.
-   Never split a partner request, a guest from their host, or a locked group.
-2. Every change notifies the manager (what happened, what moved).
-3. Who may move people depends on the clock:
-   - lock → 7 PM: automatic, nobody told yet.
-   - 7 PM → 7 AM: automatic, manager notified; sheet was "preliminary".
-   - 7 AM → noon: system PROPOSES, manager approves with one tap.
-   - after noon: manual only (Pairings §12); system notifies.
-4. Manager phone-call cancellation: "Remove player" on the phone runs the
-   same flow as an online withdrawal (credit per policy).
+   Never split a partner request, a match, a guest from their host, or a
+   locked group.
+2. The system always completes the change itself; nothing waits on a person.
+3. Every change notifies the manager and every affected player.
+4. Lock → 7 AM: change applied at once. 7 AM → first tee: change shown to the
+   manager with 15 minutes to alter or stop it, then applied automatically.
+5. Manager phone-call cancellation: "Remove player" runs the same flow as an
+   online withdrawal (credit per policy).
 
 Scenarios (N = players, G = tee times held):
 
 | # | Event | Result |
 |---|---|---|
 | A1 | Add, open seat exists | Into the open seat (rule-best group if several). Player info email; group told; course gets that group's card + cart sign; manager FYI. Field now ÷4 → close + waitlist |
-| A2 | Add when full | Waitlist (from Jan 1 the shop blocks it). Today GoDaddy can sell it: manager decides: request a time from the course + redistribute, or credit/refund |
+| A2 | Add when full | PROPOSAL: system asks the course contact directly for one more time (Yes/No link), manager CC'd. Yes → time added, field redistributed. No / no answer by a deadline → player credited automatically and waitlisted. From Dec 1 the shop blocks it (waitlist) |
 | W1 | Withdraw, group keeps 3+ | Seat reopens; group told; course gets that group's card; manager FYI |
-| W2 | Withdraw leaves a twosome | Move one player from a foursome into it (fewest rule breaks) → two threesomes |
-| W3 | Withdrawals leave a spare time (4G-N ≥ 4, e.g. 13→12 in 4,3,3,3) | "Re-lock": dissolve one group into the threesomes, release that time to the course, close registration if N÷4 |
-| W4 | Host withdraws, guest stays | Guest asked keep or cancel (Error Handling §8.2) |
+| W2 | Withdraw leaves a twosome | Move one player from a foursome into it, honouring every rule → two threesomes |
+| W3 | Withdrawals free a time (13 → 12 in 4,3,3,3) | Until 7 AM event day: fold one threesome into the others, release the time, close registration. After 7 AM: keep groups, reopen seats |
+| W4 | Host withdraws, guest stays | Guest asked keep or cancel ("hopefully you still want to play...") |
 | W5 | Withdraw at the course / no-show | Scorer + manager flow (Pairings §12) |
-| S1 | Transfer of a spot to someone else | Same seat, no movement; group + course told |
-
-OPEN: W3 timing (compress vs keep groups and reopen seats), course deadlines.
+| S1 | Spot transfer | PROPOSAL: "Give my spot" sends the new person a link; they pay; the original player gets wallet credit; same seat |
 
 ## 4. Counts to the course before lock (PROPOSAL, OPEN)
 
@@ -95,13 +114,14 @@ deadlines may depend on the course's request; "we'll release x times back to
 course too if we're WAY short"; request more if we may exceed. Rules to be
 written per course (Course Connection).
 
-## 5. Payments era (Kerry correction 10/17)
+## 5. Payments era (RULED 10/17)
 
 Kerry: "I don't think we can have a step for stripe memberships without
-stripe event payments. I don't see how we can do that in December without
-events too." So there is no Dec 1 memberships-only step; Stripe memberships
-and Stripe event payments start together. Date OPEN (CoS/CFO; #739 said Dec 1
-memberships, Jan 1 events).
+stripe event payments." Then: "I want December 1 to be all Stripe and our
+shop NOT January 1!" Memberships AND events move to Stripe + the TGF shop on
+2026-12-01 (supersedes #739's Jan 1 for events). The CA #731 hard gate
+(replication, restore drill, numeric money, case-insensitive identity) must
+pass before then.
 
 ## 6. Other items Kerry raised 10/17 (queued, OPEN)
 
