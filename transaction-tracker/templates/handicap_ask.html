@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your handicap · The Golf Fellowship</title>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<style>
+    /* THE HANDICAP ASK page (Kerry 2026-10-16, email_parser/handicap_ask.py).
+       Public, signed link, no login. The three paths open by pure CSS off
+       the radio buttons, so the page works with scripts off. One phone
+       layout at every width (560px rule: it is already a single column). */
+    body { margin:0; background:#F8F8F8; color:#1B1B1B; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:16px; line-height:1.5; }
+    .nav { background:#1B1B1B; color:#fff; padding:12px 16px; font-family:'Bitter',Georgia,serif; font-weight:700; display:flex; align-items:center; gap:10px; }
+    .nav img { width:26px; height:26px; }
+    main { max-width:520px; margin:0 auto; padding:18px 16px 40px; display:flex; flex-direction:column; gap:14px; }
+    h1 { font-family:'Bitter',Georgia,serif; font-size:1.45rem; margin:0; line-height:1.25; }
+    .mut { color:#6B7280; font-size:.92rem; margin:0; }
+    .note { background:#fff; border:1px solid #E5E7EB; border-radius:10px; padding:10px 12px; font-size:.95rem; margin:0; }
+    .choice { display:block; border:2px solid #E5E7EB; border-radius:12px; padding:12px 14px; background:#fff; cursor:pointer; }
+    .choice b { font-family:'Bitter',Georgia,serif; display:block; font-size:1.05rem; }
+    .choice span { color:#6B7280; font-size:.9rem; }
+    input[type=radio] { position:absolute; opacity:0; pointer-events:none; }
+    #k-ghin:checked ~ .choices label[for=k-ghin],
+    #k-other:checked ~ .choices label[for=k-other],
+    #k-none:checked ~ .choices label[for=k-none] { border-color:#E87C3E; background:#FDF0E6; }
+    input[type=radio]:focus-visible ~ .choices .choice { outline:none; }
+    .choices { display:flex; flex-direction:column; gap:10px; }
+    .sec { display:none; flex-direction:column; gap:12px; background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:14px; }
+    #k-ghin:checked ~ .sec-ghin, #k-other:checked ~ .sec-other, #k-none:checked ~ .sec-none { display:flex; }
+    .savebar { display:none; margin-top:14px; }
+    .savebar button { width:100%; }
+    #k-ghin:checked ~ .sec-pay, #k-other:checked ~ .sec-pay, #k-none:checked ~ .sec-pay,
+    #k-ghin:checked ~ .savebar, #k-other:checked ~ .savebar, #k-none:checked ~ .savebar { display:flex; }
+    div.f { display:flex; flex-direction:column; gap:6px; font-weight:600; font-size:.95rem; }
+    .range { display:flex; align-items:center; gap:10px; font-weight:400; }
+    .range input { flex:1; min-width:0; font-size:16px; padding:10px; border:1px solid #C9CDD3; border-radius:8px; text-align:center; }
+    .range input:focus { outline:2px solid #E87C3E; outline-offset:1px; }
+    .chk { display:flex; gap:8px; align-items:center; font-size:.95rem; }
+    .chk input { width:20px; height:20px; position:static; opacity:1; pointer-events:auto; }
+    .sec a { color:#2563eb; font-weight:600; }
+    .sec h2 { font-family:'Bitter',Georgia,serif; font-size:1.1rem; margin:0; }
+    label.f { display:flex; flex-direction:column; gap:4px; font-weight:600; font-size:.95rem; }
+    label.f input, label.f select { font-size:16px; padding:10px; border:1px solid #C9CDD3; border-radius:8px; background:#fff; color:#1B1B1B; }
+    label.f input:focus, label.f select:focus { outline:2px solid #E87C3E; outline-offset:1px; }
+    .hint { font-weight:400; color:#6B7280; font-size:.85rem; }
+    button { font-family:'Bitter',Georgia,serif; font-weight:700; font-size:1rem; background:#E87C3E; color:#fff; border:0; border-radius:999px; padding:12px 18px; cursor:pointer; }
+    .err { background:#FEE2E2; color:#991B1B; border-radius:10px; padding:10px 12px; margin:0; }
+    .done { text-align:center; align-items:center; background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:22px 16px; display:flex; flex-direction:column; gap:8px; }
+    .tick { width:56px; height:56px; border-radius:50%; background:#DCFCE7; color:#15803D; font-size:30px; font-weight:800; display:grid; place-items:center; }
+    .big { font-family:'Bitter',Georgia,serif; font-size:2.2rem; font-weight:800; }
+    a.ghost { display:inline-block; border:2px solid #1B1B1B; color:#1B1B1B; border-radius:999px; padding:10px 18px; text-decoration:none; font-family:'Bitter',Georgia,serif; font-weight:700; }
+    .tgf-hcp { background:#FDF0E6; border:2px solid #E87C3E; border-radius:12px; padding:12px 14px; margin:0; }
+    .tgf-hcp b { display:block; font-family:'Bitter',Georgia,serif; font-size:1.1rem; color:#B4561F; margin-bottom:2px; }
+    .tgf-hcp span { font-size:1rem; }
+    .temp { background:#FDF0E6; border-left:4px solid #E87C3E; border-radius:8px; padding:10px 12px; text-align:left; margin:6px 0 0; }
+    .pv { background:#FEF3C7; color:#92400E; border-radius:10px; padding:8px 12px; font-size:.9rem; margin:0; }
+    @media (max-width: 560px) { main { padding-top:14px; } }
+</style>
+</head>
+<body>
+<div class="nav"><img src="/static/tgf-icon-white.svg" alt="">The Golf Fellowship</div>
+<main>
+{% if error_page %}
+    <h1>{{ error_page }}</h1>
+    <p class="mut">Questions? Reply to the email you got from us.</p>
+{% elif done %}
+    {% if info.preview %}<p class="pv">Preview link: nothing was saved.</p>{% endif %}
+    <div class="done">
+        <div class="tick">&#10003;</div>
+        <h1>Thanks, {{ info.first_name or 'golfer' }}.{% if done.status == 'set' %} You're set.{% endif %}</h1>
+        {% if done.venmo_only %}
+        {% elif done.starting is not none %}
+            <p class="mut">{{ done_label }}</p>
+            <div class="big">{{ done.starting_text }}</div>
+            <p class="mut">{{ done_check if done.status == 'check' else done_set }}</p>
+            <p class="temp">{{ done_temp }}</p>
+        {% else %}
+            <p class="mut">{{ done_need }}</p>
+        {% endif %}
+        {% if done.venmo_line %}<p class="mut">{{ done.venmo_line }}{% if done.answer and done.answer.no_venmo %} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a>{% endif %}</p>{% endif %}
+        <a class="ghost" href="/member/teesheet/{{ info.event_id }}">See the tee sheet</a>
+    </div>
+{% elif info.answer and not info.has_venmo %}
+    {% if info.preview %}<p class="pv">Preview link: the page works and saves nothing.</p>{% endif %}
+    <h1>{{ venmo_only_head }}, {{ info.first_name or 'golfer' }}</h1>
+    <p class="mut">{{ venmo_only }}</p>
+    {% if form_error %}<p class="err" role="alert">{{ form_error }}</p>{% endif %}
+    <form method="post" autocomplete="off" class="sec" style="display:flex;">
+        <input type="hidden" name="venmo_only" value="1">
+        <p class="mut" style="margin:0;">{{ venmo_why }}</p>
+        <label class="f" for="venmo">Venmo username
+            <input id="venmo" name="venmo" autocapitalize="none" autocorrect="off" spellcheck="false"
+                   value="{{ form.venmo or '' }}" placeholder="@your-name"></label>
+        <p class="mut" style="margin:0;">{{ venmo_get }} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a></p>
+        <button type="submit">Save</button>
+    </form>
+{% else %}
+    {% if info.preview %}<p class="pv">Preview link: the page works and saves nothing.</p>{% endif %}
+    <h1>Your handicap, {{ info.first_name or 'golfer' }}</h1>
+    <p class="mut">For {{ info.event }}{% if info.day %}, {{ info.day }}{% endif %}</p>
+    <p class="tgf-hcp"><b>{{ page_note_head }}</b><span>{{ page_note }}</span></p>
+    {% if form_error %}<p class="err" role="alert">{{ form_error }}</p>{% endif %}
+    {% if info.answer %}<p class="note">We already have your answer. Send it again only if something changed.</p>{% endif %}
+    <form method="post" autocomplete="off">
+        <input type="radio" name="kind" id="k-ghin" value="ghin" {% if form.kind == 'ghin' %}checked{% endif %}>
+        <input type="radio" name="kind" id="k-other" value="other" {% if form.kind == 'other' %}checked{% endif %}>
+        <input type="radio" name="kind" id="k-none" value="none" {% if form.kind == 'none' %}checked{% endif %}>
+        <div class="choices">
+            <label class="choice" for="k-ghin"><b>I have a GHIN number</b><span>USGA handicap, most common</span></label>
+            <label class="choice" for="k-other"><b>I use another handicap service</b><span>TheGrint, a club handicap, Golf Genius&hellip;</span></label>
+            <label class="choice" for="k-none"><b>I don't have a handicap</b><span>Just tell us what you usually shoot</span></label>
+        </div>
+        <div class="sec sec-ghin" style="margin-top:14px;">
+            <h2>Your GHIN details</h2>
+            <label class="f" for="ghin">GHIN number
+                <input id="ghin" name="ghin" inputmode="numeric" value="{{ form.ghin or '' }}" placeholder="1234567"></label>
+            <label class="f" for="index-ghin">Your latest handicap index
+                <input id="index-ghin" name="index_ghin" inputmode="decimal" value="{{ form.index_ghin or '' }}" placeholder="14.2">
+                <span class="hint">The number on the front of your GHIN app, e.g. 14.2. Use + for a plus handicap.</span></label>
+            <p class="mut">{{ ghin_note }}</p>
+        </div>
+        <div class="sec sec-other" style="margin-top:14px;">
+            <h2>Your handicap service</h2>
+            <label class="f" for="service">Which service?
+                <select id="service" name="service">
+                    <option value="">Pick one</option>
+                    {% for s in services %}<option value="{{ s }}" {% if form.service == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                </select></label>
+            <label class="f" for="service-name">Club or service name (if Other)
+                <input id="service-name" name="service_name" value="{{ form.service_name or '' }}" placeholder="e.g. Oak Hills CC"></label>
+            <label class="f" for="index-other">Your latest handicap index
+                <input id="index-other" name="index_other" inputmode="decimal" value="{{ form.index_other or '' }}" placeholder="17.8"></label>
+        </div>
+        <div class="sec sec-none" style="margin-top:14px;">
+            <h2>What do you usually shoot?</h2>
+            <div class="f" role="group" aria-labelledby="range-label">
+                <span id="range-label">For 18 holes, I typically shoot between</span>
+                <div class="range">
+                    <input id="score-low" name="score_low" inputmode="numeric" aria-label="Low score" value="{{ form.score_low or '' }}" placeholder="90">
+                    <span>and</span>
+                    <input id="score-high" name="score_high" inputmode="numeric" aria-label="High score" value="{{ form.score_high or '' }}" placeholder="100">
+                </div>
+            </div>
+            <label class="f" for="rounds-year">Rounds you play a year (optional)
+                <input id="rounds-year" name="rounds_year" inputmode="numeric" value="{{ form.rounds_year or '' }}" placeholder="About how many?"></label>
+            <p class="mut">{{ none_note }}</p>
+        </div>
+        {% if not info.has_venmo %}
+        <div class="sec sec-pay" style="margin-top:14px;">
+            <h2>Your Venmo, for winnings</h2>
+            <p class="mut" style="margin:0;">{{ venmo_why }}</p>
+            <label class="f" for="venmo">Venmo username
+                <input id="venmo" name="venmo" autocapitalize="none" autocorrect="off" spellcheck="false"
+                       value="{{ form.venmo or '' }}" placeholder="@your-name"></label>
+            <label class="chk" for="no-venmo"><input type="checkbox" id="no-venmo" name="no_venmo" value="1"
+                {% if form.no_venmo %}checked{% endif %}> I don't have Venmo yet</label>
+            <p class="mut" style="margin:0;">{{ venmo_get }} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a></p>
+        </div>
+        {% endif %}
+        <div class="savebar"><button type="submit">Save</button></div>
+    </form>
+{% endif %}
+</main>
+</body>
+</html>

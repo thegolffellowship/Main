@@ -469,8 +469,12 @@ numbers]}` — so the 9/29 dry run can list Kerry's group alone.
 `attach_cart_sign_qr(pack)` runs on both cart-sign paths (the page and the
 print-pack PDF), seeds the group's round from PAIRINGS the first time
 (idempotent), and stamps `score_qr {url, svg}` on the group; the SVG is
-inline (segno), so printing needs no network. It never raises: no dial or a
-bad dial prints the old sign. The scorecard QR (R7) and the personal email
+inline (segno), so printing needs no network. It never raises: a bad dial
+prints the old sign. **Since v2.570.1 (Kerry 10/16: "QR Codes didn't print on
+cart signs this week") an event the dial does not name gets EVERY group's
+code** whenever live scoring is on for it (auto live scoring never wrote the
+dial, so Tuesday's signs printed bare). To leave codes off one event, set its
+entry to `"off"`. The scorecard QR (R7) and the personal email
 link (R8, a member send — Kerry OKs each batch) come later; the email link
 is the strong identity path, "tap your name" from a shared code is weak and
 is accepted for the beta because every action is logged by device.

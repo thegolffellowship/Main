@@ -2917,7 +2917,8 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   whenever live scoring is on for the event (the round is seeded from the
   saved pairings if needed); the bound print pack uses `on` too. Unchecked =
   `off`. With live scoring off the cards carry no code and the log says so.
-  The cart signs still follow the `score_entry_qr` dial.
+  The cart signs follow the `score_entry_qr` dial, which since v2.570.1
+  defaults to every group when the event is not named (`"off"` turns it off).
   The code carries the SHORT link (v2.525.7, `score_entry.short_score_url`).
 - **Second SI row (v2.525.7, Kerry 2026-10-06: "two SI row's (properly
   labeled) would show on that group's card...if they're different"):** dots

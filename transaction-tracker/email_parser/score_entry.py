@@ -1640,7 +1640,8 @@ def _preview_handicaps(event_id: int, ids: list, tees: dict, holes: int, db_path
             if holes == 18 and nine:
                 rating, par = rating * 2, par * 2
             use = round(idx / 2.0, 1) if (holes == 9 and nine) else idx
-            p["playing_handicap"] = ph_fn(use, slope, rating, par)
+            p["playing_handicap"] = ph_fn(use, slope, rating, par,
+                                          max_hcp=db.event_ph_cap(ev, holes == 9, db_path=db_path))
             p["course_handicap_raw"] = ch_fn(use, slope, rating, par)
             out["ph"][c] = p["playing_handicap"]
         unit = "cart" if len(ids) < 16 else "group"
@@ -1990,13 +1991,23 @@ def event_group_links(event_id: int, holes: str = "9", base_url: str | None = No
 # ---------------------------------------------------------------------------
 
 def _qr_dial(event_id: int, db_path=None):
+    """Which groups' cart signs carry the score QR. An event the dial does
+    not name gets EVERY group ("all"): live scoring now switches itself on
+    for every event (live_scoring_default), and the scorecards already print
+    a QR on every group by default, so a cart sign must too (Kerry 10/16:
+    "QR Codes didn't print on cart signs this week"). Callers still require
+    live scoring to be on for the event. To leave codes off one event, set
+    its entry to "off" (or an empty list)."""
     from email_parser.database import get_app_setting
     try:
         raw = get_app_setting("score_entry_qr", db_path) or ""
         dial = json.loads(raw) if raw.strip() else {}
     except (ValueError, TypeError):
         return None
-    return dial.get(str(event_id))
+    v = dial.get(str(event_id), "all")
+    if v in ("off", "none", [], None, ""):
+        return None
+    return v
 
 
 #: THE SHORT QR LINK (Kerry 2026-10-06: "Are there by chance less dense QR

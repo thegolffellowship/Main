@@ -55,9 +55,11 @@ def missing_handicaps(event_id: int, db_path=None) -> dict:
         hcp = db._roster_handicap_index_map(conn, as_of=db._event_index_as_of(ev), db_path=db_path)
         from email_parser.nh_flags import event_nh_players
         nh_ids = event_nh_players(conn, int(event_id))
-        seen, players, nh_players = set(), [], []
+        seen, players, nh_players, roster_ids = set(), [], [], []
         for r in db._event_roster_rows(conn, int(event_id)):
             cid = r.get("customer_id")
+            if cid:
+                roster_ids.append(int(cid))
             name = (r.get("customer") or r.get("name") or "").strip()
             key = ("c", int(cid)) if cid else ("n", name.lower())
             if not name or key in seen:
@@ -91,8 +93,27 @@ def missing_handicaps(event_id: int, db_path=None) -> dict:
     n = len(players)
     msg = (f"{n} player{'s' if n != 1 else ''} ha{'ve' if n != 1 else 's'} no handicap: "
            + ", ".join(p["name"] for p in players)) if n else ""
+    # THE HANDICAP ASK (Kerry 10/16): where each emailed player's answer
+    # stands, including those whose answer already set a handicap.
+    try:
+        from email_parser.handicap_ask import status_rows
+        names = {p["customer_id"]: p["name"] for p in players + nh_players if p.get("customer_id")}
+        asks = status_rows(list(dict.fromkeys(roster_ids)),
+                           [p["customer_id"] for p in players], db_path=db_path)
+        if asks:
+            with db._connect(db_path) as conn:
+                for a in asks:
+                    if a["customer_id"] not in names:
+                        r = conn.execute("SELECT first_name, last_name FROM customers "
+                                         "WHERE customer_id = ?", (a["customer_id"],)).fetchone()
+                        names[a["customer_id"]] = " ".join(x for x in (r or ("", "")) if x)
+            for a in asks:
+                a["name"] = names.get(a["customer_id"], "")
+    except Exception:
+        asks = []
     return {"event_id": int(event_id), "event": ev.get("item_name"),
             "event_date": ev.get("event_date"), "upcoming": upcoming, "count": n, "message": msg,
+            "asks": asks,
             "players": players, "nh_players": sorted(nh_players, key=lambda p: p["name"].lower()),
             "nh_note": NH_NOTE if n else ""}
 

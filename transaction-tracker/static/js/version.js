@@ -1,12 +1,107 @@
-window.TGF_VERSION = "2.568.1";
+window.TGF_VERSION = "2.570.2";
 window.TGF_CHANGELOG = [
   {
-    version: "2.568.1",
-    date: "2026-10-13",
+    version: "2.570.2",
+    date: "2026-10-17",
     title: "Health: Spotlight single-builder, steadier replica check, send-job slow lines",
     changes: [
       "Digest #1877 (10/15). (1) Spotlight: on 10/14 at 6:06 AM, six members opened their results-email link within one second; the Spotlight's saved pieces were cold (the refresher had gone idle after a quiet day) and all six rebuilt the same 6 s piece at once on a host at load 110, so each open took 7-10 s. Now one thread builds an entry; the others share its result (waiting if the entry is cold, or seeing the previous copy at once if it is under 15 minutes old), and the background refresher stays on for a week of quiet instead of a day. (2) The 5:00 report's off-site replica check timed out at 25 s under load 98 and the failure was remembered for 15 minutes; a failed read is no longer remembered, and the scheduled read now waits up to 75 s. (3) The two jobs that send mail to a roster (event_invite_auto, results_email_auto) get a 15-minute slow line instead of 2 minutes: 346 s and 233 s were normal sends under load. No figure, email or member-facing wording changes. Also (10/16): the staff bridges scoring-gg-history (Golf Genius archive ingest, one fetch per call) and scoring-import-orders (order-email import) get a 60 s slow line instead of 10 s; on 10/15 the first took 10-39 s on 13 of 131 calls with the host at load 100, normal for a fetch from Golf Genius."
     ]
+  },
+  {
+    version: "2.570.1",
+    date: "2026-10-16",
+    title: "Cart signs print the live-scoring QR by default",
+    changes: [
+      "Kerry 10/16: \"QR Codes didn't print on cart signs this week.\" A cart sign carried a code only when the score_entry_qr app setting named the event, and live scoring that switches itself on (5 PM the day before) never wrote that setting, so Tuesday's signs printed without one. Now an event the setting does not name gets every group's code whenever live scoring is on for it; set the event's entry to \"off\" to leave codes off. Live scoring off still means no code. Guard test_score_entry.py.",
+    ],
+  },
+  {
+    version: "2.570.0",
+    date: "2026-10-16",
+    title: "Max playing handicap: 18 on a nine, 36 on an eighteen",
+    changes: [
+      "Kerry 10/16: \"playing handicaps can be max 18 for 9 and 36 for 18 regardless of gender and what calculations are. Means that no one ever gets more than 2 pops per hole. This is because of our max triple rule and how points work. We don't want a triple earning points and the best they can get with a triple with two pops is a net bogey which is not worth any points.\" The stroke allocator already stopped at 2 pops a hole; now the playing handicap NUMBER is capped too (handicap_calc.max_playing_handicap, database.event_ph_cap), at every source: the Starter Sheet / print pack (which seeds score entry, the scorecards and their dots, the stored rounds and the engine), the FLIGHTS tab and the score-entry preview. So a round-level net, a team handicap and off-the-lowest never carry more than 18 / 36. The index itself is not capped.",
+      "Forward only: events on/after app setting ph_cap_from (2026-10-20, Tuesday's events first), so past handicaps, points and payouts stay as played. The Handicaps page's how-it-works step 7 now says 18 on a nine and 36 on an eighteen. Guard test_ph_cap.py.",
+    ],
+  },
+  {
+    version: "2.569.7",
+    date: "2026-10-16",
+    title: "Registered list shows the 18-hole index",
+    changes: [
+      "Kerry 10/16: \"Your handicaps on the tee sheet are showing 9 hole handicaps not 18 hole handicaps right? They should show 18.\" They were the 9-hole index. The member tee sheet's registered list now shows the 18-hole index by the roster's own rule: twice the 9-hole index, or a starting handicap exactly as typed (12.5, never 12.4).",
+    ],
+  },
+  {
+    version: "2.569.6",
+    date: "2026-10-16",
+    title: "Registered list: Spotlight links for members only, with a tease",
+    changes: [
+      "Kerry 10/16: \"don't put links in for non-TGF Members. That's a perk that I want to tease.\" On the member tee sheet's registered list only active members' names link to their Player Spotlight; a non-member's name is plain text (tee and HCP still shown). Under the list: \"Names in blue are TGF members: tap one to see their Player Spotlight. Members get their own.\"",
+    ],
+  },
+  {
+    version: "2.569.5",
+    date: "2026-10-16",
+    title: "Registered list: Spotlight links, handicap index and tee; Venmo can be added later on the same link",
+    changes: [
+      "Kerry 10/16 on the member tee sheet's registered list: \"Add links to member player spotlights. Add current handicap index and tee they'll be playing at that events course with the color circle.\" Each name links to /member/spotlight?player=<id>; beside it the tee for their band at this event's course with its colour circle (the Starter Sheet's own tee legend) and HCP (THE roster index map, locked to the event date once it starts; a plus handicap reads +1.5).",
+      "Kerry asked how \"reply to our email with your username\" would work: it wouldn't (nothing reads those replies). Now: \"When you set up Venmo, tap the button in our email again to add your username.\" Reopening the link after answering shows only \"Add your Venmo\" with one Save; the username goes straight onto the profile where payouts read it. Also removed the doubled \"Thanks\" on the no-handicap thank-you page.",
+    ],
+  },
+  {
+    version: "2.569.4",
+    date: "2026-10-16",
+    title: "Handicap ask: a score range for no-handicap players; Venmo names every way to win",
+    changes: [
+      "Kerry 10/16: \"for the I don't have a handicap section it should give a range. I typically shoot between x and x.\" The no-handicap answer is now \"For 18 holes, I typically shoot between [90] and [100]\" (60-160, a backwards range is put right); the manager banner reads \"usually shoots 90–100 for 18\".",
+      "Kerry: \"They can also win for CTPs or for the side games they entered.\" The Venmo box now reads: \"If you win the team game, a closest to the pin, or a side game you entered, we pay you by Venmo.\" The wording hash changed; the send stays locked until Kerry approves.",
+    ],
+  },
+  {
+    version: "2.569.3",
+    date: "2026-10-16",
+    title: "Member tee sheet shows who is registered before the pairings are set",
+    changes: [
+      "Kerry 10/16, on /member/teesheet before Tuesday's pairings: \"You could still show who is registered.\" Until the groups are saved the page now lists \"Registered so far · N\" (names only, by last name, from THE pairings roster; unpaid RSVP rows left out) under the not-posted-yet note, and the header reads \"N registered\". Once the pairings are saved it shows the groups as before. Guard test_event_day_email.py.",
+    ],
+  },
+  {
+    version: "2.569.2",
+    date: "2026-10-16",
+    title: "Handicap ask also asks for Venmo, with a link to get it",
+    changes: [
+      "Kerry 10/16: \"Yes add Venmo to that same form. If they don't have it provide a link to get it.\" Under whichever handicap choice they pick: \"Your Venmo, for winnings\" (when your team wins, we pay by Venmo), a username box, \"I don't have Venmo yet\", and a Get Venmo link (venmo.com). One Save button for the whole page. The handle is stored bare in customers.venmo_username, where payouts read it, and never replaces one already on file; a player who already has a handle is not asked (a staff preview always shows the question). The manager banner line shows the Venmo or \"no Venmo yet\". Optional: a player can answer the handicap without it.",
+    ],
+  },
+  {
+    version: "2.569.1",
+    date: "2026-10-16",
+    title: "Handicap ask: TGF's own handicap up front; temporary number on the thank-you page",
+    changes: [
+      "Kerry 10/16, on the preview: \"Need to highlight this statement more because it's important for them to realize we have our own handicap system.\" The 27-hole note is now an orange box at the top of the page: \"TGF keeps its own handicaps\" — what they enter is only a temporary starting point; after 27 holes with TGF they have their own TGF handicap.",
+      "Kerry: \"show them what their starting handicap index will be based off what they entered and remind them this is a temporary handicap until they establish one after 27 holes with us.\" The thank-you page shows \"Your temporary starting handicap\" with the number (75% of the index they entered) and a highlighted line that it is temporary until 27 holes with TGF, for GHIN and other-service answers alike; a no-handicap answer is told the manager will set the temporary number.",
+      "Fixed: on a phone, the keyboard's Go submitted the form with the first Save button (GHIN), so an \"another service\" answer came back \"Please enter your GHIN number\" (Kerry's preview). The ticked choice now decides. The wording hash changed; the send stays locked until Kerry approves.",
+    ],
+  },
+  {
+    version: "2.569.0",
+    date: "2026-10-16",
+    title: "The handicap ask: new players give their handicap themselves",
+    changes: [
+      "Kerry 10/16: \"We need some kind of automatic ask for new people that we don't have handicap for\" ... \"Build it\" (mockups approved the same day). A player on an upcoming roster with no TGF index and no starting handicap gets ONE email with a personal link (no login): GHIN number AND latest index (the Tracker cannot look an index up; GHIN shows it only to a logged-in account) sets the starting handicap to 75% and saves the GHIN number; another service (TheGrint, club, Golf Genius, 18Birdies, Other) sets 75% and is marked Check this one for a manager; no handicap asks their usual 18-hole score and the manager sets it. The handicap is for the TEAM game (non-members can't enter individual net or MVP), and the page says 27 holes with TGF gives them their own TGF handicap. The email goes the moment the order is saved (Kerry: \"I'd like the email sent as soon as we get a registration from someone we don't have a handicap for\"); one reminder two days before if unanswered, by day only; a number a manager typed is never overwritten; a GET never saves (mail scanners).",
+      "The events page's missing-handicap banner now lists every emailed player with a chip: Set from GHIN, Check this one (with a Looks right button), Needs a number (with their usual score), Asked, no answer. Only the yellow and red rows need a person.",
+      "Locked: nothing is sent unless app setting handicap_ask_auto = on AND handicap_ask_approved carries Kerry's stamp on the exact wording. Staff preview and status through bridge scoring-handicap-ask. email_parser/handicap_ask.py, templates/handicap_ask.html, route /handicap/<token>; no new table (state in app setting handicap_ask). Guard test_handicap_ask.py.",
+    ],
+  },
+  {
+    version: "2.568.2",
+    date: "2026-10-16",
+    title: "Who referred them: name box no longer locks on iPhone",
+    changes: [
+      "Kerry 10/16, on his phone, on the dashboard's 1st-Timer attribution (Ale Dimas): \"This is locking when I'm trying to type into it.\" The name box was backed by a native <datalist> of the whole roster (~440 names), which iOS Safari filters on every keystroke and froze on. The shared control (referral_control.js: dashboard modal, Leads band, customer Info tab) now shows its own short list of at most 8 matches (every typed word must appear; names starting with the text first), tap or arrow+Enter picks one, and the tapped row's customer_id is what Save sends even when two people share a name. The box is 16px so iOS no longer zooms on focus. Guard test_referred_by_ui.js.",
+    ],
   },
   {
     version: "2.568.0",

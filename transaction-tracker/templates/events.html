@@ -3130,14 +3130,54 @@
         e.preventDefault(); e.stopPropagation();
         setNhFlag(parseInt(b.dataset.eventId), parseInt(b.dataset.customerId), b.dataset.nh === "1");
     });
+    // THE HANDICAP ASK (Kerry 2026-10-16): where each emailed new player's
+    // answer stands. Only "Check this one" and "Needs a number" need a person.
+    const HCP_ASK_CHIP = {
+        set: ["Set from GHIN", "#DCFCE7", "#15803D"], confirmed: ["Checked", "#DCFCE7", "#15803D"],
+        check: ["Check this one", "#FEF3C7", "#92400E"], need: ["Needs a number", "#FEE2E2", "#B91C1C"],
+        asked: ["Asked, no answer", "#E5E7EB", "#374151"]};
+    function hcpAskRowsHtml(asks) {
+        if (!asks || !asks.length) return '';
+        const rows = asks.map(a => {
+            const c = HCP_ASK_CHIP[a.status] || [a.status, "#E5E7EB", "#374151"];
+            const act = a.status === "check"
+                ? ` <button class="btn-hcp-ask-ok" data-customer-id="${a.customer_id}"
+                     style="margin-left:6px;border:1.5px solid #1B1B1B;background:#1B1B1B;color:#fff;border-radius:999px;
+                            padding:2px 10px;font-size:0.8rem;font-weight:700;cursor:pointer;min-height:28px;">Looks right</button>`
+                : (a.status === "need" ? ` <span style="color:#6B7280;">Set it from the roster's HCP cell.</span>` : '');
+            return `<div style="padding:0.3rem 0;border-top:1px solid #FDE68A;">
+                <b>${escapeHtml(a.name || '')}</b>
+                <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;
+                    border-radius:999px;background:${c[1]};color:${c[2]};white-space:nowrap;">${escapeHtml(c[0])}</span>${act}
+                <div style="color:#6B7280;">${escapeHtml(a.line || '')}</div></div>`;
+        }).join('');
+        return `<div class="hcp-ask-rows" style="margin-top:0.4rem;"><div style="font-weight:700;">Handicap emails to new players</div>${rows}</div>`;
+    }
+    document.addEventListener("click", async e => {
+        const b = e.target.closest && e.target.closest(".btn-hcp-ask-ok");
+        if (!b) return;
+        e.preventDefault(); e.stopPropagation();
+        try {
+            const res = await fetch(`/api/handicap-ask/${b.dataset.customerId}/confirm`, {method: "POST"});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { alert(data.error || "Could not save."); return; }
+            const box = b.closest(".hcp-missing-warn");
+            const evId = parseInt((box && box.closest("[data-event-id]") || {}).dataset?.eventId || "0");
+            const ev = allEvents.find(x => x.id === evId) || allEvents.find(x => missingHcp[x.id]
+                && (missingHcp[x.id].asks || []).some(a => String(a.customer_id) === b.dataset.customerId));
+            if (ev) { await fetchMissingHcp(ev); rerenderDetail(detailContainerFor(ev.id), ev); }
+            else { b.textContent = "Checked"; b.disabled = true; }
+        } catch (err) { console.error("hcp ask confirm:", err); alert("Could not save."); }
+    });
     function missingHcpBannerHtml(ev) {
         const m = ev && missingHcp[ev.id];
         if (!m || !m.upcoming) return '';
         const nhList = (m.nh_players || []);
-        if (!m.count && !nhList.length) return '';
-        const nhRow = nhList.length
+        const askRows = hcpAskRowsHtml(m.asks || []);
+        if (!m.count && !nhList.length && !askRows) return '';
+        const nhRow = (nhList.length
             ? `<div style="margin-top:0.3rem;color:#374151;">Playing N/H: ${nhList.map(p =>
-                  `${escapeHtml(p.name)}${_nhBtn(ev, p, false)}`).join(', ')}</div>` : '';
+                  `${escapeHtml(p.name)}${_nhBtn(ev, p, false)}`).join(', ')}</div>` : '') + askRows;
         if (!m.count) {
             return `<div class="hcp-missing-warn hcp-nh-only" style="white-space:normal;background:#F8F8F8;border:1px solid #E5E7EB;
                 border-radius:8px;padding:0.45rem 0.75rem;margin:0 0 0.6rem;font-size:0.85rem;">${nhRow}</div>`;

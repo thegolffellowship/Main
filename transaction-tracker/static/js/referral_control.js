@@ -128,13 +128,20 @@
             '<div style="font-size:0.82rem; min-height:1.2em;" data-refcurrent>' +
                 currentHtml(customer) + "</div>" + suggestHtml +
             '<div style="margin-top:0.45rem; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">' +
-                '<input list="ref-people-' + cid + '" data-refinput ' +
+                // No <datalist>: iOS Safari froze typing into a box backed
+                // by ~440 options (Kerry 2026-10-16, phone: "This is locking
+                // when I'm trying to type into it"). Our own list shows at
+                // most MAX_MATCHES rows. 16px text so iOS does not zoom.
+                '<input type="text" data-refinput aria-controls="ref-sugg-' + cid + '" ' +
                     'placeholder="Type a member’s name…" autocomplete="off" ' +
-                    'style="flex:1; min-width:170px; padding:5px 8px; font-size:0.82rem; ' +
+                    'autocorrect="off" autocapitalize="words" spellcheck="false" ' +
+                    'style="flex:1; min-width:170px; padding:6px 8px; font-size:16px; ' +
                     'border:1px solid var(--border); border-radius:6px;">' +
-                '<datalist id="ref-people-' + cid + '"></datalist>' +
                 '<button type="button" class="btn-small" data-refsave>Save</button>' +
             "</div>" +
+            '<div id="ref-sugg-' + cid + '" data-refsugg role="listbox" style="display:none; ' +
+                'margin-top:4px; border:1px solid var(--border); border-radius:6px; ' +
+                'background:#fff; max-height:260px; overflow-y:auto;"></div>' +
             '<div style="margin-top:0.4rem; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">' +
                 '<span style="font-size:0.75rem; color:var(--text-muted);">or not a referral:</span>' +
                 '<select data-refvia style="padding:4px 8px; font-size:0.8rem; ' +
@@ -156,6 +163,41 @@
             return '<option value="' + esc(c.customer_name) +
                 '" data-cid="' + c.customer_id + '"></option>';
         }).join("");
+    }
+
+    /* The people whose name holds every typed word, best first (a
+     * name that STARTS with the text, then a word that does, then any). */
+    var MAX_MATCHES = 8;
+    function matchPeople(text, excludeId) {
+        var t = String(text || "").trim().toLowerCase();
+        if (!t) return [];
+        var words = t.split(/\s+/);
+        var out = [];
+        (PEOPLE || []).forEach(function (c) {
+            if (c.customer_id === excludeId) return;
+            var n = String(c.customer_name || "").trim().toLowerCase();
+            for (var i = 0; i < words.length; i++) if (n.indexOf(words[i]) < 0) return;
+            var rank = n.indexOf(t) === 0 ? 0 : (n.indexOf(" " + words[0]) >= 0 ? 1 : 2);
+            out.push({ c: c, r: rank, n: n });
+        });
+        out.sort(function (a, b) { return a.r - b.r || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0); });
+        return out.slice(0, MAX_MATCHES).map(function (x) { return x.c; });
+    }
+
+    function showMatches(input) {
+        var block = input.closest("[data-refblock]");
+        var box = block && block.querySelector("[data-refsugg]");
+        if (!box) return;
+        var cid = parseInt(block.getAttribute("data-refblock"), 10);
+        var hits = matchPeople(input.value, cid);
+        if (!hits.length) { box.style.display = "none"; box.innerHTML = ""; return; }
+        box.innerHTML = hits.map(function (c) {
+            return '<div role="option" data-refpick="' + c.customer_id + '" data-refname="' +
+                esc(c.customer_name) + '" style="padding:9px 10px; font-size:15px; ' +
+                'cursor:pointer; border-bottom:1px solid var(--border);">' +
+                esc(c.customer_name) + "</div>";
+        }).join("");
+        box.style.display = "block";
     }
 
     function resolveName(text, excludeId) {
@@ -213,6 +255,15 @@
         var block = ev.target.closest && ev.target.closest("[data-refblock]");
         if (!block) return;
         var cid = parseInt(block.getAttribute("data-refblock"), 10);
+        var pick = ev.target.closest("[data-refpick]");
+        if (pick) {
+            var inp = block.querySelector("[data-refinput]");
+            inp.value = pick.getAttribute("data-refname");
+            inp.setAttribute("data-refcid", pick.getAttribute("data-refpick"));
+            var sb = block.querySelector("[data-refsugg]");
+            sb.style.display = "none"; sb.innerHTML = "";
+            return;
+        }
         if (ev.target.matches("[data-refconfirm]")) {
             post(cid, {
                 referrer_customer_id: parseInt(
@@ -221,7 +272,13 @@
             }, block);
         } else if (ev.target.matches("[data-refsave]")) {
             var input = block.querySelector("[data-refinput]");
-            var rid = resolveName(input.value, cid);
+            // The row tapped is the person, even when two share a name.
+            var picked = parseInt(input.getAttribute("data-refcid") || "", 10);
+            var rid = (picked && (PEOPLE || []).some(function (c) {
+                return c.customer_id === picked && c.customer_id !== cid &&
+                    String(c.customer_name).trim().toLowerCase() ===
+                    input.value.trim().toLowerCase();
+            })) ? picked : resolveName(input.value, cid);
             if (!rid) {
                 var msg = block.querySelector("[data-refmsg]");
                 msg.style.color = "#dc2626";
@@ -241,21 +298,33 @@
         var cid = parseInt(block.getAttribute("data-refblock"), 10);
         post(cid, { found_us_via: ev.target.value || null }, block);
     });
-    // Fill the datalist the first time a picker is focused — building
-    // 440 options for every card up front is wasted work.
+    // Load the people the first time a picker is focused; filter on
+    // every keystroke into a short list (never the whole roster).
     document.addEventListener("focusin", function (ev) {
         if (!ev.target.matches || !ev.target.matches("[data-refinput]")) return;
+        ensurePeople();
+    });
+    document.addEventListener("input", function (ev) {
+        if (!ev.target.matches || !ev.target.matches("[data-refinput]")) return;
+        ev.target.removeAttribute("data-refcid");
+        var input = ev.target;
+        ensurePeople().then(function () { showMatches(input); });
+    });
+    document.addEventListener("focusout", function (ev) {
+        if (!ev.target.matches || !ev.target.matches("[data-refinput]")) return;
         var block = ev.target.closest("[data-refblock]");
-        var cid = parseInt(block.getAttribute("data-refblock"), 10);
-        var dl = block.querySelector("datalist");
-        if (!dl || dl.innerHTML) return;
-        ensurePeople().then(function () { dl.innerHTML = peopleOptions(cid); });
+        // Late enough for a tap on a row to land first.
+        setTimeout(function () {
+            var box = block && block.querySelector("[data-refsugg]");
+            if (box && !block.contains(document.activeElement)) box.style.display = "none";
+        }, 250);
     });
 
     global.TGFRef = {
         render: render, currentHtml: currentHtml, post: post,
         setPeople: setPeople, ensurePeople: ensurePeople,
         peopleOptions: peopleOptions, resolveName: resolveName,
+        matchPeople: matchPeople,
         onSaved: onSaved, record: function (cid) { return RECORDS[cid]; },
         FOUND_US_LABELS: FOUND_US_LABELS,
         REFERRED_SOURCE_LABELS: REFERRED_SOURCE_LABELS

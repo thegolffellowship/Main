@@ -1009,6 +1009,62 @@ them to the Tracker and that's why there was a discrepancy."
   from today through N days ahead that has any: the Front Desk brief's read.
 - Guard: `test_missing_handicaps.py`. Read-only; nothing is written.
 
+### The MAX PLAYING HANDICAP (v2.570.0, Kerry 2026-10-16)
+
+Kerry: "playing handicaps can be max 18 for 9 and 36 for 18 regardless of
+gender and what calculations are. Means that no one ever gets more than 2
+pops per hole. This is because of our max triple rule and how points work.
+We don't want a triple earning points and the best they can get with a
+triple with two pops is a net bogey which is not worth any points."
+
+- `handicap_calc.max_playing_handicap(holes)` = 2 x holes
+  (`MAX_POPS_PER_HOLE`); `allocate_strokes` already stopped at 2 pops a hole,
+  and now the NUMBER is capped too, so a round-level net, a team handicap or
+  off-the-lowest never carries more.
+- `database.event_ph_cap(ev, nine)` is the one rule every source of a
+  playing handicap passes as `max_hcp`: the print pack / Starter Sheet (which
+  seeds score entry, the cards, the dots and the engine), the FLIGHTS tab
+  (`_event_player_ph_map`) and the score-entry preview (`_preview_handicaps`).
+  The index itself is never capped (a 38.2 index stays 38.2).
+- Forward only: events on/after app setting `ph_cap_from` (default
+  2026-10-20), so past handicaps, points and payouts stay as played. The Lone
+  Star Cup's locked course handicaps (`lsc_handicap_lock`) are not touched.
+- Guard `test_ph_cap.py`. The Handicaps page's how-it-works step 7 states it.
+
+### The handicap ask (v2.569.0, Kerry 2026-10-16 "Build it")
+
+Kerry: "We need some kind of automatic ask for new people that we don't have
+handicap for." The handicap is for the TEAM game: a non-member can't enter
+individual net or MVP, "so this is just about giving them a handicap so that
+their team and them can compete together."
+
+- **Who:** a `new` or `few_rounds` player from the missing-handicap read with a
+  customer_id and a sendable address, on any active event in the next 21
+  days. Asked ONCE per person; one reminder when their event is 2 days out and
+  they have not answered. The first ask goes the moment the order is saved
+  (the inbox check runs it right after `save_items`; Kerry: "as soon as we get
+  a registration"), any hour; the job `handicap_ask_auto` (every 15 minutes)
+  catches players added other ways. Reminders only 7 AM-8 PM Central.
+- **The page** `/handicap/<token>` (signed, 60 days, no login): GHIN number AND
+  latest index -> starting handicap 75% (half up: 14.2 -> 10.7) and
+  `customers.ghin_number`; another service -> 75% applied, status `check`;
+  no handicap -> the range they usually shoot for 18 ("between 90 and 100"), status `need`, nothing set. Only the
+  form POST saves. A starting handicap a manager typed is never overwritten.
+  The Tracker cannot look an index up from a GHIN number (GHIN shows it only
+  to a logged-in account), so the page asks for both.
+- **Venmo (v2.569.2, Kerry: "add Venmo to that same form. If they don't have it
+  provide a link to get it")**: optional username box under the chosen path, saved
+  bare to `customers.venmo_username` only when empty; "I don't have Venmo yet" plus
+  a Get Venmo link (venmo.com); not asked when a handle is already on file.
+- **Manager:** the missing-handicap banner lists every emailed player: Set
+  from GHIN / Check this one (Looks right, `POST /api/handicap-ask/<cid>/confirm`)
+  / Needs a number / Asked, no answer (`missing_handicaps(...)["asks"]`).
+- **Locks:** dial `handicap_ask_auto` = on AND `handicap_ask_approved` = the
+  wording hash (`handicap_ask.template_hash()`); any wording change re-locks.
+  Bridge `scoring-handicap-ask` (status) / `:preview|<event_id>[|addr][|reminder]`
+  (staff only) / `:state`. State in app setting `handicap_ask`, no table.
+- Guard `test_handicap_ask.py`.
+
 ### The N/H flag (v2.522.53, Kerry "Good on both", CoS #1078 / #1079)
 
 - **What:** a manager marks a player with no handicap as N/H for one event.

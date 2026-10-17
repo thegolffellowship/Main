@@ -1844,6 +1844,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
       scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
+      scoring-handicap-ask[:preview|<event_id>[|<staff addr>][|reminder] | :state]  THE HANDICAP ASK (Kerry 10/16): bare = who would be asked / reminded now; preview to STAFF only; member sends only from the job (dial handicap_ask_auto=on + wording stamp handicap_ask_approved)
       scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
@@ -6944,6 +6945,29 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     return json.dumps({"error": f"no event {_a}"})
                 _a = _r[0]
             return json.dumps(db.get_event_financial_summary(_a), indent=2, default=str)
+        if cmd == "scoring-handicap-ask":
+            # "" (who would be asked / reminded now, read-only) |
+            # "preview|<event_id>[|<staff addr>][|reminder]" (staff only) |
+            # "state" (every answer so far). THE HANDICAP ASK (Kerry 10/16).
+            # Member sends happen only from the job: dial handicap_ask_auto=on
+            # AND app setting handicap_ask_approved = the wording hash.
+            from email_parser import handicap_ask as _ha
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if _p[0].lower() == "preview":
+                if len(_p) < 2 or not _p[1].isdigit():
+                    return json.dumps({"error": "preview|<event_id>[|<staff addr>][|reminder]"})
+                db.log_agent_action("mcp-claude", "scoring-handicap-ask", arg)
+                _addr = next((x for x in _p[2:] if "@" in x), None)
+                _kind = "reminder" if "reminder" in [x.lower() for x in _p] else "ask"
+                return json.dumps(_ha.send_preview(int(_p[1]), _addr, _kind), indent=2, default=str)
+            if _p[0].lower() == "state":
+                return json.dumps(_ha.load_state(), indent=2, default=str)
+            _pl = _ha.plan()
+            _slim = lambda xs: [{k: x.get(k) for k in ("customer_id", "name", "event_id", "event",
+                                                        "event_date", "why")} for x in xs]
+            return json.dumps({**_pl, "asks": _slim(_pl["asks"]), "reminders": _slim(_pl["reminders"]),
+                               "skipped": _slim(_pl["skipped"]),
+                               "dial": db.get_app_setting("handicap_ask_auto")}, indent=2, default=str)
         if cmd == "scoring-event-invite":
             # "<event_id>" (who would be invited, read-only) |
             # "<event_id>|preview[|<staff addr>][|reminder]" (staff only) |
