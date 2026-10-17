@@ -83,6 +83,18 @@ Kerry 10/17 (RULED):
 - Player-initiated cancellation (future build): walk through.
 - Spot transfer: mechanism to be defined.
 
+Kerry 10/17 on re-lock: "If someone were to drop between 7pm Monday and
+7am Tuesday, you could keep 4 spots open without locking and giving the
+extra time back. But if no one has signed up by 7am, the time is given back
+and we dissolve a theeesome to make all foursomes." After 7 AM: "one of
+those threesomes need to dissolve and be placed in the other threesomes."
+
+Kerry 10/17 on extra times: "Future system could still ask course if there
+are additional spots available and if so then players could be added from
+waitlist. That communication between player and course and back would need
+to happen very quickly and probably not include the manager as a 3rd party
+in the conversation other than as an observer and being notified."
+
 Principles (PROPOSAL, revised to the rulings):
 1. After lock, never regenerate; REDISTRIBUTE with the fewest moves.
    Never split a partner request, a match, a guest from their host, or a
@@ -102,10 +114,10 @@ Scenarios (N = players, G = tee times held):
 | A2 | Add when full | PROPOSAL: system asks the course contact directly for one more time (Yes/No link), manager CC'd. Yes → time added, field redistributed. No / no answer by a deadline → player credited automatically and waitlisted. From Dec 1 the shop blocks it (waitlist) |
 | W1 | Withdraw, group keeps 3+ | Seat reopens; group told; course gets that group's card; manager FYI |
 | W2 | Withdraw leaves a twosome | Move one player from a foursome into it, honouring every rule → two threesomes |
-| W3 | Withdrawals free a time (13 → 12 in 4,3,3,3) | Until 7 AM event day: fold one threesome into the others, release the time, close registration. After 7 AM: keep groups, reopen seats |
+| W3 | Withdrawals free a time (13 → 12 in 4,3,3,3) | RULED 10/17. Lock → 7 AM event day: keep the open seats for sale, no fold. At the 7 AM checkpoint (run before the 7 AM personal emails) if still unfilled: release the time to the course and dissolve one threesome into the others (fewest moves). After 7 AM: dissolve at once (15-minute manager window), release the time |
 | W4 | Host withdraws, guest stays | Guest asked keep or cancel ("hopefully you still want to play...") |
 | W5 | Withdraw at the course / no-show | Scorer + manager flow (Pairings §12) |
-| S1 | Spot transfer | PROPOSAL: "Give my spot" sends the new person a link; they pay; the original player gets wallet credit; same seat |
+| S1 | Spot hand-off | RULED 10/17: no player-driven "give my spot" now (future ideas, below). Today: the player tells the manager; the manager uses Transfer (exists since v2.487, price check + credit/balance-due); same seat; new player gets the info email (and handicap ask if needed); group and course told |
 
 ## 4. Counts to the course before lock (PROPOSAL, OPEN)
 
@@ -135,3 +147,12 @@ pass before then.
 - Sign-ups earlier: the weekly field signs up late; needs ideas.
 - Weekend invitation schedule: talk through again.
 - First run: 10/20 or 10/27 depends on what Kerry finishes this weekend.
+
+## 7. Future ideas (not now)
+
+- Player-driven spot hand-off ("Give my spot"), Kerry 10/17: "I don't think
+  we should do this right now. Document to keep in ideas for future. Lots to
+  think about there." Sketch: the friend gets a link, accepts and pays; the
+  original player gets wallet credit; same seat.
+- Waitlist ↔ course loop: system asks the course for more times and fills
+  them from the waitlist, manager observes only.
