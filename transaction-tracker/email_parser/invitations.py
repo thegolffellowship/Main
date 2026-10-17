@@ -74,28 +74,49 @@ FOOTER = ("You get these because you play with The Golf Fellowship in {chapter}.
 # for clarification because..." Shown only to someone whose I'm in was
 # UNCLEAR (a no within minutes of it, usually a mail scanner). Its own
 # words, outside template_hash(), so the approved invitation stamp stands.
-CLARIFY_NOTE = ("<b>A quick check:</b> our system received both an \"I'm in\" and a "
-                "\"Can't make it\" from your invitation link within a few seconds of each "
-                "other. That usually means an email security filter tapped the buttons, "
-                "not you. Please tap the one you meant below so we have you right.")
+CLARIFY_NOTE = ("<b>A quick check:</b> your invitation link recorded \"I'm in\" and then, "
+                "a few seconds later, \"{second}\". Sometimes an email security filter taps "
+                "every button by itself, so we want to be sure we have you right.{extra} "
+                "Please tap the one you meant below.")
+CLARIFY_SECOND = {"out": ("Can't make it", ""),
+                  "unsub": ("Remove me from invitations",
+                            " You're still on our invitation list.")}
 UNCLEAR_KEY = "event_invite_unclear:{event_id}"
 
 
-def unclear_ids(event_id: int, db_path=None) -> set:
+def unclear_map(event_id: int, db_path=None) -> dict:
+    """{customer_id: 'out' | 'unsub'}: whose I'm in was followed within
+    seconds by that tap. (An older plain list reads as 'out'.)"""
     try:
-        return {int(x) for x in json.loads(_setting(UNCLEAR_KEY.format(event_id=int(event_id)),
-                                                     db_path) or "[]")}
+        raw = json.loads(_setting(UNCLEAR_KEY.format(event_id=int(event_id)), db_path) or "{}")
     except Exception:
-        return set()
+        return {}
+    if isinstance(raw, list):
+        return {int(x): "out" for x in raw}
+    return {int(k): (v if v in CLARIFY_SECOND else "out") for k, v in raw.items()}
 
 
-def _set_unclear(event_id: int, cid: int, on: bool, db_path=None) -> None:
+def unclear_ids(event_id: int, db_path=None) -> set:
+    return set(unclear_map(event_id, db_path))
+
+
+def clarify_note(second: str | None) -> str:
+    label, extra = CLARIFY_SECOND.get(second or "out", CLARIFY_SECOND["out"])
+    return CLARIFY_NOTE.format(second=label, extra=extra)
+
+
+def _set_unclear(event_id: int, cid: int, on, db_path=None) -> None:
+    """on = 'out' / 'unsub' (or True = 'out') adds; False removes."""
     from email_parser import database as db
-    cur = unclear_ids(event_id, db_path)
-    new = (cur | {int(cid)}) if on else (cur - {int(cid)})
+    cur = unclear_map(event_id, db_path)
+    new = dict(cur)
+    if on:
+        new[int(cid)] = on if on in CLARIFY_SECOND else "out"
+    else:
+        new.pop(int(cid), None)
     if new != cur:
-        db.set_app_setting(UNCLEAR_KEY.format(event_id=int(event_id)), json.dumps(sorted(new)),
-                           db_path=db_path)
+        db.set_app_setting(UNCLEAR_KEY.format(event_id=int(event_id)),
+                           json.dumps({str(k): v for k, v in sorted(new.items())}), db_path=db_path)
 
 
 def template_hash() -> str:
@@ -407,7 +428,7 @@ def _button(url: str, label: str, bg: str, ink: str) -> str:
 
 def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,
                   preview: bool = False, sent_at: int | None = None,
-                  clarify: bool = False) -> dict:
+                  clarify=False) -> dict:
     from email_parser.event_day_email import frame
     ctx = _context(ev, db_path)
     cid, eid = person["customer_id"], int(ev["id"])
@@ -427,7 +448,8 @@ def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,
                + _button(links["out"], "Can't make it", "#E5E7EB", "#1B1B1B")
                + "</tr></table>")
     reg = ""   # I'm in goes straight to registration (Kerry 10/13)
-    note = (f'<p style="background:#FEF3C7;border-radius:8px;padding:10px 12px;">{CLARIFY_NOTE}</p>'
+    note = (f'<p style="background:#FEF3C7;border-radius:8px;padding:10px 12px;">'
+            f'{clarify_note(clarify if isinstance(clarify, str) else None)}</p>'
             if clarify else "")
     inner = (f"<p>{intro}</p>{note}{buttons}{reg}<p>{CLOSING.format(**vals)}</p>"
              f'<p style="font-size:12px;color:#6B7280;">{FOOTER.format(**vals)}</p>')
@@ -534,7 +556,7 @@ def _scanner_ignored(p: dict, action: str, db_path=None) -> str | None:
     if why == "burst":
         _undo_burst(int(p["v"]), int(p["c"]), db_path)
         try:
-            _set_unclear(int(p["v"]), int(p["c"]), True, db_path)
+            _set_unclear(int(p["v"]), int(p["c"]), "unsub" if action == "unsub" else "out", db_path)
         except Exception:
             logger.exception("invitations: could not mark an unclear answer")
     try:
@@ -739,7 +761,8 @@ def clicks_to_rsvps(event_id: int, apply: bool = False, db_path=None) -> dict:
             row["near"] = near
             out["ambiguous"].append(row)
             if apply:
-                _set_unclear(int(event_id), cid, True, db_path)
+                _set_unclear(int(event_id), cid,
+                             "unsub" if near.startswith("Remove me") else "out", db_path)
                 conn = db.get_connection(db_path)
                 try:
                     conn.execute("DELETE FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
@@ -1046,7 +1069,8 @@ def send_preview(event_id: int, to_address: str | None = None, kind: str = "invi
         conn.close()
     sample = {"customer_id": pcid, "first_name": (r[0] if r else "") or "Kerry",
               "name": " ".join(x for x in ((r[0], r[1]) if r else ("Kerry", "")) if x)}
-    msg = build_message(ev, sample, kind, db_path, preview=True, clarify=clarify)
+    msg = build_message(ev, sample, kind, db_path, preview=True,
+                        clarify=(clarify if isinstance(clarify, str) else ("out" if clarify else False)))
     c = pl["counts"]
     sched = ", ".join(f"{s['kind']} {s['date']}" for s in pl["schedule"])
     head = (f"<p><strong>Invitation PREVIEW ({kind})</strong> for {_e(ev.get('item_name'))}. "
@@ -1076,11 +1100,11 @@ def _deliver(ev: dict, pl: dict, db_path=None) -> dict:
     key = SENT_KEY.format(event_id=int(ev["id"]))
     sent_map = _sent_map(ev["id"], db_path)
     sent, failed, held = [], [], []
-    unclear = unclear_ids(ev["id"], db_path)
+    unclear = unclear_map(ev["id"], db_path)
     for p in pl["to_send"]:
         msg = build_message(ev, p, pl["kind"], db_path,
                             sent_at=int(datetime.utcnow().timestamp()),
-                            clarify=int(p["customer_id"]) in unclear)
+                            clarify=unclear.get(int(p["customer_id"]), False))
         if msg["held"]:
             held.append({"customer_id": p["customer_id"], "why": msg["held"]}); continue
         good = False

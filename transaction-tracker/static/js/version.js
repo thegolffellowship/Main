@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.3";
+window.TGF_VERSION = "2.571.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.4",
+    date: "2026-10-17",
+    title: "Clarification note says what they tapped",
+    changes: [
+      "Kerry 10/17: \"Need to acknowledge that they clicked I'm in then I'm out.\" The note now reads: your invitation link recorded \"I'm in\" and then, a few seconds later, \"Can't make it\" (or \"Remove me from invitations\", with \"You're still on our invitation list\"); sometimes an email security filter taps every button by itself, so we want to be sure we have you right; please tap the one you meant. The unclear list now keeps which second tap it was.",
+    ],
+  },
   {
     version: "2.571.3",
     date: "2026-10-17",

@@ -386,12 +386,18 @@ check("a Can't make it 5 s after the tap makes it unclear: listed, and the PLAYI
 check("...and marked unclear, so its next email carries the clarification note",
       770001 in inv.unclear_ids(EV, DB))
 _ev = dict(db.get_connection(DB).execute("SELECT * FROM events WHERE id = ?", (EV,)).fetchone())
+_um = inv.unclear_map(EV, DB)
 _m = inv.build_message(_ev, {"customer_id": 770001, "first_name": "Ann"}, "lastcall", DB,
-                       clarify=770001 in inv.unclear_ids(EV, DB))
+                       clarify=_um.get(770001, False))
 _m2 = inv.build_message(_ev, {"customer_id": 770004, "first_name": "Dee"}, "lastcall", DB,
-                        clarify=770004 in inv.unclear_ids(EV, DB))
-check("the note says why (Kerry 10/17), and only the unclear person gets it",
+                        clarify=_um.get(770004, False))
+check("the note says they tapped I'm in then Can't make it (Kerry 10/17)",
+      'recorded "I\'m in" and then, a few seconds later, "Can\'t make it"' in _m["html"])
+check("...the email security filter reason is there, and no one else gets it",
       "email security filter" in _m["html"] and "email security filter" not in _m2["html"] and not _m["held"])
+_mu = inv.build_message(_ev, {"customer_id": 770001, "first_name": "Ann"}, "lastcall", DB, clarify="unsub")
+check("after Remove me the note names it and says they are still on the list",
+      "Remove me from invitations" in _mu["html"] and "still on our invitation list" in _mu["html"])
 check("the note does not change the approved invitation wording stamp",
       inv.template_hash() == inv.approval_state(DB)["template_hash"])
 cl.get(f"/rsvp/{inv.make_token(770001, EV, 'in', date(2026, 12, 15), sent_at=int(_time.time()) - 3600)}")
