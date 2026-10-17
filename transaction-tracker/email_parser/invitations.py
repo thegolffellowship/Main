@@ -709,7 +709,9 @@ def _no_near_tap(event_id: int, cid: int, when: str, db_path=None) -> str | None
             "AND created_at BETWEEN ? AND ? AND ("
             "(action_type = 'event_rsvp' AND description = ?) OR "
             "(action_type = 'event_invite_unsubscribe' AND description = ?)) "
-            "ORDER BY created_at LIMIT 1",
+            # A Can't make it on this event says more than a Remove me (a
+            # scanner hits every button): prefer it when both are there.
+            "ORDER BY (action_type = 'event_rsvp') DESC, created_at LIMIT 1",
             (lo, hi, f"event {int(event_id)} customer {int(cid)} NOT PLAYING",
              f"customer {int(cid)}")).fetchone()
     except Exception:

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.4";
+window.TGF_VERSION = "2.571.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.5",
+    date: "2026-10-17",
+    title: "Clarification note names Can't make it when both were tapped",
+    changes: [
+      "Kerry 10/17: \"Tanner and Mark said remove me?\" The scanner hit every button for both: I'm in, Can't make it AND Remove me, within seconds, several times. The note picked Remove me because it was logged first. When a Can't make it on the event is there too, the note now names that, which is the real question (in or out).",
+    ],
+  },
   {
     version: "2.571.4",
     date: "2026-10-17",
