@@ -152,6 +152,41 @@ Read from the Frost 0341 statements in `TGF Financial/.../Statements/TGF LLC Che
 - **Open question (not in the return):** a $203 Venmo "external payment" for Kaleb McDonnell on a18.5 (9/10, ledger `ext-pay-2843`) points at item 2843, which no longer exists. His a18.5 entry was paid on GoDaddy order R514052706. His $250 Venmo on 9/25 has no event tag, and he is on the LSC roster, so it is treated as an LSC deposit. Both are logged for the CFO daily.
 - **Working:** the scratchpad `sep_tax.py` (the CFO session), with per-item lines.
 
+## Mixed months: November and December 2026, GoDaddy and Stripe together (CoS #1971, Kerry D29 "all Stripe … December 1")
+
+**The facts that shape these two returns:**
+- **November (return due 12/20):** GoDaddy stays the public checkout. Beta members pay live through Stripe at the November 18s (R3).
+- **December (return due 1/20):** Stripe goes live for everyone on 12/1. GoDaddy stays as the hidden rollback until the first two events after 12/1 settle, so stray GoDaddy orders are possible.
+
+**How each mixed return is built:**
+1. **One sales list per month.** It combines four sources:
+   - GoDaddy orders;
+   - Stripe charges;
+   - Venmo, Zelle and manual payments;
+   - account-credit redemptions.
+
+   Each order is counted **once**, even if it was paid on two rails (for example credit plus Stripe, or a GoDaddy deposit with a Stripe balance). The key is the Tracker order or item, not the payment.
+2. **Total Texas Sales is gross receipts from every rail.**
+   - Use the Stripe **charge** amounts from Stripe's balance transactions.
+   - Never use Stripe payouts or bank deposits: they are net of fees and batched across days.
+   - Stripe's fee is a cost. It is not deducted from sales, the same treatment GoDaddy's 2.9% + $0.30 gets.
+3. **If Stripe adds tax as a separate line** ("tax on markup", #1971):
+   - That collected tax is **not** part of Total Texas Sales.
+   - Reconcile it each month: the tax collected must equal 8.25% (or the location rate) of taxable markup on Stripe orders.
+   - Any over-collection is remitted, not kept.
+   - GoDaddy and Venmo orders in the same month still carry their tax inside the price, as today. **So the month has two tax treatments:** report them as one return, and keep the working split by rail.
+4. **Refunds and credits are recorded by rail.**
+   - A Stripe refund of a GoDaddy-era order reduces the month it is refunded in, under the same Margin Standard §8 rules.
+   - Credits keep the current treatment: the redemption is taxed as the package it bought.
+5. **The Tracker needs a source field on every sale** (godaddy, stripe, venmo, manual) before 11/13, the "tax and fees to the cent" date in #1971. Tracker Build is to confirm the field exists or add it. That would be a schema change, so rule 3b applies.
+6. **Lone Star Cup:** the October return (due 11/20) still carries the Cup markup. That is unaffected by Stripe.
+
+**Checks before each mixed return is sent to Kerry:**
+- the Stripe gross for the month ties to the Stripe dashboard;
+- the GoDaddy order count ties to the order emails;
+- no order appears on both rails;
+- the Stripe tax collected ties to the Stripe orders' markup × rate.
+
 ## Late-filing terms (Texas Comptroller)
 
 - Late penalty: $50 per late report, plus 5% of the tax due if 1–30 days late, or 10% if more than 30 days late.
