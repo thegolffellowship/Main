@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.5";
+window.TGF_VERSION = "2.571.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.6",
+    date: "2026-10-17",
+    title: "Docs: Twilio texting working draft (toll-free 833)",
+    changes: [
+      "Docs only. Kerry 10/17: \"Ok, we'll stick with the 833.\" New docs/claude/twilio-sms.md records the ruling (+1 833-440-2738, toll-free, one number for every chapter), the account state (suspended, -$67.32, support ticket #29975540), the order of work, and DRAFT toll-free verification answers, consent box and SMS terms for Kerry. Found on the way: thegolffellowship.com's Privacy Policy page says only \"coming soon\", and verification is rejected without a real one. Nothing built, sent or paid.",
+    ],
+  },
   {
     version: "2.571.5",
     date: "2026-10-17",
