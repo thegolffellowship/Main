@@ -112,7 +112,7 @@ payouts, handicaps, member communication), who it goes to (only service
 providers that run those things, such as payment, email and text providers),
 that we never sell personal data or share text-message opt-in data with third
 parties for their marketing, how to ask for changes or deletion, and a contact.
-Draft goes to Kerry; it is a legal page, so his OK (and his judgment on any
+Draft: `privacy-policy-draft.md` (10/17). It is a legal page, so his OK (and his judgment on any
 outside review) comes first.
 
 ## Sources

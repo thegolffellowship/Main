@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.6";
+window.TGF_VERSION = "2.571.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.7",
+    date: "2026-10-17",
+    title: "Docs: Privacy Policy + SMS Terms draft for the website",
+    changes: [
+      "Docs only. Kerry 10/17: \"Yes write it up so I can copy and paste into my GoDaddy website section.\" New docs/claude/privacy-policy-draft.md: a plain Privacy Policy (what we collect, how it's used, what shows publicly on leaderboards, never sold, standard carrier wording that text opt-in data is never shared) and SMS Terms, for Kerry to approve, fill the contact blanks and publish. Needed for the toll-free texting approval.",
+    ],
+  },
   {
     version: "2.571.6",
     date: "2026-10-17",
