@@ -163,7 +163,8 @@ check("the Tracker 'I'm in' puts the player on the roster as RSVP-only", 770001 
 print("6. Reminder and unsubscribe")
 pl = inv.plan(EV, "reminder", db_path=DB)
 rem = {p["customer_id"] for p in pl["to_send"]}
-check("the reminder goes only to invitees with no answer (Tracker or GG)", rem == {770004}, rem)
+check("the reminder skips only Can't make it: an unpaid I'm in (Tracker or GG) still gets it (Kerry 10/17)",
+      rem == {770001, 770002, 770004}, rem)
 cl.post(f"/rsvp/{inv.make_token(770004, EV, 'unsub', date(2026, 12, 15))}")
 a2 = inv.audience(EV, db_path=DB)
 check("an unsubscribe leaves the audience", 770004 not in {p["customer_id"] for p in a2["people"]}
@@ -274,7 +275,11 @@ check("burst: I'm in seconds after Can't make it undoes both (a scanner hits eve
       g.status_code == 302 and _np(770003) == 0 and "770003" not in clicks, (_np(770003), clicks.get("770003")))
 cl.get(f"/rsvp/{old['in']}")
 cl.post(f"/rsvp/{old['out']}", headers={"X-Requested-With": "fetch"})
-check("burst the other way: Can't make it seconds after I'm in records nothing", _np(770003) == 0)
+with db._connect(DB) as conn:
+    _pl = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
+                       (f"tracker:{EV}:770003",)).fetchone()[0]
+check("burst the other way: Can't make it seconds after I'm in records nothing, and takes back the I'm in RSVP",
+      _np(770003) == 0 and _pl == 0, (_np(770003), _pl))
 cl.post(f"/rsvp/{old['unsub']}")
 check("…but Remove me right after Can't make it still works (a person does that)",
       770003 in inv._opted_out(DB))
@@ -307,9 +312,9 @@ db.set_app_setting("event_invite_auto", "on", db_path=DB)
 check("…and nothing before 7:00", "skipped" in inv.auto_check(_dt(2026, 12, 13, 6, 59), db_path=DB))
 SENT.clear()
 r = inv.auto_check(_dt(2026, 12, 11, 7, 2), db_path=DB)   # the Friday reminder for Tue 12/15
-check("on a reminder date it reminds the invitees with no answer", len(SENT) == 1
-      and SENT[0]["subject"].startswith("Reminder:") and SENT[0]["to_address"] == "dee@example.test"
-      or len(SENT) == 0, (r, [s_["to_address"] for s_ in SENT]))
+check("on a reminder date it reminds every invitee who has not paid or said no",
+      {s_["to_address"] for s_ in SENT} == {"ann@example.test", "bob@example.test", "dee@example.test"}
+      and all(s_["subject"].startswith("Reminder:") for s_ in SENT), (r, [s_["to_address"] for s_ in SENT]))
 r2 = inv.auto_check(_dt(2026, 12, 11, 7, 17), db_path=DB)
 check("…once per slot", all(x["sent"] == 0 for x in r2.get("ran", [])), r2)
 print("6d. Kerry 10/13: the Fall Championship invites both chapters, sent early")
@@ -361,6 +366,22 @@ with db._connect(DB) as conn:
     got = dict(conn.execute("SELECT customer_id, response FROM rsvps WHERE email_uid IN (?, ?)",
                             (f"tracker:{EV}:770003", f"tracker:{EV}:770004")).fetchall())
 check("apply writes PLAYING and leaves the later no alone", got == {770003: "PLAYING", 770004: "NOT PLAYING"}, got)
+
+print("9. Kerry 10/17: an unclear I'm in is not an RSVP; ask again")
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, customer_id) "
+                 "VALUES (?, 'Ann', 'PLAYING', '2026-12-03T12:02:56Z', ?, 770001) "
+                 "ON CONFLICT(email_uid) DO UPDATE SET response = 'PLAYING'", (f"tracker:{EV}:770001", _nm))
+    conn.execute("INSERT INTO agent_action_log (agent_name, action_type, description, created_at) "
+                 "VALUES ('rsvp-link', 'event_rsvp', ?, '2026-12-03 12:03:01')", (f"event {EV} customer 770001 NOT PLAYING",))
+    conn.commit()
+db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), json.dumps({"770001": "2026-12-03T12:02:56Z"}), db_path=DB)
+amb = inv.clicks_to_rsvps(EV, apply=True, db_path=DB)
+with db._connect(DB) as conn:
+    left = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
+                        (f"tracker:{EV}:770001",)).fetchone()[0]
+check("a Can't make it 5 s after the tap makes it unclear: listed, and the PLAYING row is taken back",
+      [r["customer_id"] for r in amb["ambiguous"]] == [770001] and not amb["rsvp"] and left == 0, (amb, left))
 
 print()
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")

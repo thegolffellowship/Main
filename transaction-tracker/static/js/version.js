@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.571.1";
+window.TGF_VERSION = "2.571.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.2",
+    date: "2026-10-17",
+    title: "Unclear I'm in taps are asked again; the last call reaches unpaid I'm ins",
+    changes: [
+      "Kerry 10/17: \"I thought some of those marked can't play\" and \"If we don't have a clear understanding if they're in then we need to ask them again.\" Six of the ten backfilled taps had a Can't make it or Remove me seconds after the I'm in (the 10/14 mail-scanner storm); the 10/14 clean-up had removed those answers from the RSVP list, so the backfill missed them. The backfill now reads the action log, which keeps them: a no within 5 minutes of the tap makes the tap UNCLEAR, writes no RSVP and takes back one already written, so the invitation emails ask them again.",
+      "The live scanner filter had the same gap: a Can't make it seconds after an I'm in dropped the click but would have left the new PLAYING RSVP. The burst rule now takes that row back too.",
+      "Kerry 10/17: \"Turn it on.\" The reminders and the last call now skip only people who said Can't make it: someone who tapped I'm in but has not paid still gets Monday's \"sign up by 5 PM\". Registered players were already out of the audience. Guard test_invitations.py.",
+    ],
+  },
   {
     version: "2.571.1",
     date: "2026-10-17",

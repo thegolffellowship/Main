@@ -478,6 +478,15 @@ def _undo_burst(eid: int, cid: int, db_path=None) -> None:
         finally:
             conn.close()
     if taps.get("in") and now - taps["in"] < BURST_S:
+        # The I'm in tap wrote a PLAYING RSVP too (Kerry 10/17): the scanner's
+        # tap must leave nothing behind.
+        conn = db.get_connection(db_path)
+        try:
+            conn.execute("DELETE FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
+                         (f"{UID_PREFIX}{eid}:{cid}",))
+            conn.commit()
+        finally:
+            conn.close()
         key = CLICKS_KEY.format(event_id=eid)
         try:
             clicks = json.loads(_setting(key, db_path) or "{}")
@@ -619,6 +628,39 @@ def record_click_rsvp(event_id: int, customer_id: int, when: str | None = None,
     return True
 
 
+UNCLEAR_S = 300
+
+
+def _no_near_tap(event_id: int, cid: int, when: str, db_path=None) -> str | None:
+    """A Can't make it or Remove me logged for this person within UNCLEAR_S of
+    the I'm in tap, or None. Read from the action log, which keeps answers a
+    later clean-up removed from the rsvps table."""
+    from email_parser import database as db
+    t = _ts(when)
+    if t is None:
+        return None
+    lo = datetime.utcfromtimestamp(t - UNCLEAR_S).strftime("%Y-%m-%d %H:%M:%S")
+    hi = datetime.utcfromtimestamp(t + UNCLEAR_S).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db.get_connection(db_path)
+    try:
+        r = conn.execute(
+            "SELECT action_type, created_at FROM agent_action_log WHERE agent_name = 'rsvp-link' "
+            "AND created_at BETWEEN ? AND ? AND ("
+            "(action_type = 'event_rsvp' AND description = ?) OR "
+            "(action_type = 'event_invite_unsubscribe' AND description = ?)) "
+            "ORDER BY created_at LIMIT 1",
+            (lo, hi, f"event {int(event_id)} customer {int(cid)} NOT PLAYING",
+             f"customer {int(cid)}")).fetchone()
+    except Exception:
+        return None
+    finally:
+        conn.close()
+    if not r:
+        return None
+    what = "Can't make it" if r[0] == "event_rsvp" else "Remove me"
+    return f"{what} at {r[1]} UTC"
+
+
 def clicks_to_rsvps(event_id: int, apply: bool = False, db_path=None) -> dict:
     """Backfill (Kerry 10/17: "Do you still have those clicks for this
     week?"): every noted I'm in tap on the event becomes a PLAYING RSVP,
@@ -641,12 +683,30 @@ def clicks_to_rsvps(event_id: int, apply: bool = False, db_path=None) -> dict:
     finally:
         conn.close()
     out = {"event_id": int(event_id), "event": ev.get("item_name"), "registered": [],
-           "rsvp": [], "skipped_later_no": [], "applied": bool(apply)}
+           "rsvp": [], "skipped_later_no": [], "ambiguous": [], "applied": bool(apply)}
     for k, when in sorted(clicks.items(), key=lambda kv: kv[1]):
         cid = int(k)
         row = {"customer_id": cid, "name": names.get(cid, ""), "clicked": when}
         if cid in reg:
             out["registered"].append(row)
+            continue
+        near = _no_near_tap(int(event_id), cid, when, db_path)
+        if near:
+            # Kerry 10/17: "If we don't have a clear understanding if they're
+            # in then we need to ask them again." A Can't make it or Remove me
+            # within minutes of the tap (the 10/14 mail-scanner storm) makes
+            # the tap unclear: no RSVP; an earlier one is taken back, so the
+            # reminders and the last call ask them again.
+            row["near"] = near
+            out["ambiguous"].append(row)
+            if apply:
+                conn = db.get_connection(db_path)
+                try:
+                    conn.execute("DELETE FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
+                                 (f"{UID_PREFIX}{int(event_id)}:{cid}",))
+                    conn.commit()
+                finally:
+                    conn.close()
             continue
         if apply:
             ok = record_click_rsvp(int(event_id), cid, when, db_path)
@@ -881,14 +941,16 @@ def _sent_map(event_id: int, db_path=None) -> dict:
 
 
 def _answered_ids(event_id: int, db_path=None) -> set:
-    """Anyone with an RSVP answer on the event, either way (an I'm in tap
-    is one since Kerry 10/17)."""
+    """Who the reminders and the last call skip: anyone who said Can't make
+    it. An I'm in that has not paid still gets them (Kerry 10/17: "Turn it
+    on"); registered players are already out of the audience."""
     from email_parser import database as db
     conn = db.get_connection(db_path)
     try:
         ev = _event(conn, event_id)
         rows = conn.execute("SELECT DISTINCT customer_id FROM rsvps WHERE customer_id IS NOT NULL "
-                            "AND lower(matched_event) = lower(?)", (ev.get("item_name") or "",)).fetchall()
+                            "AND lower(matched_event) = lower(?) AND response = 'NOT PLAYING'",
+                            (ev.get("item_name") or "",)).fetchall()
         return {int(r[0]) for r in rows}
     finally:
         conn.close()

@@ -131,7 +131,12 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   "add them as RSVPs, even if they bounce when the payment page comes up"),
   so an unpaid I'm in is RSVP-only on the roster and in pairings; it clears
   an earlier Can't make it, and a no given after the tap wins. Backfill:
-  `clicks_to_rsvps` / bridge `scoring-event-invite:<id>|clicks[|apply]`. **Can't make it** lands straight on "Thanks for
+  `clicks_to_rsvps` / bridge `scoring-event-invite:<id>|clicks[|apply]`; a
+  Can't make it / Remove me in the action log within 5 minutes of the tap
+  makes it UNCLEAR (no RSVP, an earlier one taken back) so it is asked again
+  (v2.571.2, Kerry: "If we don't have a clear understanding if they're in then
+  we need to ask them again"). The reminders and last call skip only Can't
+  make it, so an unpaid I'm in still gets them (Kerry 10/17: "Turn it on"). **Can't make it** lands straight on "Thanks for
   letting us know" with **Changed my mind, I'm in** (-> registration),
   **Remove me from invitations** (-> straight to Done) and an optional one-tap
   reason (`REASONS`, table `event_decline_reasons` from migration 0016, one
