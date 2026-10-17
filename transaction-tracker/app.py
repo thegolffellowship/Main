@@ -2278,6 +2278,25 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1, coalesce=True,
     )
+    # ── THE PAYOUT ASK (Kerry 2026-10-17, CoS #1977): someone we owe
+    #    winnings to with no way to pay them on file gets one email asking
+    #    where to send it; one reminder two days later, by day. Nothing
+    #    unless payout_ask_auto = on AND the wording carries Kerry's stamp.
+    def payout_ask_job():
+        from email_parser.payout_ask import auto_check
+        try:
+            res = auto_check()
+            if res.get("asks") or res.get("reminders"):
+                logger.info("Payout ask: %s", res)
+        except Exception:
+            logger.exception("Payout ask job failed (non-fatal)")
+    scheduler.add_job(
+        payout_ask_job,
+        "interval", minutes=15,
+        id="payout_ask_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
 
     scheduler.add_job(
         event_invite_auto_job,
@@ -5064,6 +5083,70 @@ def public_handicap_ask(token):
                    done_check=_ha.DONE_CHECK.format(start=start_txt, index=idx_txt, day=info["day"]),
                    done_need=_ha.DONE_NEED.format(day=info["day"]))
     return render_template("handicap_ask.html", **ctx)
+
+
+@app.route("/payout/<token>", methods=["GET", "POST"])
+def public_payout_ask(token):
+    """THE PAYOUT ASK page (Kerry 2026-10-17, email_parser/payout_ask.py):
+    someone we owe winnings to tells us where to send them. Venmo first,
+    shown back before it saves; "get Venmo"; then credit or another way.
+    Signed link, no login. Only a form POST saves."""
+    from email_parser import payout_ask as _pa
+    info = _pa.describe(token)
+    if not info.get("ok"):
+        return render_template("payout_ask.html", error_page=info.get("error"), info={},
+                               w={}, done=None, step=""), 400
+    amt = info["amount_text"]
+    w = {"page_head": _pa.PAGE_HEAD.format(amount=amt), "venmo_label": _pa.VENMO_LABEL,
+         "venmo_hint": _pa.VENMO_HINT, "confirm_head": _pa.CONFIRM_HEAD,
+         "confirm_note": _pa.CONFIRM_NOTE, "get_head": _pa.GET_HEAD, "get_body": _pa.GET_BODY,
+         "get_after": _pa.GET_AFTER, "other_head": _pa.OTHER_HEAD.format(amount=amt),
+         "credit_label": _pa.CREDIT_LABEL, "credit_note": _pa.CREDIT_NOTE,
+         "other_note": _pa.OTHER_NOTE, "done_head": _pa.DONE_HEAD.format(first_name=info["first_name"]),
+         "done_note": _pa.DONE_NOTE, "venmo_ios": _pa.VENMO_IOS, "venmo_android": _pa.VENMO_ANDROID}
+    ctx = {"info": info, "w": w, "methods": _pa.METHODS, "reasons": _pa.REASONS,
+           "step": (request.args.get("step") or "venmo"), "form": {"venmo": request.args.get("v", "")},
+           "form_error": None, "done": None, "venmo": ""}
+    if request.method == "POST":
+        f = request.form.to_dict()
+        action = f.get("action") or ""
+        if action == "venmo_check":
+            try:
+                v = _pa.parse_venmo(f.get("venmo"))
+            except ValueError as exc:
+                v, err = None, str(exc)
+            else:
+                err = None if v else "Please enter your Venmo username."
+            if err:
+                ctx.update(step="venmo", form=f, form_error=err)
+                return render_template("payout_ask.html", **ctx), 400
+            ctx.update(step="confirm", venmo=v)
+            return render_template("payout_ask.html", **ctx)
+        if action == "venmo_save":
+            res = _pa.record_venmo(token, f.get("venmo"))
+            if not res.get("ok"):
+                ctx.update(step="venmo", form=f, form_error=res.get("error"))
+                return render_template("payout_ask.html", **ctx), 400
+            ctx["done"] = {"line": _pa.DONE_VENMO.format(amount=amt, handle=res["handle"])}
+            return render_template("payout_ask.html", **ctx)
+        if action == "other":
+            res = _pa.record_other(token, f)
+            if not res.get("ok"):
+                ctx.update(step="other", form=f, form_error=res.get("error"))
+                return render_template("payout_ask.html", **ctx), 400
+            line = (_pa.DONE_CREDIT.format(amount=amt) if res["kind"] == "credit"
+                    else _pa.DONE_OTHER.format(amount=amt, method=res["label"], handle=res["handle"]))
+            ctx["done"] = {"line": line}
+            return render_template("payout_ask.html", **ctx)
+    return render_template("payout_ask.html", **ctx)
+
+
+@app.route("/api/payout-ask/status")
+@require_role("manager")
+def api_payout_ask_status():
+    """Payouts → Unpaid chips: asked / reminded / answered, by customer_id."""
+    from email_parser.payout_ask import status_rows
+    return jsonify(status_rows())
 
 
 @app.route("/api/handicap-ask/<int:customer_id>/confirm", methods=["POST"])

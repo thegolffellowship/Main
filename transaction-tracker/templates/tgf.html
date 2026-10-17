@@ -848,6 +848,10 @@
             if (method === "zelle") {
                 return { badge: `Zelle${handle ? ": " + handle : ""} — $${amt}` };
             }
+            if (method === "applepay") {
+                // Apple Cash has no web link: pay from Messages on the iPhone.
+                return { badge: `Apple Cash${handle ? ": " + handle : ""} — $${amt}` };
+            }
             return null;
         }
 
@@ -857,8 +861,9 @@
         // to their customer record, and immediately render the pay link —
         // no page reload.
         const PAY_HINT = { venmo: "venmo-username", paypal: "PayPal.Me name (email = manual)",
-                           cashapp: "$cashtag", zelle: "email or phone" };
-        const PAY_LABEL = { venmo: "Venmo", paypal: "PayPal", cashapp: "Cash App", zelle: "Zelle" };
+                           cashapp: "$cashtag", zelle: "email or phone", applepay: "iPhone number" };
+        const PAY_LABEL = { venmo: "Venmo", paypal: "PayPal", cashapp: "Cash App", zelle: "Zelle",
+                            applepay: "Apple Cash" };
         function tgfPayHint(sel) {
             const inp = sel.parentNode.querySelector("input");
             if (inp) inp.placeholder = PAY_HINT[sel.value] || "handle";
@@ -870,7 +875,7 @@
                 `<span style="display:inline-flex;flex-wrap:wrap;gap:3px;align-items:center;justify-content:flex-end;max-width:170px;">` +
                 `<select class="add-pay-method" style="font-size:0.72rem;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;" onclick="event.stopPropagation()" onchange="tgfPayHint(this)">` +
                 `<option value="venmo">Venmo</option><option value="paypal">PayPal</option>` +
-                `<option value="cashapp">Cash App</option><option value="zelle">Zelle</option></select>` +
+                `<option value="cashapp">Cash App</option><option value="zelle">Zelle</option><option value="applepay">Apple Cash</option></select>` +
                 `<input class="add-venmo-input" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();tgfSaveAddPay(this);}">` +
                 `<button class="add-venmo-save" onclick="event.stopPropagation(); tgfSaveAddPay(this)">Save</button>` +
                 `<span class="add-venmo-msg" style="width:100%;text-align:right;"></span></span>`;
@@ -1256,8 +1261,31 @@
                 </div>`;
         }
 
+        // THE PAYOUT ASK chips (Kerry 2026-10-17, email_parser/payout_ask.py):
+        // asked / reminded / answered, per person, beside the name. The
+        // pay button itself comes from the method the answer saved.
+        let PAYOUT_ASK = null;
+        function payAskChip(cid) {
+            const a = PAYOUT_ASK && PAYOUT_ASK[String(cid)];
+            if (!a) return "";
+            const d = s => s ? new Date(s).toLocaleDateString("en-US", { month: "numeric", day: "numeric" }) : "";
+            const chip = (bg, fg, t) => ` <span style="font-size:0.66rem;font-weight:700;background:${bg};color:${fg};padding:1px 7px;border-radius:10px;white-space:nowrap;vertical-align:middle;">${t}</span>`;
+            if (a.state === "in") {
+                const what = a.kind === "credit" ? "wants credit"
+                    : (PAY_LABEL[a.kind] || a.kind) + (a.handle ? " in" : "");
+                return chip("#DCFCE7", "#15803D", what + " " + d(a.at));
+            }
+            if (a.state === "reminded") return chip("#FEE2E2", "#B91C1C", "Asked " + d(a.asked) + ", reminded " + d(a.at));
+            return chip("#FEF3C7", "#92400E", "Asked " + d(a.at));
+        }
         function renderUnpaidList() {
             const el = $("#unpaid-main");
+            if (PAYOUT_ASK === null) {
+                PAYOUT_ASK = {};
+                fetch("/api/payout-ask/status").then(r => r.ok ? r.json() : {})
+                    .then(j => { PAYOUT_ASK = j || {}; if (Object.keys(PAYOUT_ASK).length) renderUnpaidList(); })
+                    .catch(() => {});
+            }
             const list = [];
             DATA.events.forEach(ev => {
                 golferGroupsForEvent(ev).forEach(g => {
@@ -1284,7 +1312,7 @@
             list.forEach(({ev, g}) => {
                 rows += `
                     <tr>
-                        <td><div style="font-weight:600;">${g.name}</div>
+                        <td><div style="font-weight:600;">${g.name}${payAskChip(g.golfer_id)}</div>
                             <div class="queue-sub">${ev.code}${ev.event_date ? " · " + fmtDayShort(ev.event_date) : ""}</div></td>
                         <td class="right total-amount" style="white-space:nowrap;">${fmt(g.total)}</td>
                         <td class="right queue-act">${payCellHtml(ev, g)}</td>

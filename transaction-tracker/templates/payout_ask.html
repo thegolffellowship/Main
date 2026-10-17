@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your winnings · The Golf Fellowship</title>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<style>
+    /* THE PAYOUT ASK page (Kerry 2026-10-17, email_parser/payout_ask.py):
+       Venmo first, then "get Venmo", then the other ways. Public, signed
+       link, no login; the other-way choices open by pure CSS off the radio
+       buttons, so the page works with scripts off. One phone layout. */
+    body { margin:0; background:#F8F8F8; color:#1B1B1B; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:16px; line-height:1.5; }
+    .nav { background:#1B1B1B; color:#fff; padding:12px 16px; font-family:'Bitter',Georgia,serif; font-weight:700; display:flex; align-items:center; gap:10px; }
+    .nav img { width:26px; height:26px; }
+    main { max-width:520px; margin:0 auto; padding:18px 16px 40px; display:flex; flex-direction:column; gap:14px; }
+    h1 { font-family:'Bitter',Georgia,serif; font-size:1.45rem; margin:0; line-height:1.25; }
+    .mut { color:#6B7280; font-size:.92rem; margin:0; }
+    .note { background:#fff; border:1px solid #E5E7EB; border-radius:10px; padding:10px 12px; font-size:.95rem; margin:0; }
+    .choice { display:block; border:2px solid #E5E7EB; border-radius:12px; padding:12px 14px; background:#fff; cursor:pointer; }
+    .choice b { font-family:'Bitter',Georgia,serif; display:block; font-size:1.05rem; }
+    .choice span { color:#6B7280; font-size:.9rem; }
+    input[type=radio] { position:absolute; opacity:0; pointer-events:none; }
+    #k-ghin:checked ~ .choices label[for=k-ghin],
+    #k-other:checked ~ .choices label[for=k-other],
+    #k-none:checked ~ .choices label[for=k-none] { border-color:#E87C3E; background:#FDF0E6; }
+    input[type=radio]:focus-visible ~ .choices .choice { outline:none; }
+    .choices { display:flex; flex-direction:column; gap:10px; }
+    .sec { display:none; flex-direction:column; gap:12px; background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:14px; }
+    #k-ghin:checked ~ .sec-ghin, #k-other:checked ~ .sec-other, #k-none:checked ~ .sec-none { display:flex; }
+    .savebar { display:none; margin-top:14px; }
+    .savebar button { width:100%; }
+    #k-ghin:checked ~ .sec-pay, #k-other:checked ~ .sec-pay, #k-none:checked ~ .sec-pay,
+    #k-ghin:checked ~ .savebar, #k-other:checked ~ .savebar, #k-none:checked ~ .savebar { display:flex; }
+    div.f { display:flex; flex-direction:column; gap:6px; font-weight:600; font-size:.95rem; }
+    .range { display:flex; align-items:center; gap:10px; font-weight:400; }
+    .range input { flex:1; min-width:0; font-size:16px; padding:10px; border:1px solid #C9CDD3; border-radius:8px; text-align:center; }
+    .range input:focus { outline:2px solid #E87C3E; outline-offset:1px; }
+    .chk { display:flex; gap:8px; align-items:center; font-size:.95rem; }
+    .chk input { width:20px; height:20px; position:static; opacity:1; pointer-events:auto; }
+    .sec a { color:#2563eb; font-weight:600; }
+    .sec h2 { font-family:'Bitter',Georgia,serif; font-size:1.1rem; margin:0; }
+    label.f { display:flex; flex-direction:column; gap:4px; font-weight:600; font-size:.95rem; }
+    label.f input, label.f select { font-size:16px; padding:10px; border:1px solid #C9CDD3; border-radius:8px; background:#fff; color:#1B1B1B; }
+    label.f input:focus, label.f select:focus { outline:2px solid #E87C3E; outline-offset:1px; }
+    .hint { font-weight:400; color:#6B7280; font-size:.85rem; }
+    button { font-family:'Bitter',Georgia,serif; font-weight:700; font-size:1rem; background:#E87C3E; color:#fff; border:0; border-radius:999px; padding:12px 18px; cursor:pointer; }
+    .err { background:#FEE2E2; color:#991B1B; border-radius:10px; padding:10px 12px; margin:0; }
+    .done { text-align:center; align-items:center; background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:22px 16px; display:flex; flex-direction:column; gap:8px; }
+    .tick { width:56px; height:56px; border-radius:50%; background:#DCFCE7; color:#15803D; font-size:30px; font-weight:800; display:grid; place-items:center; }
+    .big { font-family:'Bitter',Georgia,serif; font-size:2.2rem; font-weight:800; }
+    a.ghost { display:inline-block; border:2px solid #1B1B1B; color:#1B1B1B; border-radius:999px; padding:10px 18px; text-decoration:none; font-family:'Bitter',Georgia,serif; font-weight:700; }
+    .tgf-hcp { background:#FDF0E6; border:2px solid #E87C3E; border-radius:12px; padding:12px 14px; margin:0; }
+    .tgf-hcp b { display:block; font-family:'Bitter',Georgia,serif; font-size:1.1rem; color:#B4561F; margin-bottom:2px; }
+    .tgf-hcp span { font-size:1rem; }
+    .temp { background:#FDF0E6; border-left:4px solid #E87C3E; border-radius:8px; padding:10px 12px; text-align:left; margin:6px 0 0; }
+    .pv { background:#FEF3C7; color:#92400E; border-radius:10px; padding:8px 12px; font-size:.9rem; margin:0; }
+    @media (max-width: 560px) { main { padding-top:14px; } }
+
+    #m-credit:checked ~ .choices label[for=m-credit],
+    #m-zelle:checked ~ .choices label[for=m-zelle], #m-paypal:checked ~ .choices label[for=m-paypal],
+    #m-cashapp:checked ~ .choices label[for=m-cashapp], #m-applepay:checked ~ .choices label[for=m-applepay] { border-color:#E87C3E; background:#FDF0E6; }
+    .hsec { display:none; }
+    #m-zelle:checked ~ .choices .h-zelle, #m-paypal:checked ~ .choices .h-paypal,
+    #m-cashapp:checked ~ .choices .h-cashapp, #m-applepay:checked ~ .choices .h-applepay { display:flex; }
+    .linkbtn { display:block; text-align:center; text-decoration:none; }
+    a.btn { display:block; text-align:center; text-decoration:none; font-family:'Bitter',Georgia,serif; font-weight:700; background:#E87C3E; color:#fff; border-radius:999px; padding:12px 18px; }
+    .handle-big { font-family:'Bitter',Georgia,serif; font-size:1.7rem; font-weight:800; text-align:center; background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:14px; word-break:break-all; }
+    .small-link { text-align:center; font-size:.92rem; }
+    .small-link a, .small-link button.lk { color:#6B7280; background:none; border:0; padding:0; font:inherit; text-decoration:underline; cursor:pointer; }
+
+</style>
+</head>
+<body>
+<div class="nav"><img src="/static/tgf-icon-white.svg" alt="">The Golf Fellowship</div>
+<main>
+{% if error_page %}
+    <h1>{{ error_page }}</h1>
+{% else %}
+{% if info.preview %}<p class="pv">Preview link: the page works and saves nothing.</p>{% endif %}
+{% if done %}
+    <div class="done">
+        <div class="tick">&#10003;</div>
+        <h1>{{ w.done_head }}</h1>
+        <p>{{ done.line }}</p>
+        <p class="mut">{{ w.done_note }}</p>
+    </div>
+{% elif step == 'confirm' %}
+    <h1>{{ w.confirm_head }}</h1>
+    <div class="handle-big">@{{ venmo }}</div>
+    <p class="mut">{{ w.confirm_note }}</p>
+    <form method="post"><input type="hidden" name="action" value="venmo_save"><input type="hidden" name="venmo" value="{{ venmo }}">
+        <button type="submit" style="width:100%;">Yes, save it</button></form>
+    <a class="ghost" style="text-align:center;" href="?step=venmo&v={{ venmo|urlencode }}">Fix it</a>
+{% elif step == 'get' %}
+    <h1>{{ w.get_head }}</h1>
+    <p>{{ w.get_body }}</p>
+    <a class="btn" href="{{ w.venmo_ios }}" target="_blank" rel="noopener">Get Venmo for iPhone</a>
+    <a class="ghost" style="text-align:center;" href="{{ w.venmo_android }}" target="_blank" rel="noopener">Get Venmo for Android</a>
+    <p class="mut" style="text-align:center;">{{ w.get_after }}</p>
+    <p class="small-link"><a href="?step=venmo">I have Venmo now</a> &middot; <a href="?step=other">I can't use Venmo</a></p>
+{% elif step == 'other' %}
+    <h1>{{ w.other_head }}</h1>
+    {% if form_error %}<p class="err" role="alert">{{ form_error }}</p>{% endif %}
+    <form method="post" autocomplete="off" style="display:flex;flex-direction:column;gap:12px;">
+        <input type="hidden" name="action" value="other">
+        <label class="f" for="reason">Why not Venmo? <span class="hint">(optional, so we stop asking)</span>
+            <select id="reason" name="reason">{% for v, l in reasons %}<option value="{{ v }}"{% if form.reason == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+        <input type="radio" name="method" id="m-credit" value="credit"{% if form.method == 'credit' %} checked{% endif %}>
+        {% for m, l, h in methods %}<input type="radio" name="method" id="m-{{ m }}" value="{{ m }}"{% if form.method == m %} checked{% endif %}>{% endfor %}
+        <div class="choices">
+            <label class="choice" for="m-credit"><b>{{ w.credit_label }}</b><span>{{ w.credit_note }}</span></label>
+            {% for m, l, h in methods %}
+            <label class="choice" for="m-{{ m }}"><b>{{ l }}</b><span>{{ h }}</span></label>
+            <div class="hsec h-{{ m }}" style="flex-direction:column;">
+                <label class="f" for="h-{{ m }}">{{ l }}
+                    <input id="h-{{ m }}" name="handle_{{ m }}" autocapitalize="none" autocorrect="off" spellcheck="false" value="{{ form['handle_' ~ m] or '' }}"></label>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="submit">Save</button>
+        <p class="mut">{{ w.other_note }} <a href="?step=venmo">Use Venmo</a></p>
+    </form>
+{% else %}
+    <h1>{{ w.page_head }}</h1>
+    {% if form_error %}<p class="err" role="alert">{{ form_error }}</p>{% endif %}
+    <form method="post" autocomplete="off" style="display:flex;flex-direction:column;gap:12px;">
+        <input type="hidden" name="action" value="venmo_check">
+        <label class="f" for="venmo">{{ w.venmo_label }}
+            <input id="venmo" name="venmo" autocapitalize="none" autocorrect="off" spellcheck="false"
+                   value="{{ form.venmo or '' }}" placeholder="@your-name">
+            <span class="hint">{{ w.venmo_hint }}</span></label>
+        <button type="submit">Continue</button>
+    </form>
+    <p class="small-link">Don't have Venmo? <a href="?step=get">Get it here</a></p>
+{% endif %}
+{% endif %}
+</main>
+</body>
+</html>

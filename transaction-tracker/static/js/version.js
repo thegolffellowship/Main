@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.570.3";
+window.TGF_VERSION = "2.571.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.0",
+    date: "2026-10-17",
+    title: "The payout ask: winners tell us where to send their money",
+    changes: [
+      "Kerry 10/17 (via CoS #1977): \"Have TGF Tracker Build build something similar to what it did yesterday for handicap email requests.\" Someone with an unpaid prize payout and no way to pay them on file (no Venmo, no payment method) gets one email with a signed link /payout/<token>; one reminder 2 days later, by day. Everyone gets the link, member or not, because we owe them money. email_parser/payout_ask.py, page templates/payout_ask.html.",
+      "Venmo first, then the rest (Kerry: Venmo \"absolutely preferred\" but \"some of our members have had their Venmo blocked\"). The page asks only for Venmo and shows the username back large before it saves; \"Don't have Venmo?\" offers the app-store buttons and nothing else; only after \"I can't use Venmo\" does it offer TGF credit, then Zelle, PayPal, Cash App and Apple Cash, each with the handle it needs, plus an optional reason. Kerry: \"I can pay all of them.\"",
+      "Where it saves: Venmo to customers.venmo_username; the others to customers.payment_method + payment_handle, the fields the Payouts tab already builds its pay links from (Apple Cash is the existing value applepay; Payouts now labels it and shows an Apple Cash badge). A value on file is never replaced. TGF credit moves no money: it raises one COO action item to convert the payout. The Tracker never pays anyone. No schema change was needed.",
+      "Payouts → Unpaid shows a chip beside each name: Asked, Asked + reminded, or what came back. Sends are locked: the job needs dial payout_ask_auto = on AND the wording stamp payout_ask_approved; the named send (bridge scoring-payout-ask:send|<ids>) needs the stamp. Guard test_payout_ask.py.",
+    ],
+  },
   {
     version: "2.570.3",
     date: "2026-10-17",

@@ -1627,6 +1627,29 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 - `_resolve_customer_for_payout(conn, name)` — resolves payout recipient to a `customer_id`: `_resolve_scoring_player` FIRST (v2.49.0 — GG results names are "LAST, First Suffix", exactly what the scoring spine's candidate expansion + curated handicap_player_links map resolve; the old comma-split alone turned 'ARIAS, Victor Jr' into first='Victor Jr'/last='Arias' and minted a fresh shell customer per recording pass), then the `_lookup_customer_id` cascade, then an exact first+last guard; creates a new customer with `acquisition_source='tgf_payout'` only if everything misses. The boot repair `_repair_tgf_payout_shells()` merges any identity-less tgf_payout shells whose name re-resolves to a real customer (repoints tgf_payouts, deletes the shell) — it healed the 8 Arias shells of 2026-07-07.
 - Payouts linked to identity via `tgf_payouts.customer_id` (FK to `customers.customer_id`)
 
+## The payout ask: where should we send it? (v2.571.0, Kerry 2026-10-17)
+
+CoS #1977, Kerry: "Have TGF Tracker Build build something similar to what it
+did yesterday for handicap email requests." `email_parser/payout_ask.py`.
+- WHO: an unpaid payout (`tgf_payouts` whose ledger row is `source='pending'`,
+  event in the last 120 days) for someone with no `venmo_username` and no
+  `payment_method`. Everyone, member or not. No email on file: listed, not sent.
+- THE PAGE `/payout/<token>` (signed, `pay.` prefix, 90 days, form POST only
+  saves): Venmo first, shown back large before saving; "Don't have Venmo?"
+  sells Venmo (app stores) and nothing else; "I can't use Venmo" offers TGF
+  credit, Zelle, PayPal, Cash App, Apple Cash (`applepay`) with the handle
+  each needs and an optional reason (`blocked` = never nudge about Venmo).
+- WRITES: `venmo_username`, or `payment_method` + `payment_handle` (the
+  fields the Pay links below already read); never over a value on file.
+  Credit raises one COO item "PAYOUT AS CREDIT" and moves no money.
+- SENDS: one ask, one reminder 2 days later 7 AM-8 PM; asks 7 AM-9 PM.
+  The job needs dial `payout_ask_auto` = on AND stamp `payout_ask_approved`
+  = `template_hash()`; `send_now` (bridge `scoring-payout-ask:send|<ids>`)
+  needs the stamp. State in app setting `payout_ask`.
+- Unpaid rows show a chip beside the name (Asked / reminded / what came back).
+- First sends (Kerry 10/17: "Send to Mark and Michele"): Mark Parker (833),
+  Michele McCormick (765). The dial stays off for everyone else.
+
 ## PAYOUTS action column — one pill + "+ Add Payment" chooser (v2.81.0, Kerry)
 The payout action cell renders exactly ONE control per row (was two
 side-by-side badges, whose double width pushed the PAID pills off-screen

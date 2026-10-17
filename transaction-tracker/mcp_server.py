@@ -1845,6 +1845,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
       scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
+      scoring-payout-ask[:preview[|<cid>][|<staff>][|reminder] | :send|<cid>,<cid> | :state]  THE PAYOUT ASK (Kerry 10/17): bare = who would be asked; send needs the wording stamp payout_ask_approved
       scoring-handicap-ask[:preview|<event_id>[|<staff addr>][|reminder] | :state]  THE HANDICAP ASK (Kerry 10/16): bare = who would be asked / reminded now; preview to STAFF only; member sends only from the job (dial handicap_ask_auto=on + wording stamp handicap_ask_approved)
       scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13)
@@ -6953,6 +6954,29 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     return json.dumps({"error": f"no event {_a}"})
                 _a = _r[0]
             return json.dumps(db.get_event_financial_summary(_a), indent=2, default=str)
+        if cmd == "scoring-payout-ask":
+            # THE PAYOUT ASK (Kerry 10/17): bare = plan; :preview[|<cid>][|<staff>][|reminder];
+            # :send|<cid>,<cid> (wording stamp required); :state
+            from email_parser import payout_ask as _pa
+            _p = arg.split("|")
+            if _p[0] == "preview":
+                _cid = int(_p[1]) if len(_p) > 1 and _p[1].strip().isdigit() else None
+                _to = _p[2] if len(_p) > 2 else None
+                _k = "reminder" if "reminder" in _p else "ask"
+                return json.dumps(_pa.send_preview(_cid, _to, _k), indent=2, default=str)
+            if _p[0] == "send":
+                _ids = [int(x) for x in (_p[1] if len(_p) > 1 else "").split(",") if x.strip().isdigit()]
+                from email_parser import database as db
+                db.log_agent_action("mcp-claude", "scoring-payout-ask", arg)
+                return json.dumps(_pa.send_now(_ids), indent=2, default=str)
+            if _p[0] == "state":
+                return json.dumps({"state": _pa.load_state(), "approval": _pa.approval_state()},
+                                  indent=2, default=str)
+            _pl = _pa.plan()
+            _slim = lambda xs: [{k: o[k] for k in ("customer_id", "name", "amount", "events", "email")}
+                                for o in xs]
+            return json.dumps({k: (_slim(v) if isinstance(v, list) else v) for k, v in _pl.items()},
+                              indent=2, default=str)
         if cmd == "scoring-handicap-ask":
             # "" (who would be asked / reminded now, read-only) |
             # "preview|<event_id>[|<staff addr>][|reminder]" (staff only) |
