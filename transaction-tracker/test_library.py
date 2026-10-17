@@ -207,6 +207,14 @@ check("an orphan row shows up grouped by table and parent",
       any(g["table"] == "library_document_reads" and g["parent"] == "library_documents" and g["rows"] == 1
           for g in fk2["all_groups"]), str(fk2["all_groups"])[:300])
 
+fd = db.fk_check_detail("library_document_reads", db_path=DB)
+check("detail names the orphan row and its FK value (db-claude #1974)",
+      fd["ok"] and any(any(c["column"] == "document_id" and c["value"] == 999999 for c in r["columns"])
+                       for r in fd["rows"]), str(fd)[:300])
+check("detail refuses a table name that is not plain", not db.fk_check_detail("x; drop", db_path=DB)["ok"])
+fdb = json.loads(mcp_server._scoring_dispatch("", "scoring-fk-check:detail=library_document_reads|library_documents"))
+check("bridge scoring-fk-check:detail=<table>|<parent>", fdb.get("ok") and fdb["violations"] >= 1, str(fdb)[:300])
+
 print()
 if F:
     print(f"{len(F)} FAILED")

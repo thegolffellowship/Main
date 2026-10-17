@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.570.2";
+window.TGF_VERSION = "2.570.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.570.3",
+    date: "2026-10-17",
+    title: "Foreign-key check lists the offending rows",
+    changes: [
+      "db-claude #1974 asked for \"a read-only scoring-fk-check:detail=<table> that returns the offending row ids and FK values\": the per-row orphan list (B3 step 2) was blocked because the check only returned counts. New bridge form scoring-fk-check:detail=<table>[|<parent>][|<limit>] (database.fk_check_detail) returns each orphan row's rowid, the parent table and the FK column values, read only. Guard test_library.py.",
+    ],
+  },
   {
     version: "2.570.2",
     date: "2026-10-17",

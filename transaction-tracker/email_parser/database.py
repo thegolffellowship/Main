@@ -20491,6 +20491,48 @@ def fk_check_summary(top: int = 5, db_path=None) -> dict:
             "ms": int((_t.time() - t0) * 1000)}
 
 
+def fk_check_detail(table: str, parent: str = "", limit: int = 200, db_path=None) -> dict:
+    """READ-ONLY: the offending rows behind one fk_check_summary group
+    (db-claude #1974: "a read-only scoring-fk-check:detail=<table> that
+    returns the offending row ids and FK values"). PRAGMA
+    foreign_key_check(<table>) gives rowid + parent + fk id; the fk id maps
+    to its column through foreign_key_list, and the stored value is read by
+    rowid. Optional `parent` narrows to one group. Writes nothing."""
+    import re as _re
+    t = (table or "").strip()
+    if not _re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", t):
+        return {"ok": False, "error": "table must be a plain table name"}
+    lim = max(1, min(int(limit or 200), 2000))
+    with _connect(db_path) as conn:
+        exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND lower(name) = lower(?)",
+                              (t,)).fetchone()
+        if not exists:
+            return {"ok": False, "error": f"no table {t}"}
+        cols = {}
+        for fk in conn.execute(f'PRAGMA foreign_key_list("{t}")'):
+            cols.setdefault(fk[0], []).append((fk[3], fk[4]))  # id -> [(from, to)]
+        rows, total = [], 0
+        for r in conn.execute(f'PRAGMA foreign_key_check("{t}")'):
+            rowid, par, fkid = r[1], r[2], r[3]
+            if parent and par.lower() != parent.strip().lower():
+                continue
+            total += 1
+            if len(rows) >= lim:
+                continue
+            pairs = cols.get(fkid, [])
+            vals = {}
+            if rowid is not None and pairs:
+                sel = ", ".join(f'"{c}"' for c, _ in pairs)
+                got = conn.execute(f'SELECT {sel} FROM "{t}" WHERE rowid = ?', (rowid,)).fetchone()
+                if got:
+                    vals = {c: got[i] for i, (c, _) in enumerate(pairs)}
+            rows.append({"rowid": rowid, "parent": par,
+                         "columns": [{"column": c, "parent_column": pc, "value": vals.get(c)}
+                                     for c, pc in pairs]})
+    return {"ok": True, "table": t, "parent": parent or None, "violations": total,
+            "returned": len(rows), "truncated": total > len(rows), "rows": rows}
+
+
 def read_platform_dialogue_v2(limit: int = 20, topic: str = "", since_id: int = 0,
                               post_id: int = 0, max_chars: int = 0, text: str = "",
                               author: str = "", since: str = "",

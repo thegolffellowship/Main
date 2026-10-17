@@ -1798,6 +1798,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-library-list:[<section>][|<status>][|archive]  READ the Library INDEX rows (live; archive adds superseded)
       scoring-library-search:text=..|section=..|limit=..|max=..|archive=1  READ Library documents containing every word, newest first, with a snippet
       scoring-fk-check[:<top n>]  READ PRAGMA foreign_key_check on live, grouped by table and parent, worst first (db-claude #1125)
+      scoring-fk-check:detail=<table>[|<parent>][|<limit>]  READ the offending row ids + FK column values for one table (db-claude #1974)
       scoring-mailbox-read:<id> | since=<id>|limit=<n>|topic=<t>|max=<chars>  read ONE post, or a catch-up window OLDEST-first with more/next_since_id
       scoring-mailbox-search:text=<words>|topic=<t>|author=<a>|since=<YYYY-MM-DD>|limit=<n>|max=<chars>  precedent search, newest first, bodies trimmed
       scoring-set-customer-field:<json>  WRITE gender (M/F/NULL) or date_of_birth (YYYY-MM-DD, M/D/YYYY, NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
@@ -6875,6 +6876,13 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # READ-ONLY (db-claude #1125, CoS #1129-1): PRAGMA foreign_key_check
             # on live, grouped by table and parent, worst first. [<top n>]
             from email_parser.database import fk_check_summary as _fk
+            if arg.strip().lower().startswith("detail="):
+                # detail=<table>[|<parent>][|<limit>]: the offending rows (db-claude #1974)
+                from email_parser.database import fk_check_detail as _fkd
+                _p = arg.strip()[7:].split("|")
+                return json.dumps(_fkd(_p[0], _p[1] if len(_p) > 1 else "",
+                                       int(_p[2]) if len(_p) > 2 and _p[2].strip().isdigit() else 200),
+                                  indent=2, default=str)
             return json.dumps(_fk(int(arg) if arg.strip().isdigit() else 5), indent=2, default=str)
         if cmd == "scoring-library-get":
             # <name>[|<version>][|<heading words>]
