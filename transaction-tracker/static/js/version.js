@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.7";
+window.TGF_VERSION = "2.571.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.8",
+    date: "2026-10-17",
+    title: "Docs: new website plan v0.1",
+    changes: [
+      "Docs only. Kerry 10/17: \"...new website build that you need to plan out... needs to be synonymous with our app.\" New docs/claude/website-plan.md: one system vs two (recommend thegolffellowship.com served by the Tracker behind a cache), site map, findability (reviews, chapter pages, event pages, FAQ, public recaps), what carries over from the GoDaddy site and what to fix (broken links, Austin contact, deadline and Hole-in-One contradictions, Golf Genius schedule links that go stale when GG retires 10/31), phases, and Kerry's open decisions. Proposal only.",
+    ],
+  },
   {
     version: "2.571.7",
     date: "2026-10-17",
