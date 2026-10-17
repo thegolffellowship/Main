@@ -1,4 +1,12 @@
-# The new thegolffellowship.com: plan v0.1 (PROPOSAL, not ratified)
+# The new thegolffellowship.com: plan v0.1 (PROPOSAL; decision 1 RULED)
+
+**RULED, Kerry 2026-10-17 (decision 1):** "I want you to build everything if
+that affords us the most flexibility...which I think it does. I want you to be
+able to access and manage everything for me and I'm the CEO and you report
+everything back to the Front Desk -> Chief of Staff -> Me." = Option A, one
+system: the website is built and run on the Tracker. Reporting runs through
+the Front Desk to the Chief of Staff to Kerry. Rule 3b still holds: every
+member-facing page and word is previewed to Kerry before it goes public.
 
 Kerry 2026-10-17: "Keep all these things in mind for our very soon to have new
 website build that you need to plan out based on our needs, your comments, our
