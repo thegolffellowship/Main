@@ -126,9 +126,12 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   (Kerry's stamp) before any member send.
 - **Links** `/rsvp/<token>` (signed, `make_token`/`verify_token`, expire the
   day after the event; no login). **I'm in** redirects to the event's
-  `registration_url` and notes the click (`event_invite_clicks:<id>`), never
-  an RSVP (Kerry: "go straight to the event registration page"), and clears
-  an earlier Can't make it. **Can't make it** lands straight on "Thanks for
+  `registration_url`, notes the click (`event_invite_clicks:<id>`) and, since
+  v2.571.1, records a Tracker PLAYING RSVP (`record_click_rsvp`; Kerry 10/17:
+  "add them as RSVPs, even if they bounce when the payment page comes up"),
+  so an unpaid I'm in is RSVP-only on the roster and in pairings; it clears
+  an earlier Can't make it, and a no given after the tap wins. Backfill:
+  `clicks_to_rsvps` / bridge `scoring-event-invite:<id>|clicks[|apply]`. **Can't make it** lands straight on "Thanks for
   letting us know" with **Changed my mind, I'm in** (-> registration),
   **Remove me from invitations** (-> straight to Done) and an optional one-tap
   reason (`REASONS`, table `event_decline_reasons` from migration 0016, one

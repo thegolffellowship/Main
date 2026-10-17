@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.571.0";
+window.TGF_VERSION = "2.571.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.1",
+    date: "2026-10-17",
+    title: "An I'm in tap is an RSVP",
+    changes: [
+      "Kerry 10/17: \"if players click I'm in on the invites, add them as RSVPs, even if they bounce when the payment page comes up.\" The tap still goes straight to registration, and now also writes a Tracker PLAYING RSVP (one per event + person), so an unpaid I'm in shows on the Players tab as RSVP-only and the pairings deal them, the way Golf Genius RSVPs did. Mail-scanner taps still record nothing, and a Can't make it given after the tap wins.",
+      "This week's taps were saved, so they are backfilled: bridge scoring-event-invite:<event_id>|clicks[|apply] (dry run by default) turns every noted tap into a PLAYING RSVP except people already registered or who said no afterwards. Guard test_invitations.py.",
+    ],
+  },
   {
     version: "2.571.0",
     date: "2026-10-17",

@@ -188,8 +188,8 @@ tok = inv.make_token(770002, EV, "in", date(2026, 12, 15))
 rg = cl.get(f"/rsvp/{tok}")
 with db._connect(DB) as conn:
     n = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()[0]
-check("I'm in goes straight to the registration page and records no RSVP",
-      rg.status_code == 302 and rg.headers["Location"] == "https://shop.example.test/e" and n == 0,
+check("I'm in goes straight to the registration page and records a PLAYING RSVP (Kerry 10/17)",
+      rg.status_code == 302 and rg.headers["Location"] == "https://shop.example.test/e" and n == 1,
       (rg.status_code, rg.headers.get("Location"), n))
 check("…the click is noted", "770002" in json.loads(db.get_app_setting(f"event_invite_clicks:{EV}", db_path=DB) or "{}"))
 print("6c. Kerry 10/13: Can't make it is one tap, with change-my-mind, remove and a reason")
@@ -222,8 +222,9 @@ check("…the bulk read too", _b and _b[0].get("decline_reason") == "Schedule", 
 check("an unlisted reason is refused", cl.post(f"/rsvp/{tok_out}/reason", data={"r": "<b>x</b>"}).status_code == 400)
 mind = cl.get(f"/rsvp/{inv.make_token(770002, EV, 'in', date(2026, 12, 15))}")
 with db._connect(DB) as conn:
-    r = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()[0]
-check("Changed my mind goes to registration and clears the earlier no", mind.status_code == 302 and r == 0, (mind.status_code, r))
+    r = conn.execute("SELECT response FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchall()
+check("Changed my mind goes to registration and the no becomes PLAYING",
+      mind.status_code == 302 and [x[0] for x in r] == ["PLAYING"], (mind.status_code, r))
 tok_un = inv.make_token(770001, EV, 'unsub', date(2026, 12, 15))
 pu = cl.get(f"/rsvp/{tok_un}").get_data(as_text=True)
 check("Kerry 10/14: Remove me asks first and saves nothing by itself (mail scanners)",
@@ -280,6 +281,9 @@ check("…but Remove me right after Can't make it still works (a person does tha
 db.set_app_setting(inv.OPTOUT_KEY, json.dumps(sorted(inv._opted_out(DB) - {770003})), db_path=DB)
 db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), "{}", db_path=DB)
 print("6e. Kerry 10/14: preview buttons record nothing")
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770003",))
+    conn.commit()
 pv = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), preview=True) for a in inv.ACTIONS}
 cl.post(f"/rsvp/{pv['out']}", headers={"X-Requested-With": "fetch"})
 cl.post(f"/rsvp/{pv['unsub']}")
@@ -337,6 +341,26 @@ out = json.loads(mcp_server._scoring_dispatch("", f"scoring-event-invite:{EV}"))
 check("the bare bridge reports the audience and sends nothing", "counts" in out and not SENT, out)
 out = json.loads(mcp_server._scoring_dispatch("", f"scoring-event-invite:{EV}|send|{lane_post}|confirm"))
 check("the bridge send refuses without Kerry's word", "refused" in out and not SENT, out)
+
+print("8. Kerry 10/17: noted I'm in clicks become RSVPs (backfill)")
+_nm = dict(db.get_connection(DB).execute("SELECT item_name FROM events WHERE id = ?", (EV,)).fetchone())["item_name"]
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE email_uid IN (?, ?)", (f"tracker:{EV}:770003", f"tracker:{EV}:770004"))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, customer_id) "
+                 "VALUES (?, 'Dee', 'NOT PLAYING', '2026-12-02T10:00:00Z', ?, 770004)",
+                 (f"tracker:{EV}:770004", _nm))
+    conn.commit()
+db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV),
+                   json.dumps({"770003": "2026-12-01T10:00:00Z", "770004": "2026-12-01T10:00:00Z"}), db_path=DB)
+dry = json.loads(mcp_server._scoring_dispatch("", f"scoring-event-invite:{EV}|clicks"))
+check("dry run: the unpaid click is listed, the later no is skipped, nothing written",
+      [r["customer_id"] for r in dry["rsvp"]] == [770003]
+      and [r["customer_id"] for r in dry["skipped_later_no"]] == [770004] and not dry["applied"], dry)
+inv.clicks_to_rsvps(EV, apply=True, db_path=DB)
+with db._connect(DB) as conn:
+    got = dict(conn.execute("SELECT customer_id, response FROM rsvps WHERE email_uid IN (?, ?)",
+                            (f"tracker:{EV}:770003", f"tracker:{EV}:770004")).fetchall())
+check("apply writes PLAYING and leaves the later no alone", got == {770003: "PLAYING", 770004: "NOT PLAYING"}, got)
 
 print()
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")

@@ -581,12 +581,100 @@ def describe_token(token: str, db_path=None) -> dict:
 CLICKS_KEY = "event_invite_clicks:{event_id}"
 
 
+def record_click_rsvp(event_id: int, customer_id: int, when: str | None = None,
+                      db_path=None) -> bool:
+    """An I'm in tap is an RSVP (Kerry 10/17: "if players click I'm in on
+    the invites, add them as RSVPs, even if they bounce when the payment page
+    comes up"): a Tracker PLAYING row, one per event + person. It never
+    replaces a Can't make it given AFTER the tap. Returns True when written."""
+    from email_parser import database as db
+    when = when or datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    uid = f"{UID_PREFIX}{int(event_id)}:{int(customer_id)}"
+    conn = db.get_connection(db_path)
+    try:
+        ev = _event(conn, int(event_id))
+        if not ev:
+            return False
+        later_no = conn.execute(
+            "SELECT 1 FROM rsvps WHERE customer_id = ? AND response = 'NOT PLAYING' "
+            "AND (event_id = ? OR lower(matched_event) = lower(?)) AND received_at > ? LIMIT 1",
+            (int(customer_id), int(event_id), ev.get("item_name") or "", when)).fetchone()
+        if later_no:
+            return False
+        c = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                         (int(customer_id),)).fetchone()
+        name = " ".join(x for x in ((c["first_name"] if c else ""), (c["last_name"] if c else "")) if x).strip()
+        email = _send_email(conn, int(customer_id)) or ""
+        conn.execute(
+            "INSERT INTO rsvps (email_uid, player_name, player_email, gg_event_name, "
+            "event_identifier, event_date, response, received_at, matched_event, "
+            "matched_item_id, customer_id) VALUES (?, ?, ?, NULL, ?, ?, 'PLAYING', ?, ?, NULL, ?) "
+            "ON CONFLICT(email_uid) DO UPDATE SET response = excluded.response, "
+            "received_at = excluded.received_at",
+            (uid, name, email, ev.get("item_name"), str(ev.get("event_date") or "")[:10], when,
+             ev.get("item_name"), int(customer_id)))
+        conn.commit()
+    finally:
+        conn.close()
+    return True
+
+
+def clicks_to_rsvps(event_id: int, apply: bool = False, db_path=None) -> dict:
+    """Backfill (Kerry 10/17: "Do you still have those clicks for this
+    week?"): every noted I'm in tap on the event becomes a PLAYING RSVP,
+    except people already registered or who said Can't make it after the
+    tap. Dry run unless apply."""
+    from email_parser import database as db
+    try:
+        clicks = json.loads(_setting(CLICKS_KEY.format(event_id=int(event_id)), db_path) or "{}")
+    except Exception:
+        clicks = {}
+    conn = db.get_connection(db_path)
+    try:
+        ev = _event(conn, int(event_id))
+        if not ev:
+            return {"error": f"no event {event_id}"}
+        reg = _registered_ids(conn, ev)
+        names = {int(r[0]): f"{r[1] or ''} {r[2] or ''}".strip() for r in conn.execute(
+            f"SELECT customer_id, first_name, last_name FROM customers WHERE customer_id IN "
+            f"({','.join('?' * len(clicks)) or 'NULL'})", [int(k) for k in clicks]).fetchall()}
+    finally:
+        conn.close()
+    out = {"event_id": int(event_id), "event": ev.get("item_name"), "registered": [],
+           "rsvp": [], "skipped_later_no": [], "applied": bool(apply)}
+    for k, when in sorted(clicks.items(), key=lambda kv: kv[1]):
+        cid = int(k)
+        row = {"customer_id": cid, "name": names.get(cid, ""), "clicked": when}
+        if cid in reg:
+            out["registered"].append(row)
+            continue
+        if apply:
+            ok = record_click_rsvp(int(event_id), cid, when, db_path)
+        else:
+            conn = db.get_connection(db_path)
+            try:
+                ok = not conn.execute(
+                    "SELECT 1 FROM rsvps WHERE customer_id = ? AND response = 'NOT PLAYING' "
+                    "AND (event_id = ? OR lower(matched_event) = lower(?)) AND received_at > ? LIMIT 1",
+                    (cid, int(event_id), ev.get("item_name") or "", when)).fetchone()
+            finally:
+                conn.close()
+        (out["rsvp"] if ok else out["skipped_later_no"]).append(row)
+    if apply:
+        try:
+            db.log_agent_action("rsvp-link", "event_invite_clicks_to_rsvps",
+                                f"event {event_id}: {len(out['rsvp'])} PLAYING", db_path=db_path)
+        except Exception:
+            pass
+    return out
+
+
 def click_in(token: str, db_path=None) -> dict:
     """GET of an I'm in link. With a registration link on the event, the
-    player goes straight there and the CLICK is noted (not an RSVP: a mail
-    scanner can follow the link too, so a click never puts anyone on the
-    roster; paying does). With no registration link, the confirm page is
-    shown and its POST records PLAYING as before."""
+    player goes straight there; the tap is noted AND recorded as a PLAYING
+    RSVP (Kerry 10/17), even if they never pay. Mail-scanner taps (the grace
+    window and the in/out burst) record nothing. With no registration link,
+    the confirm page is shown and its POST records PLAYING as before."""
     from email_parser import database as db
     p = verify_token(token)
     if not p or p.get("a") != "in":
@@ -626,6 +714,10 @@ def click_in(token: str, db_path=None) -> dict:
             conn.close()
     except Exception:
         logger.exception("invitations: could not clear the earlier no")
+    try:
+        record_click_rsvp(int(p["v"]), int(p["c"]), db_path=db_path)
+    except Exception:
+        logger.exception("invitations: could not record the I'm in RSVP")
     return {"ok": True, "redirect": url}
 
 
@@ -789,7 +881,8 @@ def _sent_map(event_id: int, db_path=None) -> dict:
 
 
 def _answered_ids(event_id: int, db_path=None) -> set:
-    """Anyone with an RSVP answer on the event, either way."""
+    """Anyone with an RSVP answer on the event, either way (an I'm in tap
+    is one since Kerry 10/17)."""
     from email_parser import database as db
     conn = db.get_connection(db_path)
     try:

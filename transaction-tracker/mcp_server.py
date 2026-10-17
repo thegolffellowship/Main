@@ -7016,6 +7016,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if not _p[0].isdigit():
                 return json.dumps({"error": "<event_id>[|preview[|addr]|send|<post>[|reminder][|confirm]]"})
             from email_parser import invitations as _inv
+            if len(_p) > 1 and _p[1].lower() == "clicks":
+                # "<event_id>|clicks[|apply]": noted I'm in taps -> PLAYING RSVPs (Kerry 10/17)
+                _ap = len(_p) > 2 and _p[2].lower() == "apply"
+                if _ap:
+                    db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
+                return json.dumps(_inv.clicks_to_rsvps(int(_p[0]), apply=_ap), indent=2, default=str)
             _low = [x.lower() for x in _p[1:]]
             _kind = "lastcall" if "lastcall" in _low else ("reminder" if "reminder" in _low else "invite")
             if len(_p) > 1 and _p[1].lower() == "preview":
