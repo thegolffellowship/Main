@@ -7027,7 +7027,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if len(_p) > 1 and _p[1].lower() == "preview":
                 db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
                 _addr = _p[2] if len(_p) > 2 and "@" in _p[2] else None
-                return json.dumps(_inv.send_preview(int(_p[0]), _addr, _kind), indent=2, default=str)
+                return json.dumps(_inv.send_preview(int(_p[0]), _addr, _kind,
+                                                    clarify="clarify" in _low), indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "restore":
                 # "0|restore|<kerry-ok post id>|<cid,cid,...>[|confirm]" (Kerry
                 # 10/14): undo answers a person did not give (mail scanners,

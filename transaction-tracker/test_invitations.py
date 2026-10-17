@@ -383,6 +383,20 @@ with db._connect(DB) as conn:
 check("a Can't make it 5 s after the tap makes it unclear: listed, and the PLAYING row is taken back",
       [r["customer_id"] for r in amb["ambiguous"]] == [770001] and not amb["rsvp"] and left == 0, (amb, left))
 
+check("...and marked unclear, so its next email carries the clarification note",
+      770001 in inv.unclear_ids(EV, DB))
+_ev = dict(db.get_connection(DB).execute("SELECT * FROM events WHERE id = ?", (EV,)).fetchone())
+_m = inv.build_message(_ev, {"customer_id": 770001, "first_name": "Ann"}, "lastcall", DB,
+                       clarify=770001 in inv.unclear_ids(EV, DB))
+_m2 = inv.build_message(_ev, {"customer_id": 770004, "first_name": "Dee"}, "lastcall", DB,
+                        clarify=770004 in inv.unclear_ids(EV, DB))
+check("the note says why (Kerry 10/17), and only the unclear person gets it",
+      "email security filter" in _m["html"] and "email security filter" not in _m2["html"] and not _m["held"])
+check("the note does not change the approved invitation wording stamp",
+      inv.template_hash() == inv.approval_state(DB)["template_hash"])
+cl.get(f"/rsvp/{inv.make_token(770001, EV, 'in', date(2026, 12, 15), sent_at=int(_time.time()) - 3600)}")
+check("a clear answer afterwards takes them off the unclear list", 770001 not in inv.unclear_ids(EV, DB))
+
 print()
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

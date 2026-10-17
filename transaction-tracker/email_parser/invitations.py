@@ -70,6 +70,34 @@ FOOTER = ("You get these because you play with The Golf Fellowship in {chapter}.
           "<a href=\"{unsub_url}\">Stop event invitations</a>.")
 
 
+# Kerry 10/17: "Need to mention in those clarification RSVPs that this is
+# for clarification because..." Shown only to someone whose I'm in was
+# UNCLEAR (a no within minutes of it, usually a mail scanner). Its own
+# words, outside template_hash(), so the approved invitation stamp stands.
+CLARIFY_NOTE = ("<b>A quick check:</b> our system received both an \"I'm in\" and a "
+                "\"Can't make it\" from your invitation link within a few seconds of each "
+                "other. That usually means an email security filter tapped the buttons, "
+                "not you. Please tap the one you meant below so we have you right.")
+UNCLEAR_KEY = "event_invite_unclear:{event_id}"
+
+
+def unclear_ids(event_id: int, db_path=None) -> set:
+    try:
+        return {int(x) for x in json.loads(_setting(UNCLEAR_KEY.format(event_id=int(event_id)),
+                                                     db_path) or "[]")}
+    except Exception:
+        return set()
+
+
+def _set_unclear(event_id: int, cid: int, on: bool, db_path=None) -> None:
+    from email_parser import database as db
+    cur = unclear_ids(event_id, db_path)
+    new = (cur | {int(cid)}) if on else (cur - {int(cid)})
+    if new != cur:
+        db.set_app_setting(UNCLEAR_KEY.format(event_id=int(event_id)), json.dumps(sorted(new)),
+                           db_path=db_path)
+
+
 def template_hash() -> str:
     raw = "\x1f".join((SUBJECT, INTRO, REMINDER_SUBJECT, REMINDER_INTRO, LASTCALL_SUBJECT,
                        LASTCALL_INTRO, CLOSING, FOOTER))
@@ -378,7 +406,8 @@ def _button(url: str, label: str, bg: str, ink: str) -> str:
 
 
 def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,
-                  preview: bool = False, sent_at: int | None = None) -> dict:
+                  preview: bool = False, sent_at: int | None = None,
+                  clarify: bool = False) -> dict:
     from email_parser.event_day_email import frame
     ctx = _context(ev, db_path)
     cid, eid = person["customer_id"], int(ev["id"])
@@ -398,7 +427,9 @@ def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,
                + _button(links["out"], "Can't make it", "#E5E7EB", "#1B1B1B")
                + "</tr></table>")
     reg = ""   # I'm in goes straight to registration (Kerry 10/13)
-    inner = (f"<p>{intro}</p>{buttons}{reg}<p>{CLOSING.format(**vals)}</p>"
+    note = (f'<p style="background:#FEF3C7;border-radius:8px;padding:10px 12px;">{CLARIFY_NOTE}</p>'
+            if clarify else "")
+    inner = (f"<p>{intro}</p>{note}{buttons}{reg}<p>{CLOSING.format(**vals)}</p>"
              f'<p style="font-size:12px;color:#6B7280;">{FOOTER.format(**vals)}</p>')
     html_body = frame(inner, (ctx["chapter"] or "").upper(), f"{ctx['day']} at {ctx['course']}")
     blanks = [k for k in ("course", "start_sentence", "manager_name") if not ctx.get(k)]
@@ -502,6 +533,10 @@ def _scanner_ignored(p: dict, action: str, db_path=None) -> str | None:
         return None
     if why == "burst":
         _undo_burst(int(p["v"]), int(p["c"]), db_path)
+        try:
+            _set_unclear(int(p["v"]), int(p["c"]), True, db_path)
+        except Exception:
+            logger.exception("invitations: could not mark an unclear answer")
     try:
         from email_parser import database as db
         db.log_agent_action("rsvp-link", "event_invite_scanner_ignored",
@@ -554,6 +589,10 @@ def record_answer(token: str, db_path=None) -> dict:
         conn.commit()
     finally:
         conn.close()
+    try:
+        _set_unclear(eid, cid, False, db_path)
+    except Exception:
+        pass
     try:
         db.log_agent_action("rsvp-link", "event_rsvp", f"event {eid} customer {cid} {RESPONSE[action]}")
     except Exception:
@@ -700,6 +739,7 @@ def clicks_to_rsvps(event_id: int, apply: bool = False, db_path=None) -> dict:
             row["near"] = near
             out["ambiguous"].append(row)
             if apply:
+                _set_unclear(int(event_id), cid, True, db_path)
                 conn = db.get_connection(db_path)
                 try:
                     conn.execute("DELETE FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
@@ -776,6 +816,7 @@ def click_in(token: str, db_path=None) -> dict:
         logger.exception("invitations: could not clear the earlier no")
     try:
         record_click_rsvp(int(p["v"]), int(p["c"]), db_path=db_path)
+        _set_unclear(int(p["v"]), int(p["c"]), False, db_path)
     except Exception:
         logger.exception("invitations: could not record the I'm in RSVP")
     return {"ok": True, "redirect": url}
@@ -976,7 +1017,7 @@ def plan(event_id: int, kind: str = "invite", db_path=None, slot: str | None = N
 
 
 def send_preview(event_id: int, to_address: str | None = None, kind: str = "invite",
-                 db_path=None) -> dict:
+                 db_path=None, clarify: bool = False) -> dict:
     """ONE sample message plus the audience counts, to STAFF only."""
     from email_parser import database as db
     from email_parser.event_day_email import _creds, _graph_send
@@ -1005,7 +1046,7 @@ def send_preview(event_id: int, to_address: str | None = None, kind: str = "invi
         conn.close()
     sample = {"customer_id": pcid, "first_name": (r[0] if r else "") or "Kerry",
               "name": " ".join(x for x in ((r[0], r[1]) if r else ("Kerry", "")) if x)}
-    msg = build_message(ev, sample, kind, db_path, preview=True)
+    msg = build_message(ev, sample, kind, db_path, preview=True, clarify=clarify)
     c = pl["counts"]
     sched = ", ".join(f"{s['kind']} {s['date']}" for s in pl["schedule"])
     head = (f"<p><strong>Invitation PREVIEW ({kind})</strong> for {_e(ev.get('item_name'))}. "
@@ -1035,9 +1076,11 @@ def _deliver(ev: dict, pl: dict, db_path=None) -> dict:
     key = SENT_KEY.format(event_id=int(ev["id"]))
     sent_map = _sent_map(ev["id"], db_path)
     sent, failed, held = [], [], []
+    unclear = unclear_ids(ev["id"], db_path)
     for p in pl["to_send"]:
         msg = build_message(ev, p, pl["kind"], db_path,
-                            sent_at=int(datetime.utcnow().timestamp()))
+                            sent_at=int(datetime.utcnow().timestamp()),
+                            clarify=int(p["customer_id"]) in unclear)
         if msg["held"]:
             held.append({"customer_id": p["customer_id"], "why": msg["held"]}); continue
         good = False

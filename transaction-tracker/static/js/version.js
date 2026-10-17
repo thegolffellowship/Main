@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.2";
+window.TGF_VERSION = "2.571.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.3",
+    date: "2026-10-17",
+    title: "Clarification note for unclear RSVPs",
+    changes: [
+      "Kerry 10/17: \"Need to mention in those clarification RSVPs that this is for clarification because...\" Someone whose I'm in was unclear (a Can't make it or Remove me within minutes, usually a mail security filter) now gets a highlighted note in their next invitation, reminder or last call: we received both answers within seconds, that usually means an email security filter tapped the buttons, please tap the one you meant. The list lives in app setting event_invite_unclear:<event_id>; the backfill and the live scanner burst add to it, a clear answer takes them off. The note sits outside the approved invitation wording, so that stamp stands. Preview: scoring-event-invite:<id>|preview|<staff>|lastcall|clarify. Guard test_invitations.py.",
+    ],
+  },
   {
     version: "2.571.2",
     date: "2026-10-17",
