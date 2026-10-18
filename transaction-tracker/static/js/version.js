@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.9";
+window.TGF_VERSION = "2.571.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.10",
+    date: "2026-10-18",
+    title: "Store titles with a bar land on one event",
+    changes: [
+      "Kerry 10/18: \"But why did the second create to begin with?\" The shop prints the Fall Championship as \"s18.12 FALL CHAMPIONSHIP | Kissing Tree\". On 3 of 5 orders (Baker, Marroquin, Thompson) the AI parser read the part after the bar as the course and saved the item as just \"s18.12 FALL CHAMPIONSHIP\"; the event sync then created a second, dateless event for that shorter name, which hid three paid players from the real event. Two guards now: the parser puts the printed title back when the email shows the extracted name followed by a bar (restore_full_title), and the event sync aliases a short name to the one recent or upcoming \"<name> | ...\" event instead of creating a duplicate. Guard test_event_title_bar.py.",
+    ],
+  },
   {
     version: "2.571.9",
     date: "2026-10-18",

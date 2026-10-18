@@ -30352,6 +30352,25 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                     except Exception:
                         logger.debug("Failed to auto-create alias for %r", name, exc_info=True)
                 continue
+            # A short form of an existing "<title> | <venue>" event is that
+            # event, not a new one (Fall Championship 10/2026: three paid
+            # players hid on a dateless duplicate). Alias it when exactly
+            # one recent or upcoming event carries this title before a bar.
+            if "|" not in name:
+                _full = conn.execute(
+                    "SELECT item_name FROM events "
+                    "WHERE lower(item_name) LIKE lower(?) || ' |%' "
+                    "AND event_date IS NOT NULL AND event_date >= date('now', '-120 days')",
+                    (name.strip(),),
+                ).fetchall()
+                if len(_full) == 1:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
+                        (name, _full[0]["item_name"]),
+                    )
+                    alias_set.add(name.lower())
+                    skipped_aliased += 1
+                    continue
             try:
                 conn.execute(
                     """INSERT INTO events (item_name, course, chapter, event_type)

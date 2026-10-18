@@ -559,6 +559,26 @@ _COURSE_ONLY_NAMES |= set(_COURSE_CANONICAL.keys())
 _MEMBERSHIP_RE = re.compile(r"^TGF\s+MEMBERSHIP\b.*", re.IGNORECASE)
 
 
+def restore_full_title(name: str | None, body: str) -> str | None:
+    """The store prints some products as "<title> | <venue>"
+    ("s18.12 FALL CHAMPIONSHIP | Kissing Tree"). The LLM has read the
+    part after the bar as the course and dropped it from item_name on 3 of
+    5 orders (Baker R047568565, Marroquin R239029515, Thompson
+    R318914434, Oct 2026), and the shorter name then auto-created a second,
+    dateless event that hid three paid players (Kerry 10/18: "But why did
+    the second create to begin with?"). The printed title is a fact: when
+    the email shows the extracted name followed by a bar, put the rest of
+    that printed line back."""
+    if not name or "|" in name or not body:
+        return name
+    m = re.search(re.escape(name.strip()) + r"[ \t]*\|[ \t]*([^\n\r|]{1,60})",
+                  body, re.IGNORECASE)
+    if not m:
+        return name
+    suffix = m.group(1).strip()
+    return f"{name.strip()} | {suffix}" if suffix else name
+
+
 def _normalize_item_name(name: str | None) -> str | None:
     """Normalise item names — e.g. strip city/tier suffixes from memberships."""
     if not name:
@@ -1030,6 +1050,7 @@ def parse_email(email_data: dict) -> list[dict]:
     for idx, item in enumerate(items):
         # Fix side-games / golf_or_compete misplacement before storing
         item = _fixup_side_games_field(item)
+        item["item_name"] = restore_full_title(item.get("item_name"), body)
 
         rows.append({
             "email_uid": email_uid,
