@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.12";
+window.TGF_VERSION = "2.571.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.13",
+    date: "2026-10-18",
+    title: "A first timer stops being one after their first round",
+    changes: [
+      "Kerry 10/18: \"A first timer is no longer a first timer after they've played one time. Only up until that point.\" A first timer is now someone registered but not yet played. Anyone marked first timer who has played an event (an active registration on a past-dated event) becomes a guest, in the boot status check (which used to wait for a second order row) and in the new classifier, which also labels never-played registrants as first timers instead of one-event players.",
+    ],
+  },
   {
     version: "2.571.12",
     date: "2026-10-18",

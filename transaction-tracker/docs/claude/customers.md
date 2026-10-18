@@ -1462,8 +1462,13 @@ Kerry: "Yes please classify" (about a fifth of every invitation went to
 customers whose `current_player_status` was NULL). `email_parser/status_classify.py`
 `classify(apply)` writes a status ONLY on NULL rows, by the existing rules: a
 membership term -> active_member (current) / expired_member (lapsed);
-otherwise by played events (active registrations on dated, played events):
-last played over 12 months ago -> inactive, one event -> first_timer, two or
-more -> active_guest; never played -> left NULL (a contact or lead) and
-reported; vendors and course contacts are skipped. Bridge
+otherwise by played events (active registrations on past-dated events):
+last played over 12 months ago -> inactive, played at least once ->
+active_guest, not played yet but registered for an upcoming event ->
+first_timer, neither -> left NULL (a contact or lead) and reported. **Kerry
+2026-10-18: "A first timer is no longer a first timer after they've played
+one time. Only up until that point."** So existing first_timers who have
+played move to active_guest too, here and in the boot step
+`_migrate_autocorrect_player_status` (which used to wait for a second items
+row); vendors and course contacts are skipped. Bridge
 `scoring-status-classify[:apply]`, dry run by default.

@@ -11,11 +11,15 @@ only upgrades membership buyers):
 1. A membership term on file: current -> active_member, lapsed ->
    expired_member.
 2. Otherwise by what they have played (active registrations, not credited /
-   refunded / transferred / WD), using the event's date:
-   - none -> left as is (a contact or lead, not a player), reported;
+   refunded / transferred / WD, on events whose date has passed):
    - last played more than 12 months ago -> inactive;
-   - one event -> first_timer;
-   - two or more -> active_guest.
+   - played at least once -> active_guest;
+   - not played yet but registered for an upcoming event -> first_timer;
+   - neither -> left as is (a contact or lead), reported.
+   Kerry 10/18: "A first timer is no longer a first timer after they've
+   played one time. Only up until that point."
+3. Anyone ALREADY marked first_timer who has played an event is moved to
+   active_guest by the same rule (reported separately).
 Vendors and course contacts (`course_staff.non_member_ids`) are never
 classified. Only NULL rows are ever written. Dry run by default.
 """
@@ -56,6 +60,14 @@ def classify(apply: bool = False, db_path=None) -> dict:
                        AND e.event_date IS NOT NULL AND e.event_date <= ?
                      GROUP BY i.customer_id""", (*_SKIP, today)).fetchall():
             played[r["customer_id"]] = (r["n"], r["last_date"])
+        upcoming = {r[0] for r in conn.execute(
+            f"""SELECT DISTINCT i.customer_id FROM items i JOIN events e ON e.id = i.event_id
+                 WHERE i.customer_id IS NOT NULL AND i.parent_item_id IS NULL
+                   AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+                   AND e.event_date > ?""", (*_SKIP, today)).fetchall()}
+        stale_ft = [r["customer_id"] for r in conn.execute(
+            "SELECT customer_id FROM customers WHERE current_player_status = 'first_timer'").fetchall()
+            if r["customer_id"] in played]
 
         plan = {"active_member": [], "expired_member": [], "inactive": [],
                 "first_timer": [], "active_guest": []}
@@ -69,13 +81,16 @@ def classify(apply: bool = False, db_path=None) -> dict:
                 to = "active_member" if (terms[cid] or "") >= today else "expired_member"
             elif cid in played:
                 n, last = played[cid]
-                to = "inactive" if (last or "") < cutoff else ("first_timer" if n == 1 else "active_guest")
+                to = "inactive" if (last or "") < cutoff else "active_guest"
+            elif cid in upcoming:
+                to = "first_timer"
             else:
                 left.append({"customer_id": cid, "name": name}); continue
             plan[to].append({"customer_id": cid, "name": name})
 
         out = {"null_status": len(rows), "counts": {k: len(v) for k, v in plan.items()},
                "left_no_play": len(left), "skipped_non_member": len(skipped),
+               "first_timers_who_played_to_guest": len(stale_ft),
                "examples": {k: v[:5] for k, v in plan.items()},
                "left_examples": left[:10], "applied": False}
         if not apply:
@@ -90,6 +105,11 @@ def classify(apply: bool = False, db_path=None) -> dict:
                 _write_status_history(conn, ids, "member", "classified from membership term")
             elif to == "expired_member" and ids:
                 _write_status_history(conn, ids, "former", "classified from lapsed term")
+        for cid in stale_ft:
+            conn.execute(
+                "UPDATE customers SET current_player_status = 'active_guest', "
+                "updated_at = CURRENT_TIMESTAMP WHERE customer_id = ? "
+                "AND current_player_status = 'first_timer'", (cid,))
         conn.commit()
         out["applied"] = True
         return out

@@ -2917,9 +2917,9 @@ def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
     Two passes (idempotent):
     1. Anyone who has bought a TGF Membership but is still flagged
        first_timer / active_guest / NULL → upgrade to active_member.
-    2. Anyone still flagged first_timer who has played more than once
-       (and didn't get caught by pass 1) → demote to active_guest. They're
-       past their first event and should no longer carry the 1st TIMER tag.
+    2. Anyone still flagged first_timer who has PLAYED an event (an active
+       registration on a past-dated event; Kerry 2026-10-18) → active_guest.
+       A first timer is only a first timer until their first round.
     """
     upgraded = conn.execute(
         """UPDATE customers
@@ -2935,12 +2935,22 @@ def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
                    OR current_player_status IN ('first_timer', 'active_guest'))"""
     ).rowcount
 
+    # Kerry 2026-10-18: "A first timer is no longer a first timer after
+    # they've played one time. Only up until that point." Played = an
+    # active registration on an event whose date has passed (the old rule,
+    # "more than one items row", kept a one-event player as a first timer).
     demoted = conn.execute(
         """UPDATE customers
               SET current_player_status = 'active_guest',
                   updated_at = CURRENT_TIMESTAMP
             WHERE current_player_status = 'first_timer'
-              AND (SELECT COUNT(*) FROM items i WHERE i.customer_id = customers.customer_id) > 1"""
+              AND EXISTS (SELECT 1 FROM items i JOIN events e ON e.id = i.event_id
+                           WHERE i.customer_id = customers.customer_id
+                             AND i.parent_item_id IS NULL
+                             AND COALESCE(i.transaction_status, 'active')
+                                 NOT IN ('credited', 'refunded', 'transferred', 'wd')
+                             AND e.event_date IS NOT NULL
+                             AND e.event_date < date('now'))"""
     ).rowcount
 
     if upgraded or demoted:
