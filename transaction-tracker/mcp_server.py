@@ -4573,14 +4573,31 @@ def _scoring_dispatch_inner(url: str, extract: str):
             res = db.merge_events(_src, _tgt)
             if not res:
                 return json.dumps({**out, "error": "merge_events refused"})
+            # Every row that points at the source id follows it (orders AND the
+            # money rows: acct_allocations, godaddy_order_splits, ...), so the
+            # target's financials see them. A table where the target already
+            # has rows of its own (an event's offer list) is a per-event
+            # CONFIG, not a pointer: left in place and reported, never merged.
+            _moved, _left = {}, {}
             with db._connect(None) as _c:
-                _moved = _c.execute("UPDATE items SET event_id = ? WHERE event_id = ?",
-                                    (_tgt, _src)).rowcount
+                for _t in _refs:
+                    try:
+                        if _t != "items" and _c.execute(
+                                f'SELECT COUNT(*) FROM "{_t}" WHERE event_id = ?',
+                                (_tgt,)).fetchone()[0] and _t.endswith("_offers"):
+                            _left[_t] = _refs[_t]
+                            continue
+                        _moved[_t] = _c.execute(
+                            f'UPDATE "{_t}" SET event_id = ? WHERE event_id = ?',
+                            (_tgt, _src)).rowcount
+                    except Exception as _e:
+                        _left[_t] = f"{_refs[_t]} ({_e})"
                 _c.commit()
             db.log_agent_action("mcp-claude", "scoring-event-merge",
-                                f"{_src}->{_tgt} items_moved={_moved}")
+                                f"{_src}->{_tgt} moved={_moved} left={_left}")
             return json.dumps({**out, "applied": True, "merge": res,
-                               "items_event_id_moved": _moved}, indent=2, default=str)
+                               "event_id_moved": _moved, "left_in_place": _left},
+                              indent=2, default=str)
         if cmd == "scoring-alias-add":
             # "<customer canonical name>|<alias name>" — records a NAME
             # alias (e.g. the Venmo account name a member pays under).

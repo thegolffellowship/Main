@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.10";
+window.TGF_VERSION = "2.571.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.11",
+    date: "2026-10-18",
+    title: "Event merge moves the money rows too",
+    changes: [
+      "The dry run of the Fall Championship merge showed acct_allocations (2) and godaddy_order_splits (9) pointing at the duplicate event as well as the 3 orders. scoring-event-merge now moves every row that points at the source event id to the target, so the target's financials include them. A per-event offer list (a table ending in _offers) where the target already has its own rows is left in place and reported, never merged.",
+    ],
+  },
   {
     version: "2.571.10",
     date: "2026-10-18",
