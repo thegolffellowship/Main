@@ -4530,6 +4530,57 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _one = next((int(x) for x in _p if x.isdigit()), None)
             return json.dumps(_sweep(apply=_apply, only_event_id=_one),
                               indent=2, default=str)
+        if cmd == "scoring-event-merge":
+            # "<source_id>|<target_id>[|apply]" (Kerry 2026-10-18: "You
+            # merge."). The Events page's Merge, from the bridge: the
+            # source name becomes an alias of the target (merge_events),
+            # then order rows still carrying the source event_id move to
+            # the target. Dry run (default) lists both events and every
+            # table row that points at the source id; nothing is written.
+            _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            _apply = any(x.lower() == "apply" for x in _p)
+            _ids = [int(x) for x in _p if x.isdigit()]
+            if len(_ids) != 2 or _ids[0] == _ids[1]:
+                return json.dumps({"error": "usage: <source_id>|<target_id>[|apply]"})
+            _src, _tgt = _ids
+            with db._connect(None) as _c:
+                _ev = {r["id"]: dict(r) for r in _c.execute(
+                    "SELECT id, item_name, event_date, chapter FROM events "
+                    "WHERE id IN (?, ?)", (_src, _tgt)).fetchall()}
+                if _src not in _ev or _tgt not in _ev:
+                    return json.dumps({"error": "event not found", "found": list(_ev)})
+                _refs = {}
+                for (_t,) in _c.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+                    try:
+                        _cols = [r[1] for r in _c.execute(f'PRAGMA table_info("{_t}")')]
+                        if "event_id" in _cols:
+                            _n = _c.execute(f'SELECT COUNT(*) FROM "{_t}" WHERE event_id = ?',
+                                            (_src,)).fetchone()[0]
+                            if _n:
+                                _refs[_t] = _n
+                    except Exception:
+                        continue
+                _items = [dict(r) for r in _c.execute(
+                    "SELECT id, customer, customer_id, item_name, holes, transaction_status "
+                    "FROM items WHERE event_id = ? OR lower(item_name) = lower(?)",
+                    (_src, _ev[_src]["item_name"])).fetchall()]
+            out = {"source": _ev[_src], "target": _ev[_tgt],
+                   "rows_pointing_at_source": _refs, "items": _items,
+                   "applied": False}
+            if not _apply:
+                return json.dumps(out, indent=2, default=str)
+            res = db.merge_events(_src, _tgt)
+            if not res:
+                return json.dumps({**out, "error": "merge_events refused"})
+            with db._connect(None) as _c:
+                _moved = _c.execute("UPDATE items SET event_id = ? WHERE event_id = ?",
+                                    (_tgt, _src)).rowcount
+                _c.commit()
+            db.log_agent_action("mcp-claude", "scoring-event-merge",
+                                f"{_src}->{_tgt} items_moved={_moved}")
+            return json.dumps({**out, "applied": True, "merge": res,
+                               "items_event_id_moved": _moved}, indent=2, default=str)
         if cmd == "scoring-alias-add":
             # "<customer canonical name>|<alias name>" — records a NAME
             # alias (e.g. the Venmo account name a member pays under).

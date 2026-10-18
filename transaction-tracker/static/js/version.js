@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.8";
+window.TGF_VERSION = "2.571.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.9",
+    date: "2026-10-18",
+    title: "Event merge from the bridge",
+    changes: [
+      "Kerry 10/18, on Brian Thompson's Fall Championship order landing on a duplicate event: \"You merge.\" New bridge scoring-event-merge:<source_id>|<target_id>[|apply] runs the Events page's Merge (the source name becomes an alias of the target, RSVPs and overrides move, the source row is deleted) and then moves order rows still carrying the source event_id to the target. Dry run by default lists both events, every table row pointing at the source id, and the orders it will move. Action-logged.",
+    ],
+  },
   {
     version: "2.571.8",
     date: "2026-10-17",
