@@ -8,6 +8,22 @@ system: the website is built and run on the Tracker. Reporting runs through
 the Front Desk to the Chief of Staff to Kerry. Rule 3b still holds: every
 member-facing page and word is previewed to Kerry before it goes public.
 
+**RULED, Kerry 2026-10-17 (domain + Austin contact):**
+- "We definitely want everything to be at thegolffellowship.com...not
+  tgf-tracker. that was always meant to be temporary. Our domain has been
+  around since 2007 I believe. I'm sure it's just a matter of godaddy still
+  hosting but discontinuing some of their services, which would also save a lot
+  of money that I spend on the shop each year." = the whole system (public site,
+  member app, manager console) moves to thegolffellowship.com; the domain stays
+  registered at GoDaddy, GoDaddy's website + store plans are cancelled once
+  nothing points at them (CFO to tally the yearly saving). tgf-tracker.up.railway.app
+  is retired behind redirects. Microsoft 365 email DNS records stay untouched.
+- "Austin manager is definitely Robert Straiton. James is just kind of an
+  advisor of sorts." = the site lists Robert Straiton for Austin.
+- "The schedule over the years has been an absolute nightmare. Multiple
+  locations to make it all work. Nothing speaking to one another, everything
+  manual." = the schedule is built once, in the Tracker, and every page reads it.
+
 Kerry 2026-10-17: "Keep all these things in mind for our very soon to have new
 website build that you need to plan out based on our needs, your comments, our
 vision, along with pertinent items from our current website. Really need to
