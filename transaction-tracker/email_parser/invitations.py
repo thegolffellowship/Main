@@ -303,7 +303,7 @@ def audience(event_id: int, db_path=None) -> dict:
                 logger.exception("invitations: lead opt-ins unreadable (left out)")
 
         # Exclusions.
-        out = {"opted_out": 0, "membership_remove": 0, "non_member": 0,
+        out = {"banned": 0, "opted_out": 0, "membership_remove": 0, "non_member": 0,
                "other_chapter": 0, "registered": 0, "no_email": 0}
         # Kerry 10/13: "Austin members should not be getting invites to SA
         # only events…only combined events and their own events." Anyone whose
@@ -330,8 +330,14 @@ def audience(event_id: int, db_path=None) -> dict:
         except Exception:
             nonmem = set(db.vendor_customer_ids(conn))
         registered = _registered_ids(conn, ev)
+        # Kerry 10/18: "Paul WUERDEMAN should be banned and not receiving
+        # invites ever." A banned account never gets an invitation or reminder.
+        banned = {int(r[0]) for r in conn.execute(
+            "SELECT customer_id FROM customers WHERE account_status = 'banned'").fetchall()}
         people = []
         for cid in sorted(why):
+            if cid in banned:
+                out["banned"] += 1; continue
             if cid in optout:
                 out["opted_out"] += 1; continue
             if cid in removed:

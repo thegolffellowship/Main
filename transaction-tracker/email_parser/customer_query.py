@@ -71,9 +71,10 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
 # Kerry's OK (rule 3b), dry run by default, every change logged with its
 # before and after.
 # ---------------------------------------------------------------------------
-SETTABLE = ("gender", "date_of_birth", "ambassador")
+SETTABLE = ("gender", "date_of_birth", "ambassador", "account_status")
 # Columns this function may name in SQL (never the caller's string).
-_COLUMNS = {"gender": "gender", "date_of_birth": "date_of_birth"}
+_COLUMNS = {"gender": "gender", "date_of_birth": "date_of_birth",
+            "account_status": "account_status"}
 
 
 def _parse_dob(value):
@@ -165,6 +166,11 @@ def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_po
         if not ok:
             return {"refused": parsed}
         value = parsed
+    if field == "account_status":
+        # Kerry 10/18: a banned account never receives invites (invitations.py).
+        value = str(value or "").strip().lower()
+        if value not in ("active", "inactive", "banned"):
+            return {"refused": "account_status must be active, inactive or banned"}
     col = _COLUMNS.get(field, field)
     with db._connect(db_path) as conn:
         ok, why = _kerry_ok(conn, kerry_ok_post)

@@ -112,7 +112,10 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
 - **Audience** (Kerry: "That audience works, go with it"), per chapter event:
   active members of the chapter (home chapter by id, else the text) + anyone
   who played that chapter in the 12 months before the event + lead opt-ins
-  (`get_lead_export_rows`, mapped to customer_id); minus the invitation
+  (`get_lead_export_rows`, mapped to customer_id); minus every BANNED
+  account (`customers.account_status = 'banned'`, Kerry 10/18: "Paul
+  WUERDEMAN should be banned and not receiving invites ever"; set through
+  `set_customer_field` field `account_status`), the invitation
   opt-out list (app setting `event_invite_optout`), membership
   `roster_choice = 'remove'`, `course_staff.non_member_ids`, undeliverable
   addresses, anyone already registered, and (Kerry 10/13: "Austin members

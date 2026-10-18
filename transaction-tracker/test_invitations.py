@@ -87,6 +87,16 @@ check("an Austin member who played an SA event still gets no SA-only invite (Ker
       770007 not in {p["customer_id"] for p in a_x["people"]} and a_x["counts"]["excluded"]["other_chapter"] >= 1,
       a_x["counts"])
 check("the TGF/national event is refused", "error" in inv.audience(999999, db_path=DB))
+with db._connect(DB) as conn:
+    conn.execute("UPDATE customers SET account_status = 'banned' WHERE customer_id = 770001")
+    conn.commit()
+a_b = inv.audience(EV, db_path=DB)
+check("a banned account never gets an invitation (Kerry 10/18)",
+      770001 not in {p["customer_id"] for p in a_b["people"]} and a_b["counts"]["excluded"]["banned"] == 1,
+      a_b["counts"])
+with db._connect(DB) as conn:
+    conn.execute("UPDATE customers SET account_status = 'active' WHERE customer_id = 770001")
+    conn.commit()
 
 print("2. The message")
 ev = dict(db.get_connection(DB).execute("SELECT * FROM events WHERE id = ?", (EV,)).fetchone())

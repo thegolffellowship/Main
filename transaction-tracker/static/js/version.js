@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.571.15";
+window.TGF_VERSION = "2.571.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.16",
+    date: "2026-10-18",
+    title: "A banned account never gets an invitation",
+    changes: [
+      "Kerry 10/18: \"Paul WUERDEMAN should be banned and not receiving invites ever.\" The invitation audience now leaves out every customer whose account_status is banned, before any other rule, and counts them under excluded.banned. Invitations, reminders and last calls all build from that one audience, so all three are covered.",
+      "set_customer_field can now set account_status (active, inactive or banned), with the same Kerry-OK post, dry run and action log as gender and date of birth. Brevo already skipped banned accounts; the invitation list was the one sender that did not."
+    ]
+  },
   {
     version: "2.571.15",
     date: "2026-10-18",

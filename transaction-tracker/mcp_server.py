@@ -8657,7 +8657,9 @@ def set_customer_field(customer_ids: list, field: str, value: str, reason: str,
                        kerry_ok_post: int, apply: bool = False) -> str:
     """WRITE one customer field (Chief of Staff #1048/#1060): gender (M, F
     or NULL) or date_of_birth (YYYY-MM-DD or M/D/YYYY, NULL clears; Kerry
-    2026-10-06); ambassador goes through Side Games' table.
+    2026-10-06) or account_status (active, inactive or banned; a banned
+    account never gets an invitation, Kerry 2026-10-18); ambassador goes
+    through Side Games' table.
     Refused unless `kerry_ok_post` is a mailbox post by Kerry himself, or by
     platform-claude / front-desk QUOTING him verbatim (KERRY: "…"); a
     lane's own post that mentions Kerry is not his OK (rule 3b). Dry run unless apply=True. Every change is logged with
