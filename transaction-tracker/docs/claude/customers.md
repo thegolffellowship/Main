@@ -1456,22 +1456,29 @@ Retirement: when registration asks gender up front, turn the dial off, remove th
 module and chip, and drop the column once no row reads `inferred_from_tees`.
 Guard `test_gender_infer.py`.
 
-## Classifying customers with no status (v2.571.12, Kerry 2026-10-18)
+## Classifying customers with no status (v2.571.12-15, Kerry 2026-10-18)
 
 Kerry: "Yes please classify" (about a fifth of every invitation went to
-customers whose `current_player_status` was NULL). `email_parser/status_classify.py`
-`classify(apply)` writes a status ONLY on NULL rows, by the existing rules: a
-membership term -> active_member (current) / expired_member (lapsed);
-otherwise by played events (active registrations on past-dated events):
-last played over 12 months ago -> inactive, played at least once ->
-active_guest, not played yet but registered for an upcoming event ->
-first_timer, neither -> left NULL (a contact or lead) and reported. **Kerry
-2026-10-18: "A first timer is no longer a first timer after they've played
-one time. Only up until that point." / "A first timer is only someone who
-registered for an event thru the end of that event."** An event counts as
-played from the day AFTER it, by the Central date (never on event day, and
-not at 7 PM when the UTC date rolls over). So existing first_timers who have
-played move to active_guest too, here and in the boot step
-`_migrate_autocorrect_player_status` (which used to wait for a second items
-row); vendors and course contacts are skipped. Bridge
+customers whose `current_player_status` was NULL), then three rulings the
+same morning:
+- "A first timer is no longer a first timer after they've played one time."
+- "A first timer is only someone who registered for an event thru the end of that event."
+- **"A first timer can be either a guest or a member. So you could say someone
+  is a member but it's also their first time to play. Same as guest. So it's
+  almost really a sub tag."**
+
+So `first_timer` is no longer a STATUS. Status is member / expired / guest /
+inactive; FIRST TIME is a per-event TAG derived from history
+(`_mark_first_timers` in database.py: no rounds before that event, so it holds
+through the end of the first event; plus the order's own 1ST TIMER box). The
+boot step `_migrate_autocorrect_player_status` turns any stored `first_timer`
+into `active_member` (membership buyers) or `active_guest`; an order marked
+1ST TIMER now sets a new profile to `active_guest` (`_STATUS_MAP`); the
+Customers page no longer offers 1ST TIMER as a status.
+
+`email_parser/status_classify.py` `classify(apply)` writes a status ONLY on
+NULL rows: membership term -> active_member (current) / expired_member
+(lapsed); otherwise last played over 12 months ago -> inactive; played, or
+registered for an upcoming event -> active_guest; neither -> left NULL (a
+contact or lead) and reported; vendors and course contacts skipped. Bridge
 `scoring-status-classify[:apply]`, dry run by default.

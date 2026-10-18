@@ -2917,9 +2917,12 @@ def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
     Two passes (idempotent):
     1. Anyone who has bought a TGF Membership but is still flagged
        first_timer / active_guest / NULL → upgrade to active_member.
-    2. Anyone still flagged first_timer who has PLAYED an event (an active
-       registration on a past-dated event; Kerry 2026-10-18) → active_guest.
-       A first timer is only a first timer until their first round.
+    2. Anyone still flagged first_timer → active_guest (pass 1 already
+       made the membership buyers members). Kerry 2026-10-18: "A first
+       timer can be either a guest or a member ... it's almost really a
+       sub tag." First time is a per-event TAG derived from history
+       (_mark_first_timers: no rounds before that event, so it lasts
+       through the end of the first event), never a stored status.
     """
     upgraded = conn.execute(
         """UPDATE customers
@@ -2935,25 +2938,11 @@ def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
                    OR current_player_status IN ('first_timer', 'active_guest'))"""
     ).rowcount
 
-    # Kerry 2026-10-18: "A first timer is no longer a first timer after
-    # they've played one time. Only up until that point." / "...thru the
-    # end of that event." Played = an active registration on an event whose
-    # date is before today in CENTRAL time (never on the event day itself,
-    # and not at 7 PM when the UTC date rolls over) (the old rule,
-    # "more than one items row", kept a one-event player as a first timer).
     demoted = conn.execute(
         """UPDATE customers
               SET current_player_status = 'active_guest',
                   updated_at = CURRENT_TIMESTAMP
-            WHERE current_player_status = 'first_timer'
-              AND EXISTS (SELECT 1 FROM items i JOIN events e ON e.id = i.event_id
-                           WHERE i.customer_id = customers.customer_id
-                             AND i.parent_item_id IS NULL
-                             AND COALESCE(i.transaction_status, 'active')
-                                 NOT IN ('credited', 'refunded', 'transferred', 'wd')
-                             AND e.event_date IS NOT NULL
-                             AND e.event_date < ?)""",
-        (today_central_str(),),
+            WHERE current_player_status = 'first_timer'"""
     ).rowcount
 
     if upgraded or demoted:
@@ -6943,7 +6932,10 @@ def _lookup_customer_id(conn: sqlite3.Connection,
 _STATUS_MAP = {
     "MEMBER":    "active_member",
     "GUEST":     "active_guest",
-    "1ST TIMER": "first_timer",
+    # Kerry 2026-10-18: "A first timer can be either a guest or a member
+    # ... it's almost really a sub tag." First time is derived per event
+    # (_mark_first_timers: no rounds before the event), never a status.
+    "1ST TIMER": "active_guest",
 }
 
 

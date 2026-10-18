@@ -1895,7 +1895,6 @@
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Member Status</div>
             <select class="modal-input cust-edit-input" data-field="current_player_status" style="width:auto; padding:0.3rem; font-size:0.82rem;">
                 <option value="">— Not Set —</option>
-                <option value="first_timer" ${(customer.current_player_status === 'first_timer') ? 'selected' : ''}>1ST TIMER</option>
                 <option value="active_guest" ${(customer.current_player_status === 'active_guest') ? 'selected' : ''}>GUEST</option>
                 <option value="active_member" ${(customer.current_player_status === 'active_member') ? 'selected' : ''}>MEMBER</option>
                 <option value="member_plus" ${(customer.current_player_status === 'member_plus') ? 'selected' : ''}>MEMBER+</option>

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.14";
+window.TGF_VERSION = "2.571.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.15",
+    date: "2026-10-18",
+    title: "First timer is a tag, not a status",
+    changes: [
+      "Kerry 10/18: \"A first timer can be either a guest or a member ... it's almost really a sub tag.\" Status is now member, expired, guest or inactive only. First time is a per-event tag worked out from history (no rounds before that event, so it lasts through the end of the first event), which the rosters and pairings already compute. Any stored first-timer status becomes guest (or member for membership buyers) at boot, an order marked 1ST TIMER sets a new profile to guest, the Customers page no longer offers 1ST TIMER as a status, and the classifier never assigns it.",
+    ],
+  },
   {
     version: "2.571.14",
     date: "2026-10-18",

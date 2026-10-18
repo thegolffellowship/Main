@@ -13,15 +13,17 @@ only upgrades membership buyers):
 2. Otherwise by what they have played (active registrations, not credited /
    refunded / transferred / WD, on events whose date has passed):
    - last played more than 12 months ago -> inactive;
-   - played at least once -> active_guest;
-   - not played yet but registered for an upcoming event -> first_timer;
+   - played at least once, or registered for an upcoming event -> active_guest;
    - neither -> left as is (a contact or lead), reported.
    Kerry 10/18: "A first timer is no longer a first timer after they've
    played one time. Only up until that point." and "A first timer is only
    someone who registered for an event thru the end of that event." So an
    event counts as played from the day AFTER it (Central), never on the day.
-3. Anyone ALREADY marked first_timer who has played an event is moved to
-   active_guest by the same rule (reported separately).
+   Kerry 10/18 again: "A first timer can be either a guest or a member ...
+   it's almost really a sub tag." So no one is ever GIVEN first_timer: the
+   first-time tag is derived per event (database._mark_first_timers). Any
+   first_timer still stored becomes active_guest (or active_member through
+   the membership pass at boot).
 Vendors and course contacts (`course_staff.non_member_ids`) are never
 classified. Only NULL rows are ever written. Dry run by default.
 """
@@ -69,11 +71,10 @@ def classify(apply: bool = False, db_path=None) -> dict:
                    AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
                    AND e.event_date >= ?""", (*_SKIP, today)).fetchall()}
         stale_ft = [r["customer_id"] for r in conn.execute(
-            "SELECT customer_id FROM customers WHERE current_player_status = 'first_timer'").fetchall()
-            if r["customer_id"] in played]
+            "SELECT customer_id FROM customers WHERE current_player_status = 'first_timer'").fetchall()]
 
         plan = {"active_member": [], "expired_member": [], "inactive": [],
-                "first_timer": [], "active_guest": []}
+                "active_guest": []}
         left, skipped = [], []
         for r in rows:
             cid = r["customer_id"]
@@ -86,14 +87,14 @@ def classify(apply: bool = False, db_path=None) -> dict:
                 n, last = played[cid]
                 to = "inactive" if (last or "") < cutoff else "active_guest"
             elif cid in upcoming:
-                to = "first_timer"
+                to = "active_guest"
             else:
                 left.append({"customer_id": cid, "name": name}); continue
             plan[to].append({"customer_id": cid, "name": name})
 
         out = {"null_status": len(rows), "counts": {k: len(v) for k, v in plan.items()},
                "left_no_play": len(left), "skipped_non_member": len(skipped),
-               "first_timers_who_played_to_guest": len(stale_ft),
+               "first_timer_status_to_guest": len(stale_ft),
                "examples": {k: v[:5] for k, v in plan.items()},
                "left_examples": left[:10], "applied": False}
         if not apply:
