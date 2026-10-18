@@ -18,6 +18,12 @@ member-facing page and word is previewed to Kerry before it goes public.
   registered at GoDaddy, GoDaddy's website + store plans are cancelled once
   nothing points at them (CFO to tally the yearly saving). tgf-tracker.up.railway.app
   is retired behind redirects. Microsoft 365 email DNS records stay untouched.
+- **Email caution (CFO #1999, 10/18):** TGF's Microsoft 365 email is bought
+  THROUGH GoDaddy (with the Email Encryption add-on). Every cancel names the
+  exact product (Websites + Marketing, Online Store), never "close GoDaddy";
+  the M365 subscription and its DNS records (MX, autodiscover, SPF/DKIM)
+  stay exactly as they are at cutover. tgfclub.com / tgftour.com renew 11/4
+  ($45.98 + tax), Kerry's call whether they're still used.
 - "Austin manager is definitely Robert Straiton. James is just kind of an
   advisor of sorts." = the site lists Robert Straiton for Austin.
 - "The schedule over the years has been an absolute nightmare. Multiple
