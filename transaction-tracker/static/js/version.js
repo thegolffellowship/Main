@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.571.17";
+window.TGF_VERSION = "2.571.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.18",
+    date: "2026-10-18",
+    title: "An order option glued to the event title no longer makes a new event",
+    changes: [
+      "Kerry 10/18: \"More money coming thru that isn't finding its way onto the events.\" Tom Donovan's Fall Championship order (R609146228) printed the next option on the title's line, and v2.571.10's title restore took it into the name (\"... | Kissing Tree GOLF or COMPETE?: EVENT Only ...\"), which created a dateless event 3337. restore_full_title now refuses a suffix carrying \"?\" or \":\" (an option label; a venue never has one) and keeps the short name, which the sync already aliases to the one \"<name> | ...\" event.",
+      "Second guard in sync_events_from_items: a name that starts with exactly one recent or upcoming event's full name plus more text is aliased to that event instead of creating a new one. Event 3337 merged into 3305 and the item renamed to the shop title; Tom Donovan is on the Championship. Guard test_event_title_bar.py."
+    ]
+  },
   {
     version: "2.571.17",
     date: "2026-10-18",

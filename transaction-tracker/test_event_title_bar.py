@@ -37,6 +37,10 @@ check("a full name is left alone",
 check("a name with no bar in the email is left alone",
       restore_full_title("s9.29 SILVERHORN", body) == "s9.29 SILVERHORN")
 check("empty stays empty", restore_full_title("", body) == "")
+body2 = "s18.12 FALL CHAMPIONSHIP | Kissing Tree GOLF or COMPETE?: EVENT Only - No Additional Games $170.00"
+check("an option glued after the venue is not taken into the name (Donovan 10/18)",
+      restore_full_title("s18.12 FALL CHAMPIONSHIP", body2) == "s18.12 FALL CHAMPIONSHIP",
+      restore_full_title("s18.12 FALL CHAMPIONSHIP", body2))
 
 print("event sync")
 soon = (date.today() + timedelta(days=13)).isoformat()
@@ -53,6 +57,16 @@ al = c.execute("SELECT canonical_event_name FROM event_aliases WHERE alias_name 
 check("no duplicate event is created", n == 1, n)
 check("the short name is an alias of the real event",
       al and al[0] == "s18.12 FALL CHAMPIONSHIP | Kissing Tree", al)
+c.execute("INSERT INTO items (email_uid, item_index, merchant, order_date, customer, item_name, course) "
+          "VALUES ('u2', 0, 'The Golf Fellowship', ?, 'Tom Donovan', "
+          "'s18.12 FALL CHAMPIONSHIP | Kissing Tree GOLF or COMPETE?: EVENT Only - No Additional Ga', 'Kissing Tree')",
+          (date.today().isoformat(),))
+c.commit()
+db.sync_events_from_items(DB)
+n = c.execute("SELECT COUNT(*) FROM events WHERE item_name LIKE 's18.12%'").fetchone()[0]
+al2 = c.execute("SELECT canonical_event_name FROM event_aliases WHERE alias_name LIKE '%COMPETE%'").fetchone()
+check("a name with option text glued on creates no event", n == 1, n)
+check("it is an alias of the real event", al2 and al2[0] == "s18.12 FALL CHAMPIONSHIP | Kissing Tree", al2)
 
 print()
 if F:

@@ -30376,6 +30376,25 @@ def sync_events_from_items(db_path: str | Path | None = None) -> dict:
                     alias_set.add(name.lower())
                     skipped_aliased += 1
                     continue
+            # The other direction (Tom Donovan R609146228, 10/18): the
+            # printed title with the next order option glued on ("s18.12
+            # FALL CHAMPIONSHIP | Kissing Tree GOLF or COMPETE?: EVENT
+            # Only ...") is still that event. Alias it when exactly one
+            # recent or upcoming event's full name starts this name.
+            _head = conn.execute(
+                "SELECT item_name FROM events "
+                "WHERE lower(?) LIKE lower(item_name) || ' %' "
+                "AND event_date IS NOT NULL AND event_date >= date('now', '-120 days')",
+                (name.strip(),),
+            ).fetchall()
+            if len(_head) == 1:
+                conn.execute(
+                    "INSERT OR IGNORE INTO event_aliases (alias_name, canonical_event_name) VALUES (?, ?)",
+                    (name, _head[0]["item_name"]),
+                )
+                alias_set.add(name.lower())
+                skipped_aliased += 1
+                continue
             try:
                 conn.execute(
                     """INSERT INTO events (item_name, course, chapter, event_type)

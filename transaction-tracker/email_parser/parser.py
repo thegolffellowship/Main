@@ -576,7 +576,14 @@ def restore_full_title(name: str | None, body: str) -> str | None:
     if not m:
         return name
     suffix = m.group(1).strip()
-    return f"{name.strip()} | {suffix}" if suffix else name
+    # The store can print the next order option on the same line
+    # ("| Kissing Tree GOLF or COMPETE?: EVENT Only ...", Tom Donovan
+    # R609146228, 10/18). An option label carries "?" or ":"; a venue
+    # never does. Then keep the short name: the event sync aliases it to
+    # the one "<name> | ..." event.
+    if not suffix or "?" in suffix or ":" in suffix:
+        return name
+    return f"{name.strip()} | {suffix}"
 
 
 def _normalize_item_name(name: str | None) -> str | None:
