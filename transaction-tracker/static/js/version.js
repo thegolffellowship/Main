@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.571.16";
+window.TGF_VERSION = "2.571.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.17",
+    date: "2026-10-18",
+    title: "Ending a membership for a member who no longer wants one",
+    changes: [
+      "Kerry 10/18: \"Randy no longer wants to be a member so he can be noted as such.\" New memberships.end_membership (bridge scoring-membership-end:<customer_id>|<kerry-ok post>[|apply], dry run by default): every term is marked roster_choice remove, a term still running ends yesterday with its original end date kept in notes, every unsent notice is stamped so no renewal, day-of or lapsed email goes out, and the status becomes expired_member. Before this, setting the status alone was undone by the nightly status sync while a paid term was still running.",
+      "No money moves: the term's price stays as paid. Guard test_membership_end.py."
+    ]
+  },
   {
     version: "2.571.16",
     date: "2026-10-18",

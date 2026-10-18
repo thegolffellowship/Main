@@ -1482,3 +1482,20 @@ NULL rows: membership term -> active_member (current) / expired_member
 registered for an upcoming event -> active_guest; neither -> left NULL (a
 contact or lead) and reported; vendors and course contacts skipped. Bridge
 `scoring-status-classify[:apply]`, dry run by default.
+
+
+## Ending a membership early (v2.571.17)
+
+Kerry 2026-10-18: "Randy no longer wants to be a member so he can be noted as
+such." `memberships.end_membership(customer_id, kerry_ok_post, apply=False)`,
+bridge `scoring-membership-end:<customer_id>|<kerry-ok post>[|apply]`:
+- every term gets `roster_choice = 'remove'` (the same flag the lapsed-notice
+  "Remove me" link sets, which also keeps him off invitations);
+- a term still running ends YESTERDAY (Central); the original end date is kept
+  in the term's notes, so the change can be reversed by hand;
+- every unsent notice column (30d / 7d / day-of / lapsed) and
+  `roster_admin_notified_at` is stamped, so the shortened term sends nothing;
+- `current_player_status = 'expired_member'` plus a `former` status-history row.
+Setting the status alone does not hold: `sync_player_status_with_terms`
+upgrades anyone with a running term back to active_member. No money moves.
+Guard `test_membership_end.py`.

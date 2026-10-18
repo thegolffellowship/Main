@@ -1572,3 +1572,73 @@ def set_term_price_paid(term_id: int, amount, db_path=None, apply: bool = False)
                          "updated_at = datetime('now') WHERE id = ?", (amt, int(term_id)))
             conn.commit()
     return {"applied": bool(apply), "term": before, "price_paid_after": amt}
+
+
+def end_membership(customer_id: int, kerry_ok_post, reason: str = "",
+                   apply: bool = False, db_path=None) -> dict:
+    """A member who no longer wants to be one (Kerry 2026-10-18: "Randy no
+    longer wants to be a member so he can be noted as such.").
+
+    Every term of the customer gets roster_choice = 'remove'. A term still
+    running is ended yesterday (Central), its original end kept in notes, so
+    `sync_player_status_with_terms` reads him as expired_member and never
+    upgrades him back. Every unsent notice column is stamped, so no renewal,
+    day-of or "your membership lapsed" email goes out for the shortened
+    term. No money moves. Needs a Kerry-OK post; dry run by default.
+    """
+    from datetime import timedelta
+    from email_parser.customer_query import _kerry_ok
+    from email_parser.timezone_utils import today_central
+    today = today_central()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    cols = [c for c, _o, _l in NOTICE_WINDOWS]
+    with _connect(db_path) as conn:
+        ensure_membership_tables(conn)
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+        if not ok:
+            return {"refused": f"rule 3b: {why}"}
+        cust = conn.execute(
+            "SELECT customer_id, first_name, last_name, current_player_status "
+            "FROM customers WHERE customer_id = ?", (int(customer_id),)).fetchone()
+        if not cust:
+            return {"refused": f"no customer {customer_id}"}
+        terms = [dict(r) for r in conn.execute(
+            "SELECT * FROM customer_memberships WHERE customer_id = ? ORDER BY started_at",
+            (int(customer_id),)).fetchall()]
+        plan = []
+        for t in terms:
+            running = (t["expires_at"] or "") >= today.isoformat()
+            plan.append({"term_id": t["id"], "started_at": t["started_at"],
+                         "expires_at": t["expires_at"],
+                         "new_expires_at": yesterday if running else t["expires_at"],
+                         "roster_choice": "remove",
+                         "price_paid": t.get("price_paid")})
+        out = {"customer_id": cust["customer_id"],
+               "name": f"{cust['first_name'] or ''} {cust['last_name'] or ''}".strip(),
+               "status_before": cust["current_player_status"], "status_after": "expired_member",
+               "authority": why, "terms": plan, "dry_run": not apply}
+        if not apply:
+            return out
+        note = f"ended early {today.isoformat()}: no longer wants to be a member; authority {why}"
+        if reason:
+            note += f"; {reason}"
+        for t, p in zip(terms, plan):
+            sets = ["roster_choice = 'remove'", "roster_choice_at = datetime('now')",
+                    "updated_at = datetime('now')"]
+            params = []
+            if p["new_expires_at"] != t["expires_at"]:
+                sets.append("expires_at = ?")
+                params.append(p["new_expires_at"])
+                sets.append("notes = ?")
+                params.append(((t.get("notes") or "") + f" | was to {t['expires_at']}; {note}").strip(" |"))
+            for c in cols + ["roster_admin_notified_at"]:
+                sets.append(f"{c} = COALESCE({c}, datetime('now'))")
+            conn.execute(f"UPDATE customer_memberships SET {', '.join(sets)} WHERE id = ?",
+                         (*params, t["id"]))
+        conn.execute(
+            "UPDATE customers SET current_player_status = 'expired_member', "
+            "updated_at = CURRENT_TIMESTAMP WHERE customer_id = ?", (int(customer_id),))
+        _write_status_history(conn, [int(customer_id)], "former", note)
+        conn.commit()
+    out["applied"] = True
+    return out

@@ -1884,6 +1884,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
       scoring-import-status        progress of the running/last import
       scoring-customer-status:<customer_id>|<status_name>[|<note>]  set a customer's status on record (member / member_plus / former / guest / 1st_timer); audited; for pre-Tracker history Kerry states (e.g. "Vazquez, Cordero were members")
+      scoring-membership-end:<customer_id>|<kerry-ok post>[|apply]  a member who no longer wants to be one (Kerry 2026-10-18): every term roster_choice remove, a running term ends yesterday (original end kept in notes), every unsent notice stamped so no renewal/lapsed email, status expired_member; no money moves; dry run default
       scoring-member-rate-check[:<since>]  customers who paid the MEMBER rate on an event with no membership purchase and no member status (Kerry 2026-09-09, Kyle Compton)
       scoring-contest-flags-audit[:apply][|all]  memberships not at $50/$75 (|all = every one) + SEASON CONTESTS items: stored contest flags vs the option lines printed on the order email (Graph fetch, no AI); apply writes the form's answers
       scoring-mp-reconcile75[:<season>|<chapter>|<allow>]  match-play reconcile
@@ -4342,6 +4343,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _res = approve_insider(_subj, _html, dry_run=_dry)
             _audit("scoring-insider-approve", f"subject={_res.get('subject')} created={_res.get('created')} "
                    f"campaign_id={_res.get('campaign_id')} lint={_res.get('lint')} dry={_dry}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-membership-end":
+            # "<customer_id>|<kerry-ok post>[|apply]" — a member who no longer
+            # wants to be one (Kerry 2026-10-18): roster_choice remove, running
+            # terms end yesterday, notices stamped, status expired_member.
+            from email_parser.memberships import end_membership
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 2 or not _p[0].isdigit() or not _p[1].isdigit():
+                return json.dumps({"error": "usage: scoring-membership-end:<customer_id>|<kerry-ok post>[|apply]"})
+            _apply = _p[-1].lower() == "apply"
+            _res = end_membership(int(_p[0]), int(_p[1]), apply=_apply)
+            if _res.get("applied"):
+                _audit("scoring-membership-end", f"customer {_p[0]} authority #{_p[1]}")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-membership-terms-dedupe":
             # "[apply]" — one item, one term: delete the duplicate terms the
