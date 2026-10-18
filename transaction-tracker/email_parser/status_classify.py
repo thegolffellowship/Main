@@ -17,7 +17,9 @@ only upgrades membership buyers):
    - not played yet but registered for an upcoming event -> first_timer;
    - neither -> left as is (a contact or lead), reported.
    Kerry 10/18: "A first timer is no longer a first timer after they've
-   played one time. Only up until that point."
+   played one time. Only up until that point." and "A first timer is only
+   someone who registered for an event thru the end of that event." So an
+   event counts as played from the day AFTER it (Central), never on the day.
 3. Anyone ALREADY marked first_timer who has played an event is moved to
    active_guest by the same rule (reported separately).
 Vendors and course contacts (`course_staff.non_member_ids`) are never
@@ -39,8 +41,9 @@ def classify(apply: bool = False, db_path=None) -> dict:
     try:
         ensure_membership_tables(conn)
         skip_ids = non_member_ids(conn)
-        today = date.today().isoformat()
-        cutoff = (date.today() - timedelta(days=365)).isoformat()
+        from email_parser.timezone_utils import today_central
+        today = today_central().isoformat()
+        cutoff = (today_central() - timedelta(days=365)).isoformat()
         rows = conn.execute(
             "SELECT customer_id, first_name, last_name FROM customers "
             "WHERE current_player_status IS NULL").fetchall()
@@ -57,14 +60,14 @@ def classify(apply: bool = False, db_path=None) -> dict:
                       FROM items i JOIN events e ON e.id = i.event_id
                      WHERE i.customer_id IS NOT NULL AND i.parent_item_id IS NULL
                        AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
-                       AND e.event_date IS NOT NULL AND e.event_date <= ?
+                       AND e.event_date IS NOT NULL AND e.event_date < ?
                      GROUP BY i.customer_id""", (*_SKIP, today)).fetchall():
             played[r["customer_id"]] = (r["n"], r["last_date"])
         upcoming = {r[0] for r in conn.execute(
             f"""SELECT DISTINCT i.customer_id FROM items i JOIN events e ON e.id = i.event_id
                  WHERE i.customer_id IS NOT NULL AND i.parent_item_id IS NULL
                    AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
-                   AND e.event_date > ?""", (*_SKIP, today)).fetchall()}
+                   AND e.event_date >= ?""", (*_SKIP, today)).fetchall()}
         stale_ft = [r["customer_id"] for r in conn.execute(
             "SELECT customer_id FROM customers WHERE current_player_status = 'first_timer'").fetchall()
             if r["customer_id"] in played]

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.13";
+window.TGF_VERSION = "2.571.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.14",
+    date: "2026-10-18",
+    title: "First timer through the end of their first event",
+    changes: [
+      "Kerry 10/18: \"A first timer is only someone who registered for an event thru the end of that event.\" An event now counts as played from the day after it, by the Central date, so a first timer keeps the label all through event day (the check used the UTC date, which rolls over at 7 PM Central during an event night).",
+    ],
+  },
   {
     version: "2.571.13",
     date: "2026-10-18",

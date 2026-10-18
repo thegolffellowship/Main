@@ -1467,7 +1467,10 @@ last played over 12 months ago -> inactive, played at least once ->
 active_guest, not played yet but registered for an upcoming event ->
 first_timer, neither -> left NULL (a contact or lead) and reported. **Kerry
 2026-10-18: "A first timer is no longer a first timer after they've played
-one time. Only up until that point."** So existing first_timers who have
+one time. Only up until that point." / "A first timer is only someone who
+registered for an event thru the end of that event."** An event counts as
+played from the day AFTER it, by the Central date (never on event day, and
+not at 7 PM when the UTC date rolls over). So existing first_timers who have
 played move to active_guest too, here and in the boot step
 `_migrate_autocorrect_player_status` (which used to wait for a second items
 row); vendors and course contacts are skipped. Bridge

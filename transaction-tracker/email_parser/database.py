@@ -2936,8 +2936,10 @@ def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
     ).rowcount
 
     # Kerry 2026-10-18: "A first timer is no longer a first timer after
-    # they've played one time. Only up until that point." Played = an
-    # active registration on an event whose date has passed (the old rule,
+    # they've played one time. Only up until that point." / "...thru the
+    # end of that event." Played = an active registration on an event whose
+    # date is before today in CENTRAL time (never on the event day itself,
+    # and not at 7 PM when the UTC date rolls over) (the old rule,
     # "more than one items row", kept a one-event player as a first timer).
     demoted = conn.execute(
         """UPDATE customers
@@ -2950,7 +2952,8 @@ def _migrate_autocorrect_player_status(conn: sqlite3.Connection) -> int:
                              AND COALESCE(i.transaction_status, 'active')
                                  NOT IN ('credited', 'refunded', 'transferred', 'wd')
                              AND e.event_date IS NOT NULL
-                             AND e.event_date < date('now'))"""
+                             AND e.event_date < ?)""",
+        (today_central_str(),),
     ).rowcount
 
     if upgraded or demoted:
