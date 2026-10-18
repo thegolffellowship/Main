@@ -1455,3 +1455,15 @@ build: the manager's "F? confirm" chip (Confirm or M → source `manager`).
 Retirement: when registration asks gender up front, turn the dial off, remove the
 module and chip, and drop the column once no row reads `inferred_from_tees`.
 Guard `test_gender_infer.py`.
+
+## Classifying customers with no status (v2.571.12, Kerry 2026-10-18)
+
+Kerry: "Yes please classify" (about a fifth of every invitation went to
+customers whose `current_player_status` was NULL). `email_parser/status_classify.py`
+`classify(apply)` writes a status ONLY on NULL rows, by the existing rules: a
+membership term -> active_member (current) / expired_member (lapsed);
+otherwise by played events (active registrations on dated, played events):
+last played over 12 months ago -> inactive, one event -> first_timer, two or
+more -> active_guest; never played -> left NULL (a contact or lead) and
+reported; vendors and course contacts are skipped. Bridge
+`scoring-status-classify[:apply]`, dry run by default.

@@ -4530,6 +4530,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _one = next((int(x) for x in _p if x.isdigit()), None)
             return json.dumps(_sweep(apply=_apply, only_event_id=_one),
                               indent=2, default=str)
+        if cmd == "scoring-status-classify":
+            # "" = dry run | "apply" (Kerry 2026-10-18: "Yes please classify"):
+            # a status for every customer with none, by the existing rules
+            # (email_parser/status_classify.py). Only NULL rows are written.
+            from email_parser.status_classify import classify as _classify
+            _ap = (arg or "").strip().lower() == "apply"
+            if _ap:
+                db.log_agent_action("mcp-claude", "scoring-status-classify", "apply")
+            return json.dumps(_classify(apply=_ap), indent=2, default=str)
         if cmd == "scoring-event-merge":
             # "<source_id>|<target_id>[|apply]" (Kerry 2026-10-18: "You
             # merge."). The Events page's Merge, from the bridge: the

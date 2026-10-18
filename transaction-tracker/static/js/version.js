@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.11";
+window.TGF_VERSION = "2.571.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.12",
+    date: "2026-10-18",
+    title: "Classify customers with no status",
+    changes: [
+      "Kerry 10/18: \"Yes please classify.\" About a fifth of every invitation went to customers with no status on file. New email_parser/status_classify.py gives each NULL-status customer one by the rules the system already uses: a membership term makes them an active or expired member; otherwise their played events make them inactive (last played over 12 months ago), a 1st Timer (one event) or a guest (two or more). People who never played are left alone and reported; vendors and course contacts are skipped; a status already on file is never changed. Bridge scoring-status-classify[:apply], dry run by default.",
+    ],
+  },
   {
     version: "2.571.11",
     date: "2026-10-18",
