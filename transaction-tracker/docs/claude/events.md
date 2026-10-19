@@ -2572,6 +2572,57 @@ rules since v2.525.9:
   holes keeps his card's pops, marked `team_pops_src = "card"`. Same rule
   as the phone card, the printed scorecard and `live_scoring.game_team_net`.
 
+## The board's SUMMARY tab, projected WON, pots, Match Play (Kerry 2026-10-19, B10-B12)
+
+Spec: `docs/claude/handoff-2026-10-19-leaderboard-review.md` §12-13. The
+server half is `email_parser/board_summary.py`; `attach()` decorates the
+`/api/events-leaderboard/event` payload after `get_event_leaderboard` and
+writes nothing. Guards `test_lb_summary.py` (server) and
+`test_lb_summary.js` (the page's own renderer, headless).
+
+- **`board_state`**: `upcoming` (no card), `live` (a hole is out),
+  `in_review` (every score in, money showing), `final` (closeout fired:
+  payouts recorded in `tgf_payouts`, or the auto-payouts preview says every
+  card is final). An Unlock puts a hole back out, so the board goes back to
+  LIVE and SUMMARY leaves with it.
+- **SUMMARY (B10)**: shown at IN REVIEW and FINAL only (never on a
+  no-games event, never while the money is held), prepended as the FIRST
+  tab and the landing tab, its own green colour with an IN REVIEW / FINAL
+  badge (`evlbSummaryShown`, `evlbSummaryHtml` in contests.html). One block
+  per game in tab order (Team, MVP, Net by flight, Gross, Skins, CTPs + HIO)
+  with winners, amounts and a "See the board" link. It reads the same
+  `won` / `teams[].purse` / `proxies` the WON columns read, so a changed
+  figure moves here too.
+- **Projected WON (B11)**: while LIVE on an entry-mode event the server
+  sends `projected` = the SAME assembly the auto-payouts preview runs,
+  `assemble_event_game_payouts(name, projected=True, lb=board)`: the engine
+  on the LIVE entered cards (`event_engine_state(live=True)`, the board's
+  own TEMP overlay), a game still in play pays what it would now, Team Net
+  and CTPs off the board's teams and phone holders, City MVP off the points
+  board's leader (`_projected_city_mvp`; TGF MVP is not projected).
+  Customer ids resolve as the preview does (`auto_payouts._with_ids`),
+  team purses through `team_slot_money`. Cached per event per score-entry
+  version. The page blanks the record money as before, then fills the WON
+  column with the projection (`evlbBlankMoneyProj`), header `Won PROJ.`,
+  cells muted italic, no win tints. Nothing records projected rows; the
+  default assembly path is unchanged.
+- **Pots (B11)**: `pots` from the flight board's AMOUNTS (`individual_net`,
+  `individual_gross`, `skins`: total, per-flight pot, players, places) and
+  the live matrix (team 1st/2nd, CTP values). Flight bands read
+  "LOW FLIGHT · 10 players · pot $90 (1st $60 · 2nd $30)"; TEAM, MVP and
+  CTPs get one pot line above the board (MVP = the MVP money on the board).
+- **Money per tab**: audited, no mixing found. `EVLB_GAME_CATS` gives each
+  payout category to one tab (Team = team_net, MVP = mvp + tgf_mvp, Net,
+  Gross, Skins; CTP / HIO only on CTPs); the projection follows the same map.
+- **Match Play (B12)**: `match_play` = `cmp_matches` rows whose `event_id`
+  is this event plus `cmp_bracket` knockout pairs with that `event_id` (or,
+  like `cmp_get_bracket`, whose hardened GG detail names the event code).
+  A "Match Play" tab is appended when there is any, rendering the Season
+  Contests' own `mpMatchCardFromMatch` cards inside `.mpv2`, read-only.
+  **Gap:** a pool match recorded without an `event_id` (a private match,
+  or one the manager never linked) is not shown; nothing infers it from
+  the date.
+
 ## Event Setup: GAMES OFFERED (v2.475.0, Kerry ratified 2026-09-21)
 
 Kerry: "Yes, add a Games Offered setting to Event Setup. I guess we've

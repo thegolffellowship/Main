@@ -27081,12 +27081,16 @@ def _variant_pins_for(board: dict | None) -> dict:
     return out
 
 
-def event_engine_state(event_name: str, db_path=None) -> dict:
+def event_engine_state(event_name: str, db_path=None, live: bool = False) -> dict:
     """The engine's round state for a real event, built IN MEMORY from its
     scorecards (`scoring_rounds` / `scoring_holes`, whichever source wrote
     them — GG import or entered scores via G-0). Writes NOTHING: this is
     `ls_seed_session_from_event` without the sandbox, for the paths that
-    run hourly (payout assembly) and must not grow sandbox rows."""
+    run hourly (payout assembly) and must not grow sandbox rows.
+
+    live=True reads an ENTRY-MODE event's live entered cards (the same TEMP
+    overlay the EVENTS board reads, `_entry_mode_overlay`) instead of the
+    published record — the board's PROJECTED money (Kerry 10/19, B11)."""
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
         ev = conn.execute("SELECT * FROM events WHERE lower(item_name) = lower(?)",
@@ -27094,6 +27098,8 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
         if not ev:
             return {"error": f"event not found: {event_name}"}
         ev = dict(ev)
+        if live:
+            _entry_mode_overlay(conn, ev["id"], db_path)
         rounds = [dict(r) for r in conn.execute(
             "SELECT * FROM scoring_rounds WHERE event_id = ? ORDER BY player_name",
             (ev["id"],)).fetchall()]
@@ -59683,20 +59689,27 @@ def _entry_ctp_proxies(conn, ev: dict, db_path=None) -> list:
     return out
 
 
-def _tracker_team_and_ctp_rows(ev: dict, notes: list, db_path=None) -> list:
+def _tracker_team_and_ctp_rows(ev: dict, notes: list, db_path=None,
+                               lb: dict | None = None,
+                               projected: bool = False) -> list:
     """GG-shaped result rows for an UNTETHERED event (no Golf Genius board):
     Team / CART Net from the Tracker's EVENTS leaderboard and CTP / Longest
     Putt from the phone claims. Money waits for the field, as the board's
     own money does (`field_complete`): a team total with holes missing is
-    not a result. Read-only."""
+    not a result. Read-only.
+
+    projected=True (the board's PROJECTED money while LIVE, B11): the
+    standings as they stand now, field complete or not; `lb` is the board
+    already read (the caller IS the board, so it is not read twice)."""
     out: list = []
     try:
-        lb = get_event_leaderboard(ev["item_name"], db_path=db_path) or {}
+        if lb is None:
+            lb = get_event_leaderboard(ev["item_name"], db_path=db_path) or {}
     except Exception as exc:
         logger.exception("untethered payouts: leaderboard failed for %s", ev["item_name"])
         notes.append(f"Team Net / CTP: leaderboard unavailable ({exc}) — skipped")
         return out
-    if not lb.get("field_complete"):
+    if not lb.get("field_complete") and not projected:
         notes.append(
             f"Team Net / CTP: the field is not complete yet "
             f"({lb.get('holes_posted')} of {lb.get('holes_needed')} holes posted) — skipped")
@@ -59747,14 +59760,20 @@ def _tracker_team_and_ctp_rows(ev: dict, notes: list, db_path=None) -> list:
     return out
 
 
-def _engine_flight_payout_rows(event_name: str, notes: list, db_path=None) -> list:
+def _engine_flight_payout_rows(event_name: str, notes: list, db_path=None,
+                               projected: bool = False) -> list:
     """Individual Net, Skins and Individual Gross for an UNTETHERED event,
     paid by the Tracker's engine on the event's flight board
     (`engine_game_payouts`: the board's SELECTION pins the flights, its
     AMOUNTS pay the places/skins). A game that is not complete pays nothing
     and says why; money with no winner is reported, never guessed."""
     rows: list = []
-    eng = engine_game_payouts(event_name, db_path=db_path)
+    # projected (B11): the engine on the LIVE entered cards, and a game
+    # still in play ('provisional') pays what it would if play ended now
+    eng = (engine_game_payouts(
+        event_name, db_path=db_path,
+        state=event_engine_state(event_name, db_path=db_path, live=True))
+        if projected else engine_game_payouts(event_name, db_path=db_path))
     if eng.get("error"):
         notes.append(f"Ind Net / Skins / Ind Gross: {eng['error']} — skipped "
                      f"(publish the entered cards first)")
@@ -59766,7 +59785,7 @@ def _engine_flight_payout_rows(event_name: str, notes: list, db_path=None) -> li
         g = (eng.get("games") or {}).get(game)
         if not g or g.get("status") == "not_running":
             continue
-        if g.get("status") != "paid":
+        if g.get("status") != "paid" and not (projected and g.get("status") == "provisional"):
             notes.append(f"{prefix}: {g.get('status')} — "
                          + ("; ".join(g.get("notes") or []) or "not final")
                          + " — skipped")
@@ -59788,12 +59807,41 @@ def _engine_flight_payout_rows(event_name: str, notes: list, db_path=None) -> li
     return rows
 
 
-def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
+def _projected_city_mvp(lb: dict | None) -> dict | None:
+    """City MVP as it stands mid-round, off the EVENTS board's own points
+    order (B11 projected money): the points board already sorts the top
+    tied group by the ratified chain (net, then gross, then split), so the
+    first MVP-eligible buyer is the winner, and a group the chain could not
+    split ("tiebreak 3") shares it. Same shape as determine_tgf_mvp's
+    city_mvp. None when nobody has points yet."""
+    rows = [r for r in (lb or {}).get("points_board") or []
+            if r.get("buyer") and r.get("net_pts") is not None]
+    if not rows:
+        return None
+    top = rows[0]
+    split = [r for r in rows if r.get("net_pts") == top.get("net_pts")
+             and "split pot" in (r.get("mvp_note") or "")]
+    winners = split if len(split) > 1 else [top]
+    return {"status": "determined", "split": len(winners) > 1,
+            "winners": [{"player": w.get("player_name"),
+                         "customer_id": w.get("customer_id")} for w in winners]}
+
+
+def assemble_event_game_payouts(event_name: str, db_path=None,
+                                projected: bool = False,
+                                lb: dict | None = None) -> dict:
     """Server-side assembly of every DETERMINED winner for one event into
     payout rows — the single source of truth behind both the Games tab's
     Record Payouts button and the bulk populate (bridge command). Uses
     the LIVE prize matrix for amounts; skips (with a note) anything not
-    yet determined. Returns {rows, notes, counts, holes}."""
+    yet determined. Returns {rows, notes, counts, holes}.
+
+    projected=True (Kerry 10/19, B11: "the WON column holds projected
+    numbers"): the SAME assembly on the standings as they stand mid-round —
+    the engine on the live entered cards, Team Net and CTPs off the board
+    `lb` (the caller's own read), City MVP off the board's points leader.
+    DISPLAY ONLY: nothing records projected rows (the EVENTS board marks
+    them PROJ.); the default path is unchanged."""
     from email_parser.match_play import split_cents
     m9, m18 = _load_games_matrix(db_path=db_path)
     with _connect(db_path) as conn:
@@ -59844,7 +59892,8 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
     from email_parser.gg_untether import gg_allowed as _gg_allowed
     untethered = not _gg_allowed(ev.get("event_date"), db_path)
     if untethered:
-        gg_rows = _tracker_team_and_ctp_rows(ev, notes, db_path=db_path)
+        gg_rows = _tracker_team_and_ctp_rows(ev, notes, db_path=db_path,
+                                             lb=lb, projected=projected)
     team_amts = [a for a in (_matrix_num(g_event.get("team1st")),
                              _matrix_num(g_event.get("team2nd"))) if a > 0]
     teams = [r for r in gg_rows if r["game"] == "team_net"]
@@ -60022,6 +60071,8 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
                 city_val = (_matrix_num(g_net.get("mvp"))
                             or min(city_half + tgf_val, 100.0))
         cm = my and my.get("city_mvp")
+        if projected and not (cm and cm.get("status") == "determined"):
+            cm = _projected_city_mvp(lb)
         if cm and cm.get("status") == "determined" and cm.get("winners") and city_val > 0:
             _money_split(city_val, [w["player"] for w in cm["winners"]],
                          "mvp", "City MVP" + (" (split)" if cm.get("split") else ""))
@@ -60275,7 +60326,8 @@ def assemble_event_game_payouts(event_name: str, db_path=None) -> dict:
 
     if untethered:
         rows.extend(_engine_flight_payout_rows(ev["item_name"], notes,
-                                               db_path=db_path))
+                                               db_path=db_path,
+                                               projected=projected))
     notes.append("Hole-in-One is an accruing cross-event pot — never auto-recorded")
     return {"event_name": ev["item_name"], "holes": holes, "counts": counts,
             "rows": rows, "notes": notes,

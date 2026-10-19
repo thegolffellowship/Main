@@ -767,6 +767,39 @@
         .evlb-winline.ctp .cat { color: var(--cat-ctp, #0F766E); }
         .evlb-winline .who { flex: 1; min-width: 0; white-space: normal; }
         .evlb-winline .amt { font-weight: 700; color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        /* ── B10 SUMMARY tab: its own colour, left of the orange game tabs
+           (Kerry 10/19: "at the left of the tabs, its own color") ── */
+        .evlb-seg-sub button.evlb-sum-tab { background: #0F3D2E; color: #fff; }
+        .evlb-seg-sub button.evlb-sum-tab.active { background: #14532D; color: #fff; box-shadow: inset 0 -3px 0 #FACC15; }
+        .evlb-sum-tabbadge { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 4px;
+            font-size: 8.5px; letter-spacing: .5px; background: #FACC15; color: #1B1B1B; vertical-align: 1px; }
+        .evlb-sum { display: grid; gap: 8px; white-space: normal; }
+        .evlb-sum-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 8px 10px;
+            border-radius: 8px; background: #FFFBEB; border: 1px solid #FCD34D; color: #92400E; font-size: 12px; }
+        .evlb-sum.is-final .evlb-sum-head { background: #F0FDF4; border-color: #86EFAC; color: #14532D; }
+        .evlb-sum-badge { font: 700 11px/1.4 'Bitter', serif; letter-spacing: 1px; padding: 2px 8px; border-radius: 4px;
+            background: #B45309; color: #fff; }
+        .evlb-sum-badge.final { background: #15803D; }
+        .evlb-sum-pot { font-weight: 700; }
+        .evlb-sum-why { flex-basis: 100%; }
+        .evlb-sum-game { border: 1px solid #F0EEE9; border-radius: 8px; padding: 6px 10px; background: #FAFAF8; }
+        .evlb-sum-gh { display: flex; justify-content: space-between; align-items: baseline;
+            font: 700 10px/1.6 'Bitter', serif; letter-spacing: 1px; color: #1B1B1B; }
+        .evlb-sum-link { appearance: none; border: 0; background: none; padding: 0; cursor: pointer;
+            font-family: inherit; font-size: 11px; font-weight: 600; letter-spacing: 0; color: var(--link, #2563eb); }
+        .evlb-sum-row { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; padding: 3px 0;
+            border-top: 1px solid #F0EEE9; }
+        .evlb-sum-row .pl { min-width: 64px; color: #6B7280; font-size: 11px; }
+        .evlb-sum-row .who { flex: 1; min-width: 0; }
+        .evlb-sum-row .det { display: block; font-size: 10.5px; color: #9CA3AF; }
+        .evlb-sum-row .amt { font-weight: 700; color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .evlb-sum.in-review .evlb-sum-row .amt { color: #4D7C0F; font-style: italic; }
+        /* ── B11 projected WON: an inconspicuous not-final marker ── */
+        .evlb-proj { font: 600 8px/1 system-ui, sans-serif; letter-spacing: .4px; color: #9CA3AF; vertical-align: 1px; }
+        .evlb-projwon td.won, .evlb-projwon td.r { color: #6B7280; font-style: italic; }
+        .evlb-potline { font-size: 11.5px; color: #4B5563; margin: 0 0 6px; white-space: normal; }
+        .evlb-bandpot { font-weight: 400; opacity: .85; text-transform: none; }
+        .evlb-mp-gh { font: 700 10px/1.6 'Bitter', serif; letter-spacing: 1px; color: #6B7280; margin: 10px 0 4px; }
         .evlb-legend { font-size: 11px; color: #6B7280; margin: 8px 0 0; white-space: normal; }
         .evlb-legend .lg { display: inline-block; padding: 1px 7px; border-radius: 4px; font-weight: 700; }
         .evlb-legend .lg.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); }
@@ -3971,7 +4004,11 @@
             points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole. <b>Won</b> = MVP money only.`,
             team: `Hole scores are each player's GROSS with their pops marked; gross less pops is the net the team played, and the green cell is the ball that counted. The TEAM NET row closes each band with the team's holes, total and whole purse; a player row's <b>Won</b> is that player's share.`,
             prox: `Closest-to-the-pin and other proximity winners, hole by hole.`,
+            summary: `Every game's winners and their money in one place, with a link to each game's board. It appears once every score is in. <b>IN REVIEW</b> means the money is showing but not settled: a score can still be corrected and the amounts can change. <b>FINAL</b> means results are closed and prizes are set.`,
+            mp: `City Match Play matches played at this event, in the same cards the Match Play board uses. Tap a match for its hole-by-hole card.`,
         };
+        if (game !== "summary" && game !== "mp" && evlbProjOn(d))
+            out.push(sec("Projected winnings", `While the round is in play, <b>Won</b> shows what each player would win if play ended now, marked <b>PROJ.</b> It is not final and moves as scores come in. Each flight's header shows that flight's pot.`));
         if (noGames) out.push(sec("This event", "No games at this event, so the boards are just the scores: Net ranks by net total, Gross by gross total. Nobody bought in and nothing is paid."));
         // the game notes that used to sit on the board (Kerry 10/19)
         const gn = (d.games_off || []).map(g => escapeHtml(g.note)).filter(Boolean);
@@ -4066,7 +4103,7 @@
             // winner stated confidently, and the number is what a member
             // remembers, not the caveat. The board still ranks and the
             // scores still read live.
-            if (d.money_visible === false) evlbBlankMoney(d);
+            if (d.money_visible === false) evlbBlankMoneyProj(d);   // projected WON (B11)
             body.innerHTML = evlbEventHtml(d);
             body._evlbD = d;
             evlbWireEvent(body, d);
@@ -4266,6 +4303,177 @@
         const by = r.won_by_cat || {};
         return (EVLB_GAME_CATS[game] || []).reduce((t, c) => t + (by[c] || 0), 0);
     }
+    // ════ B10 / B11 / B12 (Kerry 10/19, leaderboard review §12-13) ════
+    //  SUMMARY tab, projected WON, pot headers, Match Play tab. Kept in one
+    //  block so the tab-order / TEAM / THRU / state-strip lanes merge around
+    //  it. The server decorates the payload (email_parser/board_summary.py):
+    //  board_state, projected, pots, match_play.
+    //
+    // SUMMARY appears at IN REVIEW (every score in, money showing) with an
+    // IN REVIEW badge that turns FINAL when closeout fires; hidden through
+    // UPCOMING and LIVE. When it shows it is the FIRST tab and the landing.
+    function evlbSummaryShown(d) {
+        return !!d && !evlbNoGames(d) && !d._moneyHeld
+            && (d.board_state === "in_review" || d.board_state === "final");
+    }
+    // PROJECTED WON (Kerry 10/19: "Show projected winnings instead, like
+    // Season Contests: the WON column holds projected numbers with an
+    // inconspicuous not-final marker"). Only while the money is held for
+    // the field AND the server sent a projection (an entry-mode event, LIVE).
+    function evlbProjOn(d) {
+        return !!(d && d._moneyHeld && d._moneyProj && !evlbNoGames(d));
+    }
+    // Blank the record money (evlbBlankMoney, unchanged), then put the
+    // projection where the WON column reads it. Win tints stay off: a
+    // projection is not a winner. The CTP holders' amounts are taken
+    // BEFORE the blank, since those rows are the live holders already.
+    function evlbBlankMoneyProj(d) {
+        const prox = (d.proxies || []).map(p => p.purse);
+        const hio = (d.hio || []).map(p => p.purse);
+        evlbBlankMoney(d);
+        const pj = d.projected;
+        if (!pj || evlbNoGames(d)) return;
+        d._moneyProj = true;
+        const by = pj.by_cid || {};
+        (d.overall_board || []).forEach(r => {
+            const m = (r.customer_id != null && by[String(r.customer_id)]) || {};
+            r.won_by_cat = Object.assign({}, m);
+            r.won_total = Object.values(m).reduce((t, v) => t + (v || 0), 0);
+        });
+        (pj.teams || []).forEach(pt => {
+            const t = (d.teams || [])[pt.index];
+            if (!t) return;
+            t.purse = pt.purse != null ? pt.purse : null;
+            (t.players || []).forEach(p => {
+                p.team_won = (pt.slots || {})[String(p.scoring_round_id)] || null;
+            });
+        });
+        (d.proxies || []).forEach((p, i) => { p.purse = prox[i]; });
+        (d.hio || []).forEach((p, i) => { p.purse = hio[i]; });
+    }
+    const EVLB_PROJ_TITLE = "Projected: what this player would win if play ended now. Not final.";
+    function evlbProjMark(d) {
+        return evlbProjOn(d) ? ` <span class="evlb-proj" title="${EVLB_PROJ_TITLE}">PROJ.</span>` : "";
+    }
+    function evlbUsd(v) {
+        const n = Number(v || 0);
+        return "$" + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+    }
+    function evlbOrd(n) {
+        return n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+    }
+    // POTS ON THE FLIGHT HEADER ROWS (Kerry 10/19: "Total pots go on flight
+    // header rows or a section header row"): "LOW FLIGHT · 10 players · pot
+    // $90 (1st $60 · 2nd $30)". Read from the GAMES tab's numbers (the
+    // flight board's AMOUNTS), never from scores. `ord` is the band's
+    // flight ordinal (1 = low flight), the same count _flight_ordinals uses.
+    function evlbPotBandText(d, game, ord) {
+        const pg = ((d && d.pots) || {})[game];
+        if (!pg || !ord) return "";
+        const f = (pg.flights || []).find(x => +x.flight_no === +ord);
+        if (!f || !(f.pot > 0)) return "";
+        const parts = [];
+        if (f.players) parts.push(`${f.players} player${f.players === 1 ? "" : "s"}`);
+        let pot = `pot ${evlbUsd(f.pot)}`;
+        if (game === "skins") pot += " (split per skin)";
+        else if ((f.places || []).length > 1)
+            pot += " (" + f.places.map((a, i) => `${evlbOrd(i + 1)} ${evlbUsd(a)}`).join(" · ") + ")";
+        parts.push(pot);
+        return " · " + parts.join(" · ");
+    }
+    // One pot line above a board whose game has no flight bands (TEAM, MVP,
+    // CTPs, or a flighted game played as one band).
+    function evlbPotLine(d, game, board) {
+        if (!d || evlbNoGames(d)) return "";
+        const pg = (d.pots || {})[game];
+        let txt = "";
+        if (game === "team" && pg) {
+            txt = `Team pot ${evlbUsd(pg.total)}` + ((pg.places || []).length > 1
+                ? " (" + pg.places.map((a, i) => `${evlbOrd(i + 1)} ${evlbUsd(a)}`).join(" · ") + ")" : "");
+        } else if (game === "prox" && pg) {
+            txt = `CTP pot ${evlbUsd(pg.total)} (${pg.each.map(evlbUsd).join(" · ")})`;
+        } else if (game === "points") {
+            const tot = (d.overall_board || []).reduce((t, r) => t + evlbGameMoney(r, "points"), 0);
+            if (tot > 0) txt = `MVP pot ${evlbUsd(Math.round(tot * 100) / 100)}`;
+        } else if (pg && board && !(board.sections || []).some(s => s.label && s.label !== "UNFLIGHTED")) {
+            txt = `Pot ${evlbUsd(pg.total)}`;
+        }
+        if (pg && game === "gross" && pg.bonus > 0)
+            txt += (txt ? " · " : "") + `${escapeHtml(pg.bonus_label || "Overall Low Gross")} ${evlbUsd(pg.bonus)}`;
+        return txt ? `<div class="evlb-potline">${txt}${evlbProjMark(d)}</div>` : "";
+    }
+    // ── SUMMARY: every game's winners and their money in one place, in tab
+    //    order, each with a link to its board. Reads the same money the WON
+    //    columns read, so an Unlock that moves a figure moves it here too.
+    const EVLB_STATE_WORD = { upcoming: "UPCOMING", live: "LIVE", in_review: "IN REVIEW", final: "FINAL" };
+    function evlbSummaryWinners(sections, cats) {
+        const out = [];
+        (sections || []).forEach(sec => (sec.rows || []).forEach(r => {
+            const ws = (r.won || []).filter(w => cats.includes(w.category));
+            const cents = ws.reduce((t, w) => t + (w.cents || 0), 0);
+            if (cents > 0) out.push({
+                flight: sec.label && sec.label !== "UNFLIGHTED" ? sec.label : "",
+                who: r.player_name, cents,
+                detail: ws.map(w => w.detail).filter(Boolean).join(" · "),
+            });
+        }));
+        return out.sort((a, b) => (a.flight || "").localeCompare(b.flight || "") || b.cents - a.cents);
+    }
+    function evlbSummaryHtml(d) {
+        if (!evlbSummaryShown(d)) return "";
+        const st = d.board_state === "final" ? "final" : "in_review";
+        const blocks = [];
+        const block = (cls, title, goto, rows) => {
+            if (!rows.length) return;
+            blocks.push(`<div class="evlb-sum-game ${cls}"><div class="evlb-sum-gh"><span>${title}</span>` +
+                `<button type="button" class="evlb-sum-link" data-evlb-goto="${goto}">See the board</button></div>` +
+                rows.map(x => `<div class="evlb-sum-row">` +
+                    `<span class="pl">${escapeHtml(x.pl || "")}</span>` +
+                    `<span class="who">${escapeHtml(x.who || "")}${x.detail ? `<span class="det">${escapeHtml(x.detail)}</span>` : ""}</span>` +
+                    `<span class="amt">${evlbUsd(x.amt)}</span></div>`).join("") + `</div>`);
+        };
+        block("team", "TEAM NET", "team", (d.teams || []).filter(t => t.purse != null && t.purse > 0).map(t => ({
+            pl: t.position || "", amt: t.purse,
+            who: (t.players || []).map(evlbTeamMemberName).join(" · ") })));
+        block("mvp", "MVP", "points", evlbSummaryWinners([{ rows: d.points_board || [] }], EVLB_GAME_CATS.points)
+            .map(w => ({ pl: "", who: w.who, detail: w.detail, amt: w.cents / 100 })));
+        [["net", "NET", "net_board"], ["gross", "GROSS", "gross_board"], ["skins", "SKINS", "skins_board"]].forEach(([g, t, k]) =>
+            block(g, t, g, evlbSummaryWinners(d[k], EVLB_GAME_CATS[g])
+                .map(w => ({ pl: w.flight, who: w.who, detail: w.detail, amt: w.cents / 100 }))));
+        block("ctp", "CTPs", "prox", (d.proxies || []).filter(p => p.purse > 0).map(p => ({
+            pl: p.label || "", who: p.player, detail: p.detail, amt: p.purse }))
+            .concat((d.hio || []).filter(p => p.purse > 0).map(p => ({
+                pl: "Hole-in-One", who: p.player, detail: p.detail, amt: p.purse }))));
+        const pot = blocks.length ? (d.pot || 0) : 0;
+        const head = `<div class="evlb-sum-head"><span class="evlb-sum-badge ${st}">${EVLB_STATE_WORD[st]}</span>` +
+            (pot > 0 ? `<span class="evlb-sum-pot">Event pot ${evlbUsd(pot)}</span>` : "") +
+            `<span class="evlb-sum-why">${st === "final"
+                ? "Results are closed and prizes are set."
+                : "Every score is in. Not final: a score can still be corrected, and these amounts can change until results close."}</span></div>`;
+        return `<div class="evlb-sum ${st === "final" ? "is-final" : "in-review"}">${head}` +
+            (blocks.join("") || '<p style="color:var(--text-muted);">No winnings to show yet.</p>') + `</div>`;
+    }
+    // ── CITY MATCH PLAY at this event (B12, Kerry 10/19: "If an event has
+    //    City Match Play matches, the leaderboard needs a toggle showing
+    //    them per the standard match-play visualization"). The cards are
+    //    the Season Contests' own mpMatchCardFromMatch, read-only.
+    function evlbMatchPlayHtml(d) {
+        const ms = (d && d.match_play) || [];
+        if (!ms.length) return "";
+        const groups = {};
+        ms.forEach(m => {
+            const k = [m.chapter || "", m.kind === "knockout" ? "Knockout · " + (m.pool_name || "") : (m.pool_name || "Pool")]
+                .filter(Boolean).join(" · ");
+            (groups[k] = groups[k] || []).push(m);
+        });
+        const card = m => (typeof mpMatchCardFromMatch === "function")
+            ? mpMatchCardFromMatch(m)
+            : `<div class="mp-match-card"><div class="mp-card-head">${escapeHtml(m.player1_name)} vs ${escapeHtml(m.player2_name)}` +
+              `${m.winner_name ? " — " + escapeHtml(m.winner_name) + (m.margin ? " " + escapeHtml(m.margin) : "") : ""}</div></div>`;
+        return `<div class="mpv2 evlb-mp">` + Object.keys(groups).map(k =>
+            `<div class="evlb-mp-gh">${escapeHtml(k)}</div>` + groups[k].map(card).join("")).join("") + `</div>`;
+    }
+    // ════ end B10 / B11 / B12 block ════
     // ONE overall row — module-level so the sortable headers can
     // re-render the tbody with the same markup the initial paint used.
     // `i` drives the zebra stripe: striping by render index (not CSS
@@ -4591,8 +4799,11 @@
         // gaps in the numbering (1, 3, 6…) and the board would read as
         // broken rather than filtered.
         const buyersOnly = !evlbShowAll && EVLB_BUYIN_GAMES.includes(game) && !evlbNoGames(d);
-        let i = 0, html = "";
+        let i = 0, html = "", potOrd = 0;
         board.sections.forEach((sec, si) => {
+            // flight ordinal for the pot header (B11), counted before any
+            // filtering so a band keeps its flight's number
+            const flightOrd = (sec.label && sec.label !== "UNFLIGHTED") ? ++potOrd : 0;
             const src = buyersOnly
                 ? sec.rows.filter(r => r._buyer !== false) : sec.rows;
             if (!src.length) return;      // an emptied flight drops its band too
@@ -4622,7 +4833,8 @@
             }
             if (sec.label) {
                 html += `<tr class="evlb-band"${board.teamBands ? ` data-team="${si}"` : ""}>` +
-                    `<td colspan="${ncols}">${board.teamBands ? '<span class="tchev tgf-exp">&#9654;</span> ' : ""}${escapeHtml(sec.label)}</td></tr>`;
+                    `<td colspan="${ncols}">${board.teamBands ? '<span class="tchev tgf-exp">&#9654;</span> ' : ""}${escapeHtml(sec.label)}` +
+                    `${board.teamBands ? "" : `<span class="evlb-bandpot">${evlbPotBandText(d, game, flightOrd)}</span>`}</td></tr>`;
             }
             // a team band renders in NET and closes with its total row
             const tm = board.teamBands ? (board.teams || [])[si] : null;
@@ -4704,7 +4916,7 @@
             + ` title="${escapeHtml((board.gameCol && board.gameCol.title) || gl)}"`
             + `>${escapeHtml(gl)}</th>`;
         const showHoles = evlbHolesFor(board, d);
-        return (note || "") +
+        return (note || "") + evlbPotLine(d, board.game, board) +
             `<div class="evlb-togrow">` +
             `<div class="evlb-togs">` +
             evlbTogs(board, d, showHoles) +
@@ -4715,12 +4927,12 @@
                 ? `<div class="evlb-ghostkey evlb-only-all"><span class="evlb-circ evlb-ghost">3</span> would have won the skin (not in the skins)</div>` : "") +
             // no WON column on an event with no games (Kerry 10/9: "Won
             // column shouldn't show at all if there aren't any side games")
-            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp && !board.noHcp ? "" : " no-hcp"}${d._moneyHeld || evlbNoGames(d) ? " no-won" : ""}" data-board="${id}"${board.noHcp ? " data-nohcp" : ""}><thead>` +
+            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp && !board.noHcp ? "" : " no-hcp"}${evlbProjOn(d) ? " evlb-projwon" : (d._moneyHeld || evlbNoGames(d) ? " no-won" : "")}" data-board="${id}"${board.noHcp ? " data-nohcp" : ""}><thead>` +
             `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
             `<th data-k="player" class="nm sortable">Player</th>` +
             // Won sits right of the name (Kerry 2026-09-13) — the money
             // is the point of the board, so it reads without scrolling
-            `<th data-k="won" class="won sortable br${active("won")}">Won</th>` +
+            `<th data-k="won" class="won sortable br${active("won")}">Won${evlbProjMark(d)}</th>` +
             (board.gameColAfterWon ? gcTh : "") +
             `<th data-k="index" class="sortable bl hc" title="Handicap Index">Idx</th>` +
             `<th data-k="hcp" class="sortable br hc" title="Playing Handicap">PH</th>` +
@@ -4752,6 +4964,14 @@
                ["skins", (d.skins_variant || {}).basis === "net" ? "\u00bd Net Skins" : "Skins"],
                ["prox", "CTPs"], ["overall", "Overall"]];
         const first = noGames ? "overall" : ((d.teams || []).length ? "team" : "net");
+        // ── B10 / B12 (Kerry 10/19): SUMMARY goes FIRST and lands once the
+        //    event reaches IN REVIEW; Match Play joins the end when the event
+        //    has City Match Play matches. Prepended / appended here, apart
+        //    from the tab order above, so the order list stays one line. ──
+        const sumOn = evlbSummaryShown(d);
+        if (sumOn) tabs.unshift(["summary", "Summary"]);
+        if (!noGames && ((d && d.match_play) || []).length) tabs.push(["mp", "Match Play"]);
+        const landing = sumOn ? "summary" : first;
         // no games, no money: nothing to hold or explain
         // Status (money held / not final) stays on the board; explanations
         // such as "Individual Gross activates at 16 ..." live in HOW IT WORKS
@@ -5009,7 +5229,7 @@
                 `<td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`;
         };
         const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
-            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${d._moneyHeld ? " no-won" : ""}"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
+            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${d._moneyHeld && !evlbProjOn(d) ? " no-won" : ""}${evlbProjOn(d) ? " evlb-projwon" : ""}"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$${evlbProjMark(d)}</th></tr></thead><tbody>` +
               (d.proxies || []).map(p => proxRow(p.label || "", p)).join("") +
               (d.hio || []).map(p => proxRow("Hole-in-One", p)).join("") +
               `</tbody></table></div>`
@@ -5030,15 +5250,18 @@
             gross: evlbStdBoard(d, boards.gross, offNotes) + evlbLegendFor("gross"),
             skins: evlbStdBoard(d, boards.skins, offNotes) + evlbLegendFor("skins"),
             points: evlbStdBoard(d, boards.points) + evlbLegendFor("points"),
-            prox: proxHtml,
+            prox: evlbPotLine(d, "prox") + proxHtml,
+            summary: evlbSummaryHtml(d),
+            mp: evlbMatchPlayHtml(d),
         };
         // one board, no tab bar to choose from (the no-games Overall)
         return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? ' style="display:none"' : ""}>` +
             tabs.map(([k, l]) =>
-                `<button class="evlb-subtab${k === first ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
+                `<button class="evlb-subtab${k === landing ? " active" : ""}${k === "summary" ? " evlb-sum-tab" : ""}" data-sub="${k}">${l}${
+                    k === "summary" ? ` <span class="evlb-sum-tabbadge">${d.board_state === "final" ? "FINAL" : "IN REVIEW"}</span>` : ""}</button>`).join("") +
             `</div><div class="evlb-hiw-row"><button type="button" class="pr-hiw-link evlb-hiw-btn" data-evlb-hiw>How it works</button></div></div>` +
             tabs.map(([k]) =>
-                `<div class="evlb-panel" data-panel="${k}"${k === first ? "" : " hidden"}>${panels[k]}</div>`).join("") +
+                `<div class="evlb-panel" data-panel="${k}"${k === landing ? "" : " hidden"}>${panels[k]}</div>`).join("") +
             `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard.</p>`;
     }
     // Team net card in THE card standard's family: each member's NET
@@ -5245,6 +5468,20 @@
                 derived_totals: {net: row.net ?? null}};
     }
     function evlbWireEvent(body, d) {
+        // SUMMARY's "See the board" opens that game's tab (B10)
+        body.addEventListener("click", (e) => {
+            const g = e.target.closest && e.target.closest("[data-evlb-goto]");
+            if (!g || !body.contains(g)) return;
+            const b = body.querySelector(`.evlb-subtab[data-sub="${g.dataset.evlbGoto}"]`);
+            if (b) b.click();
+        });
+        // Match Play cards expand on the page's own handler (MATCHPLAY_V2);
+        // without it, this board wires its own
+        if (!window.MATCHPLAY_V2 && typeof mpCardToggle === "function")
+            body.addEventListener("click", (e) => {
+                const h = e.target.closest && e.target.closest(".evlb-mp .mp-card-head.mp-clickable");
+                if (h) mpCardToggle(h);
+            });
         body.querySelectorAll(".evlb-subtab").forEach(btn =>
             btn.addEventListener("click", () => {
                 body.querySelectorAll(".evlb-subtab").forEach(b => b.classList.toggle("active", b === btn));
