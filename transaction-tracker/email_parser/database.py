@@ -14789,18 +14789,30 @@ def get_event_leaderboard(event_name: str,
                         _t = _by_band.get(_band) or _by_band_lc.get(_band.lower())
                         if not _t:
                             continue
+                        _men_band = str(_t.get("band") or _band) in ("<50", "50-64", "65+")
                         _rec = {"band": _t.get("band") or _band,
+                                "band_label": _t.get("band_label"),
                                 "tee_name": _t.get("tee_name"),
                                 "color": _t.get("color"),
-                                "ring": bool(_t.get("ring"))}
+                                # a man on the women's-rated tee gets the
+                                # filled dot, not the ladies' outline
+                                "ring": bool(_t.get("ring")) and not _men_band}
                         _ck = (f"c:{_pl['customer_id']}"
                                if _pl.get("customer_id") else None)
                         _nk = ("n:" + _pl["name"].strip().lower()
                                if _pl.get("name") else None)
-                        if _ck and _ck not in tee_by_player:
-                            tee_by_player[_ck] = _rec
-                        if _nk and _nk not in tee_by_player:
-                            tee_by_player[_nk] = _rec
+                        # WHO PLAYS IT IS THE SHEET'S BAND (Kerry 10/19: "Hector
+                        # Hinojosa, Michael Murphy and Reggie Johnson are all
+                        # showing as Women Red Tees ... They're Men 65+ Red
+                        # Tees"). On a course whose only Red tee is rated for
+                        # women, the played tee reads ladies; a men's band on
+                        # the sheet wins over that.
+                        for _k in (_ck, _nk):
+                            if not _k:
+                                continue
+                            _cur = tee_by_player.get(_k)
+                            if _cur is None or (_men_band and (_cur.get("ladies") or _cur.get("band_label") == TEE_LEGEND_WOMEN_WORD)):
+                                tee_by_player[_k] = _rec
                         _used_bands.add(_t.get("band"))
             if not tee_legend:
                 tee_legend = band_legend
