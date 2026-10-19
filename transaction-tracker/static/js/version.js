@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.571.28";
+window.TGF_VERSION = "2.572.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.572.0",
+    date: "2026-10-19",
+    title: "Night before: tee times at 7 PM; Event Info at 7 AM",
+    changes: [
+      "Kerry 10/19: \"I thought we're just sending tee times tonight and then the full event info email at 7:00am.\" Approving the pairings (manager, 5-7 PM) now signs off the sheet and emails NO player. At 7 PM a sheet nobody approved is auto-approved as it stands, still with no player email. At 7:00 AM on event day every event's players get their personal Event Info email (the approved 'Event Day \u2014 Your Pairing' template), approved or not, on the sheet as it stands then. A failure emails Kerry and retries hourly until noon. The manager's prompt and review page say so. Guard test_pairings_approval.py.",
+      "The 7 PM TEE-TIMES email, three versions (CMO #2101): players (with \"Your full Event Info email ... comes at 7:00 AM tomorrow\"), the course contact (To the primary, CC the other TGF contacts; skipped without a contact) and the chapter manager. Tee sheet from the Starter Sheet's own reader, no money or contact details. Every message is held on a blank or leftover tag, sent once per person per event, logged with event_id and customer_id. LOCKED until Kerry stamps each wording (teetimes_player_approved / teetimes_course_approved / teetimes_manager_approved = the template hash) AND turns on dial teetimes_email_auto; the player version also waits for tgf_mailing_address (the footer). Job teetimes_email every 15 min 7 PM-midnight; bridge scoring-teetimes-email:<id>[|preview]. Guard test_teetimes_email.py."
+    ]
+  },
   {
     version: "2.571.28",
     date: "2026-10-19",
