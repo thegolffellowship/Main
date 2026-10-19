@@ -230,9 +230,26 @@ for dirpath, _, files in os.walk(ROOT):
         # (Track B's tools/lsc_synthetic_weekend.py drives the se_ API and
         # only describes the tables in its comments).
         if re.search(r"(?i)\b(from|join|into|update|table)\s+se_(hole_scores|players|rounds|teams|groups|"
-                     r"ctp_claims|hio_claims|signoffs|audit|group_locks|card_checks|hole_marks)\b", src):
+                     r"ctp_claims|hio_claims|signoffs|audit|group_locks|card_checks|hole_marks|"
+                     r"group_pace|player_pace)\b", src):
             readers.append(os.path.relpath(path, ROOT))
 check("only score_entry.py touches se_* tables", readers == [], readers)
+
+# se_audit is APPEND-ONLY (db-claude #2059): it is the lossless record the
+# pace measure (migration 0037) and every refused write rely on. No code --
+# score_entry.py included -- may UPDATE or DELETE its rows.
+mutators = []
+for dirpath, _, files in os.walk(ROOT):
+    if any(p in dirpath for p in ("/.git", "/node_modules", "/docs")):
+        continue
+    for f in files:
+        if not f.endswith(".py") or f.startswith("test_"):
+            continue
+        src = open(os.path.join(dirpath, f), encoding="utf-8", errors="ignore").read()
+        if re.search(r"(?i)\b(update\s+se_audit|delete\s+from\s+se_audit|drop\s+table\s+(if\s+exists\s+)?se_audit"
+                     r"|insert\s+or\s+replace\s+into\s+se_audit|replace\s+into\s+se_audit)\b", src):
+            mutators.append(os.path.relpath(os.path.join(dirpath, f), ROOT))
+check("se_audit is append-only: no code updates or deletes its rows", mutators == [], mutators)
 for f in ("season_payouts.py", "gg_match_play.py", "match_play.py", "flighting.py"):
     src = open(os.path.join(ROOT, "email_parser", f), encoding="utf-8").read()
     check(f"{f} does not import score_entry", "score_entry" not in src)

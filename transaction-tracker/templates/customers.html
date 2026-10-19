@@ -711,7 +711,30 @@
             ${[1, 2, 3].map(r => `<button type="button"
                 class="pace-btn${stored === r ? ' active' : ''}${stored == null && r === 2 ? ' implied' : ''}"
                 data-pace="${r}" title="${PACE_LABELS[r]}">${r}</button>`).join('')}
-        </div>`;
+        </div>${renderPaceMeasured(c)}`;
+    }
+
+    // MEASURED PACE (Kerry 2026-10-19 #2100, suggest only): beside the
+    // manager's 1-3, from score-entry tap times (/api/pace/players, manager+).
+    // Below the round threshold it reads "N/10, not used yet"; at it, the
+    // minutes per hole and the field comparison. Never a suggested 1/2/3 and
+    // never a write to pace_rating.
+    function _paceMS(sec) {
+        const s = Math.abs(Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }
+    function renderPaceMeasured(c) {
+        const m = c.pace_measured;
+        if (!m || !m.timed_rounds) return '';
+        const need = m.rounds_needed || 10;
+        if (!m.in_use) {
+            return `<span class="pace-measured" style="display:block;font-size:0.68rem;color:var(--text-muted);"
+                title="Timed rounds from Live Scoring; not used until ${need}">${m.counting_rounds}/${need} timed, not used yet</span>`;
+        }
+        const mph = m.avg_seconds_per_hole != null ? (m.avg_seconds_per_hole / 60).toFixed(1) : '—';
+        const rel = m.avg_rel_seconds_per_hole;
+        const relTxt = rel == null ? '' : ` · ${rel > 0 ? '+' : rel < 0 ? '−' : '±'}${_paceMS(rel)} vs field`;
+        return `<span class="pace-measured" style="display:block;font-size:0.68rem;color:var(--text-muted);"
+            title="Measured over ${m.counting_rounds} timed rounds (group pace, first hole to second-to-last)">${mph} min/hole${relTxt}</span>`;
     }
 
     // Role flags (Kerry-ratified 2026-09-15, pairings rules 12/13):
@@ -4482,6 +4505,19 @@
                     if (canon.customer_id && !c.customer_id) c.customer_id = canon.customer_id;
                 });
             } catch (e) { /* canonical data optional — items-derived values used as fallback */ }
+
+            // Measured pace (staff only, #2100): manager+ sessions only.
+            if (currentRole === "manager" || currentRole === "admin") {
+                try {
+                    const paceRes = await fetch("/api/pace/players");
+                    if (paceRes.ok) {
+                        const paceMap = await paceRes.json();
+                        allCustomers.forEach(c => {
+                            if (c.customer_id && paceMap[c.customer_id]) c.pace_measured = paceMap[c.customer_id];
+                        });
+                    }
+                } catch (e) { /* measured pace optional */ }
+            }
 
             // Fetch current membership term (one-row-per-customer map) for the
             // Renewal column on the list view + the term-aware sort key.

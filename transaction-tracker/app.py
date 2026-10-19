@@ -2420,6 +2420,29 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── PACE OF PLAY (Kerry 2026-10-19 #2092, migration 0037): every morning
+    #    at 6:41 Central, rebuild the pace tables out of se_audit
+    #    (derived tables, always), then send yesterday's MANAGER PACE REPORT
+    #    per round (chapter manager, Kerry copied, staff only, once per
+    #    round) ONLY when app setting pace_report_send = on (default OFF).
+    #    email_parser/pace_report.py.
+    def pace_morning_job():
+        from email_parser.pace_report import morning_job
+        try:
+            res = morning_job()
+            if res.get("sent"):
+                logger.info("Pace reports: %s", res["sent"])
+        except Exception:
+            logger.exception("Pace morning job failed (non-fatal)")
+    scheduler.add_job(
+        pace_morning_job,
+        "cron", hour=6, minute=41,
+        timezone="US/Central",
+        id="pace_morning",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -5619,6 +5642,19 @@ def api_set_customer_pace(customer_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/pace/players")
+@require_role("manager")
+def api_pace_players():
+    """MEASURED PACE beside the manager's 1-3 (Kerry #2100: suggest only).
+    STAFF ONLY. {customer_id: {timed_rounds, counting_rounds, rounds_needed,
+    avg_seconds_per_hole, avg_rel_seconds_per_hole, in_use}} read by
+    score_entry.pace_players. No suggested 1/2/3; never writes customers.pace_rating."""
+    from email_parser.score_entry import pace_players
+    res = pace_players()
+    return jsonify({str(p["customer_id"]): {**p, "rounds_needed": res["rounds_needed"]}
+                    for p in res["players"]})
 
 
 @app.route("/api/customers/<int:customer_id>/status-history")

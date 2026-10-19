@@ -793,6 +793,53 @@ def _ensure_score_entry_tables(conn: sqlite3.Connection) -> None:
         version    INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT);
     """)
+    # PACE (migration 0037, Kerry #2092): derived from se_audit, rebuilt by
+    # rebuild_pace. Declared in both places, like 0009 -- keep in step.
+    conn.executescript(_PACE_DDL)
+
+
+_PACE_DDL = """
+    CREATE TABLE IF NOT EXISTS se_group_pace (
+        id                    INTEGER PRIMARY KEY,
+        round_id              INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id              INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        holes_timed           INTEGER NOT NULL CHECK (holes_timed >= 0),
+        seconds_per_hole      INTEGER,
+        field_median_seconds  INTEGER,
+        status                TEXT NOT NULL CHECK (status IN ('clean', 'adjusted', 'flagged')),
+        start_moved           INTEGER NOT NULL DEFAULT 0 CHECK (start_moved IN (0, 1)),
+        end_moved             INTEGER NOT NULL DEFAULT 0 CHECK (end_moved IN (0, 1)),
+        batches               INTEGER NOT NULL DEFAULT 0 CHECK (batches >= 0),
+        flag_few_holes        INTEGER NOT NULL DEFAULT 0 CHECK (flag_few_holes IN (0, 1)),
+        flag_long_gap         INTEGER NOT NULL DEFAULT 0 CHECK (flag_long_gap IN (0, 1)),
+        flag_clock            INTEGER NOT NULL DEFAULT 0 CHECK (flag_clock IN (0, 1)),
+        flag_entry_split      INTEGER NOT NULL DEFAULT 0 CHECK (flag_entry_split IN (0, 1)),
+        flag_manager_entry    INTEGER NOT NULL DEFAULT 0 CHECK (flag_manager_entry IN (0, 1)),
+        takeovers             INTEGER NOT NULL DEFAULT 0 CHECK (takeovers >= 0),
+        method_version        INTEGER NOT NULL,
+        computed_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (round_id, group_id));
+    CREATE INDEX IF NOT EXISTS idx_se_group_pace_round ON se_group_pace (round_id);
+    CREATE TABLE IF NOT EXISTS se_player_pace (
+        id                      INTEGER PRIMARY KEY,
+        customer_id             INTEGER NOT NULL REFERENCES customers(customer_id),
+        round_id                INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id                INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        group_size              INTEGER NOT NULL CHECK (group_size >= 1),
+        group_seconds_per_hole  INTEGER,
+        rel_seconds_per_hole    INTEGER,
+        holes_saved             INTEGER NOT NULL DEFAULT 0 CHECK (holes_saved >= 0),
+        status                  TEXT NOT NULL CHECK (status IN ('clean', 'adjusted', 'flagged')),
+        flag_partial            INTEGER NOT NULL DEFAULT 0 CHECK (flag_partial IN (0, 1)),
+        flag_regrouped          INTEGER NOT NULL DEFAULT 0 CHECK (flag_regrouped IN (0, 1)),
+        counts                  INTEGER NOT NULL DEFAULT 0 CHECK (counts IN (0, 1)),
+        method_version          INTEGER NOT NULL,
+        computed_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CHECK (counts = 0 OR status <> 'flagged'),
+        UNIQUE (customer_id, round_id));
+    CREATE INDEX IF NOT EXISTS idx_se_player_pace_customer ON se_player_pace (customer_id, counts);
+    CREATE INDEX IF NOT EXISTS idx_se_player_pace_round ON se_player_pace (round_id);
+"""
 
 
 def _bump(conn, event_id: int) -> int:
@@ -3596,6 +3643,433 @@ def hole_save_times(round_id: int, db_path=None) -> dict:
             d = subjects.setdefault(s["subject_key"], {"group_id": s["group_id"], "holes": {}})
             d["holes"][str(s["hole_number"])] = s["server_ts"]
     return {"round_id": int(round_id), "groups": groups, "subjects": subjects}
+
+
+# ---------------------------------------------------------------------------
+# PACE OF PLAY, MEASURED (Kerry 2026-10-19 #2092; measure db-claude #2084,
+# entry_split #2103, clean + adjusted count, suggest only #2100). Migration
+# 0037: se_group_pace + se_player_pace, DERIVED from se_audit's first saves
+# and rebuilt by rebuild_pace (the only writer). Staff only: nothing here
+# reaches a member payload, and nothing here writes customers.pace_rating.
+# ---------------------------------------------------------------------------
+PACE_METHOD_VERSION = 1
+PACE_METHOD_NOTE = ("Method: first hole to second-to-last; catch-ups spread; "
+                    "last hole not used. Flagged groups are shown, not counted.")
+# Code defaults; each is overridable by ONE app_settings key of the same name
+# (plain integer, no JSON). The first six are #2084's; the entry_split pair is
+# #2103's "3 or more span holes ... more than 2 minutes".
+PACE_DIAL_DEFAULTS = {
+    "pace_batch_seconds": 300,
+    "pace_stop_minutes": 35,
+    "pace_clock_seconds": 120,
+    "pace_min_holes_9": 6,
+    "pace_min_holes_18": 12,
+    "pace_rounds_to_count": 10,
+    "pace_split_seconds": 120,
+    "pace_split_holes": 3,
+}
+_MANAGER_DEVICE_PREFIXES = ("manager", "admin", "lsc-preview")
+
+
+def pace_dials(db_path=None) -> dict:
+    from email_parser.database import get_app_setting
+    out = {}
+    for k, d in PACE_DIAL_DEFAULTS.items():
+        try:
+            v = (get_app_setting(k, db_path) or "").strip()
+            out[k] = int(v) if v else d
+        except (ValueError, TypeError):
+            out[k] = d
+        except Exception:
+            out[k] = d
+    return out
+
+
+def _epoch(s):
+    d = _parse_utc(s)
+    return int(d.timestamp()) if d else None
+
+
+def _median(vals):
+    v = sorted(vals)
+    n = len(v)
+    if not n:
+        return None
+    return v[n // 2] if n % 2 else (v[n // 2 - 1] + v[n // 2]) / 2
+
+
+def _round_hole_list(conn, r) -> list:
+    hl = [x[0] for x in conn.execute(
+        "SELECT hole_number FROM se_round_holes WHERE round_id = ? ORDER BY hole_number",
+        (r["id"],))]
+    if len(hl) >= int(r["holes"]):
+        return hl
+    first = min(hl) if hl else 1
+    return list(range(first, first + int(r["holes"])))
+
+
+def _play_order(holes: list, start_hole) -> list:
+    if start_hole in holes:
+        i = holes.index(start_hole)
+        return holes[i:] + holes[:i]
+    return list(holes)
+
+
+def _pace_round_excluded(conn, r, db_path=None):
+    """Why a whole round is not timed (#2084 item 18), else None."""
+    if (r["created_by"] or "") == "preview" or str(r["label"] or "").startswith("PREVIEW"):
+        return "preview / test round"
+    pk = str(r["pairings_holes"] or "").lower()
+    if pk.startswith("lsc"):
+        return "Lone Star Cup match play"
+    try:
+        if round_matches(int(r["id"]), db_path=db_path):
+            return "match play round"
+    except Exception:
+        pass
+    return None
+
+
+def audit_first_saves(round_id: int, db_path=None) -> dict:
+    """READ-ONLY (bridge scoring-se-audit-times, #2092/#2103): for one round,
+    each group's FIRST accepted save per hole per player/team from se_audit
+    (an edit later never moves it), with the phone's client_ts beside the
+    server time, and the group's take-over count.
+    {round_id, event_id, holes, groups: [{group_id, group_num, label,
+     start_hole, tee_time, takeovers, customer_ids, subjects: {subject_key:
+     {customer_ids, holes: {hole: {at, client_ts, device_id}}}}}]}"""
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT * FROM se_rounds WHERE id = ?", (int(round_id),)).fetchone()
+        if not r:
+            return {"error": "no such round"}
+        return _audit_first_saves(conn, r)
+
+
+def _audit_first_saves(conn, r) -> dict:
+    rid = int(r["id"])
+    teams = {t["id"]: [t["customer_id_a"], t["customer_id_b"]] for t in conn.execute(
+        "SELECT id, customer_id_a, customer_id_b FROM se_teams WHERE round_id = ?", (rid,))}
+    groups = {}
+    for g in conn.execute("SELECT id, group_num, label, start_hole, tee_time FROM se_groups "
+                          "WHERE round_id = ? ORDER BY group_num", (rid,)):
+        groups[g["id"]] = {"group_id": g["id"], "group_num": g["group_num"], "label": g["label"],
+                           "start_hole": g["start_hole"], "tee_time": g["tee_time"],
+                           "takeovers": 0, "customer_ids": [], "subjects": {}}
+    for p in conn.execute("SELECT group_id, customer_id FROM se_players WHERE round_id = ? "
+                          "ORDER BY seat, id", (rid,)):
+        if p["group_id"] in groups:
+            groups[p["group_id"]]["customer_ids"].append(p["customer_id"])
+    for a in conn.execute("SELECT group_id, COUNT(*) FROM se_audit WHERE round_id = ? "
+                          "AND kind = 'takeover' GROUP BY group_id", (rid,)):
+        if a[0] in groups:
+            groups[a[0]]["takeovers"] = int(a[1])
+    for a in conn.execute("SELECT group_id, device_id, detail, at FROM se_audit "
+                          "WHERE round_id = ? AND kind = 'write' AND result = 'ok' "
+                          "ORDER BY id", (rid,)):
+        g = groups.get(a["group_id"])
+        if g is None:
+            continue
+        try:
+            d = json.loads(a["detail"] or "{}")
+            hole = int(d.get("hole"))
+        except (ValueError, TypeError):
+            continue
+        if d.get("gross") is None:
+            continue  # a cleared hole is not a play
+        if d.get("team_id") is not None:
+            key, cids = f"t:{int(d['team_id'])}", teams.get(int(d["team_id"]), [])
+        elif d.get("customer_id") is not None:
+            key, cids = f"c:{int(d['customer_id'])}", [int(d["customer_id"])]
+        else:
+            continue
+        s = g["subjects"].setdefault(key, {"customer_ids": cids, "holes": {}})
+        s["holes"].setdefault(str(hole), {"at": a["at"], "client_ts": d.get("client_ts"),
+                                          "device_id": a["device_id"]})
+    return {"round_id": rid, "event_id": r["event_id"], "holes": r["holes"],
+            "round_date": r["round_date"], "label": r["label"],
+            "groups": list(groups.values())}
+
+
+def _group_pace(g: dict, holes: list, dials: dict, n_holes: int) -> dict:
+    """Kerry's rule (#2084 §1) for ONE group. Times are epoch seconds."""
+    batch_s, clock_s = dials["pace_batch_seconds"], dials["pace_clock_seconds"]
+    order = _play_order(holes, g["start_hole"])
+    pos = {h: i for i, h in enumerate(order)}
+    per_hole, clock_bad, mgr_only = {}, set(), {}
+    for s in g["subjects"].values():
+        for hk, v in s["holes"].items():
+            h = int(hk)
+            if h not in pos:
+                continue
+            at, ct = _epoch(v["at"]), _epoch(v["client_ts"])
+            if at is None:
+                continue
+            t = at
+            if ct is not None:
+                if abs(ct - at) <= clock_s:
+                    t = ct
+                else:
+                    clock_bad.add(h)
+            per_hole.setdefault(h, []).append(t)
+            dev = str(v.get("device_id") or "").lower()
+            mgr_only[h] = mgr_only.get(h, True) and dev.startswith(_MANAGER_DEVICE_PREFIXES)
+    pts = [(pos[h], _median(per_hole[h]), h) for h in order if h in per_hole]
+    out = {"group_id": g["group_id"], "start_hole": g["start_hole"], "tee_time": g["tee_time"],
+           "takeovers": g["takeovers"], "customer_ids": list(g["customer_ids"]),
+           "holes_timed": 0, "seconds_per_hole": None, "span_seconds": None,
+           "start_moved": 0, "end_moved": 0, "batches": 0, "hole_seconds": {},
+           "span_holes": [], "flags": [], "first_hole": pts[0][2] if pts else None,
+           "last_hole": pts[-1][2] if pts else None}
+    if not pts:
+        out["flags"].append("few_holes")
+        out["status"] = "flagged"
+        return out
+    n = len(pts)
+    short = [pts[k + 1][1] - pts[k][1] < batch_s for k in range(n - 1)]
+    batches, k = [], 0
+    while k < n - 1:          # a run of short gaps k..j covers points k..j+1
+        if short[k]:
+            j = k
+            while j + 1 < n - 1 and short[j + 1]:
+                j += 1
+            batches.append((k, j + 1))
+            k = j + 1
+        else:
+            k += 1
+    out["batches"] = len(batches)
+    s_i, e_i = 0, n - 2       # the last hole is never used
+    for a, b in batches:
+        if a == 0:            # hole 1 saved with hole 2: start at the batch's end
+            s_i, out["start_moved"] = b, 1
+        if b == n - 1:        # second-to-last saved with the last: end before it
+            e_i, out["end_moved"] = a - 1, 1
+    if e_i <= s_i or e_i < 0:
+        out["flags"].append("few_holes")
+        out["status"] = "flagged"
+        return out
+    holes_timed = pts[e_i][0] - pts[s_i][0]
+    span = pts[e_i][1] - pts[s_i][1]
+    out.update(holes_timed=holes_timed, span_seconds=int(round(span)),
+               seconds_per_hole=int(round(span / holes_timed)) if holes_timed else None,
+               span_holes=[p[2] for p in pts[s_i:e_i + 1]])
+    mid = {a - 1: b for a, b in batches if a > 0 and b <= e_i}
+    i = s_i
+    while i < e_i:            # per-hole series, catch-ups spread
+        j = mid.get(i, i + 1)
+        j = min(j, e_i)
+        dt, kk = pts[j][1] - pts[i][1], pts[j][0] - pts[i][0]
+        for p in range(pts[i][0] + 1, pts[j][0] + 1):
+            out["hole_seconds"][order[p]] = int(round(dt / kk)) if kk else 0
+        i = j
+    flags = out["flags"]
+    min_holes = dials["pace_min_holes_18"] if n_holes == 18 else dials["pace_min_holes_9"]
+    if holes_timed < min_holes:
+        flags.append("few_holes")
+    if any(v > dials["pace_stop_minutes"] * 60 for v in out["hole_seconds"].values()):
+        flags.append("long_gap")
+    span_set = set(out["span_holes"])
+    if clock_bad & span_set:
+        flags.append("clock")
+    split = sum(1 for h in span_set if len(per_hole[h]) > 1
+                and max(per_hole[h]) - min(per_hole[h]) > dials["pace_split_seconds"])
+    out["split_holes"] = split
+    if split >= dials["pace_split_holes"]:
+        flags.append("entry_split")
+    if span_set and all(mgr_only.get(h) for h in span_set):
+        flags.append("manager_entry")
+    out["status"] = "flagged" if flags else ("adjusted" if out["batches"] else "clean")
+    return out
+
+
+def compute_round_pace(round_id: int, db_path=None) -> dict:
+    """The whole measure for one round, read-only: groups (with the per-hole
+    series), the field median, and one row per player carrying the group's
+    pace. rebuild_pace stores it; the manager pace report reads it."""
+    dials = pace_dials(db_path)
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT * FROM se_rounds WHERE id = ?", (int(round_id),)).fetchone()
+        if not r:
+            return {"error": "no such round"}
+        holes = _round_hole_list(conn, r)
+        raw = _audit_first_saves(conn, r)
+        sizes = {x[0]: int(x[1]) for x in conn.execute(
+            "SELECT group_id, COUNT(*) FROM se_players WHERE round_id = ? GROUP BY group_id",
+            (int(round_id),))}
+        excluded = _pace_round_excluded(conn, r, db_path)
+    out = {"round_id": int(round_id), "event_id": r["event_id"], "holes": int(r["holes"]),
+           "hole_list": holes, "round_date": r["round_date"], "label": r["label"],
+           "excluded": excluded, "dials": dials, "method_version": PACE_METHOD_VERSION,
+           "groups": [], "players": [], "field_median_seconds": None}
+    if excluded:
+        return out
+    groups = [_group_pace(g, holes, dials, int(r["holes"])) for g in raw["groups"]
+              if g["subjects"]]
+    counting = [g["seconds_per_hole"] for g in groups
+                if g["status"] != "flagged" and g["seconds_per_hole"] is not None]
+    med = _median(counting)
+    med = int(round(med)) if med is not None else None
+    out["field_median_seconds"] = med
+    for g in groups:
+        g["field_median_seconds"] = med
+        g["group_size"] = sizes.get(g["group_id"]) or len(g["customer_ids"]) or 1
+        g["rel_seconds_per_hole"] = (g["seconds_per_hole"] - med
+                                     if med is not None and g["seconds_per_hole"] is not None else None)
+    out["groups"] = groups
+    by_gid = {g["group_id"]: g for g in groups}
+    raw_by_gid = {g["group_id"]: g for g in raw["groups"]}
+    # Each player: the group holding most of their saves (#2084 item 14).
+    holes_by_cid: dict = {}
+    for gid, g in raw_by_gid.items():
+        span = set(by_gid[gid]["span_holes"]) if gid in by_gid else set()
+        for s in g["subjects"].values():
+            for cid in s["customer_ids"]:
+                if cid is None:
+                    continue
+                d = holes_by_cid.setdefault(cid, {})
+                saved = {int(h) for h in s["holes"]}
+                d.setdefault(gid, [set(), set()])
+                d[gid][0].update(saved)
+                d[gid][1].update(saved & span)
+    min_holes = dials["pace_min_holes_18"] if int(r["holes"]) == 18 else dials["pace_min_holes_9"]
+    for cid, per in sorted(holes_by_cid.items()):
+        gid = max(per, key=lambda k: (len(per[k][0]), -k))
+        g = by_gid.get(gid)
+        if g is None:
+            continue
+        regrouped = 1 if len(per) > 1 else 0
+        saved = len(per[gid][1])
+        partial = 1 if saved < min(min_holes, len(g["span_holes"]) or min_holes) else 0
+        status = "flagged" if (regrouped or partial) else g["status"]
+        out["players"].append({
+            "customer_id": cid, "group_id": gid, "group_size": g["group_size"],
+            "group_seconds_per_hole": g["seconds_per_hole"],
+            "rel_seconds_per_hole": g["rel_seconds_per_hole"], "holes_saved": saved,
+            "status": status, "flag_partial": partial, "flag_regrouped": regrouped,
+            "counts": 0 if status == "flagged" or g["seconds_per_hole"] is None else 1})
+    return out
+
+
+def _pace_rounds(conn, round_id=None) -> list:
+    if round_id is not None:
+        return [int(round_id)]
+    return [x[0] for x in conn.execute(
+        "SELECT DISTINCT r.id FROM se_rounds r JOIN se_audit a ON a.round_id = r.id "
+        "AND a.kind = 'write' AND a.result = 'ok' ORDER BY r.id")]
+
+
+def rebuild_pace(round_id: int | None = None, apply: bool = False, db_path=None) -> dict:
+    """Rebuild se_group_pace / se_player_pace from se_audit for one round or
+    every round with saves. Dry run by default (returns what it would store).
+    The ONLY writer of the two tables; never touches se_audit or customers."""
+    with _closing(_conn(db_path)) as conn:
+        rids = _pace_rounds(conn, round_id)
+    results, stored = [], {"groups": 0, "players": 0}
+    for rid in rids:
+        rp = compute_round_pace(rid, db_path=db_path)
+        if rp.get("error"):
+            results.append({"round_id": rid, "error": rp["error"]})
+            continue
+        summary = {"round_id": rid, "excluded": rp["excluded"],
+                   "groups": {s: sum(1 for g in rp["groups"] if g["status"] == s)
+                              for s in ("clean", "adjusted", "flagged")},
+                   "players": len(rp["players"]),
+                   "players_counting": sum(p["counts"] for p in rp["players"]),
+                   "field_median_seconds": rp["field_median_seconds"]}
+        results.append(summary)
+        if not apply:
+            continue
+        now = _now()
+        with _closing(_conn(db_path)) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM se_player_pace WHERE round_id = ?", (rid,))
+            conn.execute("DELETE FROM se_group_pace WHERE round_id = ?", (rid,))
+            for g in rp["groups"]:
+                fl = set(g["flags"])
+                conn.execute(
+                    "INSERT INTO se_group_pace (round_id, group_id, holes_timed, seconds_per_hole, "
+                    "field_median_seconds, status, start_moved, end_moved, batches, flag_few_holes, "
+                    "flag_long_gap, flag_clock, flag_entry_split, flag_manager_entry, takeovers, "
+                    "method_version, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (rid, g["group_id"], g["holes_timed"], g["seconds_per_hole"],
+                     g["field_median_seconds"], g["status"], g["start_moved"], g["end_moved"],
+                     g["batches"], int("few_holes" in fl), int("long_gap" in fl),
+                     int("clock" in fl), int("entry_split" in fl), int("manager_entry" in fl),
+                     g["takeovers"], PACE_METHOD_VERSION, now))
+                stored["groups"] += 1
+            for p in rp["players"]:
+                conn.execute(
+                    "INSERT INTO se_player_pace (customer_id, round_id, group_id, group_size, "
+                    "group_seconds_per_hole, rel_seconds_per_hole, holes_saved, status, "
+                    "flag_partial, flag_regrouped, counts, method_version, computed_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (p["customer_id"], rid, p["group_id"], p["group_size"],
+                     p["group_seconds_per_hole"], p["rel_seconds_per_hole"], p["holes_saved"],
+                     p["status"], p["flag_partial"], p["flag_regrouped"], p["counts"],
+                     PACE_METHOD_VERSION, now))
+                stored["players"] += 1
+            conn.commit()
+    return {"applied": bool(apply), "rounds": results, "stored": stored if apply else None}
+
+
+def pace_players(customer_id: int | None = None, db_path=None) -> dict:
+    """STAFF-ONLY read of se_player_pace (suggest only, #2100: minutes per
+    hole and the field comparison; NO suggested 1/2/3; never writes
+    customers.pace_rating). One player -> their history rows; none -> every
+    player's counting rounds + averages and the digest line (#2096)."""
+    need = pace_dials(db_path)["pace_rounds_to_count"]
+    with _closing(_conn(db_path)) as conn:
+        if customer_id is not None:
+            rows = [dict(x) for x in conn.execute(
+                "SELECT pp.round_id, pp.group_id, pp.group_size, pp.group_seconds_per_hole, "
+                "pp.rel_seconds_per_hole, pp.holes_saved, pp.status, pp.flag_partial, "
+                "pp.flag_regrouped, pp.counts, r.round_date, r.event_id, r.label "
+                "FROM se_player_pace pp JOIN se_rounds r ON r.id = pp.round_id "
+                "WHERE pp.customer_id = ? ORDER BY r.round_date, pp.round_id",
+                (int(customer_id),))]
+            c = [x for x in rows if x["counts"]]
+            return {"customer_id": int(customer_id), "rounds_needed": need,
+                    "timed_rounds": len(rows), "counting_rounds": len(c),
+                    "avg_seconds_per_hole": (int(round(sum(x["group_seconds_per_hole"] for x in c) / len(c)))
+                                             if c else None),
+                    "avg_rel_seconds_per_hole": (int(round(sum(x["rel_seconds_per_hole"] or 0 for x in c) / len(c)))
+                                                 if c else None),
+                    "in_use": len(c) >= need, "history": rows}
+        agg = [dict(x) for x in conn.execute(
+            "SELECT customer_id, COUNT(*) AS timed_rounds, SUM(counts) AS counting_rounds, "
+            "AVG(CASE WHEN counts = 1 THEN group_seconds_per_hole END) AS avg_seconds_per_hole, "
+            "AVG(CASE WHEN counts = 1 THEN rel_seconds_per_hole END) AS avg_rel_seconds_per_hole "
+            "FROM se_player_pace GROUP BY customer_id")]
+    for a in agg:
+        a["counting_rounds"] = int(a["counting_rounds"] or 0)
+        for k in ("avg_seconds_per_hole", "avg_rel_seconds_per_hole"):
+            a[k] = int(round(a[k])) if a[k] is not None else None
+        a["in_use"] = a["counting_rounds"] >= need
+    agg.sort(key=lambda a: (-a["counting_rounds"], a["customer_id"]))
+    top = agg[0]["counting_rounds"] if agg else 0
+    reached = [a["customer_id"] for a in agg if a["counting_rounds"] >= need]
+    return {"rounds_needed": need, "players": agg, "top_counting_rounds": top,
+            "players_at_top": [a["customer_id"] for a in agg if agg and a["counting_rounds"] == top],
+            "reached": reached,
+            "digest_line": f"Pace: top player {top}/{need} timed rounds"}
+
+
+def event_round_ids(event_id: int, db_path=None) -> list:
+    """The score-entry round ids of one event, oldest first (read-only)."""
+    with _closing(_conn(db_path)) as conn:
+        return [x[0] for x in conn.execute(
+            "SELECT id FROM se_rounds WHERE event_id = ? ORDER BY id", (int(event_id),))]
+
+
+def rounds_on_date(day: str, db_path=None) -> list[dict]:
+    """Rounds (any status) whose date -- the round's, else the event's -- is
+    ``day`` (YYYY-MM-DD). Read-only; the morning pace report reads it."""
+    with _closing(_conn(db_path)) as conn:
+        rows = conn.execute(
+            "SELECT r.id AS round_id, r.event_id FROM se_rounds r "
+            "LEFT JOIN events e ON e.id = r.event_id "
+            "WHERE substr(COALESCE(r.round_date, e.event_date, ''), 1, 10) = ? ORDER BY r.id",
+            (day,)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def event_ctp_holders(event_id: int, db_path=None) -> list[dict]:

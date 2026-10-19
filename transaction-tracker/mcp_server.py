@@ -1813,6 +1813,10 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-se-gate-check:<event_id>[|<chapter>]  read-only: status codes a manager / a player link get (per-event opt-in proof)
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
       scoring-se-hole-times:<round_id>  read-only: when each hole was saved (UTC), per player/team
+      scoring-se-audit-times:<round_id>  read-only: FIRST save per hole per player/team (se_audit) + client_ts, take-overs per group
+      scoring-pace-rebuild[:<round_id>][|apply]  the pace tables, rebuilt out of se_audit (dry run default)
+      scoring-pace-players[:<customer_id>]  staff read: counting rounds, avg min/hole vs field, the digest line (no 1/2/3)
+      scoring-pace-report:<event_id>[|preview|send]  the manager pace report (data | HTML | send behind dial pace_report_send)
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
       scoring-se-clear-group:<group_id>[|apply][|checks]  start one group's card over (|checks: also a submitted TEST card's checks): scores, marks, CTP answers and the scorer lock go, signatures voided; the cleared scores stay in se_audit (dry run by default; open rounds only)
@@ -3555,6 +3559,63 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_se.hole_save_times(int(arg.strip())), indent=2)
             except ValueError:
                 return json.dumps({"error": "usage: scoring-se-hole-times:<round_id>"})
+        if cmd == "scoring-se-audit-times":
+            # scoring-se-audit-times:<round_id> — read-only (#2092/#2103): each
+            # group's FIRST accepted save per hole per player/team from
+            # se_audit, client_ts beside the server time, and the group's
+            # take-over count. An edit later never moves a first save.
+            from email_parser import score_entry as _se
+            try:
+                return json.dumps(_se.audit_first_saves(int(arg.strip())), indent=2, default=str)
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-audit-times:<round_id>"})
+        if cmd == "scoring-pace-rebuild":
+            # scoring-pace-rebuild[:<round_id>][|apply] — se_group_pace +
+            # se_player_pace, out of se_audit (migration 0037). Dry run default.
+            from email_parser import score_entry as _se
+            _r, _, _flag = arg.partition("|")
+            if _r.strip().lower() == "apply":
+                _r, _flag = "", "apply"
+            try:
+                _rid = int(_r.strip()) if _r.strip() else None
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-pace-rebuild[:<round_id>][|apply]"})
+            _res = _se.rebuild_pace(_rid, apply=_flag.strip().lower() == "apply")
+            if _res.get("applied"):
+                _audit("scoring-pace-rebuild", f"round {_rid or 'all'}: {_res.get('stored')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-pace-players":
+            # scoring-pace-players[:<customer_id>] — STAFF read of se_player_pace:
+            # every player's counting rounds + the digest line ("Pace: top
+            # player N/10 timed rounds", #2096), or one player's history. No
+            # suggested 1/2/3 (#2100); never writes customers.pace_rating.
+            from email_parser import score_entry as _se
+            try:
+                _cid = int(arg.strip().lstrip("c")) if arg.strip() else None
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-pace-players[:<customer_id>]"})
+            return json.dumps(_se.pace_players(_cid), indent=2, default=str)
+        if cmd == "scoring-pace-report":
+            # scoring-pace-report:<event_id>[|preview|send] — the manager pace
+            # report (#2092 §2, #2096 §1). No flag: the data. |preview: the
+            # data + the HTML, nothing sent. |send: each round to the chapter
+            # manager, Kerry copied — refused unless dial pace_report_send=on,
+            # staff addresses only, once per round.
+            from email_parser import pace_report as _pr
+            _ev, _, _flag = arg.partition("|")
+            _flag = _flag.strip().lower()
+            try:
+                _eid = int(_ev.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-pace-report:<event_id>[|preview|send]"})
+            if _flag == "send":
+                from email_parser import score_entry as _se
+                _out = {_rid: _pr.send_round(_eid, _rid) for _rid in _se.event_round_ids(_eid)}
+                _audit("scoring-pace-report", f"event {_eid} send: {_out}")
+                return json.dumps(_out, indent=2, default=str)
+            if _flag == "preview":
+                return json.dumps(_pr.build_email(_eid), indent=2, default=str)
+            return json.dumps(_pr.event_report(_eid), indent=2, default=str)
         if cmd == "scoring-se-links":
             # scoring-se-links:<round_id> — one link per group (Kerry hands them out).
             from email_parser import score_entry as _se

@@ -689,3 +689,35 @@ stops), `created_at`, `created_by`, `revoked_at`, `last_seen_at`. Pages opened a
 `agent_action_log` rows (agent `advisor:<id>`, action `advisor_concept_open`), not
 a second table. Reversible: drop the table. Library sections added beside it:
 `published` (0022) and `concepts` (0023, served by `/concepts`).
+
+## se_group_pace + se_player_pace (migration 0037, Kerry "Yes to both, go ahead" #2092; db-claude PASS pending)
+
+Pace of play, measured from the phones (score-entry.md "Pace of play,
+measured"). Both tables are DERIVED from `se_audit` (the lossless record of
+every save) and rebuilt by `score_entry.rebuild_pace`, the only writer (dry
+run by default; the morning job applies it). Drop both and a rebuild restores
+them. Integer seconds, ids not names, no JSON, enums by CHECK. Also declared in
+`score_entry.py`'s lazy DDL (both places, like 0009).
+
+- `se_group_pace`: one row per group per timed round, UNIQUE(round_id,
+  group_id). `holes_timed`, `seconds_per_hole` (first hole to second-to-last
+  in play order; the last hole is never used), `field_median_seconds` (median
+  of the round's counting groups), `status` clean | adjusted | flagged,
+  `start_moved` / `end_moved` / `batches` (Kerry's catch-up rule),
+  `flag_few_holes` / `flag_long_gap` / `flag_clock` / `flag_entry_split`
+  (#2103) / `flag_manager_entry`, `takeovers`, `method_version`, `computed_at`.
+- `se_player_pace`: one row per player per timed round carrying the GROUP's
+  pace, UNIQUE(customer_id, round_id): `customer_id` FK, `group_id`,
+  `group_size`, `group_seconds_per_hole` (copied), `rel_seconds_per_hole` (vs
+  the field median), `holes_saved`, `status`, `flag_partial`,
+  `flag_regrouped`, `counts` (CHECK counts = 0 OR status <> 'flagged'; clean +
+  adjusted count, #2084/#2093). A player's history is their rows; averages and
+  counts are read on the fly (`score_entry.pace_players`).
+- Not timed at all: preview/test rounds and Lone Star Cup / match-play rounds.
+- STAFF ONLY. Suggest only (#2100): nothing writes `customers.pace_rating`.
+  No notice key: #2096 dropped `pace_10_round_notice_sent_at`; the 10-round
+  line rides db-claude's digest through `scoring-pace-players`.
+- Reversible: `DROP TABLE se_player_pace; DROP TABLE se_group_pace`.
+- Numbering: `migrations/` holds 0001-0024 with gaps; 0025-0036 are not in
+  the repo (0036 reserved for soft-merge, db-claude #2059). The runner
+  applies each file once in name order, so 0037 applies ahead of the gap.

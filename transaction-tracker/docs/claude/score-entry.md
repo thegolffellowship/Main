@@ -728,7 +728,76 @@ Missing holes are absent, not zero. One version per event; poll every
 `test_score_entry.py` — idempotent replay, lock refusal kept in audit,
 take-over audit, team row, the read shape, links (tamper / revoke / closed
 round), identity, the money-record guard, seeding from PAIRINGS (shotgun
-start hole + clock), and the HTTP layer including the flag.
+start hole + clock), and the HTTP layer including the flag. It also holds
+the **se_audit append-only guard** (db-claude #2059): no code, score_entry.py
+included, may UPDATE / DELETE / REPLACE / DROP se_audit rows.
+
+`test_pace.py` — the pace measure, flags, rebuild, staff read and manager
+report (below).
+
+## Pace of play, measured (migration 0037, Kerry 2026-10-19 #2092)
+
+Kerry: "Pace is measured per group but that group number should be an entry
+for each player as well" (#2073) and "Yes to both, go ahead - I also want a
+pace report sent to the manager ..." (#2092). Measure db-claude #2084,
+entry_split #2103, names not group numbers #2096, suggest only #2100.
+
+**The measure** (`compute_round_pace`, all in score_entry.py):
+- t[hole] = the group's FIRST accepted save on that hole, from `se_audit`
+  (an edit later never moves it; a refused or cleared write is not a save);
+  the phone's `client_ts` when within `pace_clock_seconds` of the server
+  time, else the server time and flag `clock`. Several players saving the
+  same hole: the median of their first saves.
+- Holes in PLAY order from `se_groups.start_hole`, wrapping on a shotgun.
+- A run of gaps under `pace_batch_seconds` (negative gaps included) is a
+  catch-up: its holes share the time evenly. Hole 1 saved with hole 2 moves
+  the start anchor to the end of that batch; the second-to-last saved with
+  the last moves the end anchor before it. The last hole is never used.
+- seconds_per_hole = (t[end] - t[start]) / play-order holes between them; a
+  missing hole counts as a hole elapsed.
+- Flags (status `flagged`: shown, not counted): `few_holes` (under
+  `pace_min_holes_9` / `_18`), `long_gap` (a hole over `pace_stop_minutes`
+  after spreading), `clock`, `entry_split` (players' saves more than
+  `pace_split_seconds` apart on `pace_split_holes` or more span holes),
+  `manager_entry` (every span save from a `manager*` / `admin*` device);
+  per player `partial` (too few span saves) and `regrouped` (saves in two
+  groups; kept in the one with most). Otherwise `adjusted` if any catch-up
+  or anchor moved, else `clean`. Clean and adjusted count.
+- Not timed: preview/test rounds, Lone Star Cup / match-play rounds.
+- Dials (one app_settings key each, plain integers): `pace_batch_seconds`
+  300, `pace_stop_minutes` 35, `pace_clock_seconds` 120, `pace_min_holes_9`
+  6, `pace_min_holes_18` 12, `pace_rounds_to_count` 10, `pace_split_seconds`
+  120, `pace_split_holes` 3.
+
+**Storage**: `se_group_pace` / `se_player_pace` (schema.md), rebuilt by
+`rebuild_pace` (dry run default).
+
+**Bridges**: `scoring-se-audit-times:<round_id>` (read-only first saves +
+client_ts per group and player/team, with each group's take-over count),
+`scoring-pace-rebuild[:<round_id>][|apply]`, `scoring-pace-players[:<cid>]`
+(counting rounds, average min/hole and vs field, and the digest line "Pace:
+top player N/10 timed rounds" for db-claude's 7:05 digest, #2096; the
+Tracker's own daily email has no hook for it), `scoring-pace-report:<event_id>
+[|preview|send]`.
+
+**Suggest only** (#2100): `/api/pace/players` (manager+) feeds a small line
+under the 1-2-3 pace buttons on the Customers page: "N/10 timed, not used
+yet" below the threshold, minutes per hole and "+m:ss vs field" at it. No
+suggested 1/2/3; nothing writes `customers.pace_rating`.
+
+**The manager pace report** (`email_parser/pace_report.py`, one per event
+round, STAFF ONLY): (a) groups fastest to slowest, each led by the players'
+NAMES and the start hole or tee time (the group id never appears), average
+min/hole with vs field, total minutes over the measured holes with the hole
+count, estimated round time (average x holes), status with the reason; (b)
+hole by hole across the counting groups, the three slowest marked, n per
+hole, and a reason where a hole has no data; (c) the method line. To the
+chapter manager (`pairings_approval.manager_for`), Kerry copied, staff
+addresses only (`recap_mail.staff_only`), once per round (message_log
+`sent_by='pace_report'`). Job `pace_morning` 6:41 AM Central rebuilds the
+tables, then sends yesterday's rounds ONLY when app setting
+`pace_report_send` = on (default OFF; Kerry turns it on). The bridge's
+`|send` obeys the same dial.
 
 ## Load rehearsal (CA #665.1, 2026-09-25)
 
