@@ -4084,6 +4084,11 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if arg.strip() == "prompt":
                 from email_parser.pairings_approval import prompt_check
                 return json.dumps(prompt_check(), indent=2, default=str)
+            if arg.strip().startswith("resend|"):
+                # resend|<event_id>: the manager's approval email again, now
+                # (Kerry 10/19: "Send me another manager email with the changes")
+                from email_parser.pairings_approval import send_prompt
+                return json.dumps(send_prompt(int(arg.split("|", 1)[1])), indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings-run:generate|prompt"})
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a

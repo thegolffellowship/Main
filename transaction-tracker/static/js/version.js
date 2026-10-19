@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.573.7";
+window.TGF_VERSION = "2.573.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.8",
+    date: "2026-10-19",
+    title: "Bridge: resend a manager's pairings approval email",
+    changes: ["scoring-pairings-run:resend|<event_id> sends the chapter manager's approval email again for the current sheet (Kerry 10/19: \"Send me another manager email with the changes\")."]
+  },
   {
     version: "2.573.7",
     date: "2026-10-19",
