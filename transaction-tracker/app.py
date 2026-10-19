@@ -6468,6 +6468,17 @@ def approve_pairings_page(event_id):
     why = may_approve(session.get("role"), session.get("chapter"), rv["event"]["chapter"])
     if why:
         return why, 403
+    # One-tap Approve from the manager's email (Kerry 10/19): the link
+    # carries the sheet's fingerprint; a stale one just shows the review.
+    want = (request.args.get("approve") or "").strip()
+    if want and want == rv.get("fingerprint") and not rv["state"].get("approved_fp") == want:
+        from email_parser.pairings_approval import approve_and_send
+        who = session.get("role") or "?"
+        if session.get("chapter"):
+            who = f"{who} ({session.get('chapter')})"
+        approve_and_send(event_id, want, role=session.get("role"),
+                         session_chapter=session.get("chapter"), approved_by=who)
+        rv = review(event_id)
     return render_page(rv)
 
 

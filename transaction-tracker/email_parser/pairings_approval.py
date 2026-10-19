@@ -248,9 +248,13 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
         f"their full Event Info email goes at {EVENT_INFO_HOUR}:00 AM on event day: "
         f"<b>{c.get('ready', 0)} players</b>"
         + (f", {c.get('held')} held" if c.get("held") else "") + ".</p>"
-        f'<p><a href="{_e(url)}" style="display:inline-block;background:#E87C3E;color:#fff;'
+        # One tap approves (Kerry 10/19: "This should show two buttons:
+        # APPROVE Pairings / EDIT Pairings ... Why go to a review page that
+        # shows the same thing."). The link carries this sheet's
+        # fingerprint, so a changed sheet is never approved by an old email.
+        f'<p><a href="{_e(url)}?approve={_e(rv["fingerprint"])}" style="display:inline-block;background:#E87C3E;color:#fff;'
         f'text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:999px;">'
-        f"Review &amp; approve the pairings</a>"
+        f"Approve pairings</a>"
         f' &nbsp; <a href="{_e(_base_url(base_url))}/events?event={int(event_id)}&amp;view=pairings" style="display:inline-block;'
         f'border:2px solid #1B1B1B;color:#1B1B1B;text-decoration:none;font-weight:bold;padding:10px 18px;border-radius:999px;">'
         f"Edit pairings</a></p>"

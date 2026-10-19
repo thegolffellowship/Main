@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.573.9";
+window.TGF_VERSION = "2.573.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.10",
+    date: "2026-10-19",
+    title: "Manager email: one-tap Approve pairings",
+    changes: ["Kerry 10/19: \"This should show two buttons: APPROVE Pairings / EDIT Pairings ... Why go to a review page that shows the same thing.\" The manager's email now has Approve pairings (log in and it is approved; the link carries this sheet's fingerprint, so an older email can never approve a changed sheet) and Edit pairings. Guard test_pairings_approval.py."]
+  },
   {
     version: "2.573.9",
     date: "2026-10-19",

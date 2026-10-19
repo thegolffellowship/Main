@@ -186,6 +186,15 @@ page = cl.get(f"/events/{AUS}/approve-pairings")
 check("the Austin manager sees the review with the approved state",
       page.status_code == 200 and b"Event Info emails go to" in page.data, page.status_code)
 
+with cl.session_transaction() as s:
+    s["role"] = "admin"; s.pop("chapter", None)
+_fp = pa.sheet_fingerprint(SA, DB)
+cl.get(f"/events/{SA}/approve-pairings?approve=stale")
+check("a stale one-tap link approves nothing", pa.event_state(SA, DB).get("approved_fp") != _fp)
+page = cl.get(f"/events/{SA}/approve-pairings?approve={_fp}")
+check("the email's one-tap Approve approves the sheet (Kerry 10/19)",
+      page.status_code == 200 and pa.event_state(SA, DB).get("approved_fp") == _fp, page.status_code)
+
 try: os.unlink(DB)
 except OSError: pass
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")
