@@ -512,3 +512,15 @@ Tier 1 is small and display-only: it can ride one deploy before Tuesday's 3:35 P
 1. On THRU: when a player finishes, does each tab show its own total (gross on GROSS, net on NET, points on MVP) or always the gross total?
 2. FINAL / SUMMARY timing: appears when results close (about 20 minutes after the last score), or when the money first shows (IN REVIEW)?
 3. Tier 1 before Tuesday, or all of it after?
+
+
+---
+
+## 13. Kerry's answers to section 12.8 (10/19, verbatim) and the final spec
+
+Kerry: "1. Yes  2. SUMMARY can show at IN REVIEW. But with IN REVIEW badge  3. Build it all now."
+
+- **THRU finished cell (Q1): yes, each tab shows its own total.** GROSS: gross total. NET: net total. MVP: points. TEAM: team net. Shown "F 39" style so a stroke total is not read as a hole count.
+- **SUMMARY (Q2): appears at IN REVIEW, carrying an IN REVIEW badge, and the badge becomes FINAL when closeout fires.** This replaces the "appears at FINAL" rule in 11.3 and 12.1. It is the first tab as soon as it appears, and the landing tab from then on. Hidden through UPCOMING and LIVE. A hold keeps it at IN REVIEW. Cautions from section 7 apply: it is the first place all the money appears together, so the IN REVIEW badge must be unmistakable and the dollars carry the same "in review" weight as the WON column; an Unlock after IN REVIEW can change a figure and SUMMARY moves with it.
+- **Build scope (Q3): everything, now.** Build list B1 to B11 in 12.7 is one body of work, no tiering. Tiering survives only as a deploy-safety note: nothing deploys inside Tuesday's window (3:40 PM first tee through closeout), and nothing deploys without Kerry's "Deploy". If the build is tested and Kerry deploys before 3:35 PM Tue, it is live Tuesday; if not, it deploys after Tuesday's closeout. Tracker Build owns the code and the deploy call, per rule 3c.
+- **Open items still not ruled** (do not block the build): whether a Longest Putt changes the per-contest dollars (Event Ops); a team hole where a player has no score on a closed card (Event Ops stale-card rule).
