@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.573.2";
+window.TGF_VERSION = "2.573.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.3",
+    date: "2026-10-19",
+    title: "Tee-times player email sends without the footer until an address is on file",
+    changes: [
+      "Kerry 10/19 (\"Send without footer\"): a tee sheet to players who registered is transactional, so while tgf_mailing_address is empty the player version drops its footer line instead of being held. Setting the address brings the line back by itself. The approved wording hash is unchanged. Guard test_teetimes_email.py."
+    ]
+  },
   {
     version: "2.573.2",
     date: "2026-10-19",

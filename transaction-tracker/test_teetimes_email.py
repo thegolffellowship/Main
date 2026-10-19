@@ -107,11 +107,12 @@ check("job dial and spots dial default OFF", d == {tt.AUTO_DIAL: "off", tt.SPOTS
 for v in tt.VERSIONS:
     print(f"     {tt.TEMPLATES[v]}: {appr[v]['template_hash']}  ({tt.APPROVAL_KEYS[v]})")
 
-print("2. Held on blanks: the player version waits for the mailing address")
+print("2. No mailing address: the player version sends without its footer (Kerry 10/19)")
 b = tt.build(EV, db_path=DB)
 held_p = [h for h in b["held"] if h["version"] == "player"]
-check("every player with an email is held on {mailing_address}",
-      not by(b, "player") and sum(1 for h in held_p if "{mailing_address}" in h["reason"]) == 4, held_p)
+check("every player with an email is ready, the footer line dropped",
+      len(by(b, "player")) == 4 and not any("{mailing_address}" in h["reason"] for h in held_p)
+      and not any("The Golf Fellowship &middot;" in m["html"] for m in by(b, "player")), held_p)
 check("the player with no email is held for that", any(h["customer_id"] == 880104 and "no email" in h["reason"]
                                                        for h in held_p))
 db.set_app_setting(tt.MAILING_ADDRESS_KEY, "PO Box 1, San Antonio, TX 78201", db_path=DB)

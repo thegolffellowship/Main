@@ -279,9 +279,15 @@ def _guard(subject: str, body: str, used: set, values: dict) -> list:
 def _render(version: str, tpl: dict, values: dict) -> tuple[str, str, list]:
     from email_parser.fetcher import render_msg_template, normalize_email_html
     from email_parser.event_day_email import html_to_text
-    used = set(_TAG_RE.findall(tpl["subject"] + tpl["html_body"]))
+    html_body = tpl["html_body"]
+    if not (values.get("mailing_address") or "").strip():
+        # Kerry 10/19: send without the footer while no address is on file
+        # (a tee sheet to registered players is transactional). The line
+        # returns by itself once tgf_mailing_address is set.
+        html_body = re.sub(r"<p[^>]*>[^<]*\{mailing_address\}[^<]*</p>", "", html_body)
+    used = set(_TAG_RE.findall(tpl["subject"] + html_body))
     subject = html_to_text(render_msg_template(tpl["subject"], values))
-    body = normalize_email_html(render_msg_template(tpl["html_body"], values))
+    body = normalize_email_html(render_msg_template(html_body, values))
     return subject, body, _guard(subject, body, used, values)
 
 
@@ -554,7 +560,7 @@ def send_preview(event_id: int, to_address=None, db_path=None) -> dict:
     if built.get("tee_sheet_problems"):
         why_not.append("tonight's pairings aren't saved yet (5:00 PM)")
     if not built.get("mailing_address_on_file"):
-        why_not.append("the player version needs the mailing address for its footer")
+        pass   # no address: the player version sends without its footer line
     unstamped = [v for v in VERSIONS if not built["approvals"][v]["approved"]]
     if unstamped:
         why_not.append("your OK on the wording of: " + ", ".join(unstamped))
