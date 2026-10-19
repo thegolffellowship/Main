@@ -1,5 +1,22 @@
-window.TGF_VERSION = "2.572.1";
+window.TGF_VERSION = "2.573.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.0",
+    date: "2026-10-19",
+    title: "Leaderboard: Kerry's 10/19 rulings, all of it",
+    changes: [
+      "Kerry 10/19: \"I want everything built.\" / \"Build it all now.\" (Leaderboard Review #2098/#2099, handoff-2026-10-19-leaderboard-review.md sections 12-13).",
+      "Tabs: TEAM, MVP, NET, GROSS, SKINS, then CTPs, or PROXIES when an event has a contest other than Closest to the Pin (from the event's proxy slots). OVERALL is retired behind app setting evlb_overall_tab (off), code kept; a no-games event keeps its single board.",
+      "Member names read First LAST on every board (Michelle DelCARMEN, Adam BAKER, Sean MacBRIDE; Delgado stays DELGADO), display only.",
+      "A state strip above the tabs: UPCOMING / LIVE / IN REVIEW / FINAL, each with one plain line; a hold keeps IN REVIEW with 'Results are being checked.' Minutes come from the dials. HOW IT WORKS explains the four words and THRU.",
+      "THRU, PGA style, on boards not showing hole by hole: the tee time and start hole before the round, holes done during it, 'F' and that tab's total when finished. While LIVE the boards rank on to-par, then holes done.",
+      "TEAM: opens on one row per team (# / TEAM / THRU / NET / \u00b1 / WON); tap a team to open today's full board, with no further player expansion; Expand all / Collapse all. Team Net 1-, 2- and 3-ball from the event's dial (the sum of the N lowest nets per hole, \u00b1 against par for each counted ball), the same rule the payouts now rank on; every counted ball is green, ties at the cutoff too. A hole counts once every player on the team has posted it.",
+      "SUMMARY: once every score is in, a first tab (and the landing tab) with every game's winners and money and a link to each board, badged IN REVIEW until closeout, then FINAL.",
+      "Projected WON: while LIVE, the WON column shows what each player would win if play ended now, muted and marked PROJ., from the same calculation the auto-payouts preview uses (never recorded); each flight header shows its pot and places. Money only on its own game's tab.",
+      "Match Play: an event with City Match Play matches gets a Match Play tab with the standard match cards, read-only.",
+      "Guards: test_evlb_rulings_b1_b7.py/.js, test_team_net_nball.py, test_team_board_collapsed.js, test_lb_summary.py/.js, plus the existing board tests."
+    ]
+  },
   {
     version: "2.572.1",
     date: "2026-10-19",
