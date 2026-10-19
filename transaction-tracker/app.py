@@ -6542,12 +6542,8 @@ def api_send_course_files(event_id):
     ev = next((e for e in get_all_events() if e["id"] == event_id), None)
     if not ev:
         return jsonify({"error": "Event not found"}), 404
-    from email_parser.print_pack import course_recipients_for_event
-    _rec = course_recipients_for_event(ev)
-    if not _rec.get("ok"):
-        return jsonify({"sent": False, "no_contact": True, "course_id": _rec.get("course_id"),
-                        "course": ev.get("course"),
-                        "why": f"{_rec.get('why')} ({ev.get('course') or 'this course'})"}), 409
+    # No course contact -> the manager gets the files (Kerry 10/19);
+    # send_course_files decides, and only refuses when there is no one.
     built = build_print_pack_for_event(event_id, force_scorecards=True)
     if not built:
         return jsonify({"error": "Event not found or nothing to print"}), 404
@@ -6562,6 +6558,8 @@ def api_send_course_files(event_id):
                          "course-files-send", f"event {event_id}: {json.dumps(res, default=str)[:300]}")
     except Exception:
         pass
+    if res.get("no_contact") and not res.get("sent") and not res.get("to_manager"):
+        return jsonify(res), 409
     return jsonify(res), (200 if res.get("sent") else 502)
 
 

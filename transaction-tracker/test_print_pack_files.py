@@ -99,7 +99,20 @@ check("To the primary, the other TGF contact and Kerry on CC, course wording",
       and "kerry@thegolffellowship.com" in (_sent.get("cc_address") or "") and _sent.get("for_course") is True, _sent)
 _sent.clear()
 res = pp.send_course_files({"event": {"id": 2, "course_id": None, "course": "Nowhere"}}, db_path=DB)
-check("no contact: refused, nothing sent", res.get("no_contact") and not _sent, res)
+# Kerry 10/19: "If there is not a course contact - send to manager."
+check("no contact: the files go to the manager (our pack recipients) instead",
+      res.get("no_contact") and res.get("to_manager")
+      and _sent.get("to_address") == "kerry@thegolffellowship.com", (res, _sent))
+_sent.clear()
+_env = os.environ.pop("PRINT_PACK_EMAIL_TO", None)
+_env2 = {k: os.environ.pop(k, None) for k in ("DAILY_REPORT_TO", "EMAIL_ADDRESS")}
+res = pp.send_course_files({"event": {"id": 3, "course_id": None, "course": "Nowhere"}}, db_path=DB)
+check("no contact and no manager address: refused, nothing sent", res.get("no_contact") and not _sent, res)
+if _env:
+    os.environ["PRINT_PACK_EMAIL_TO"] = _env
+for k, v in _env2.items():
+    if v:
+        os.environ[k] = v
 pp.send_print_pack_files = _orig
 check("the interim course_print_contacts setting is retired", "course_print_contacts(" not in pk
       and "def set_course_print_contact" not in pk)

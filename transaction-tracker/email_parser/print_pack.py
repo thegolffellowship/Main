@@ -428,7 +428,8 @@ def print_pack_recipient(ev: dict | None = None, db_path=None) -> str | None:
 # 0014, #1699/#1701): To the course's primary TGF contact, CC its other TGF
 # contacts plus Kerry's pack recipients. The interim app setting
 # `course_print_contacts` is retired. An event whose course has no primary
-# TGF contact is refused, never sent to a guessed address.
+# TGF contact goes to the manager (our pack recipients) instead, never to a
+# guessed address (Kerry 10/19).
 def _event_course_id(ev: dict | None, db_path=None) -> int | None:
     if not ev:
         return None
@@ -463,9 +464,17 @@ def send_course_files(built: dict, db_path=None) -> dict:
     ev = built.get("event") or {}
     rec = course_recipients_for_event(ev, db_path)
     if not rec.get("ok"):
-        return {"sent": False, "no_contact": True, "course_id": rec.get("course_id"),
-                "course": ev.get("course"),
-                "why": f"{rec.get('why')} ({ev.get('course') or 'this course'})"}
+        # Kerry 10/19: "If there is a course contact - send to course contact
+        # and CC manager. If there is not a course contact - send to manager."
+        mgr = [a.strip() for a in (print_pack_recipient(ev, db_path=db_path) or "").split(",") if a.strip()]
+        why = f"{rec.get('why')} ({ev.get('course') or 'this course'})"
+        if not mgr:
+            return {"sent": False, "no_contact": True, "course_id": rec.get("course_id"),
+                    "course": ev.get("course"), "why": why}
+        res = send_print_pack_files(built, to_address=mgr[0], db_path=db_path,
+                                    cc_address=", ".join(mgr[1:]) or None, for_course=True)
+        return {**res, "no_contact": True, "to_manager": True, "course_id": rec.get("course_id"),
+                "course": ev.get("course"), "why": why}
     cc = list(rec.get("cc") or [])
     for a in (print_pack_recipient(ev, db_path=db_path) or "").split(","):
         a = a.strip()

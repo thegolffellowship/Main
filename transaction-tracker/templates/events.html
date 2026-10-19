@@ -7344,7 +7344,7 @@
                 return;
             }
             if (!res.ok || !data.sent) { alert(data.error || data.why || "The course files were not sent."); return; }
-            alert(`Course files sent to ${data.to}${data.cc ? " (cc " + data.cc + ")" : ""}: ${(data.files || []).map(f => f.filename).join(", ")}.`);
+            alert(`${data.to_manager ? "No course contact on file, so the" : "Course"} files ${data.to_manager ? "went to the manager, " : "sent to "}${data.to}${data.cc ? " (cc " + data.cc + ")" : ""}: ${(data.files || []).map(f => f.filename).join(", ")}.`);
         } catch (err) {
             alert("The course files were not sent.");
         } finally {

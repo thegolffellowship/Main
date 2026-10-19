@@ -3163,8 +3163,10 @@ emailed to me."
   Course Files go To the course's PRIMARY active `tgf_contact`
   (`course_staff.print_recipients`), CC its other active TGF contacts plus
   `print_pack_recipient` (Kerry and the chapter extras). With no primary on file
-  the route answers 409 `no_contact` and the button points the admin to the
-  Courses page (`/courses?course=<id>`). The interim `course_print_contacts`
+  the files go to the manager instead (`print_pack_recipient`, v2.571.24, Kerry
+  10/19: "If there is not a course contact - send to manager."); only with no
+  address at all does the route answer 409 `no_contact` and point the admin to
+  the Courses page (`/courses?course=<id>`). The interim `course_print_contacts`
   setting and the `scoring-course-contact` bridge are retired. Bridge:
   `scoring-print-pack-pdf:<id>|files|send|course`.
 - **COURSE STAFF** (v2.562.0, migration 0014, Kerry 10/13 "Deploy now" #1737;
