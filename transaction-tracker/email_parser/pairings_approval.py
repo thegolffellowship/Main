@@ -42,7 +42,12 @@ DIAL = "pairings_approval_prompt"
 REPROMPT_MINUTES = 60
 # Kerry's TGF address for San Antonio and national events; other chapters
 # use the dial's `email`, else the manager's own customer email.
+# A manager's prompt goes to their TGF address, never a personal one (Kerry
+# 10/19: "Robert's email for TGF is robert@thegolffellowship.com"). An email
+# typed into the chapter_managers dial still wins; the customer row's own
+# address is only the last resort.
 DEFAULT_MANAGER_EMAIL = {"san antonio": "kerry@thegolffellowship.com",
+                         "austin": "robert@thegolffellowship.com",
                          "tgf": "kerry@thegolffellowship.com"}
 
 
@@ -128,7 +133,8 @@ def manager_for(chapter: str | None, db_path=None) -> dict:
             r = conn.execute("SELECT email FROM customer_emails WHERE customer_id = ? "
                              "ORDER BY is_primary DESC, email_id LIMIT 1", (int(cid),)).fetchone()
         email = (r[0] if r else "") or ""
-    return {"name": entry.get("name") or ("Kerry" if want in DEFAULT_MANAGER_EMAIL else ""),
+    return {"name": entry.get("name") or {"austin": "Robert"}.get(want)
+            or ("Kerry" if want in DEFAULT_MANAGER_EMAIL else ""),
             "email": email, "customer_id": cid}
 
 

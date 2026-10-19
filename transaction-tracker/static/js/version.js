@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.27";
+window.TGF_VERSION = "2.571.28";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.28",
+    date: "2026-10-19",
+    title: "Austin pairings prompt goes to robert@thegolffellowship.com",
+    changes: [
+      "Kerry 10/19: \"Robert's email for TGF is robert@thegolffellowship.com.\" The 5 PM pairings-approval prompt for Austin read Robert's personal address off his customer row because the chapter_managers dial carries no email for Austin. A manager's prompt now goes to their TGF address (Austin: robert@thegolffellowship.com; San Antonio: kerry@); an email typed into the dial still wins, and the customer row is only the last resort. Guard test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.571.27",
     date: "2026-10-19",

@@ -57,8 +57,8 @@ db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
 print("1. Who approves")
 check("San Antonio's prompt goes to Kerry's TGF address",
       pa.manager_for("San Antonio", DB)["email"] == "kerry@thegolffellowship.com")
-check("Austin's goes to Robert's own email (his customer row)",
-      pa.manager_for("Austin", DB)["email"] == "robert@example.test", pa.manager_for("Austin", DB))
+check("Austin's goes to Robert's TGF address, not his personal one (Kerry 10/19)",
+      pa.manager_for("Austin", DB)["email"] == "robert@thegolffellowship.com", pa.manager_for("Austin", DB))
 check("admin may approve anything", pa.may_approve("admin", None, "Austin") is None)
 check("the Austin manager may approve Austin", pa.may_approve("manager", "Austin", "Austin") is None)
 check("…but not San Antonio", pa.may_approve("manager", "Austin", "San Antonio") is not None)
@@ -69,8 +69,8 @@ mon_5_05 = datetime(2026, 10, 19, 17, 5)
 SENT.clear()
 r = pa.prompt_check(mon_5_05, DB)
 check("Monday 5:05 PM: one prompt per event, to its manager",
-      sorted(s["to_address"] for s in SENT) == ["kerry@thegolffellowship.com", "robert@example.test"], r)
-p = next((s for s in SENT if s["to_address"] == "robert@example.test"), {})
+      sorted(s["to_address"] for s in SENT) == ["kerry@thegolffellowship.com", "robert@thegolffellowship.com"], r)
+p = next((s for s in SENT if s["to_address"] == "robert@thegolffellowship.com"), {})
 check("…naming the event, the player count and the review link (login)",
       "a9.60 AUS TUESDAY" in p.get("subject", "") and "2 players" in p.get("html_body", "")
       and f"/events/{AUS}/approve-pairings" in p.get("html_body", "")
@@ -78,7 +78,7 @@ check("…naming the event, the player count and the review link (login)",
 check("…with the groups and a sample player email",
       "Ann Able" in p.get("html_body", "") and "Sample player email" in p.get("html_body", ""))
 check("no player was emailed by the prompt",
-      not any(s["to_address"].endswith("@example.test") and s["to_address"] != "robert@example.test" for s in SENT))
+      not any(s["to_address"].endswith("@example.test") for s in SENT))
 SENT.clear()
 pa.prompt_check(mon_5_05 + timedelta(minutes=15), DB)
 check("the same sheet is never prompted twice", not SENT)
@@ -90,7 +90,7 @@ check("a changed sheet waits out the hour before a fresh prompt",
       not SENT and "hour" in (r2["events"][AUS].get("skipped") or ""), r2["events"].get(AUS))
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
 pa.prompt_check(mon_5_05 + timedelta(minutes=80), DB)
-check("…then re-prompts for the new sheet", [s["to_address"] for s in SENT] == ["robert@example.test"])
+check("…then re-prompts for the new sheet", [s["to_address"] for s in SENT] == ["robert@thegolffellowship.com"])
 
 print("3. Approve")
 fp = pa.sheet_fingerprint(AUS, DB)
@@ -115,7 +115,7 @@ db.save_event_pairings(AUS, SHEET, db_path=DB)
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
 SENT.clear()
 r = pa.prompt_check(mon_5_05 + timedelta(hours=3), DB)
-check("once the emails went, no more prompts", not any(s["to_address"] == "robert@example.test" for s in SENT)
+check("once the emails went, no more prompts", not any(s["to_address"] == "robert@thegolffellowship.com" for s in SENT)
       and "already sent" in (r["events"][AUS].get("skipped") or ""), r["events"].get(AUS))
 db.set_app_setting(ede.APPROVAL_KEY, "", db_path=DB)
 r = pa.approve_and_send(SA, pa.sheet_fingerprint(SA, DB), role="admin", session_chapter=None,
