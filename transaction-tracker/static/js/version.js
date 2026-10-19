@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.573.10";
+window.TGF_VERSION = "2.573.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.11",
+    date: "2026-10-19",
+    title: "Blind counts on the Pairings tab; approve pages timed",
+    changes: [
+      "Kerry 10/19: \"on the PAIRINGS tab, next to the BLIND names, add (x) for number of times player has been a blind in the calendar year.\" Each BLIND seat reads e.g. \"BLIND \u00b7 Mary Wade (3)\": every blind this calendar year, this event included, from blind_draws (Golf Genius-era rows count too).",
+      "Kerry 10/19: \"Put all these load times into CTO Tracker Health & Performance.\" The manager's approve page and the approve API are now timed routes (approve_pairings_page / approve_pairings_api), so their load times show on /admin/health and in the daily digest beside pairings_get."
+    ]
+  },
   {
     version: "2.573.10",
     date: "2026-10-19",

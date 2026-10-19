@@ -63081,13 +63081,24 @@ def get_event_blinds(event_id: int, conn=None, db_path=None) -> dict:
                 WHERE b.event_id = ? AND b.group_num IS NOT NULL
                 ORDER BY b.holes, b.group_num, b.cart_pos""",
             (event_id,)).fetchall()
+        # Times each blind has been a blind this calendar year, this event
+        # included (Kerry 10/19: "next to the BLIND names, add (x) for
+        # number of times player has been a blind in the calendar year").
+        _yc: dict = {}
+        try:
+            _evd = c.execute("SELECT event_date FROM events WHERE id = ?", (event_id,)).fetchone()
+            _yr = int(str(_evd[0])[:4]) if _evd and _evd[0] else None
+            _yc = {k: v["count"] for k, v in blind_draw_history(c, year=_yr).items()} if _yr else {}
+        except Exception:
+            logger.exception("blind year counts unavailable (non-fatal)")
         out: dict = {}
         for r in rows:
             _mh = _mh_by.get(r["blind_id"]) or None
             out.setdefault(r["holes"], {}).setdefault(r["group_num"], []).append({
                 "cart_pos": r["cart_pos"], "name": r["player_name"],
                 "customer_id": r["customer_id"], "source": r["source"],
-                "reason": r["reason"] or "open_seat", "missed_holes": _mh})
+                "reason": r["reason"] or "open_seat", "missed_holes": _mh,
+                "year_count": _yc.get(r["customer_id"])})
         return out
     if conn is not None:
         return _run(conn)

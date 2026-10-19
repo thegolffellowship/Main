@@ -6455,6 +6455,7 @@ def auto_generate_pairings_job():
 
 @app.route("/events/<int:event_id>/approve-pairings")
 @require_role("manager")
+@perf.timed_route("approve_pairings_page")
 def approve_pairings_page(event_id):
     """MANAGER APPROVES THE PAIRINGS (Kerry 2026-10-13: "the manager needs to
     receive a prompt to review and approve the pairings which would then
@@ -6484,6 +6485,7 @@ def approve_pairings_page(event_id):
 
 @app.route("/api/events/<int:event_id>/approve-pairings", methods=["POST"])
 @require_role("manager")
+@perf.timed_route("approve_pairings_api")
 def api_approve_pairings(event_id):
     """Approve the saved sheet (its fingerprint must match) and email every
     player their event-day email. Manager of the event's chapter, or admin."""
