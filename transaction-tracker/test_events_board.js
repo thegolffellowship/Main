@@ -34,8 +34,10 @@ const d = {
   // net stableford points per hole -> the MVP/Points tab's PTS row
   hole_pts:{"1":{"1":2,"2":1},"2":{"1":1},"3":{"1":3}},
   // [hole, gross, strokes_received] — rid 1 pops on hole 2, rid 3 gets
-  // two on hole 1, so the dot rendering is exercised at 0/1/2 strokes
-  cards:{ 1:[[1,4,0],[2,5,1]], 2:[[1,5,0]], 3:[[1,6,2]], 4:[[1,4,0]] },
+  // two on hole 1, so the dot rendering is exercised at 0/1/2 strokes.
+  // rid 2 posts hole 2 too: a TEAM hole counts only once every player on
+  // the team has posted it (Kerry 10/19), and rids 1+2 are the team.
+  cards:{ 1:[[1,4,0],[2,5,1]], 2:[[1,5,0],[2,6,0]], 3:[[1,6,2]], 4:[[1,4,0]] },
   skin_cells:{ "2":[1] },
   overall_board:[
     // won_total is the whole event; won_by_cat is what each game paid,
@@ -86,7 +88,7 @@ const boards={
   gross:{sections:secsFrom(d.gross_board),sort:'gross',game:'gross',gameCol:false,netCol:false},
   skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'#',title:'Skins won',value:skinsCount},gameColAfterWon:true,holesOnLanding:true,netCol:false,noCard:true},
   points:{sections:[{label:null,rows:d.points_board.map(x=>ovOf(x,x.mvp_note)).filter(Boolean)}],sort:'keep',game:'points',grossCol:false},
-  team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,grossCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep'},
+  team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,grossCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep',holesOnLanding:true,noCard:true},
 };
 
 let fails=0;
@@ -153,7 +155,10 @@ console.log('== bands + order ==');
 ck('net board carries both flight bands',
    (htmls.net.match(/class="evlb-band"/g)||[]).length === 2);
 ck('overall has no bands', !htmls.overall.includes('evlb-band'));
-ck('team bands are tappable', htmls.team.includes('data-team="0"'));
+// Kerry 10/19 (B8): nothing opens inside an expanded team — the band is a
+// heading, with no chevron and no tap target
+ck('team bands are NOT tappable (no player expansion inside a team)',
+   !htmls.team.includes('data-team=') && !/evlb-band[\s\S]{0,80}tchev/.test(htmls.team));
 ck('points keeps the MVP tiebreak note', htmls.points.includes('MVP tiebreak 2'));
 
 console.log('== rank runs within a band ==');
@@ -511,7 +516,12 @@ console.log('== holes start CLOSED, and the PTS rows ride with them ==');
   // SKINS lands hole by hole (Kerry 10/19)
   ck('skins: lands with the hole grid open',
      !/class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls.skins));
-  for (const k of ['net','gross','points','team'])
+  // an opened TEAM is today's full board WITH its holes (Kerry 10/19: "The
+  // attached view should be the fully expanded view state"); the collapsed
+  // row in front of it is the TEAM tab's landing
+  ck('team: an opened team shows its hole grid',
+     !/class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls.team));
+  for (const k of ['net','gross','points'])
     ck(`${k}: lands with the hole columns closed`,
        /class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls[k]),
        (htmls[k].match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
