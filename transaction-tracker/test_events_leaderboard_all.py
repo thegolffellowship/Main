@@ -98,8 +98,11 @@ check("the page opens the named event (which loads and pins it)",
 r = tc.get("/member/results/999999")
 check("an unknown event id falls back to the full results list",
       r.status_code == 302 and r.headers["Location"].endswith("/member/results"))
-check("OVERALL is the last tab and the board lands on TEAM (NET with no team board) (Kerry 10/19)",
-      '["prox", "CTPs"], ["overall", "Overall"]]' in html and '[["team", "Team"], ["points", "MVP"], ["net", "Net"]' in html
+check("OVERALL is retired behind evlb_overall_tab (last when on) and the board lands on TEAM "
+      "(NET with no team board) (Kerry 10/19)",
+      '["prox", d.proxy_tab_label || "CTPs"]]' in html
+      and '.concat(d.overall_tab ? [["overall", "Overall"]] : [])' in html
+      and '[["team", "Team"], ["points", "MVP"], ["net", "Net"]' in html
       and '((d.teams || []).length ? "team" : "net")' in html)
 check("the game notes moved into HOW IT WORKS; status notices stay on the board",
       "Tonight's games" in html and "evlbMoneyNotice(d) + evlbFinalNotice(d);" in html)

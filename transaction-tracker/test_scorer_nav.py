@@ -13,7 +13,7 @@ Screen (headless Chromium at 390x844, skips without Playwright):
   (Scoring active) and on the board (Leaderboard active, "Hole N" on the
   Scoring segment), and on no other member page;
 - tapping LEADERBOARD lands on the scorer's event only, with the event bar,
-  the seven game tabs fitting the width in two rows, the Won column HIDDEN
+  the six game tabs fitting the width in two rows, the Won column HIDDEN
   while scores are out, every name cell one row high with its tee dot inside;
 - tapping SCORING returns to the same hole;
 - the hole screen still fits one screen with the toggle (no scrolling);
@@ -167,10 +167,14 @@ if sync_playwright and CHROME:
               and pg.inner_text(".evlb-solo-bar").replace("\n", " ") == "s9.26 Olympia Hills IN PLAY", pg.inner_text(".evlb-solo-bar"))
         check("no chapter chips, no eyebrow card, no summary on the scorer's board", pg.evaluate("!document.querySelector('details.evlb-ev > summary').offsetParent") and pg.evaluate("!document.querySelector('#evlb-chips').offsetParent"))
         seg = pg.evaluate("(() => { const s = document.querySelector('.evlb-seg-sub'); const r = s.getBoundingClientRect(); return {w: s.scrollWidth, cw: s.clientWidth, right: r.right, rows: new Set([...s.children].map(b => Math.round(b.getBoundingClientRect().top))).size, n: s.children.length}; })()")
-        check("seven game tabs fit the phone width in two rows", seg["n"] == 7 and seg["rows"] == 2 and seg["w"] <= seg["cw"] and seg["right"] <= 390, str(seg))
+        # six since OVERALL retired behind evlb_overall_tab (Kerry 10/19)
+        check("six game tabs fit the phone width in two rows", seg["n"] == 6 and seg["rows"] == 2 and seg["w"] <= seg["cw"] and seg["right"] <= 390, str(seg))
         check("Won column hidden while scores are out (every board + proxies)", pg.evaluate("[...document.querySelectorAll('table.evlb-holes')].every(t => t.classList.contains('no-won') && getComputedStyle(t.querySelector('th.won')).display === 'none')")
               and pg.evaluate("[...document.querySelectorAll('table.evlb-prox')].every(t => t.classList.contains('no-won'))"))
-        rows = pg.evaluate("""[...document.querySelectorAll('table.evlb-ovr[data-board] tbody td.nm')].map(td => {
+        # nobody in this fixture bought in, and OVERALL (which showed every
+        # player) is retired: bring the field onto the visible NET board
+        pg.locator(".evlb-panel:not([hidden]) input[data-ovr-all]").check(); pg.wait_for_timeout(300)
+        rows = pg.evaluate("""[...document.querySelectorAll('.evlb-panel:not([hidden]) table.evlb-ovr[data-board] tbody td.nm')].map(td => {
             const r = td.getBoundingClientRect(); const d = td.querySelector('.evlb-tee-dot');
             const dr = d ? d.getBoundingClientRect() : null;
             return {h: r.height, name: td.innerText.trim(), dotIn: !d || (dr.top >= r.top && dr.bottom <= r.bottom && dr.right <= r.right + 0.5), lines: Math.round(r.height / parseFloat(getComputedStyle(td).lineHeight))};
