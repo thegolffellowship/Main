@@ -362,7 +362,10 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
         if sheet_why:
             why = [f"tee sheet: {w}" for w in sheet_why] + [w for w in why if w != "blank: {tee_sheet}"]
         if why:
-            held.append({**row, "reason": "; ".join(why)})
+            # keep the rendered draft so the staff preview can SHOW it (Kerry
+            # 10/19: "Don't know what I'm looking at"); never sent while held
+            held.append({**row, "reason": "; ".join(why), "subject": subject,
+                         "html": frame(body, label, f"Tee times · {short}")})
             return
         ready.append({**row, "subject": subject,
                       "html": frame(body, label, f"Tee times · {short}"),
@@ -529,39 +532,40 @@ def send_preview(event_id: int, to_address=None, db_path=None) -> dict:
     if built.get("error"):
         return built
     ev = built["event"]
-    parts = [f"<p><strong>Tee-times email PREVIEW</strong> for <strong>{_e(ev['name'])}</strong> "
-             f"({_e(ev['date'])}, {_e(ev['course'])}). Nothing has been sent to any player, course or "
-             f"manager.</p><p>Job dial {AUTO_DIAL}: <b>{built['dials'][AUTO_DIAL]}</b>; "
-             f"spots dial {SPOTS_DIAL}: <b>{built['dials'][SPOTS_DIAL]}</b>; field {built['field']}, "
-             f"spots left {built['spots_left']}.</p><ul>"]
+    LABEL = {"player": "1. PLAYER version (each registered player)",
+             "course": "2. COURSE CONTACT version",
+             "manager": "3. MANAGER version"}
+    parts = [f"<p><strong>Tee-times email preview: {_e(ev['name'])}</strong> ({_e(ev['date'])}). "
+             f"Below are the three emails exactly as they would go out. Nothing has been sent.</p>"]
     for v in VERSIONS:
-        a = built["approvals"][v]
-        c = built["counts"][v]
-        parts.append(f"<li><b>{_e(a['template'])}</b>: hash <code>{_e(a['template_hash'])}</code> "
-                     f"{'APPROVED' if a['approved'] else 'NOT approved (' + a['approval_key'] + ')'}; "
-                     f"ready {c['ready']}, held {c['held']}, skipped {c['skipped']}</li>")
-    parts.append("</ul>")
-    shown = set()
-    for m in built["messages"]:
-        tag = (m["version"], m.get("spots_box"))
-        if tag in shown:
+        m = next((x for x in built["messages"] if x["version"] == v and not x.get("spots_box")), None) \
+            or next((x for x in built["held"] if x["version"] == v and x.get("html")), None)
+        parts.append('<hr style="border:0;border-top:3px solid #E87C3E;margin:24px 0 8px">'
+                     f"<p style=\"font:bold 16px Arial,sans-serif\">{LABEL[v]}</p>")
+        if not m:
+            sk = next((x for x in built["skipped"] if x["version"] == v), None)
+            parts.append(f"<p><i>Not sent for this event: {_e((sk or {}).get('why') or 'no recipient')}</i></p>")
             continue
-        shown.add(tag)
-        parts.append('<hr style="border:0;border-top:2px solid #E87C3E">'
-                     f"<p><strong>{_e(TEMPLATES[m['version']])}</strong>"
-                     + (" (with the spots box)" if m.get("spots_box") else "")
-                     + f"<br><strong>To:</strong> {_e(m['name'])} &lt;{_e(m['email'])}&gt;"
-                     + (f"<br><strong>CC:</strong> {_e(', '.join(m['cc']))}" if m.get("cc") else "")
-                     + f"<br><strong>Subject:</strong> {_e(m['subject'])}</p>" + m["html"])
-    parts.append('<hr style="border:0;border-top:2px solid #E87C3E">')
-    if built["held"]:
-        parts.append("<p><strong>HELD:</strong></p><ul>" + "".join(
-            f"<li>{_e(h['version'])}: {_e(h.get('name'))} (cid {_e(h.get('customer_id'))}): "
-            f"{_e(h['reason'])}</li>" for h in built["held"]) + "</ul>")
-    if built["skipped"]:
-        parts.append("<p><strong>Skipped:</strong></p><ul>" + "".join(
-            f"<li>{_e(s['version'])}: {_e(s.get('name') or '')} {_e(s['why'])}</li>"
-            for s in built["skipped"]) + "</ul>")
+        parts.append(f"<p style=\"color:#6B7280\">To: {_e(m['name'])} &lt;{_e(m['email'])}&gt;"
+                     + (f"<br>CC: {_e(', '.join(m['cc']))}" if m.get("cc") else "")
+                     + f"<br>Subject: {_e(m['subject'])}</p>" + m["html"])
+    # Plain-English status at the bottom.
+    why_not = []
+    if built.get("tee_sheet_problems"):
+        why_not.append("tonight's pairings aren't saved yet (5:00 PM)")
+    if not built.get("mailing_address_on_file"):
+        why_not.append("the player version needs the mailing address for its footer")
+    unstamped = [v for v in VERSIONS if not built["approvals"][v]["approved"]]
+    if unstamped:
+        why_not.append("your OK on the wording of: " + ", ".join(unstamped))
+    if built["dials"][AUTO_DIAL] != "on":
+        why_not.append("the send switch is off")
+    parts.append('<hr style="border:0;border-top:3px solid #E87C3E;margin:24px 0 8px">'
+                 "<p><strong>What it's waiting on before anything sends:</strong></p><ul>"
+                 + "".join(f"<li>{_e(w)}</li>" for w in why_not) + "</ul>"
+                 + (f"<p style=\"color:#6B7280;font-size:12px\">Players: {built['counts']['player']['ready']} ready, "
+                    f"{built['counts']['player']['held']} waiting. Wording codes: "
+                    + ", ".join(f"{v} {built['approvals'][v]['template_hash']}" for v in VERSIONS) + ".</p>"))
     subject = f"PREVIEW: tee-times email: {ev['name']}"
     creds = _creds()
     if not creds:

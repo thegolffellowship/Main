@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.573.0";
+window.TGF_VERSION = "2.573.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.1",
+    date: "2026-10-19",
+    title: "Tee-times preview shows the three emails",
+    changes: [
+      "Kerry 10/19 on the first preview: \"Don't know what I'm looking at.\" The staff preview listed who was held and why but showed no email, because a held message kept no draft. It now shows the player, course contact and manager emails exactly as they would go, then one plain list of what each is still waiting on (pairings saved, mailing address, wording OK, send switch). Guard test_teetimes_email.py."
+    ]
+  },
   {
     version: "2.573.0",
     date: "2026-10-19",
