@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.573.4";
+window.TGF_VERSION = "2.573.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.5",
+    date: "2026-10-19",
+    title: "Tee-times email to the not-yet-registered",
+    changes: [
+      "Kerry 10/19: \"Everyone invited except those who said I can't make it ... Yes I want it to go tonight.\" With teetimes_spots_audience = invited, everyone in the event's invitation audience who has not registered and did not answer Can't make it gets the player tee-times email with the spots-open box (only while seats are open). Their 7 AM line reads \"Register and we'll fit you into a group; your full Event Info email ... follows at 7:00 AM tomorrow.\" The new line is part of the player wording, so the player stamp is re-approved. The staff preview shows this version as section 4 with its head count."
+    ]
+  },
   {
     version: "2.573.4",
     date: "2026-10-19",

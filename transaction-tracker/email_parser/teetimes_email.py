@@ -82,6 +82,12 @@ SPOTS_BOX = {
     "one": 'There is 1 spot still open. If you want in: <a href="{registration_link}">Register</a>',
     "many": 'There are {spots_left} spots still open. If you want in: <a href="{registration_link}">Register</a>',
 }
+# The registered players' 7 AM line, and what a NOT-yet-registered recipient
+# reads in its place (Kerry 10/19: "Everyone invited except those who said I
+# can't make it").
+EVENT_INFO_LINE = "Your full Event Info email, with your start, group, cart and games, comes at 7:00 AM tomorrow."
+NONREG_LINE = ("Register and we'll fit you into a group; your full Event Info email, with your start, "
+               "group, cart and games, follows at 7:00 AM tomorrow.")
 PACK_LINE = {
     "weekday": "Print packs (starter sheet, cart signs and scorecards) will arrive by email at noon tomorrow.",
     "weekend": "Print packs (starter sheet, cart signs and scorecards) were sent at noon today.",
@@ -105,7 +111,7 @@ SENT_LINE = {
 FOOTER = '<p style="font-size:12px;color:#6B7280;">The Golf Fellowship &middot; {mailing_address}</p>'
 
 _FIXED = {
-    "player": (PRELIM_LINE, TEESHEET_LINK, SPOTS_BOX["one"], SPOTS_BOX["many"]),
+    "player": (PRELIM_LINE, TEESHEET_LINK, SPOTS_BOX["one"], SPOTS_BOX["many"], NONREG_LINE),
     "course": (PRELIM_LINE, TEESHEET_LINK, FOOTER, *PACK_LINE.values()),
     "manager": (PRELIM_LINE, TEESHEET_LINK, FOOTER, ADD_CONTACT_LINE,
                 *MANAGER_LINE.values(), *SENT_LINE.values()),
@@ -443,6 +449,7 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
                 vals = {**common, "first_name": _e((c[0] if c else "") or "there"),
                         "spots_block": box}
                 s, b, why = _render("player", tpl_p, vals)
+                b = b.replace(EVENT_INFO_LINE, NONREG_LINE)
                 if not link:
                     why = why + ["blank: {registration_link} (the event has no registration link)"]
                 add("player", key, cid, full, email, (s, b, why), extra={"spots_box": True})
@@ -541,6 +548,9 @@ def send_preview(event_id: int, to_address=None, db_path=None) -> dict:
     LABEL = {"player": "1. PLAYER version (each registered player)",
              "course": "2. COURSE CONTACT version",
              "manager": "3. MANAGER version"}
+    spots_m = next((x for x in built["messages"] + built["held"]
+                    if x.get("spots_box") and x.get("html")), None)
+    n_spots = sum(1 for x in built["messages"] if x.get("spots_box"))
     parts = [f"<p><strong>Tee-times email preview: {_e(ev['name'])}</strong> ({_e(ev['date'])}). "
              f"Below are the three emails exactly as they would go out. Nothing has been sent.</p>"]
     for v in VERSIONS:
@@ -555,6 +565,15 @@ def send_preview(event_id: int, to_address=None, db_path=None) -> dict:
         parts.append(f"<p style=\"color:#6B7280\">To: {_e(m['name'])} &lt;{_e(m['email'])}&gt;"
                      + (f"<br>CC: {_e(', '.join(m['cc']))}" if m.get("cc") else "")
                      + f"<br>Subject: {_e(m['subject'])}</p>" + m["html"])
+    parts.append('<hr style="border:0;border-top:3px solid #E87C3E;margin:24px 0 8px">'
+                 f"<p style=\"font:bold 16px Arial,sans-serif\">4. NOT REGISTERED version "
+                 f"(everyone invited who hasn't registered or said Can't make it: {n_spots} people)</p>")
+    if spots_m:
+        parts.append(f"<p style=\"color:#6B7280\">To: {_e(spots_m['name'])} &lt;{_e(spots_m['email'])}&gt;"
+                     f"<br>Subject: {_e(spots_m['subject'])}</p>" + spots_m["html"])
+    else:
+        parts.append("<p><i>Not sent: " + ("the event is full." if not built.get("spots_left")
+                     else f"the {SPOTS_DIAL} switch is off.") + "</i></p>")
     # Plain-English status at the bottom.
     why_not = []
     if built.get("tee_sheet_problems"):
