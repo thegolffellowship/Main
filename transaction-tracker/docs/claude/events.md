@@ -1515,6 +1515,15 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
 
 ## Skins labels
 - "Skins ½ Net" when gross player count < 8
+  - The EVENTS leaderboard plays the same variant (v2.571.27): `get_event_leaderboard`
+    selects it with `live_scoring.select_variant` on the gross buyer count (a
+    frozen/settled flight board's variant wins), and on ½ Net computes each
+    buyer's pops with `live_scoring.game_handicaps` (50%, off the lowest BUYER,
+    own tee's SI) and circles the low NET score. It returns `skins_variant` and
+    `skin_pops` ({rid: {strokes, by_hole}}); the Skins tab draws those pops and
+    is labelled "½ Net Skins". Ghost circles use the non-buyer's own 50% off
+    the same lowest buyer. Guard test_half_net_skins_board.py (also checks the
+    paying engine circles the same holes).
 - "Skins Gross" when gross player count >= 8
 
 ## Skins Type row

@@ -363,6 +363,17 @@ for (const k of Object.keys(boards)) {
   else
     ck(`${k}: pops show on the hole scores`, /evlb-pops/.test(htmls[k]));
 }
+{
+  // ½ Net Skins (Kerry 10/19): the GAME's pops (50%, off the lowest buyer)
+  // from the server's skin_pops show; the card's full pops never do.
+  const rid0 = String(d.skins_board[0].rows[0].scoring_round_id);
+  const dn = Object.assign({}, d, { skins_variant: { name: 'half_net', basis: 'net' },
+    skin_pops: { [rid0]: { strokes: 1, by_hole: { '2': 1 } } } });
+  const hn = evlbStdBoard(dn, boards.skins);
+  ck('½ Net skins: the game pops show', (hn.match(/evlb-pops/g) || []).length === 1, (hn.match(/evlb-pops/g) || []).length);
+  const tabsSrc = src.match(/\["skins", \(d\.skins_variant[^\]]*\]/);
+  ck('½ Net skins: the tab reads ½ Net Skins', !!tabsSrc && /\\u00bd Net Skins/.test(tabsSrc[0]), tabsSrc && tabsSrc[0]);
+}
 ck('the team tab keeps the dots on its NET cells',
    /class="h[^"]*"[^>]*><span class="evlb-pops">/.test(htmls.team), '');
 ck('PAR row carries no pops',

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.26";
+window.TGF_VERSION = "2.571.27";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.27",
+    date: "2026-10-19",
+    title: "Leaderboard: \u00bd Net Skins",
+    changes: [
+      "Kerry 10/19: \"Skins 1/2 Net is simple because there's only one flight, so it's the field of players who actually bought in...not the whole field... Build the 1/2 Net Skins today.\" When the side-games matrix runs Skins \u00bd Net (fewer than 8 gross buyers, or a frozen flight board that froze it), the Skins tab now circles the low NET score on each hole: each buyer plays off 50% of his playing handicap, rounded once, off the lowest BUYER, on his own tee's stroke index. The dots on the hole scores are those game pops (gross Skins still shows none). The tab reads \u00bd Net Skins, and HOW IT WORKS says how it is played. Same dials the payouts engine pays on, and the test checks the two circle the same holes. Guards test_half_net_skins_board.py, test_events_board.js."
+    ]
+  },
   {
     version: "2.571.26",
     date: "2026-10-19",

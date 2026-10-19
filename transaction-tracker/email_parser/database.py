@@ -15098,6 +15098,7 @@ def get_event_leaderboard(event_name: str,
         # same SELECTION the payouts are paid on (Kerry 10/13: "It doesn't
         # look like flights are showing where they should on the
         # leaderboard").
+        _fb = None
         if not _gg_era:
             try:
                 _fb = event_flights_board(ev["id"], db_path=db_path)
@@ -15926,18 +15927,101 @@ def get_event_leaderboard(event_name: str,
     if not _gg_era:
         team_slot_money(teams, won)
 
-    # ── skins winning cells (outright low GROSS on a hole WITHIN the
+    # ── skins winning cells (outright low score on a hole WITHIN the
     # flight — the engine's rule) for the GG-style hole-by-hole grid ──
+    # THE MATRIX PICKS THE GAME (Kerry 10/19, from GG's own setup: "SKINS
+    # 1/2 Net $ ... USGA Net (off lowest) ... 50%"). Below the buyer band
+    # Skins is ½ Net: each BUYER's playing handicap x 50%, rounded once,
+    # off the lowest among the players who actually bought in (not the
+    # whole field), placed on his own tee's stroke index — the same dials
+    # live_scoring.game_skins pays on. A frozen / settled flight board's
+    # variant wins over the buyer count, as it does for the money.
     skin_cells: dict = {}
     ghost_skin_cells: dict = {}
+    skins_variant = None
+    skin_pops: dict = {}
+    try:
+        from email_parser import live_scoring as _ls_sk
+        _sk_cfg = _ls_sk.SEED_LIVE_SCORING_CONFIG["games"].get("skins") or {}
+        _sk_key = "18" if len(hole_cols) > 9 else "9"
+        _sk_v = _ls_sk.select_variant(_sk_cfg, _sk_key, len(gross_buyers))
+        _sk_pin = _variant_pins_for(_fb).get("skins") if _fb else None
+        if _sk_pin and _sk_pin != _sk_v.get("name"):
+            _sk_v = next((dict(v) for v in _sk_cfg.get("variants") or []
+                          if v.get("name") == _sk_pin), _sk_v)
+        skins_variant = {"name": _sk_v.get("name"), "label": _sk_v.get("label"),
+                         "basis": _sk_v.get("basis"),
+                         "allowance_pct": (_sk_v.get("handicap") or {}).get("allowance_pct"),
+                         "off_lowest": bool((_sk_v.get("handicap") or {}).get("off_lowest"))}
+    except Exception:
+        _ls_sk, _sk_v = None, None
+        logger.exception("Non-fatal: skins variant unavailable for event %s", ev["id"])
+    _sk_net = bool(_sk_v and _sk_v.get("basis") == "net" and _sk_v.get("handicap"))
+
+    def _sk_si(r):
+        band = band_by_cid.get(r.get("customer_id"))
+        si = ((_tn_si_by_band.get(band) if band else None)
+              or _tn_si_by_rid.get(r["scoring_round_id"]) or {})
+        return {h: v for h, v in si.items() if h in hole_cols}
+
+    def _sk_pseudo(r):
+        return {"key": str(r["scoring_round_id"]),
+                "playing_handicap": by_rid_hcp.get(r["scoring_round_id"]),
+                "holes": [{"hole": h, "stroke_index": v}
+                          for h, v in sorted(_sk_si(r).items())]}
+
+    by_rid_hcp = {p["scoring_round_id"]: p["hcp"] for p in plist}
     for sec in skins_board:
+        sec_pops: dict = {}
+        if _sk_net:
+            buyers_ = [r for r in sec["rows"] if r["buyer"]]
+            si_union: dict = {}
+            for r in buyers_:
+                si_union.update(_sk_si(r))
+            hc = _ls_sk.game_handicaps([_sk_pseudo(r) for r in buyers_],
+                                       _sk_v["handicap"], si_union)
+            for r in buyers_:
+                bh = (hc["by_key"].get(str(r["scoring_round_id"])) or {})
+                sec_pops[r["scoring_round_id"]] = {
+                    int(h): int(n) for h, n in (bh.get("by_hole") or {}).items() if n}
+                skin_pops[str(r["scoring_round_id"])] = {
+                    "strokes": bh.get("strokes"),
+                    "by_hole": {str(h): n for h, n in sec_pops[r["scoring_round_id"]].items()}}
+            # A non-buyer's would-be pops (ghost circles only): his own 50%,
+            # off the same lowest BUYER — he never moves the base.
+            _rb = [r_ for r_ in buyers_ if by_rid_hcp.get(r_["scoring_round_id"]) is not None]
+            if _rb:
+                _mode = _sk_v["handicap"].get("rounding", "half_up")
+                _pct = _sk_v["handicap"].get("allowance_pct", 100)
+                _low = (min(_ls_sk._round_allowance(float(by_rid_hcp[r_["scoring_round_id"]]) * _pct / 100.0, _mode)
+                            for r_ in _rb) if _sk_v["handicap"].get("off_lowest") else 0)
+                for r in sec["rows"]:
+                    ph_ = by_rid_hcp.get(r["scoring_round_id"])
+                    if r["buyer"] or ph_ is None:
+                        continue
+                    st_ = _ls_sk._round_allowance(float(ph_) * _pct / 100.0, _mode) - _low
+                    si_ = _sk_si(r) or si_union
+                    try:
+                        bh_ = _ls_sk.allocate_strokes(
+                            st_, si_, mode=_ls_sk.ruled_allocation_mode(
+                                _sk_v["handicap"].get("stroke_allocation", "ruled"), si_)) if si_ else {}
+                    except Exception:
+                        bh_ = {}
+                    sec_pops[r["scoring_round_id"]] = {int(h): int(n) for h, n in bh_.items() if n}
+
+        def _sk_score(r, hn):
+            s = _player_holes(r["scoring_round_id"]).get(hn)
+            s = s[0] if s else None
+            if s is None:
+                return None
+            return s - (sec_pops.get(r["scoring_round_id"]) or {}).get(hn, 0)
+
         for hn in hole_cols:
             best, who, tie = None, None, False
             for r in sec["rows"]:
                 if not r["buyer"]:
                     continue   # placed non-buyers never contest a skin
-                s = _player_holes(r["scoring_round_id"]).get(hn)
-                s = s[0] if s else None
+                s = _sk_score(r, hn)
                 if s is None:
                     continue
                 if best is None or s < best:
@@ -15952,8 +16036,7 @@ def get_event_leaderboard(event_name: str,
             # only: never a skin, never money.
             scores = []
             for r in sec["rows"]:
-                s = _player_holes(r["scoring_round_id"]).get(hn)
-                s = s[0] if s else None
+                s = _sk_score(r, hn)
                 if s is not None:
                     scores.append((s, r))
             if scores:
@@ -16033,6 +16116,10 @@ def get_event_leaderboard(event_name: str,
         "skins_board": skins_board,
         "skin_cells": {str(k): v for k, v in skin_cells.items()},
         "ghost_skin_cells": {str(k): v for k, v in ghost_skin_cells.items()},
+        # which Skins the matrix runs tonight, and each buyer's ½ Net pops
+        # ({rid: {"strokes", "by_hole": {hole: n}}}) — empty on gross skins
+        "skins_variant": skins_variant,
+        "skin_pops": skin_pops,
         "points_board": points_rows,
         "teams": teams,
         "team_board": team_rows,

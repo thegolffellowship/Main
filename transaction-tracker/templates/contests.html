@@ -3965,7 +3965,9 @@
             overall: `The whole field in one table: hole-by-hole gross with the totals. A tinted <b>N</b> (net) or <b>G</b> (gross) total won that game in that flight; a circled hole score is a skin won in that flight; <span class="lg w-mvp">Pts</span> marks the Event MVP. <b>Won</b> = everything collected at this event, all games (team &amp; proxies included).`,
             net: `Individual Net. A tinted <b>N</b> total won Individual Net in that flight. <b>Won</b> = Individual Net money only; OVERALL shows everything collected at this event.`,
             gross: `Individual Gross. A tinted <b>G</b> total won Individual Gross in that flight. <b>Won</b> = Individual Gross money only; OVERALL shows everything collected at this event.`,
-            skins: `A circled hole score is a skin won in that flight. <b>Won</b> = Skins money only; OVERALL shows everything collected at this event.`,
+            skins: ((d.skins_variant || {}).basis === "net"
+                ? `Tonight is <b>Skins \u00bd Net</b> (fewer buyers, so the side-games matrix runs the net form): each buyer gets half his playing handicap, off the lowest among the players who bought in, and the dots on a hole score are those strokes. The low NET score on a hole, alone, wins the skin. `
+                : "") + `A circled hole score is a skin won in that flight. <b>Won</b> = Skins money only; OVERALL shows everything collected at this event.`,
             points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole. <b>Won</b> = MVP money only.`,
             team: `Hole scores are each player's GROSS with their pops marked; gross less pops is the net the team played, and the green cell is the ball that counted. The TEAM NET row closes each band with the team's holes, total and whole purse; a player row's <b>Won</b> is that player's share.`,
             prox: `Closest-to-the-pin and other proximity winners, hole by hole.`,
@@ -4379,8 +4381,13 @@
             }
             // A GROSS skins board (no Net column) shows no pops (Kerry
             // 10/19: "Do not show hole pops on skins when it's Gross
-            // Skins"); the Cup's NET team skins keep theirs.
-            const pops = (game === "skins" && netCol === false) ? "" : evlbPops(hh ? hh[2] : 0);
+            // Skins"); the Cup's NET team skins keep theirs. ½ Net Skins
+            // shows the GAME's pops (50%, off the lowest buyer), from the
+            // server's skin_pops, never the card's full ones.
+            const skNet = game === "skins" && netCol === false
+                && (d.skins_variant || {}).basis === "net";
+            const skP = skNet ? ((((d.skin_pops || {})[String(r.scoring_round_id)] || {}).by_hole || {})[String(n)] || 0) : 0;
+            const pops = (game === "skins" && netCol === false) ? evlbPops(skP) : evlbPops(hh ? hh[2] : 0);
             if (!hh || hh[1] == null) return '<td class="h"></td>';
             const ghost = game === "skins" && evlbShowAll
                 && (((d.ghost_skin_cells || {})[String(r.scoring_round_id)]) || []).includes(n);
@@ -4741,7 +4748,8 @@
         // board lands on NET.
         const tabs = noGames ? [["overall", "Overall"]]
             : [["team", "Team"], ["points", "MVP"], ["net", "Net"],
-               ["gross", "Gross"], ["skins", "Skins"],
+               ["gross", "Gross"],
+               ["skins", (d.skins_variant || {}).basis === "net" ? "\u00bd Net Skins" : "Skins"],
                ["prox", "CTPs"], ["overall", "Overall"]];
         const first = noGames ? "overall" : ((d.teams || []).length ? "team" : "net");
         // no games, no money: nothing to hold or explain
