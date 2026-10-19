@@ -55,8 +55,8 @@ check("legends are chips, not prose (Kerry 10/8: \"Nobody is going to read all t
       'Money winners color-code by FLIGHT: ${' not in html and 'Tap a player for their scorecard.</p>' in html)
 check("the solo board drops the GG line on an event GG never scores (or with no posted score yet)",
       "off.hidden = !ev || !!ev.live_entry" in html)
-check("the long explanation lives behind a How to read this button (Kerry 10/8: \"An only if curious thing\")",
-      'data-evlb-hiw>How to read this</button>' in html and 'id="evlb-hiw-modal"' in html
+check("the long explanation lives behind a HOW IT WORKS button (Kerry 10/8; renamed 10/19: \"HOW IT WORKS is our standard\")",
+      'data-evlb-hiw>How it works</button>' in html and 'id="evlb-hiw-modal"' in html
       and 'function evlbReadGuide(d, game)' in html and 'non-buyers are placed in the flight their handicap' in html
       and html.index('id="evlb-hiw-modal"') > html.index('id="section-lone-star-cup"'))
 # Kerry 10/9 reversed 10/8 for the practice round: "I only want to show an
@@ -98,6 +98,14 @@ check("the page opens the named event (which loads and pins it)",
 r = tc.get("/member/results/999999")
 check("an unknown event id falls back to the full results list",
       r.status_code == 302 and r.headers["Location"].endswith("/member/results"))
+check("OVERALL is the last tab and the board lands on TEAM (NET with no team board) (Kerry 10/19)",
+      '["prox", "CTPs"], ["overall", "Overall"]]' in html and '[["team", "Team"], ["points", "MVP"], ["net", "Net"]' in html
+      and '((d.teams || []).length ? "team" : "net")' in html)
+check("the game notes moved into HOW IT WORKS; status notices stay on the board",
+      "Tonight's games" in html and "evlbMoneyNotice(d) + evlbFinalNotice(d);" in html)
+check("the 'not in' chip and the would-have-won key show only with Show All Players",
+      'class="lg evlb-only-all"' in html and 'evlb-ghostkey evlb-only-all' in html
+      and 'classList.toggle("evlb-showall", evlbShowAll)' in html)
 print()
 if F: print(f"{len(F)} FAILED"); sys.exit(1)
 print("\n== non-buyers are placed by INDEX against an index ladder (Kerry 9/29: Vest / McCormick) ==")

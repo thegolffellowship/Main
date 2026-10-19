@@ -1,5 +1,25 @@
-window.TGF_VERSION = "2.571.24";
+window.TGF_VERSION = "2.571.26";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.26",
+    date: "2026-10-19",
+    title: "Leaderboard: HOW IT WORKS, TEAM first, OVERALL last",
+    changes: [
+      "Kerry 10/19: \"not in badge should only show when 'Show All Players' is checked.\" The grey 'not in' legend chip and the Skins would-have-won key now show only while Show All Players is ticked, and follow the box when it is ticked or unticked (it used to need a reload).",
+      "\"HOW IT WORKS is our standard for any explanations.\" The board's button is now HOW IT WORKS (was How to read this), on the same line as the game tabs on desktop. Explanations such as \"Individual Gross activates at 16 ...\" and the Team tab's paragraph moved into it (a Tonight's games section); status notices (money held / not final yet) stay on the board.",
+      "\"Let's move OVERALL to the end for every view and event. Then let's land on TEAM rather than OVERALL.\" Tabs read Team, MVP, Net, Gross, Skins, CTPs, Overall (Kerry 10/19, second pass); the board opens on Team, or on Net when the event has no team board. An event with no games keeps its single Overall board. Display only. Guards test_events_leaderboard_all.py, test_events_board.js.",
+      "7 PM auto-send safety (Kerry 10/19: \"it needs to send me an email of failure, and then try again hourly\"): a failed 7 PM send emails Kerry and retries once an hour until it goes or a manager approves. Guard test_pairings_approval.py."
+    ]
+  },
+  {
+    version: "2.571.25",
+    date: "2026-10-19",
+    title: "Pairings: player emails go at 7 PM if no manager approved",
+    changes: [
+      "Kerry 10/19: \"The 7pm automatic send only fires based on no approval. If it's approved prior to that, or edited then approved, then it fires and sends right at that moment and doesn't need to resend at 7pm.\" New job pairings_auto_send (every 15 minutes on the quarter hour): at 7:00 PM Central the day before, an event with saved pairings, no manager approval and no player emails yet is approved as \"auto 7 PM (no manager approval)\" and its players get the pairing email (the wording Kerry already approved). An approval before 7 has already sent and is never repeated. Catch-up the next morning if the job missed 7 PM. Dial pairings_auto_send (off stops it). Guard test_pairings_approval.py.",
+      "Not yet: the tee-sheet-only email to the course contact and manager at the same time (new wording, CMO + Kerry's template approval)."
+    ]
+  },
   {
     version: "2.571.24",
     date: "2026-10-19",

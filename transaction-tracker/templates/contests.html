@@ -515,8 +515,14 @@
         .evlb-ev .pot .s { display: block; font: 600 10px/1.6 'Helvetica Neue', Arial, sans-serif;
             color: #9CA3AF; letter-spacing: 0.5px; }
         .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
-        .evlb-subtabs { margin-bottom: 10px; }
-        .evlb-hiw-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+        /* HOW IT WORKS sits on the games tab line on desktop (Kerry 10/19:
+           "On desktop it should be on same line as the games nav bar") */
+        .evlb-subtabs { margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .evlb-hiw-row { display: flex; justify-content: flex-end; margin-left: auto; }
+        /* shown only while Show All Players is ticked (Kerry 10/19) */
+        .evlb-only-all { display: none !important; }
+        html.evlb-showall .evlb-only-all { display: revert !important; }
+        html.evlb-showall .evlb-ghostkey.evlb-only-all { display: flex !important; }
         /* players still to tee off: name + tee time across the hole columns */
         tr.evlb-wait td { color: #6B7280; }
         tr.evlb-wait td.nm { color: inherit; opacity: .8; }
@@ -533,6 +539,7 @@
             .evlb-seg-sub { display: flex; flex-wrap: wrap; border-radius: 12px; }
             .evlb-seg-sub button { flex: 1 1 25%; padding: 9px 4px; font-size: 10.5px; letter-spacing: .3px; border-top: 1px solid var(--border, #E5E7EB); margin-top: -1px; }
             .evlb-seg-sub button:nth-child(5) { border-left: 0; }
+            .evlb-hiw-row { width: 100%; }
         }
         .evlb-scroll { overflow-x: auto; }
         /* tables compress LEFT instead of filling the width (Kerry) */
@@ -2819,9 +2826,9 @@
         </div>
         <!-- HOW TO READ THIS BOARD (Kerry 10/8): page level, so it opens from any tab -->
                 <div class="pr-hiw-scrim" id="evlb-hiw-scrim" style="display:none;"></div>
-                <div class="pr-hiw-modal" id="evlb-hiw-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="How to read this board">
+                <div class="pr-hiw-modal" id="evlb-hiw-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="How it works">
                     <button id="evlb-hiw-close" class="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
-                    <div class="pr-hiw-title" id="evlb-hiw-title">How to read this board</div>
+                    <div class="pr-hiw-title" id="evlb-hiw-title">How it works</div>
                     <div class="pr-hiw-secs" id="evlb-hiw-secs"></div>
                     <div class="pr-hiw-cta"><button type="button" id="evlb-hiw-gotit">Got it</button></div>
                 </div>
@@ -3964,6 +3971,9 @@
             prox: `Closest-to-the-pin and other proximity winners, hole by hole.`,
         };
         if (noGames) out.push(sec("This event", "No games at this event, so the boards are just the scores: Net ranks by net total, Gross by gross total. Nobody bought in and nothing is paid."));
+        // the game notes that used to sit on the board (Kerry 10/19)
+        const gn = (d.games_off || []).map(g => escapeHtml(g.note)).filter(Boolean);
+        if (gn.length) out.push(sec("Tonight's games", gn.join("<br>")));
         else if (what[game]) out.push(sec("This tab", what[game]));
         if (!noGames) out.push(sec("Colors",
             `Money winners are colour-coded by FLIGHT: ${[1, 2, 3].map(f => `<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`).join(" ")}. `
@@ -3982,7 +3992,7 @@
         const act = body.querySelector(".evlb-subtab.active");
         const game = act ? act.dataset.sub : "overall";
         const label = act ? act.textContent.trim() : "";
-        $("evlb-hiw-title").innerHTML = `How to read <span class="hiw-name">${escapeHtml(label || "this board")}</span>`;
+        $("evlb-hiw-title").innerHTML = `How it works <span class="hiw-name">${escapeHtml(label || "")}</span>`;
         $("evlb-hiw-secs").innerHTML = evlbReadGuide(d, game);
         $("evlb-hiw-scrim").style.display = "block";
         $("evlb-hiw-modal").style.display = "block";
@@ -4694,8 +4704,8 @@
             `</div>` + evlbTeeLegend(d) + `</div>` +
             // Kerry 10/19: a grey circle where a player who didn't buy in
             // would have won the skin; its legend shows only with Show All.
-            (board.game === "skins" && evlbShowAll
-                ? `<div class="evlb-ghostkey"><span class="evlb-circ evlb-ghost">3</span> would have won the skin (not in the skins)</div>` : "") +
+            (board.game === "skins"
+                ? `<div class="evlb-ghostkey evlb-only-all"><span class="evlb-circ evlb-ghost">3</span> would have won the skin (not in the skins)</div>` : "") +
             // no WON column on an event with no games (Kerry 10/9: "Won
             // column shouldn't show at all if there aren't any side games")
             `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp && !board.noHcp ? "" : " no-hcp"}${d._moneyHeld || evlbNoGames(d) ? " no-won" : ""}" data-board="${id}"${board.noHcp ? " data-nohcp" : ""}><thead>` +
@@ -4726,14 +4736,19 @@
         // ...and since Kerry 10/9 (the practice round's scorer board): "I only
         // want to show an Overall leaderboard that would have both Gross and
         // Net ... land with all players, but hole scores and handicaps off".
+        // OVERALL moves to the end and the board lands on TEAM (Kerry 10/19:
+        // player feedback found OVERALL confusing). An event with no team
+        // board lands on NET.
         const tabs = noGames ? [["overall", "Overall"]]
-            : [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
+            : [["team", "Team"], ["points", "MVP"], ["net", "Net"],
                ["gross", "Gross"], ["skins", "Skins"],
-               ["points", "MVP/Points"], ["prox", "Proxies"]];
-        const first = tabs[0][0];
+               ["prox", "CTPs"], ["overall", "Overall"]];
+        const first = noGames ? "overall" : ((d.teams || []).length ? "team" : "net");
         // no games, no money: nothing to hold or explain
-        const offNotes = noGames ? "" : evlbMoneyNotice(d) + evlbFinalNotice(d) + (d.games_off || []).map(g =>
-            `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
+        // Status (money held / not final) stays on the board; explanations
+        // such as "Individual Gross activates at 16 ..." live in HOW IT WORKS
+        // (Kerry 10/19: "HOW IT WORKS is our standard for any explanations").
+        const offNotes = noGames ? "" : evlbMoneyNotice(d) + evlbFinalNotice(d);
         // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
         // hole-by-hole gross plus totals. Wins highlight by the ratified
         // category colors (Net total green, Gross total amber, MVP on
@@ -4810,7 +4825,7 @@
                 chips.push(`<span class="lg w-mvp">Pts</span> MVP`);
             if (EVLB_BUYIN_GAMES.includes(game))
                 chips.push(`<span class="lg" style="background:var(--buyin-row,#FFFFFF);color:#1B1B1B;border:1px solid #E5E7EB;">bought in</span>`,
-                           `<span class="lg" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">not in</span>`);
+                           `<span class="lg evlb-only-all" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">not in</span>`);
             return chips.length ? `<p class="evlb-legend">${chips.join(" ")}</p>` : "";
         };
         const ovLegend = evlbLegendFor(null);
@@ -5000,10 +5015,7 @@
             overall: evlbStdBoard(d, boards.overall) + ovLegend + stripsBelow,
             team: (d.teams || []).length
                 ? evlbStdBoard(d, Object.assign({ teamBands: true, teams: d.teams }, boards.team),
-                    `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">` +
-                    `Bands are the teams, in the recorded Golf Genius order. Hole scores are each player's GROSS with their pops marked; take the pops off and you have the net the team played — the green cell is the ball that counted. ` +
-                    `Each band closes with a <b>TEAM NET</b> row: the team's score on every hole, the team total, and the team's whole purse. ` +
-                    `Tap a band for the best-ball card, a player for their own scorecard.</div>`)
+                    offNotes)
                     + evlbLegendFor("team")
                 : teamHtml,
             net: evlbStdBoard(d, boards.net) + evlbLegendFor("net"),
@@ -5016,7 +5028,7 @@
         return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? ' style="display:none"' : ""}>` +
             tabs.map(([k, l]) =>
                 `<button class="evlb-subtab${k === first ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
-            `</div><div class="evlb-hiw-row"><button type="button" class="pr-hiw-link evlb-hiw-btn" data-evlb-hiw>How to read this</button></div></div>` +
+            `</div><div class="evlb-hiw-row"><button type="button" class="pr-hiw-link evlb-hiw-btn" data-evlb-hiw>How it works</button></div></div>` +
             tabs.map(([k]) =>
                 `<div class="evlb-panel" data-panel="${k}"${k === first ? "" : " hidden"}>${panels[k]}</div>`).join("") +
             `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard.</p>`;
@@ -5176,6 +5188,7 @@
         body.querySelectorAll("input[data-ovr-all]").forEach(cb =>
             cb.addEventListener("change", () => {
                 evlbShowAll = cb.checked;
+                document.documentElement.classList.toggle("evlb-showall", evlbShowAll);
                 // every board on the page re-renders, so the ranks are
                 // right on all of them and two open events agree
                 document.querySelectorAll("table.evlb-ovr[data-board]").forEach(t => {

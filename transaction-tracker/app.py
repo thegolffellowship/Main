@@ -2399,6 +2399,27 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # 7:00 PM AUTO-SEND (Kerry 2026-10-19): an event whose manager has not
+    # approved by 7 PM the day before gets its player emails then; an
+    # approval before 7 has already sent and is never repeated. Every 15 min
+    # on the quarter hour, so it fires at 7:00. Dial `pairings_auto_send`.
+    def pairings_auto_send_job():
+        from email_parser.pairings_approval import auto_send_check
+        try:
+            res = auto_send_check()
+            if res.get("events"):
+                logger.info("Pairings 7 PM auto-send: %s", res["events"])
+        except Exception:
+            logger.exception("Pairings auto-send failed (non-fatal)")
+    scheduler.add_job(
+        pairings_auto_send_job,
+        "cron", minute="0-59/15",
+        timezone="US/Central",
+        id="pairings_auto_send",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 

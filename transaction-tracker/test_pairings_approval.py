@@ -124,6 +124,67 @@ check("unapproved wording: approving the sheet still sends nothing", "refused" i
 db.set_app_setting(pa.DIAL, "0", db_path=DB)
 check("dial off: no prompts", pa.prompt_check(mon_5_05, DB) == {"status": "off"})
 
+print("3b. 7:00 PM auto-send (Kerry 10/19)")
+db.set_app_setting(pa.DIAL, "1", db_path=DB)
+db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
+E_APP, E_AUTO = 9311, 9312
+with db._connect(DB) as conn:
+    for eid, name, ch in ((E_APP, "s9.61 APPROVED EARLY", "San Antonio"), (E_AUTO, "a9.61 NOBODY APPROVED", "Austin")):
+        conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, "
+                     "start_time, course) VALUES (?, ?, '2026-10-27', ?, 'active', '9-hole', 'Shotgun', "
+                     "'16:30', 'Test GC')", (eid, name, ch))
+        for cid, fn, ln in ((990101, "Ann", "Able"), (990102, "Bob", "Baker")):
+            conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, side_games, "
+                         "transaction_status, order_date, order_id, email_uid, merchant) VALUES "
+                         "(?, ?, ?, ?, '9', 'NONE', 'active', '2026-10-01', ?, ?, 'GoDaddy')",
+                         (f"{fn} {ln}", cid, name, eid, f"R{cid}{eid}", f"m-{cid}-{eid}"))
+    conn.commit()
+for eid in (E_APP, E_AUTO):
+    db.save_event_pairings(eid, SHEET, db_path=DB)
+mon26_6pm = datetime(2026, 10, 26, 18, 0)
+SENT.clear()
+check("6:00 PM the day before: nothing auto-sends", pa.auto_send_check(mon26_6pm, DB).get("status") == "not yet")
+r = pa.approve_and_send(E_APP, pa.sheet_fingerprint(E_APP, DB), role="admin", session_chapter=None,
+                        approved_by="admin", db_path=DB)
+n_app = len(SENT)
+check("Approve before 7 sends at that moment", n_app >= 2 and pa.emails_sent(E_APP, DB) >= 2, (n_app, r))
+SENT.clear()
+r = pa.auto_send_check(datetime(2026, 10, 26, 19, 0), DB)
+check("7:00 PM: the approved event is NOT sent again",
+      "approved" in (r["events"].get(E_APP, {}).get("skipped") or "") , r["events"].get(E_APP))
+check("7:00 PM: the event nobody approved is sent now",
+      pa.emails_sent(E_AUTO, DB) >= 2 and pa.event_state(E_AUTO, DB).get("approved_by", "").startswith("auto 7 PM"),
+      r["events"].get(E_AUTO))
+check("7:00 PM sent exactly the unapproved event's two players", len(SENT) == 2, len(SENT))
+SENT.clear()
+r = pa.auto_send_check(datetime(2026, 10, 26, 19, 15), DB)
+check("7:15 PM: nothing resends", not SENT, r)
+# A failed 7 PM send emails Kerry and retries hourly (Kerry 10/19)
+E_FAIL = 9313
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, "
+                 "start_time, course) VALUES (?, 's9.62 WILL FAIL', '2026-10-27', 'San Antonio', 'active', "
+                 "'9-hole', 'Shotgun', '16:30', 'Test GC')", (E_FAIL,))
+    for cid, fn, ln in ((990101, "Ann", "Able"), (990102, "Bob", "Baker")):
+        conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, side_games, "
+                     "transaction_status, order_date, order_id, email_uid, merchant) VALUES "
+                     "(?, ?, 's9.62 WILL FAIL', ?, '9', 'NONE', 'active', '2026-10-01', ?, ?, 'GoDaddy')",
+                     (f"{fn} {ln}", cid, E_FAIL, f"R{cid}{E_FAIL}", f"m-{cid}-{E_FAIL}"))
+    conn.commit()
+db.save_event_pairings(E_FAIL, SHEET, db_path=DB)
+db.set_app_setting(ede.APPROVAL_KEY, "", db_path=DB)        # wording unapproved -> send refused
+SENT.clear()
+r = pa.auto_send_check(datetime(2026, 10, 26, 19, 30), DB)
+check("a failed 7 PM send emails Kerry",
+      "error" in r["events"].get(E_FAIL, {}) and any("FAILED" in x.get("subject", "") and
+      x.get("to_address") == "kerry@thegolffellowship.com" for x in SENT), (r["events"].get(E_FAIL), [x.get("subject") for x in SENT]))
+SENT.clear()
+r = pa.auto_send_check(datetime(2026, 10, 26, 19, 45), DB)
+check("…and does not retry inside the hour", "hourly" in (r["events"].get(E_FAIL, {}).get("skipped") or ""), r["events"].get(E_FAIL))
+db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
+db.set_app_setting(pa.AUTO_DIAL, "off", db_path=DB)
+check("dial off: auto-send stops", pa.auto_send_check(datetime(2026, 10, 26, 19, 30), DB) == {"status": "off"})
+
 print("4. The routes: log in first")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
