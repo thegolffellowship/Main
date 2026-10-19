@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.571.24";
+window.TGF_VERSION = "2.571.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.25",
+    date: "2026-10-19",
+    title: "Pairings: player emails go at 7 PM if no manager approved",
+    changes: [
+      "Kerry 10/19: \"The 7pm automatic send only fires based on no approval. If it's approved prior to that, or edited then approved, then it fires and sends right at that moment and doesn't need to resend at 7pm.\" New job pairings_auto_send (every 15 minutes on the quarter hour): at 7:00 PM Central the day before, an event with saved pairings, no manager approval and no player emails yet is approved as \"auto 7 PM (no manager approval)\" and its players get the pairing email (the wording Kerry already approved). An approval before 7 has already sent and is never repeated. Catch-up the next morning if the job missed 7 PM. Dial pairings_auto_send (off stops it). Guard test_pairings_approval.py.",
+      "Not yet: the tee-sheet-only email to the course contact and manager at the same time (new wording, CMO + Kerry's template approval)."
+    ]
+  },
   {
     version: "2.571.24",
     date: "2026-10-19",

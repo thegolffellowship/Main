@@ -413,3 +413,73 @@ button[disabled] {{ opacity:.6; }}
 }})();
 </script>
 </body></html>"""
+
+
+# ---------------------------------------------------------------------------
+# 7:00 PM auto-send (Kerry 2026-10-19)
+# ---------------------------------------------------------------------------
+# Kerry: "The 7pm automatic send only fires based on no approval. If it's
+# approved prior to that, or edited then approved, then it fires and sends
+# right at that moment and doesn't need to resend at 7pm."
+# So: Approve sends at once (approve_and_send, unchanged). This job sends
+# ONLY for an event whose players have had no email yet, at/after 7:00 PM
+# Central the day before (or the morning of, if the job was down at 7). It
+# sends the sheet as it stands through the same approve_and_send, recorded
+# as approved by "auto 7 PM". Dial `pairings_auto_send` (0/off stops it).
+AUTO_DIAL = "pairings_auto_send"
+AUTO_HOUR = 19
+
+
+def auto_send_check(now=None, db_path=None) -> dict:
+    from email_parser.database import get_app_setting
+    from email_parser.live_scoring_default import _skip_reason
+    from email_parser import database as db
+    if (get_app_setting(AUTO_DIAL, db_path=db_path) or "").strip().lower() in ("0", "off", "false"):
+        return {"status": "off"}
+    if now is None:
+        from email_parser.timezone_utils import now_central
+        now = now_central()
+    today = now.date()
+    days = []
+    if now.hour >= AUTO_HOUR:
+        days.append((today + timedelta(days=1)).isoformat())
+    if now.hour < 12:
+        days.append(today.isoformat())      # catch-up if 7 PM was missed
+    if not days:
+        return {"status": "not yet"}
+    with db._connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, item_name, event_date, status FROM events WHERE substr(event_date, 1, 10) IN ({}) "
+            "AND COALESCE(status, 'active') = 'active'".format(",".join("?" * len(days))),
+            days).fetchall()
+    out = {}
+    for r in rows:
+        eid = int(r["id"])
+        try:
+            why = _skip_reason(dict(r), db_path)
+            if why:
+                out[eid] = {"skipped": why}
+                continue
+            if emails_sent(eid, db_path):
+                out[eid] = {"skipped": "player emails already sent (approved earlier)"}
+                continue
+            fp = sheet_fingerprint(eid, db_path)
+            if not fp:
+                out[eid] = {"skipped": "no saved pairings"}
+                continue
+            st = event_state(eid, db_path)
+            if st.get("approved_fp"):
+                out[eid] = {"skipped": "a manager approved; that approval sent the emails"}
+                continue
+            if st.get("auto_sent_fp"):
+                out[eid] = {"skipped": "auto-send already ran"}
+                continue
+            _put(eid, db_path, auto_sent_fp=fp,
+                 auto_sent_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+            out[eid] = approve_and_send(eid, fp, role="admin", session_chapter=None,
+                                        approved_by="auto 7 PM (no manager approval)",
+                                        db_path=db_path)
+        except Exception as exc:
+            logger.exception("pairings auto-send failed for %s", eid)
+            out[eid] = {"error": str(exc)}
+    return {"status": "ran", "events": out}
