@@ -4609,6 +4609,46 @@ def init_db(db_path: str | Path | None = None) -> None:
                 None,
             ),
             (
+                # THE 7:00 PM TEE-TIMES EMAIL (CMO #2076 copy, #2101 build
+                # hand-off): three versions rendered by
+                # email_parser/teetimes_email.py, which fills {tee_sheet},
+                # {spots_block}, {pack_line}, {sent_line}, {closing_block}
+                # and {footer_block}, HOLDS any message with a blank or a
+                # leftover {tag}, and sends a version only when its stamp
+                # (teetimes_<version>_approved) equals its wording hash AND
+                # the job dial teetimes_email_auto is on.
+                "Tee Times — Player", "email",
+                "Tee times for {event_name}, {date_long}",
+                "<p>Hi {first_name},</p>"
+                "{spots_block}"
+                "<p>Here are tomorrow's tee times at {course}.</p>"
+                "{tee_sheet}"
+                "<p>Your full Event Info email, with your start, group, cart and games, comes at 7:00 AM tomorrow.</p>"
+                "<p>See you out there,<br>Kerry</p>"
+                "<p style=\"font-size:12px;color:#6B7280;\">The Golf Fellowship &middot; {mailing_address}</p>",
+                None,
+            ),
+            (
+                "Tee Times — Course Contact", "email",
+                "TGF tee sheet for {date_long}: {event_name}",
+                "<p>Hi {first_name},</p>"
+                "<p>Here is our tee sheet for {date_long}.</p>"
+                "{tee_sheet}"
+                "<p>{pack_line}</p>"
+                "<p>Thank you,<br>Kerry Niester, The Golf Fellowship</p>"
+                "{footer_block}",
+                None,
+            ),
+            (
+                "Tee Times — Manager", "email",
+                "Tee sheet sent for {event_name}",
+                "{tee_sheet}"
+                "<p>{sent_line}</p>"
+                "{closing_block}"
+                "{footer_block}",
+                None,
+            ),
+            (
                 "Post-Event Results", "email",
                 "Results — {event_name}",
                 "<p>Hi {player_name},</p>"
@@ -40324,11 +40364,15 @@ def delete_message_template(template_id: int, db_path: str | Path | None = None)
 def log_message(data: dict, db_path: str | Path | None = None) -> int:
     """Log a sent message. Returns the new log entry ID."""
     with _connect(db_path) as conn:
+        # event_id / customer_id (db-claude #1785): optional; a sender that
+        # knows them passes them and they are written beside the row.
+        extra = [k for k in ("event_id", "customer_id") if data.get(k) is not None]
         cur = conn.execute(
             "INSERT INTO message_log "
             "(event_name, template_id, channel, recipient_name, recipient_address, "
-            " subject, body_preview, status, error_message, sent_by) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " subject, body_preview, status, error_message, sent_by"
+            + "".join(", " + k for k in extra) + ") "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?" + ", ?" * len(extra) + ")",
             (
                 data.get("event_name"),
                 data.get("template_id"),
@@ -40340,6 +40384,7 @@ def log_message(data: dict, db_path: str | Path | None = None) -> int:
                 data.get("status", "sent"),
                 data.get("error_message"),
                 data.get("sent_by"),
+                *(int(data[k]) for k in extra),
             ),
         )
         conn.commit()

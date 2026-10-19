@@ -37,6 +37,7 @@ RULED (Kerry 10/17) at lock:
 | E-1 5:00 PM | Lock. Pairings build. Manager review prompt. Course gets the tee-time count; open times released; more times requested if over | RULED "Yes on all" + release/request added by Kerry |
 | E-1 5-7 PM | Manager review window; approval not required | RULED "Agreed" |
 | E-1 7:00 PM | Preliminary tee sheet to players, NO personal link | RULED (Kerry: "I don't think personal link would go then") |
+| E-1 7:00 PM (built) | Tee-times email in three versions: players (registered roster), course contact (To primary, CC other TGF contacts), chapter manager (print or not). `email_parser/teetimes_email.py`, job `teetimes_email`, beside the 7 PM pairing auto-send. LOCKED until Kerry stamps each wording and turns on `teetimes_email_auto`; player version also waits on `tgf_mailing_address`. Spots-open box behind `teetimes_spots_audience` (off). events.md | BUILT 10/19, not stamped |
 | E 7:00 AM | Personal Event Info email to every player (the full breakdown sent 10/13), with the personal link | RULED |
 | E 12:00 PM | Print pack to course contact, TGF CC'd (TGF only if no contact). Revised Event Info ONLY to players whose details changed since 7 AM | RULED |
 | E noon → first tee | Late adds into open seats (see §3) | RULED |

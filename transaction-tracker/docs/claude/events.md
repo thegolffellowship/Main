@@ -3435,6 +3435,58 @@ does, the member send refuses.**
 - Test: `test_event_day_email.py` (Graph mocked).
 
 
+## The 7:00 PM TEE-TIMES EMAIL, three versions (CMO #2076 copy, #2101 build, 2026-10-19, LOCKED until Kerry stamps)
+
+`email_parser/teetimes_email.py`. At 7:00 PM Central the day before (E-1),
+for every active event dated tomorrow with a saved sheet, three emails go at
+the same moment. Job `teetimes_email` (every 15 min, 7 PM to midnight) sits
+BESIDE the pairing auto-send (`pairings_approval.auto_send_check`), never in
+place of it.
+
+- **Tee sheet block** (all three): from `get_event_print_pack`, the Starter
+  Sheet's reader. Header = course · date · holes · first tee (`start_label`);
+  one row per group, start then players with cart pairs joined by "&";
+  "Preliminary: changes are still possible until the morning of the event.";
+  a link to `/member/teesheet/<event>`. Names and starts only. No groups, no
+  course, no date or no first-tee time empties the block, which holds every
+  message.
+- **Player** (`Tee Times — Player`): the registered roster (`_event_roster_rows`
+  minus RSVP-only rows). Kerry 10/19 line: "Your full Event Info email, with
+  your start, group, cart and games, comes at 7:00 AM tomorrow." Needs the
+  mailing-address footer (CA #1793): app setting `tgf_mailing_address`; until
+  it is set every player message is HELD on `{mailing_address}`.
+- **Spots-open box**: only for NON-registered recipients, only while the event
+  is not full (lock rule: field ÷ 4, remainder r leaves 4 − r). Audience is
+  Kerry's open question (#2076 Q2), so dial `teetimes_spots_audience` =
+  `off` (default) | `rsvp_in` (I'm in, not paid: the roster's RSVP-only rows)
+  | `invited` (also the invitation audience minus Can't make it). The Register
+  link is the invitation "in" token (`/rsvp/<token>` → `click_in`, the scanner
+  filter → the event's registration_url); no registration_url holds it.
+- **Course contact** (`Tee Times — Course Contact`): To the primary TGF
+  contact, CC the other TGF contacts (`course_staff.print_recipients` via
+  `print_pack.course_recipients_for_event`). Skipped when there is none. Pack
+  line: weekday "will arrive by email at noon tomorrow"; Sat/Sun "were sent
+  at noon today".
+- **Manager** (`Tee Times — Manager`): the chapter manager
+  (`pairings_approval.manager_for`). A sent line says what actually went
+  (players / course / both), then ONE closing line: contact on file → "You
+  don't need to print anything"; none → "Please print them" plus "Add course
+  contact" → `/courses?course=<id>` (opens the Contacts panel).
+- **Guards**: any blank required variable, leftover `{tag}` or `[BLANK]`
+  holds that message; once per event + person (app setting
+  `teetimes_email_sent:<event_id>`, keys `player:<cid>` / `course:<cid>` /
+  `manager:<cid>`); preview to staff only; every send logged to `message_log`
+  with `event_id` and `customer_id` (`log_message` now writes both when given).
+- **The gate**: each version sends only when `teetimes_<version>_approved`
+  equals its CURRENT wording hash (the DB template plus the fixed lines in the
+  module, so editing either voids the stamp) AND dial `teetimes_email_auto` =
+  `on` (default off). Seeded hashes: Player `df90086871b4587a`, Course Contact
+  `98a0903c7877fb4f`, Manager `16e7f8c738ecc3b7`.
+- **Bridge** `scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]`:
+  bare = dry build (per-recipient ready / held / skipped with reasons, hashes,
+  stamps, dials, `would_send_now`); `|preview` mails one combined preview to
+  staff. No send bridge. Guard `test_teetimes_email.py`.
+
 ## Credit from a received payment (v2.525.8, Kerry 2026-10-06)
 
 Kerry: "What do you mean no tool records a payment into a credit? We do that

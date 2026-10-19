@@ -79,6 +79,8 @@ SLOW_MS = {
     "scoring-import-orders": 60_000,  # staff order-email import through Graph (19.8 s on 10/15)
     "event_invite_auto": 900_000,     # job: sends mail to a roster through Graph (346 s on 10/14 at host load 110)
     "results_email_auto": 900_000,    # job: the 6 AM results email, one message per recipient (233 s for 209 on 10/14)
+    "scoring-teetimes-email": 60_000,  # |preview builds three versions + one Graph send
+    "teetimes_email": 900_000,        # job: one Graph send per roster player, course and manager
     "scoring-event-day-email": 60_000, # sends one email per roster player through Graph: p50 6.7 s, 12 s on 10/12
     "scoring-health": 30_000,        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; cached reads are fast
     "scoring-recap-draft-email": 30_000,
