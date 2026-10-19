@@ -116,6 +116,8 @@ The strongest board in the app on a phone: a single score strip, match cards wit
 
 ## 3. Kerry's 10/19 rulings, added to the audit list
 
+> **Superseded in part by section 11 (Kerry's evening rulings, same day):** tab order is now TEAM, MVP, NET, GROSS, SKINS, PROXIES; OVERALL is retired; SUMMARY shows at FINAL; THRU and name format are ruled; TEAM gets a collapsed one-row-per-team view. Read section 11 first.
+
 Verbatim, from the front-desk routine: "HOW IT WORKS is our standard for any explanations" (replaces HOW TO READ THIS; sits on the same line as the games nav bar on desktop); explanatory notes such as "Individual Gross activates at 16 Gross buy-ins on a 9-hole event..." move into it; the 'not in' badge shows only when Show All Players is checked; OVERALL moves to the end of the tabs on every view and event, and the landing tab is TEAM; a possible SUMMARY tab is an idea to evaluate, not a build.
 
 Current state vs the ruling:
@@ -225,6 +227,8 @@ Order I would ship: 2, 6, 7 (hours, safe) with 1 and 3, then 4 and 5 as one chan
 
 ## 7. SUMMARY tab (an idea to evaluate, not a build)
 
+> **Update (section 11):** Kerry ruled SUMMARY shows when the board is FINAL. The "provisional" row in the states table below is therefore not shown on SUMMARY; the tab appears at FINAL and is marked not official until closeout.
+
 Kerry: money winners for all games with links to each game, shown once last scores are in, not official until closeout fires.
 
 **What it would show** (one screen on a phone):
@@ -324,3 +328,106 @@ Open items for the Future Items list (topic `future-items`) are in the mailbox d
 - Code read: `templates/contests.html` (`evlbOverallSort`, `evlbReadGuide`, `evlbMoneyNotice`, `evlbFinalNotice`, the `boards` table, `evlbRankBand`), `email_parser/entry_publish.py` (`live_board_rows`), `email_parser/database.py` (`_entry_mode_overlay`, `get_event_leaderboard`).
 - Mailbox: #2041-#2081 read; #2057 (playing for, closeout), #2065 and #2069 (live net fix), #2071 and #2079 (skins view), #2067 (Kerry's fourth batch) used.
 - Method: Playwright 1.56.1, Chromium, 390 x 844, device scale 2, public member pages only (no PIN, no writes, nothing sent).
+
+
+---
+
+## 11. Kerry's evening rulings, 10/19 (verbatim) and what they mean for the design
+
+Kerry, with a screenshot of the TEAM board fully expanded:
+
+- "TEAM is always first. Then MVP, NET, GROSS, SKINS, PROXIES"
+- "Retire the OVERALL tab but keep the idea around in case we want to bring it back"
+- "SUMMARY will show when FINAL"
+- "State words. Explain each"
+- "Show thru columns on leaderboards that don't show all holes on landing. Pre-Event view would show tee time/hole in that column"
+- "First Last, but show last names with the capitalization rules we have."
+- "TEAM should be simpler. The attached view should be the fully expanded view state. There should not be any additional player expansion. But I want to the collapsed state to show a single row for each team with their net score (follow hole by hole calculations like we just discussed on NET, rather than cumulative score minus total PH). Then players can click to expand a team into it's current state."
+
+These replace my section 3 and 6 where they differ. Research and proposals only; Tracker Build owns the code.
+
+### 11.1 Tabs
+
+Order: TEAM, MVP, NET, GROSS, SKINS, PROXIES. Landing tab TEAM. Where SUMMARY sits is not ruled (my lean: last). The screenshot labels the last game tab CTPS and the sub-nav shows ENROLLMENT; Kerry's text says PROXIES. **One label, please: PROXIES or CTPS?** (The page header, HOW IT WORKS and the Playing for line should use the same word.)
+
+Retire OVERALL, keep the idea: hide the tab behind one setting (`evlb_overall_tab`, default off), leave its renderer and the `won` roll-up in place, and note in the code comment why. No data or schema change. Its two jobs move: the "everything I won" roll-up becomes SUMMARY; the all-holes view is the Hole by hole checkbox on each tab. Fix F1 and F5 (my doc section 2) simply stop mattering for the landing view, but F1's ranking rule still applies to TEAM, MVP and SKINS (section 11.4).
+
+### 11.2 State words, explained (draft for the strip and HOW IT WORKS)
+
+| Word | Where it shows | Plain-language meaning for a player | What the board does | Event list badge |
+|---|---|---|---|---|
+| UPCOMING | Before the first tee | The pairings are set; nobody has played yet. | THRU column shows each player's tee time and starting hole. No money. | UPCOMING |
+| LIVE | From the first score until every score is in | Scores are coming in hole by hole. Standings move as groups post. | Everything is "to date" with a THRU number. WON is blank. | LIVE |
+| PROVISIONAL | Every score is in, up to 15 minutes after the last one | The field is done and the money is shown, but a score can still be corrected, so the dollars can change. | WON shows, lighter, marked provisional. SUMMARY not shown yet. | PROVISIONAL |
+| FINAL | Every card has locked (15 minutes after its group's last score) and closeout has not run | Scores are locked. Nothing changes unless a manager unlocks a card. Results are not official until they are closed. | WON normal weight. **SUMMARY appears.** | FINAL |
+| OFFICIAL | After closeout runs (the 20-minute rule) and the payouts are recorded | Results are closed and prizes are set. A later correction updates the board and says so. | SUMMARY loses its "not official" marking. | OFFICIAL |
+
+Two things Kerry should know about how these line up with his 20-minute rule (#2057, #2067): closeout starts 20 minutes after the last score, a card is final at 15, so **a clean night spends only about five minutes in FINAL before it becomes OFFICIAL.** FINAL is long only when something holds closeout (card parity, an unconfirmed CTP, his hold, a wait on a stuck group); then SUMMARY shows with "not official yet" for as long as the hold lasts. The words come from the dials; the minutes in the copy are never typed in.
+
+HELD is not a sixth word. A hold keeps the board at FINAL and the strip says one plain line, "Results are being checked."
+
+### 11.3 SUMMARY tab
+
+Appears at FINAL. Until then it is not in the tab row (a tab that appears is clearer than a greyed one). Contents, states and cautions as in section 7, with the provisional state removed. At FINAL it carries "Not official until closed". At OFFICIAL that line goes. If a manager unlocks a card after FINAL the tab disappears again until the board is FINAL (and says "corrected" when it returns after OFFICIAL). Because it can only be seen at FINAL, the "winner reads $63 then $57" risk from section 7 is smaller, but not zero: an Unlock after FINAL can still move money.
+
+### 11.4 THRU column
+
+Rule as ruled: show it on any board that is not showing all the holes on landing. In practice:
+
+- **Hole by hole OFF** (the new phone default I proposed, F4; also any board that never has hole columns): THRU is a column beside the score.
+- **Hole by hole ON**: the holes are the progress; THRU is hidden.
+- **Value:** holes completed while LIVE ("5"), "F" when the card is finished. Pre-event (UPCOMING): the tee time and start hole, "3:40 PM · 10" for a shotgun start or "3:40 PM" for tee times. Not started once play has begun: the same tee time, greyed. A withdrawn or no-show player: "-".
+- Ranking while LIVE stays on to-par (section 2, F1), then more holes completed, then name, so the THRU column and the order always agree.
+
+### 11.5 Names
+
+First Last everywhere (the Season Contests board's "BAKER, Adam" changes). Capitalization: show the player's canonical stored name and do not re-case it at display time. The stored forms follow the app's own rule (`_proper_case`: Mc/Mac, apostrophes, hyphens, roman numerals), and a few are set by hand ("DelCarmen" is on the board today; `_proper_case` alone would print "Delcarmen"). So the display layer should read `customers.customer_name` as stored, never call `_proper_case` itself. **[CONFIRM with Tracker Build that no board applies its own casing, and that the Season Contests board's Last, First form is a display transform and not stored.]** Sort order is separate: sort by last name, show First Last.
+
+### 11.6 TEAM: collapsed by default, expanded = today's board
+
+**Expanded view = Kerry's screenshot, unchanged.** Band header with the four names, the four player rows with holes, per-player `N` and `±`, the green best-ball cells, the `TEAM NET` row with its purse. **No further expansion inside it:** remove the tap-a-player-for-a-scorecard behaviour and the team best-ball card chevron from TEAM (the tee dot, BLIND chip and WON per player stay).
+
+**Collapsed view = one row per team:**
+
+```
+# | TEAM                                         | THRU | NET  | ±  | WON
+T1  Jeff Rideout, Steven Hunt, Luke Mazanec,        9     30    -6   $46.00
+    Jesse Saldana                                                  
+T1  Jeff Young, Ale Dimas, Pat Youngs,              9     30    -6   $46.00
+    Michele McCormick (blind)
+T3  Adam Baker, Wade Lewis, Dan Stich,              9     31    -5
+    Michele McCormick
+...
+```
+
+How the number is built (Kerry: hole by hole, not total minus PH):
+
+- Team NET = the sum, over holes the team has finished, of the best net ball on each hole (each player's gross on that hole minus the strokes they receive on that hole, by stroke index on their own tee). This is exactly the `TEAM NET` row in the expanded view, so collapsed and expanded always agree.
+- A hole counts for the team once every ball on the card has posted it (blinds are pre-filled and never hold a hole **[CONFIRM]**). That keeps the number from flickering as the four players post at different moments. Team THRU is the count of those holes.
+- `±` is Team NET minus par for those same holes. The row ranks on `±`, then THRU (more holes ahead), then name.
+- No team handicap and no "total minus PH" anywhere in the row. If the allowance changes who gets strokes on which hole (the 75% team allowance on the cart, **[CONFIRM against side-games.md]**), that is already inside each player's per-hole pops, so the collapsed row needs no special case.
+- WON on the row is the team purse once money shows (PROVISIONAL onward); blank before.
+- UPCOMING: the collapsed row shows the team's tee time in the THRU slot.
+- Tap anywhere on the row to expand; tap again to collapse. Each team opens and closes on its own. An Expand all / Collapse all control is an obvious add; not ruled, I would offer it (S).
+
+Tab-landing effect: with TEAM the landing tab, one screen on a phone shows every team at a glance (about 6 teams of 4 on a 23-player night), which is the "who is winning, where do I stand" answer in one glance. Hole by hole is not needed on this tab.
+
+### 11.7 What this changes in the fix list (section 6)
+
+| # | Change |
+|---|---|
+| 2 | Becomes: tab order TEAM, MVP, NET, GROSS, SKINS, PROXIES; OVERALL off behind a setting (S) |
+| 5 | The state strip uses the five words in 11.2 (M, with the closeout trigger) |
+| 14 | SUMMARY: appears at FINAL (M) |
+| new 16 | THRU column per 11.4, including the pre-event tee time and hole (M) |
+| new 17 | TEAM collapsed row + expanded = current board, remove player expansion (M) |
+| new 18 | Name display: First Last, stored casing, on every board including Season Contests (S, check `_proper_case` use) |
+
+Suggested ship order for the next deploy that is safe before Tuesday's 3:35 PM: only the zero-risk display items (tab order, OVERALL off, name format). The ranking, THRU and TEAM collapsed row change member-facing numbers and layout on a live night, so I recommend they wait for the 10/27 deploy after Tuesday's live walk, unless Kerry wants them sooner (his call; rule 3b).
+
+### 11.8 Questions for Kerry (one at a time, in this order)
+
+1. PROXIES or CTPS as the tab word?
+2. Where does SUMMARY sit in the tab row (my lean: last)?
+3. Team hole counts when all four balls are posted (my rule) or as soon as one is? (I recommend all four; one ball makes the team number jump.)
+4. Ship the safe display items before Tuesday, or hold everything for 10/27?
