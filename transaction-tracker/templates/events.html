@@ -7719,6 +7719,10 @@
                 // scoring link and where every card stands. Admin only in
                 // the dry run.
                 html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
+                // APPROVE from here after editing (Kerry 10/19: "takes me to
+                // the PAIRINGS view in the EVENT. Then it would ALSO need an
+                // APPROVE button"). Opens the review page for the saved sheet.
+                html += `<a class="pairings-action-btn" href="/events/${ev.id}/approve-pairings" style="background:#E87C3E;color:#fff;text-decoration:none;" title="Review the saved sheet and approve it: the tee-times email goes out">&#x2713; Approve</a>`;
             }
         }
         html += '</div>'; // .pairings-actions

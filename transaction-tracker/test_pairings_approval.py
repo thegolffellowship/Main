@@ -76,7 +76,7 @@ check("…naming the event, the player count and the review link (login)",
       and f"/events/{AUS}/approve-pairings" in p.get("html_body", "")
       and "log in" in p.get("html_body", ""), p.get("html_body", "")[:400])
 check("…with the groups and a sample player email",
-      "Ann Able" in p.get("html_body", "") and "Sample player email" in p.get("html_body", ""))
+      "Ann Able" in p.get("html_body", "") and "7:00 AM Event Info email" in p.get("html_body", "") and "Edit pairings" in p.get("html_body", ""))
 check("no player was emailed by the prompt",
       not any(s["to_address"].endswith("@example.test") for s in SENT))
 SENT.clear()

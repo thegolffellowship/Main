@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.573.5";
+window.TGF_VERSION = "2.573.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.6",
+    date: "2026-10-19",
+    title: "Pairings approval: Edit pairings + Approve in the Pairings view",
+    changes: [
+      "Kerry 10/19: \"how do I EDIT the groups? There needs to be an EDIT button ... takes me to the PAIRINGS view in the EVENT. Then it would ALSO need an APPROVE button.\" The approval email and the review page carry an Edit pairings button (opens the event's Pairings view), and the Pairings toolbar has an orange Approve button that opens the review page for the saved sheet. The sample in both is now labelled as the 7:00 AM Event Info email, not tonight's tee-times email. Guard test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.573.5",
     date: "2026-10-19",

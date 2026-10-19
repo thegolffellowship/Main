@@ -250,11 +250,14 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
         + (f", {c.get('held')} held" if c.get("held") else "") + ".</p>"
         f'<p><a href="{_e(url)}" style="display:inline-block;background:#E87C3E;color:#fff;'
         f'text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:999px;">'
-        f"Review &amp; approve the pairings</a></p>"
+        f"Review &amp; approve the pairings</a>"
+        f' &nbsp; <a href="{_e(_base_url(base_url))}/events?event={int(event_id)}&amp;view=pairings" style="display:inline-block;'
+        f'border:2px solid #1B1B1B;color:#1B1B1B;text-decoration:none;font-weight:bold;padding:10px 18px;border-radius:999px;">'
+        f"Edit pairings</a></p>"
         f"<p style=\"color:#6B7280;font-size:13px;\">You'll be asked to log in to the Tracker.</p>"
         + _flags_html(rv)
         + "<p><b>The groups:</b></p>" + _groups_html(rv["groups"])
-        + (f'<hr style="border:0;border-top:2px solid #E87C3E"><p><b>Sample player email</b> '
+        + (f'<hr style="border:0;border-top:2px solid #E87C3E"><p><b>Sample: the 7:00 AM Event Info email</b> (not tonight\'s tee-times email) '
            f"(to {_e(sample['name'])}):</p>" + sample["html"] if sample else ""))
     subject = f"Pairings ready to approve: {ev['name']}"
     creds = _creds()
@@ -389,6 +392,11 @@ def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
 # The page (manager login required by the route)
 # ---------------------------------------------------------------------------
 
+SAMPLE_HEAD = ('<h3>Sample: the 7:00 AM Event Info email each player gets on event day</h3>'
+               '<p style="color:#6B7280;font-size:13px;">Not tonight\'s tee-times email; this is the '
+               'full email that follows in the morning.</p>')
+
+
 def render_page(rv: dict) -> str:
     ev = rv["event"]
     c = rv["counts"]
@@ -429,10 +437,11 @@ button[disabled] {{ opacity:.6; }}
 <div style="color:#D1D5DB;font-size:14px;">{_e(ev['date'])} · {_e(ev['course'])} · {c.get('ready', 0)} ready{f", {c.get('held')} held" if c.get('held') else ""}</div></header>
 <main>
 {action}
+<p style="margin-top:12px;"><a href="/events?event={int(ev['id'])}&amp;view=pairings" style="display:inline-block;width:100%;box-sizing:border-box;text-align:center;border:2px solid #1B1B1B;color:#1B1B1B;text-decoration:none;font-weight:bold;padding:12px;border-radius:999px;">Edit pairings</a></p>
 {_flags_html(rv)}
 <h3>The groups</h3>
 {_groups_html(rv["groups"])}
-{('<h3>Sample player email</h3><div class="sample">' + sample["html"] + '</div>') if sample else ""}
+{(SAMPLE_HEAD + '<div class="sample">' + sample["html"] + '</div>') if sample else ""}
 </main>
 <script>
 (function () {{
