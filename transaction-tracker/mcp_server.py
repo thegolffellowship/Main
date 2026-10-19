@@ -4072,6 +4072,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _nm = "|".join(_p[1:-1] if _apply else _p[1:])
             return json.dumps(db.rename_course(_cid, _nm, apply=_apply, set_by="mcp-claude"),
                               indent=2, default=str)
+        if cmd == "scoring-pairings-run":
+            # scoring-pairings-run:generate|prompt — run the 5 PM pairings
+            # generator or the manager-approval prompt job NOW (Kerry 10/19:
+            # "Delay the generator 10 minutes for both events and the manager
+            # emails...today only"). Same functions the scheduler calls; the
+            # generator still skips any event already paired.
+            db.log_agent_action("mcp-claude", "scoring-pairings-run", arg)
+            if arg.strip() == "generate":
+                return json.dumps({"generated": db.auto_generate_pairings()}, indent=2, default=str)
+            if arg.strip() == "prompt":
+                from email_parser.pairings_approval import prompt_check
+                return json.dumps(prompt_check(), indent=2, default=str)
+            return json.dumps({"error": "usage: scoring-pairings-run:generate|prompt"})
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).

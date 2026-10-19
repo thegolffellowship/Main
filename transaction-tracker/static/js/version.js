@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.573.1";
+window.TGF_VERSION = "2.573.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.2",
+    date: "2026-10-19",
+    title: "Bridge: run the pairings generator / approval prompt now",
+    changes: [
+      "Kerry 10/19: \"Delay the generator 10 minutes for both events and the manager emails...today only.\" New bridge scoring-pairings-run:generate|prompt runs the same 5 PM generator or manager-prompt job on demand (the generator still skips an event already paired), so a night's start can be moved without a code change."
+    ]
+  },
   {
     version: "2.573.1",
     date: "2026-10-19",
