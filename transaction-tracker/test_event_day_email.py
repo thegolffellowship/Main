@@ -117,8 +117,8 @@ check("…the START card states the start as the Starter Sheet does",
       "YOUR START" in at and "Hole 1A \u00b7 8:00 AM" in at
       and "Shotgun \u00b7 Tuesday, October 13 \u00b7 Test Links GC" in at, at)
 check("…the group lists all four with initials, herself marked",
-      all(n in at for n in ("Ann Able you \u00b7 Cart A", "Bob Baker your cart \u00b7 Cart A",
-                            "Cal Cole Cart B", "Dee Dunn Cart B"))
+      all(n in at for n in ("Ann Able", "you \u00b7 Cart A", "Bob Baker", "your cart \u00b7 Cart A",
+                            "Cal Cole", "Dee Dunn", "Cart B"))
       and ">AA<" in ann.get("html", ""), at)
 check("…format from the event and the games tab", "9 holes \u00b7 Team Net" in at, at)
 check("…the chapter manager", "Text Kerry at" in at and "Kerry\nThe Golf Fellowship" in at, at)

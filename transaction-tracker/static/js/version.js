@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.573.8";
+window.TGF_VERSION = "2.573.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.9",
+    date: "2026-10-19",
+    title: "Event Info email: larger group photos, side by side",
+    changes: ["Kerry 10/19: \"Can you show in a different way so photos are larger? I can't see them very well to distinguish features.\" YOUR GROUP now shows the players side by side, each a 72px photo (or initials) with the name and cart beneath; yours is ringed in orange. Photo and name still open the Spotlight."]
+  },
   {
     version: "2.573.8",
     date: "2026-10-19",

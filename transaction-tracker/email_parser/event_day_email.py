@@ -332,13 +332,15 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
         # have photos. Otherwise it's the initials."
         cid = p.get("customer_id")
         ver = (photos or {}).get(str(cid)) if cid else None
+        # Larger faces, side by side (Kerry 10/19: "photos are larger? I
+        # can't see them very well to distinguish features").
         if ver and base_url:
-            face = (f'<img src="{_e(base_url)}/member/photo/h/{int(cid)}.jpg?v={int(ver)}" width="36" height="36" '
-                    f'alt="{_e(_initials(nm))}" style="display:block;width:36px;height:36px;border-radius:18px;'
-                    f'object-fit:cover;border:0;">')
+            face = (f'<img src="{_e(base_url)}/member/photo/h/{int(cid)}.jpg?v={int(ver)}" width="72" height="72" '
+                    f'alt="{_e(_initials(nm))}" style="display:block;margin:0 auto;width:72px;height:72px;'
+                    f'border-radius:36px;object-fit:cover;border:{"3px solid " + ORANGE if mine else "0"};">')
         else:
-            face = (f'<div style="width:36px;height:36px;border-radius:18px;background:{bg};color:{ink};'
-                    f'text-align:center;font:bold 13px Arial,sans-serif;line-height:36px;">{_e(_initials(nm))}</div>')
+            face = (f'<div style="width:72px;height:72px;margin:0 auto;border-radius:36px;background:{bg};color:{ink};'
+                    f'text-align:center;font:bold 24px Arial,sans-serif;line-height:72px;">{_e(_initials(nm))}</div>')
         link = f"{base_url}/member/spotlight?player={int(cid)}" if (cid and base_url) else ""
         if link:
             face = f'<a href="{_e(link)}" style="text-decoration:none;">{face}</a>'
@@ -346,11 +348,10 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
         if link:
             label = f'<a href="{_e(link)}" style="color:{INK};text-decoration:none;">{label}</a>'
         rows.append(
-            f'<tr><td width="40" style="padding:0 10px 10px 0;vertical-align:middle;">{face}</td>'
-            f'<td style="padding:0 0 10px;vertical-align:middle;">'
-            + label
-            + (f' <span style="font-size:13px;color:{MUTED};">{note}</span>' if note else "")
-            + "</td></tr>")
+            f'<td width="25%" align="center" style="padding:0 4px 10px;vertical-align:top;text-align:center;">'
+            f'{face}<div style="font-size:14px;line-height:1.3;padding-top:6px;">{label}</div>'
+            + (f'<div style="font-size:12px;color:{MUTED};">{note}</div>' if note else "")
+            + "</td>")
     foot = []
     if tee and tee.get("name"):
         sw = (tee.get("color") or "").strip()
@@ -373,7 +374,7 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
         f'<div style="font-size:14px;">{_e(start_sub)}</div></td></tr>'
         f'<tr><td style="padding:12px 16px 4px;">'
         f'<div style="{_EYEBROW}color:{MUTED};padding-bottom:8px;">YOUR GROUP</div>'
-        f'<table {_T}>{"".join(rows)}</table></td></tr>'
+        f'<table {_T}><tr>{"".join(rows)}</tr></table></td></tr>'
         + (f'<tr><td style="border-top:1px solid {LINE};padding:10px 16px;"><table {_T}><tr>'
            f'{"".join(foot)}</tr></table></td></tr>' if foot else "")
         + (f'<tr><td style="border-top:1px solid {LINE};padding:12px 16px 14px;">{card_html}</td></tr>'
