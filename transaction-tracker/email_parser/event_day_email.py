@@ -373,6 +373,7 @@ def _game_label(name: str) -> str:
     n = re.sub(r"[^\w\s#.&'/+-]", "", name or "").strip()
     n = re.sub(r"^CTP\b", "Closest to the Pin", n)
     n = re.sub(r"^Skins Gross$", "Skins", n)
+    n = re.sub(r"^Skins 1/2 Net\b.*$", "Skins \u00bd Net", n)
     n = re.sub(r"^(TEAM|CART)\b", lambda m: m.group(1).title(), n)
     return re.sub(r"^Ind\.\s*", "Individual ", n)
 

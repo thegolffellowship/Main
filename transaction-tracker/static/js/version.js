@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.573.3";
+window.TGF_VERSION = "2.573.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.4",
+    date: "2026-10-19",
+    title: "GAMES tab: drop the stale '1/2 Net rule pending' note",
+    changes: [
+      "The GAMES tab still labelled a small-field skins game \"Skins 1/2 Net manual \u2014 \u00bd-net rule pending\", a note from before \u00bd Net Skins was ratified and built (v2.571.27). That text fed the players' 7 AM Event Info email (a9.28 Avery Ranch tonight). The note is gone, and the email names the game \"Skins \u00bd Net\". Guard test_event_day_email.py."
+    ]
+  },
   {
     version: "2.573.3",
     date: "2026-10-19",

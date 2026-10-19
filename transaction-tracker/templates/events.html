@@ -9168,8 +9168,10 @@
                 const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
                 const skinsMwpVal = numVal(gGross.skinsTotal) / skinsFlights;
                 grossMWP += skinsMwpVal;
-                const halfNetNote = grossPC < 8
-                    ? ` <span style="color:var(--text-muted);font-size:0.85em;font-weight:400;" title="½-net pop allocation rule pending ratification — see mailbox game-results-wiring">manual — ½-net rule pending</span>` : "";
+                // ½ Net Skins is ratified and computed (v2.571.27); the old
+                // "manual — rule pending" note reached the players' Event
+                // Info email (Kerry 10/19), so it is gone.
+                const halfNetNote = "";
                 html += `<tr><td><strong>${skinsLabel}</strong>${halfNetNote}</td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
                 if (grossPC >= 8) {
                     html += `<tr class="games-row-sub games-winner-row" style="display:none;"><td class="games-indent" colspan="${C}"><span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="skins" data-flights="${skinsFlights}" data-pot="${numVal(gGross.skinsTotal)}"></span></td></tr>`;
