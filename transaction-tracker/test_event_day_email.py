@@ -365,6 +365,16 @@ check("the member tee sheet is public (no PIN) and 404s an unknown event",
 check("the Email Players send is admin only",
       _cl.post("/api/events/1/event-day-email/send", json={}).status_code in (401, 302, 403))
 
+print("6. Your group: photos + Spotlight links (Kerry 10/19)")
+_g = {"players": [{"name": "Ann Able", "customer_id": 11, "cart_pos": 1},
+                  {"name": "Bob Baker", "customer_id": 12, "cart_pos": 2}]}
+_h = ede.spot_card(_g, _g["players"][0], start_headline="4:00 PM", start_sub="x", tee=None,
+                   format_line="", photos={"12": 1700000000}, base_url="https://t.example")
+check("a player with a photo shows it", 'src="https://t.example/member/photo/h/12.jpg?v=1700000000"' in _h)
+check("a player without a photo keeps the initials", ">AA</div>" in _h and "/member/photo/h/11.jpg" not in _h)
+check("every name links to that player's Spotlight",
+      "/member/spotlight?player=11" in _h and "/member/spotlight?player=12" in _h)
+
 try: os.unlink(DB)
 except OSError: pass
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")

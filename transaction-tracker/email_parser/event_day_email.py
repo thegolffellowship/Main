@@ -308,7 +308,8 @@ def _cart_of(p: dict) -> str:
 
 
 def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
-              tee: dict | None, format_line: str, card_html: str = "") -> str:
+              tee: dict | None, format_line: str, card_html: str = "",
+              photos: dict | None = None, base_url: str = "") -> str:
     """The orange START header, the group with initials and carts, then
     tees and format. Blinds are not people and are never listed."""
     my_cart = _cart_of(me)
@@ -326,12 +327,28 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
         else:
             note = f"Cart {cart}" if cart else ""
         bg, ink = (INK, "#ffffff") if mine else ("#D3DDE4", INK)
+        # Kerry 10/19: "put player photos with player spotlight links into
+        # the player emails so they can see who they're playing with, if we
+        # have photos. Otherwise it's the initials."
+        cid = p.get("customer_id")
+        ver = (photos or {}).get(str(cid)) if cid else None
+        if ver and base_url:
+            face = (f'<img src="{_e(base_url)}/member/photo/h/{int(cid)}.jpg?v={int(ver)}" width="36" height="36" '
+                    f'alt="{_e(_initials(nm))}" style="display:block;width:36px;height:36px;border-radius:18px;'
+                    f'object-fit:cover;border:0;">')
+        else:
+            face = (f'<div style="width:36px;height:36px;border-radius:18px;background:{bg};color:{ink};'
+                    f'text-align:center;font:bold 13px Arial,sans-serif;line-height:36px;">{_e(_initials(nm))}</div>')
+        link = f"{base_url}/member/spotlight?player={int(cid)}" if (cid and base_url) else ""
+        if link:
+            face = f'<a href="{_e(link)}" style="text-decoration:none;">{face}</a>'
+        label = f"<b>{_e(nm)}</b>" if mine else _e(nm)
+        if link:
+            label = f'<a href="{_e(link)}" style="color:{INK};text-decoration:none;">{label}</a>'
         rows.append(
-            f'<tr><td width="40" style="padding:0 10px 10px 0;vertical-align:middle;">'
-            f'<div style="width:36px;height:36px;border-radius:18px;background:{bg};color:{ink};'
-            f'text-align:center;font:bold 13px Arial,sans-serif;line-height:36px;">{_e(_initials(nm))}</div></td>'
+            f'<tr><td width="40" style="padding:0 10px 10px 0;vertical-align:middle;">{face}</td>'
             f'<td style="padding:0 0 10px;vertical-align:middle;">'
-            + (f"<b>{_e(nm)}</b>" if mine else _e(nm))
+            + label
             + (f' <span style="font-size:13px;color:{MUTED};">{note}</span>' if note else "")
             + "</td></tr>")
     foot = []
@@ -677,6 +694,15 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                         sc_dump[int(d["customer_id"])] = d
             except Exception:
                 logger.exception("event-day email: scorecard read failed (non-fatal)")
+        # player photos + Spotlight links in YOUR GROUP (Kerry 10/19)
+        try:
+            from email_parser.player_photos import photo_index as _pidx
+            from email_parser.score_entry import _base_url as _bu
+            group_photos = _pidx(db_path).get("h") or {}
+            group_base = _bu()
+        except Exception:
+            logger.exception("event-day email: photo index unavailable (initials only)")
+            group_photos, group_base = {}, ""
         scoring_note = None
         if "{scoring_button}" in tpl_text and not links:
             scoring_note = ("Live Scoring is not on for this event, so no player gets a "
@@ -787,7 +813,8 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                 except Exception:
                     logger.exception("event-day email: card strip failed for cid %s", cid)
             spot = spot_card(g, me, start_headline=start_headline, start_sub=start_sub,
-                             tee=tee, format_line=format_line, card_html=card_html) if sl else ""
+                             tee=tee, format_line=format_line, card_html=card_html,
+                             photos=group_photos, base_url=group_base) if sl else ""
             tbutton = (teesheet_button(f"{teesheet_url}#g{_e(g.get('group_num'))}")
                        if teesheet_url and "{teesheet_button}" in tpl_text else "")
             gcard = games_card(gview, cid, bool(r.get("rsvp_only")), as_of, day) if gview.get("ok") else ""

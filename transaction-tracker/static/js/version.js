@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.573.6";
+window.TGF_VERSION = "2.573.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.7",
+    date: "2026-10-19",
+    title: "Event Info email: group photos + Spotlight links",
+    changes: [
+      "Kerry 10/19: \"put player photos with player spotlight links into the player emails so they can see who they're playing with, if we have photos. Otherwise it's the initials.\" YOUR GROUP in the 7 AM Event Info email shows each player's headshot (from the player photos) or their initials, and both the picture and the name open that player's Spotlight. Guard test_event_day_email.py."
+    ]
+  },
   {
     version: "2.573.6",
     date: "2026-10-19",
