@@ -65,6 +65,18 @@ check("every notice is stamped (no renewal or lapsed email)",
       all(t[col] for t in terms for col, _o, _l in m.NOTICE_WINDOWS))
 check("the original end date is kept in notes", any("was to" in (t["notes"] or "") for t in terms))
 
+print("undo (Kerry #2031)")
+u = m.undo_end_membership(cid, ok, apply=True, db_path=DB)
+with db._connect(DB) as c:
+    st = c.execute("SELECT current_player_status FROM customers WHERE customer_id = ?", (cid,)).fetchone()[0]
+    terms2 = [dict(r) for r in c.execute("SELECT * FROM customer_memberships WHERE customer_id = ?", (cid,))]
+check("undo applied", u.get("applied"), u)
+check("the running term's end date is back", max(t["expires_at"] for t in terms2) == (today + timedelta(days=265)).isoformat(), terms2)
+check("roster_choice is cleared", all(t["roster_choice"] is None for t in terms2))
+check("the stamps end_membership set are cleared", all(t[col] is None for t in terms2 for col, _o, _l in m.NOTICE_WINDOWS))
+check("no 'ended early' note remains", not any("ended early" in (t["notes"] or "") for t in terms2), terms2)
+check("status is active_member again", st == "active_member", st)
+
 print()
 if F:
     print(f"{len(F)} FAILED")

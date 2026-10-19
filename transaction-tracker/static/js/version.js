@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.18";
+window.TGF_VERSION = "2.571.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.19",
+    date: "2026-10-19",
+    title: "Undo for an ended membership",
+    changes: [
+      "Kerry 10/18 (CoS #2031): \"You don't need to end his membership. He's just not going to be active and he's opted out of communications. If for some reason he decides he wants to play with us again, he's perfectly welcome to.\" New memberships.undo_end_membership (bridge scoring-membership-end:<customer_id>|<kerry-ok post>|undo[|apply]) puts back what end_membership changed: the original end date from the term's note, roster_choice cleared, the notice stamps it set cleared, then the status sync. The invitation opt-out list is left alone. Guard test_membership_end.py."
+    ]
+  },
   {
     version: "2.571.18",
     date: "2026-10-18",
