@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.21";
+window.TGF_VERSION = "2.571.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.22",
+    date: "2026-10-19",
+    title: "Docs: GHIN memo updated with Kerry's answers",
+    changes: [
+      "Handicap Management & Research. Corrected the memo: 10/31 is TGF's own decision to stop posting through Golf Genius, not a Golf Genius retirement. Recorded Kerry's answers (no deadline; OK for the free TGA inquiry) and added what could and could not be confirmed about auto-checking members' GHIN indexes (API, a member club's roster export, or member-supplied) plus a draft TGA inquiry for Kerry to send. Docs only; nothing sent, bought or contacted."
+    ]
+  },
   {
     version: "2.571.21",
     date: "2026-10-19",

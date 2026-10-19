@@ -40,7 +40,7 @@ No other priced vendor holding a GHIN posting connection turned up in my searche
 
 ## Assumptions and unknowns
 
-- Assumed Golf Genius ends 10/31 as stated in the hand-off; I found no public notice either way, so I did not test it.
+- **Corrected by Kerry 10/19:** 10/31 is TGF's own decision to stop using Golf Genius and therefore stop posting through it. It is not a Golf Genius retirement. (My earlier note that I found no public GG retirement notice is moot.)
 - **UNKNOWN:** which GHIN customer or club identity Golf Genius used for TGF's posting; whether TGF already has any TGA/GHIN club record; the TGA club fee and per-golfer rate; whether TGF qualifies as a club; the USGA GPA fee and steps.
 - usga.org pages (GPA overview, GHIN FAQ, terms, Rules of Handicapping ch. 6) returned 403 to direct fetch. Items from them rest on search excerpts and are marked above. txga.org and docs.golfgenius.com pages were read directly.
 - Blog claims of "$50k-$100k API development" are consultancy marketing with no source; not used.
@@ -55,6 +55,24 @@ All of: (1) the 12/1 all-Stripe cutover and the #731 gate are done; (2) Kerry OK
 - **Golf Genius support:** ask under which GHIN customer TGF's posting ran and what export of posted history TGF can keep before 10/31.
 - **USGA (GPA):** only if route A is ever reconsidered; no contact verified.
 
-## Open question for Kerry
+## Kerry's answers, 10/19 (afternoon)
 
-Is there a deadline, or is this for when money allows?
+- **No deadline.** This is a future service. Kerry also wants the Tracker to **auto-check GHIN for members' latest handicaps**.
+- **Kerry OKs the TGA inquiry** and says he has inquired before (what he was told is not on file; asked him).
+- Timing: my earlier "after 12/1" was a suggestion, not a Kerry rule. The inquiry is free and can go whenever Kerry sends it; nothing is sent by this lane.
+
+## Auto-checking members' GHIN indexes: what I could and could not confirm
+
+- **Today:** the Tracker cannot look an index up from a GHIN number; GHIN shows it only to a logged-in account (handicaps.md, handicap ask). Members supply it on the handicap-ask page.
+- **Real routes, none confirmed:** (1) the USGA GPA API (route A, fee unknown). (2) As a TGA member club, the USGA Admin Portal lets a club export its GHIN roster to Excel, and an older club guide says the roster can be filtered by Handicap Index and exported; whether the current export carries each golfer's index and whether TGF members would be on TGF's roster are both **UNKNOWN** ([Mass Golf admin guide](https://www.massgolf.org/?p=5434), [GHP club guide 2014](https://www.massgolf.org/wp-content/uploads/2017/12/GHP-Club-Quick-Start-Guide-09-2014.pdf), seen 10/19). That would be a periodic file the Tracker imports, not a live link. (3) One tournament-software vendor says GHIN stopped allowing direct index retrieval in 2025 and suggests exporting a roster list instead (vendor claim, unverified).
+- **Not recommended:** scraping the GHIN site or app. It is login-gated and the GPA/API agreement, not the consumer terms, governs automated access.
+- **Add to the TGA inquiry:** whether a member club can export each rostered golfer's current Handicap Index, how often, and whether members who are on another club's roster can also be on TGF's.
+
+## Draft TGA inquiry (for Kerry to send or edit; nothing sent)
+
+To: Mary Harrison, Senior Director of Handicapping & Membership, TGA. "The Golf Fellowship (San Antonio and Austin, about 150 active members, 9- and 18-hole events at rated Texas courses) is asking what it would take to become a TGA member club using GHIN. Questions: (1) Does a social golf group with its own handicap committee qualify as a member club, and what are the requirements? (2) What are the annual club fee and the per-golfer fee, and is there a rebate when we charge more? (3) Can the club post tournament scores for rostered golfers and export each golfer's current Handicap Index? (4) Many of our members already hold a GHIN number with another club; how do they appear on our roster and what does that cost them? (5) What did we discuss previously, if anything is on file?"
+
+## Open questions for Kerry
+
+1. What did the TGA tell you when you inquired before (club fee, per-golfer cost, whether we qualified)?
+2. Do you want to send the inquiry yourself, or have me draft it as an email in your Outlook drafts for you to send? I will not send anything to the TGA.
