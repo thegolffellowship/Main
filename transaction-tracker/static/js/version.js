@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.571.22";
+window.TGF_VERSION = "2.571.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.23",
+    date: "2026-10-19",
+    title: "Live Individual Net counts only the strokes received so far",
+    changes: [
+      "Kerry 10/19: \"Individual net is really screwed up because it takes the cumulative total of what they have minus their full playing handicap ... It should only show cumulative total minus the cumulative total of strokes they received for those holes.\" entry_publish.live_board_rows (the live board in entry mode) now gives a part-played card a net of gross to date minus the pops on the holes played, by each hole's stroke index on the player's tee.",
+      "A complete card is still gross minus the playing handicap, exactly as before, so final results, payouts (which wait for the whole field), card parity and closeout do not change. With no stroke index on file the old figure stays. Guard test_board_entry_mode.py."
+    ]
+  },
   {
     version: "2.571.22",
     date: "2026-10-19",

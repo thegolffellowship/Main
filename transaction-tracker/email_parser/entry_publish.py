@@ -522,13 +522,23 @@ def live_board_rows(conn, event_id: int, db_path=None, _read: dict | None = None
             ph = p.get("playing_handicap")
             dots = _derived_dots(conn, rnd, tee["tee_id"], ph, holes or played)
             gross = sum(scores.values())
+            # Net to date (Kerry 10/19: "It should only show cumulative total
+            # minus the cumulative total of strokes they received for those
+            # holes"). A part-played card subtracts only the pops on the
+            # holes played; a complete card is gross minus the playing
+            # handicap exactly as before, so final results never move. With
+            # no stroke index on file the old figure stays (dots unresolved).
+            net = (gross - ph) if ph is not None else None
+            full = holes or played
+            if ph is not None and len(played) < len(full) and (dots or not ph):
+                net = gross - sum(int(dots.get(h, 0) or 0) for h in played)
             out.append({
                 "customer_id": cid,
                 "player_name": names.get(cid) or (p.get("name") or "").strip() or f"customer {cid}",
                 "event_id": ev["id"], "round_date": round_date, "course_id": course_id,
                 "tee_id": tee["tee_id"], "holes_played": len(played),
                 "playing_handicap": ph, "gross": gross,
-                "net": (gross - ph) if ph is not None else None,
+                "net": net,
                 "imported_at": (str(p.get("last_write_at") or "").replace("T", " ")[:19] or _now_utc()),
                 "holes": {h: scores[h] for h in played},
                 "strokes_received": {h: int(dots.get(h, 0) or 0) for h in played},

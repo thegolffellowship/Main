@@ -151,6 +151,11 @@ check("Adam's pops on the played holes keep their full-round places (PH 3: SI 1-
       sorted(h for h, v in live[302]["strokes_received"].items() if v) == [1, 3],
       live[302]["strokes_received"])
 
+check("a complete card's net is gross minus the playing handicap, unchanged (41 - 5 = 36)",
+      live[301]["net"] == 36, live[301]["net"])
+check("a part-played card's net subtracts only the pops on holes played (Kerry 10/19: 14 - 2 = 12, not 14 - 3)",
+      live[302]["net"] == 12, live[302]["net"])
+
 print("a round dated another day is not entry mode (past events stay frozen)")
 c = sqlite3.connect(DB)
 c.execute("UPDATE se_rounds SET round_date = '2026-09-29' WHERE id = ?", (rid,))
