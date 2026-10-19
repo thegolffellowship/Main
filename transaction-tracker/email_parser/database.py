@@ -15929,6 +15929,7 @@ def get_event_leaderboard(event_name: str,
     # ── skins winning cells (outright low GROSS on a hole WITHIN the
     # flight — the engine's rule) for the GG-style hole-by-hole grid ──
     skin_cells: dict = {}
+    ghost_skin_cells: dict = {}
     for sec in skins_board:
         for hn in hole_cols:
             best, who, tie = None, None, False
@@ -15945,6 +15946,21 @@ def get_event_leaderboard(event_name: str,
                     tie = True
             if who is not None and not tie:
                 skin_cells.setdefault(who, []).append(hn)
+            # Kerry 10/19: a player who didn't buy in but would have won
+            # the hole outright (lower than everyone in the flight, buyer
+            # or not) shows a grey circle under Show All Players. Display
+            # only: never a skin, never money.
+            scores = []
+            for r in sec["rows"]:
+                s = _player_holes(r["scoring_round_id"]).get(hn)
+                s = s[0] if s else None
+                if s is not None:
+                    scores.append((s, r))
+            if scores:
+                low = min(x[0] for x in scores)
+                at_low = [r for x, r in scores if x == low]
+                if len(at_low) == 1 and not at_low[0]["buyer"]:
+                    ghost_skin_cells.setdefault(at_low[0]["scoring_round_id"], []).append(hn)
     # ── games that did NOT run, with the requirement from the LIVE
     # matrix (Kerry 2026-09-11: denote immediately, per the 9/18
     # standard, and say the pot rolled into skins) ──
@@ -16016,6 +16032,7 @@ def get_event_leaderboard(event_name: str,
         "gross_board": gross_board,
         "skins_board": skins_board,
         "skin_cells": {str(k): v for k, v in skin_cells.items()},
+        "ghost_skin_cells": {str(k): v for k, v in ghost_skin_cells.items()},
         "points_board": points_rows,
         "teams": teams,
         "team_board": team_rows,

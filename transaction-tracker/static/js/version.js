@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.571.23";
+window.TGF_VERSION = "2.571.24";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.24",
+    date: "2026-10-19",
+    title: "Leaderboard: men's tee labels, bigger flight headings, the Skins view",
+    changes: [
+      "Kerry 10/19: \"Hector Hinojosa, Michael Murphy and Reggie Johnson are all showing as Women Red Tees ... They're Men 65+ Red Tees.\" On a course whose only Red tee is rated for women, the played tee read as ladies. The player's band on the pairing sheet now decides who plays it: a men's band gets its own label (Men 65+) and the filled dot, not the ladies' outline.",
+      "Flight section headings on every leaderboard are larger (14px, was 10px): \"The fact that it's Flight 1 or Flight 2 is kind of lost.\"",
+      "SKINS view (Kerry 10/19): lands hole by hole; no Net columns; no pops on the gross skins board (the Cup's net team skins keep theirs); checkboxes read Show All Players, Handicaps, Hole by hole on this tab only; no scorecard expansion (\"Seems like overkill\"); under Show All Players a grey circle marks a hole a player who didn't buy in would have won outright, with a legend line that shows only then. The # column already counts skins held right now and drops one the moment it's covered. Display only: payouts, card parity and closeout are untouched. Guards test_events_board.js, test_lsc_skins_pane.js."
+    ]
+  },
   {
     version: "2.571.23",
     date: "2026-10-19",

@@ -726,6 +726,9 @@
             font: 700 14px/1.6 'Bitter', serif; letter-spacing: 1px; padding: 7px 12px;
             white-space: normal; }
         .evlb-holes tr.evlb-band[data-team] td { cursor: pointer; }
+        .evlb-circ.evlb-ghost { border-color: #9CA3AF !important; color: #6B7280 !important; }
+        .evlb-ghostkey { font-size: 12px; color: #6B7280; margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
+        .evlb-ghostkey .evlb-circ { position: static; }
         .evlb-holes tr.evlb-band .tchev { opacity: .9; }
         .evlb-holetog { display: inline-flex; align-items: center; gap: 6px;
             font-size: 12px; color: #4B5563; margin: 0; cursor: pointer;
@@ -4098,6 +4101,18 @@
             + (pale ? "box-shadow:inset 0 0 0 1.5px #1B1B1B;" : "");
     }
 
+    // The board's checkboxes. On SKINS the order is Show All Players,
+    // Handicaps, Hole by hole (Kerry 10/19); every other board keeps
+    // Hole by hole, Handicaps, Show All Players.
+    function evlbTogs(board, d, showHoles) {
+        const holes = `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${showHoles ? " checked" : ""}> Hole by hole</label>`;
+        const hcp = board.noHcp ? "" :
+            `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>`;
+        const all = (EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d) && !board.noAllToggle)
+            ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
+            : "";
+        return board.game === "skins" ? all + hcp + holes : holes + hcp + all;
+    }
     function evlbTeeLegend(d) {
         const legend = (d && d.tee_legend) || [];
         if (!legend.length) return "";
@@ -4352,8 +4367,14 @@
                     hh[1]}${sr ? " \u2212 " + sr + " = net " + net : " (no stroke)"
                 }${ct ? " \u2014 the ball that counted for the team" : ""}">${evlbPops(sr)}${hh[1]}</td>`;
             }
-            const pops = evlbPops(hh ? hh[2] : 0);
+            // A GROSS skins board (no Net column) shows no pops (Kerry
+            // 10/19: "Do not show hole pops on skins when it's Gross
+            // Skins"); the Cup's NET team skins keep theirs.
+            const pops = (game === "skins" && netCol === false) ? "" : evlbPops(hh ? hh[2] : 0);
             if (!hh || hh[1] == null) return '<td class="h"></td>';
+            const ghost = game === "skins" && evlbShowAll
+                && (((d.ghost_skin_cells || {})[String(r.scoring_round_id)]) || []).includes(n);
+            if (ghost) return `<td class="h"><span class="evlb-circ evlb-ghost" title="would have won this skin; not in the skins">${hh[1]}</span></td>`;
             return `<td class="h">${pops}${skinHoles.includes(n)
                 ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="${d.field_complete === false ? "skin so far" : "skin"} — flight ${r.skins_flight || 1}${d.field_complete === false ? " (provisional until every card is in)" : ""}">${hh[1]}</span>`
                 : hh[1]}</td>`;
@@ -4669,13 +4690,12 @@
         return (note || "") +
             `<div class="evlb-togrow">` +
             `<div class="evlb-togs">` +
-            `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${showHoles ? " checked" : ""}> Hole by hole</label>` +
-            (board.noHcp ? "" :
-                `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>`) +
-            (EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d) && !board.noAllToggle
-                ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
-                : "") +
+            evlbTogs(board, d, showHoles) +
             `</div>` + evlbTeeLegend(d) + `</div>` +
+            // Kerry 10/19: a grey circle where a player who didn't buy in
+            // would have won the skin; its legend shows only with Show All.
+            (board.game === "skins" && evlbShowAll
+                ? `<div class="evlb-ghostkey"><span class="evlb-circ evlb-ghost">3</span> would have won the skin (not in the skins)</div>` : "") +
             // no WON column on an event with no games (Kerry 10/9: "Won
             // column shouldn't show at all if there aren't any side games")
             `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp && !board.noHcp ? "" : " no-hcp"}${d._moneyHeld || evlbNoGames(d) ? " no-won" : ""}" data-board="${id}"${board.noHcp ? " data-nohcp" : ""}><thead>` +
@@ -4838,6 +4858,10 @@
                            value: skinsCount },
                 // skins won sits beside skins money (Kerry 2026-09-14)
                 gameColAfterWon: true,
+                // Kerry 10/19: "show hole by hole view as landing for Skins
+                // ... Do not show Net score columns" and no scorecard
+                // expansion ("Seems like overkill").
+                holesOnLanding: true, netCol: false, noCard: true,
             },
             points: {
                 sections: [{
@@ -5277,6 +5301,8 @@
         body.addEventListener("click", async (e) => {
             const tr = e.target.closest("tr.evlb-plr[data-rid]");
             if (!tr || !body.contains(tr)) return;
+            const _st = EVLB_BOARDS[(tr.closest("table[data-board]") || {}).dataset?.board];
+            if (_st && _st.board && _st.board.noCard) return;
             {
                 const rid = tr.dataset.rid;
                 if (!rid) return;

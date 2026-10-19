@@ -84,7 +84,7 @@ const boards={
   overall:{sections:[{label:null,rows:d.overall_board}],sort:'net'},
   net:{sections:secsFrom(d.net_board),sort:'net',game:'net',gameCol:false},
   gross:{sections:secsFrom(d.gross_board),sort:'gross',game:'gross',gameCol:false,netCol:false},
-  skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'#',title:'Skins won',value:skinsCount},gameColAfterWon:true},
+  skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'#',title:'Skins won',value:skinsCount},gameColAfterWon:true,holesOnLanding:true,netCol:false,noCard:true},
   points:{sections:[{label:null,rows:d.points_board.map(x=>ovOf(x,x.mvp_note)).filter(Boolean)}],sort:'keep',game:'points',grossCol:false},
   team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,grossCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep'},
 };
@@ -103,10 +103,19 @@ const htmlsAll = {};
 for (const k of Object.keys(boards)) htmlsAll[k] = evlbStdBoard(d, boards[k]);
 evlbSetShowAll(false);
 
+console.log('== SKINS toggles (Kerry 10/19) ==');
+{
+  const i = t => htmls.skins.indexOf(t);
+  ck('skins: Show All Players, then Handicaps, then Hole by hole',
+     i('data-ovr-all') >= 0 && i('data-ovr-all') < i('data-ovr-hcp') && i('data-ovr-hcp') < i('data-ovr-holes'));
+  const j = t => htmls.net.indexOf(t);
+  ck('net keeps Hole by hole first', j('data-ovr-holes') < j('data-ovr-hcp'));
+}
 console.log('== every tab is the same table ==');
 const base = colCount(htmls.overall);
-for (const k of ['overall','skins'])
-  ck(`${k}: identical column count (${base})`, colCount(htmls[k]) === base, colCount(htmls[k]));
+ck(`overall: identical column count (${base})`, colCount(htmls.overall) === base, colCount(htmls.overall));
+// SKINS drops the net pair (Kerry 10/19: "Do not show Net score columns")
+ck('skins: drops the net pair, two columns narrower', colCount(htmls.skins) === base - 2, colCount(htmls.skins));
 // MVP/Points drops the gross pair (Kerry 2026-09-14)
 ck('points: drops the gross pair, two columns narrower',
    colCount(htmls.points) === base - 2, colCount(htmls.points));
@@ -347,8 +356,13 @@ ck('two strokes render two dots',
    /<span class="evlb-pops">\u25CF\u25CF<\/span>6/.test(htmls.overall));
 ck('no stroke received renders no dots on that cell',
    /<td class="h">4<\/td>/.test(htmls.overall));
-for (const k of Object.keys(boards))
-  ck(`${k}: pops show on the hole scores`, /evlb-pops/.test(htmls[k]));
+for (const k of Object.keys(boards)) {
+  // Kerry 10/19: "Do not show hole pops on skins when it's Gross Skins."
+  if (k === 'skins')
+    ck('skins: no pops on the hole scores (gross skins, Kerry 10/19)', !/evlb-pops/.test(htmls[k]));
+  else
+    ck(`${k}: pops show on the hole scores`, /evlb-pops/.test(htmls[k]));
+}
 ck('the team tab keeps the dots on its NET cells',
    /class="h[^"]*"[^>]*><span class="evlb-pops">/.test(htmls.team), '');
 ck('PAR row carries no pops',
@@ -483,7 +497,10 @@ console.log('== holes start CLOSED, and the PTS rows ride with them ==');
      (htmls.overall.match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
   ck('OVERALL\'s Hole-by-hole box is checked to match',
      /data-ovr-holes checked>/.test(htmls.overall));
-  for (const k of ['net','gross','skins','points','team'])
+  // SKINS lands hole by hole (Kerry 10/19)
+  ck('skins: lands with the hole grid open',
+     !/class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls.skins));
+  for (const k of ['net','gross','points','team'])
     ck(`${k}: lands with the hole columns closed`,
        /class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls[k]),
        (htmls[k].match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
@@ -518,7 +535,7 @@ ck('gross KEEPS the gross score and its to-par',
 ck('the # column sorts by gross there, not by a column that is gone',
    /<th data-k="gross" class="sortable">#<\/th>/.test(htmls.gross),
    (htmls.gross.match(/<th data-k="[a-z]+" class="sortable">#/)||[])[0]);
-ck('every other tab still shows net', ['overall','net','skins','points','team']
+ck('every other tab still shows net (skins dropped it, Kerry 10/19)', ['overall','net','points','team']
    .every(k => /data-k="tpn"/.test(htmls[k])));
 ck('every row type on GROSS has the same cell count',
    (() => {
@@ -544,7 +561,7 @@ console.log('== SKINS count sits beside the money (Kerry 2026-09-14) ==');
   ck('OVERALL keeps Pts at the END, not beside the money',
      /class="bl br gc"/.test(((htmls.overall.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0]
        .match(/<td[^>]*>/g)||[]).slice(-1)[0] || ''));
-  ck('skins column count is unchanged by the move', colCount(htmls.skins) === base);
+  ck('skins column count is unchanged by the move', colCount(htmls.skins) === base - 2);
 }
 
 console.log('== TEAM hole cells are GROSS with pops (Kerry 2026-09-14) ==');
