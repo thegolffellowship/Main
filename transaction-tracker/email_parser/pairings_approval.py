@@ -232,6 +232,10 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
         return rv
     if not rv["fingerprint"]:
         return {"skipped": "no saved pairings"}
+    # Never ask twice for a sheet already approved (Kerry 10/19: "Robert had
+    # already approved his I believe. You didn't need to send his.").
+    if (rv.get("state") or {}).get("approved_fp") == rv["fingerprint"]:
+        return {"skipped": "this sheet is already approved"}
     mgr = manager_for(rv["event"]["chapter"], db_path)
     if not mgr["email"]:
         return {"skipped": f"no manager email for {rv['event']['chapter']}"}
