@@ -2572,6 +2572,53 @@ rules since v2.525.9:
   holes keeps his card's pops, marked `team_pops_src = "card"`. Same rule
   as the phone card, the printed scorecard and `live_scoring.game_team_net`.
 
+## The TEAM tab: N-ball Team Net, counted balls, collapsed rows (Kerry 10/19, B5/B8/B9)
+
+From the leaderboard review (`handoff-2026-10-19-leaderboard-review.md`
+11.6, 12.4, 12.6, 13). Kerry: "build in TEAM Net 2 and 3 ball options
+too, where we're adding cumulative of the two best or three best net
+scores" and "TEAM should be simpler ... collapsed state to show a single
+row for each team with their net score".
+
+- **N-ball (B9).** N is the event's dial, `event_team_net_dial` (the
+  event's `team_ball_count`, else `team_net_balls`, else Best 1), sent to
+  the board as `team_balls` with `team_unit` ("team" / "cart"). Each hole
+  the team scores the SUM of the N lowest nets (Team Net pops as above).
+  A hole counts only once EVERY player on the team has posted it; a
+  blind's card never holds a hole, an N/H seat or a seat with no card is
+  not a ball. `±` is against par for each counted ball (N x par when the
+  tees agree). Never "total minus PH".
+- **One rule, three places.** `get_event_leaderboard` puts on each team
+  `total_net`, `to_par`, `thru`, `complete`, `team_holes` ({hole: {net,
+  balls, counted: [round ids]}}) and `start_line`; non-GG teams rank on
+  `±`, then holes played, then name (ties share a place on `±`; if a
+  counted ball has no par every team falls back to the total). The
+  untethered payouts rank on this list (`_tracker_team_and_ctp_rows`), so
+  the board and the money agree. `live_scoring.game_team_net(balls=)`
+  plays the same N (from `event_engine_state` / `ls_leaderboard` meta
+  `team_balls`) and lists every counted ball per hole. The page's
+  `evlbTeamMins` computes the same thing from the payload. A GG-era event
+  keeps GG's positions and posted total.
+- **Counted balls (B5).** Every ball that counted on a hole is green: one
+  for Best 1, two for Best 2, three for Best 3; a tie at the cutoff greens
+  all the tied balls (`evlbTeamCounted`).
+- **Collapsed by default (B8).** The TEAM tab lands on one row a team:
+  `# | TEAM | THRU | NET | ± | WON` (`evlbTeamPanel`). THRU is the
+  team's start line (print pack `start_line`, else the live waiting
+  list's tee time) before it tees off, the holes the whole team has
+  posted while it plays, and `F <net>` when every hole is in. WON is the
+  team purse once money shows. Tap a row to open today's full board for
+  that team (band, player rows with holes, green counted cells, TEAM NET
+  row); each team opens on its own and Expand all / Collapse all does
+  them all. Nothing opens inside a team: the band chevron that opened
+  every player's card and the tap-a-player scorecard are gone on TEAM
+  (`noCard`); the tee dot, BLIND chip and per-player WON stay. A team
+  that has not teed off on a live entry-mode day is kept on the board
+  (`upcoming`) so its start shows. The heading and HOW IT WORKS read
+  the dial: "Team Net · best 2 of 4 · 85% allowance".
+- Guards: `test_team_net_nball.py` (server + engine), `test_team_board_collapsed.js`
+  (sums, highlight with ties, row values, expand/collapse), `test_events_board.js`.
+
 ## Event Setup: GAMES OFFERED (v2.475.0, Kerry ratified 2026-09-21)
 
 Kerry: "Yes, add a Games Offered setting to Event Setup. I guess we've

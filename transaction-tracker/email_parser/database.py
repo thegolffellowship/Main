@@ -15734,6 +15734,7 @@ def get_event_leaderboard(event_name: str,
     # WHS-rounded, off the lowest of those same values across the field.
     _sheet_team_hcp: dict = {}
     _sheet_low = None
+    _pack: dict = {}
     try:
         _pack = get_event_print_pack(ev["id"], db_path=db_path) or {}
         for _g in _pack.get("groups") or []:
@@ -15750,6 +15751,47 @@ def get_event_leaderboard(event_name: str,
         _field_low = min(_allowed) if _allowed else None
     except Exception:
         _wr = None
+
+    # TEAM NET N-BALL (Kerry 10/19: "build in TEAM Net 2 and 3 ball
+    # options too, where we're adding cumulative of the two best or three
+    # best net scores"). The event's ball count is the same dial the sheet
+    # prints and the allowance ladder reads (event_team_net_dial).
+    try:
+        _team_n = max(1, int(_tb or 1))
+    except (TypeError, ValueError):
+        _team_n = 1
+    # A team still to tee off shows its start where THRU will be
+    # (Kerry 10/19: "Pre-Event view would show tee time/hole in that
+    # column"). The start line is the print pack's, so the board and the
+    # starter sheet say it the same way; the live waiting list is the
+    # fallback.
+    _start_by_cid: dict = {}
+    _start_by_group: dict = {}
+    try:
+        _want_holes = str(ev["holes"] or 18)
+        _pgroups = (_pack or {}).get("groups") or []
+        if any(str(_g.get("holes")) == _want_holes for _g in _pgroups):
+            _pgroups = [_g for _g in _pgroups if str(_g.get("holes")) == _want_holes]
+        for _g in _pgroups:
+            _sl = _g.get("start_line")
+            if not _sl:
+                continue
+            _start_by_group.setdefault(_g.get("group_num"), _sl)
+            for _p in _g.get("players") or []:
+                if _p.get("customer_id") is not None:
+                    _start_by_cid.setdefault(int(_p["customer_id"]), _sl)
+    except Exception:
+        logger.exception("Non-fatal: team start lines unavailable for %s", ev["id"])
+    _waiting_cids: set = set()
+    for _w in waiting or []:
+        if _w.get("customer_id") is None:
+            continue
+        _wc = int(_w["customer_id"])
+        _waiting_cids.add(_wc)
+        if _wc not in _start_by_cid and _w.get("tee_time"):
+            _sh = _w.get("start_hole")
+            _start_by_cid[_wc] = str(_w["tee_time"]) + (
+                f" · {_sh}" if _sh not in (None, 1, "1") else "")
 
     teams = []
     for tn, names in sorted(_groups.items(), key=lambda kv: str(kv[0])):
@@ -15779,8 +15821,14 @@ def get_event_leaderboard(event_name: str,
                 # on the sheet but no card (no-show / blind-draw slot)
                 members.append({"player_name": nm, "customer_id": None,
                                 "scoring_round_id": None, "hcp": None})
+        _upcoming = False
         if not matched:
-            continue
+            # a team on the live day that has not teed off keeps its row,
+            # showing its start (only entry mode knows who is waiting)
+            if not any(c is not None and int(c) in _waiting_cids
+                       for _n, c, _b in names):
+                continue
+            _upcoming = True
         # TEAM handicap: the sheet's number (off the lowest in the FIELD),
         # else PH x allowance off the field's lowest. Never off the team.
         for m in members:
@@ -15803,9 +15851,19 @@ def get_event_leaderboard(event_name: str,
             _pops_by_rid[m["scoring_round_id"]] = tp
             m["team_pops"] = {str(h): n for h, n in sorted(tp.items())}
             m["team_pops_src"] = "team_net"
-        total, any_hole = 0, False
+        # HOLE BY HOLE, N BALLS, ONLY ONCE THE WHOLE TEAM IS IN (Kerry
+        # 10/19, handoff 12.4 / 12.6). A hole counts for the team once
+        # every player on it has a score there (a blind's card is
+        # pre-filled and never holds a hole), so the number does not drop
+        # each time a better ball arrives. The hole scores the SUM of the
+        # N lowest nets; ± is against par for each counted ball (N x par
+        # when the tees agree). Never "total minus PH". The TEAM tab
+        # (evlbTeamMins in contests.html) plays the same rule, and the
+        # untethered payouts rank on this total (_tracker_team_and_ctp_rows).
+        total, any_hole, thru, to_par, par_ok = 0, False, 0, 0, True
+        team_holes: dict = {}
         for hn in hole_cols:
-            nets = []
+            nets, waiting_on = [], False
             for m in members:
                 if not m["scoring_round_id"] or m.get("nh"):
                     continue
@@ -15814,15 +15872,46 @@ def get_event_leaderboard(event_name: str,
                 v = _player_holes(m["scoring_round_id"]).get(hn)
                 if v and v[0] is not None:
                     tp = _pops_by_rid.get(m["scoring_round_id"])
-                    nets.append(v[0] - (tp.get(hn, 0) if tp is not None else (v[1] or 0)))
-            if nets:
-                total += min(nets)
-                any_hole = True
+                    _par = (_tn_par_by_rid.get(m["scoring_round_id"]) or {}).get(
+                        hn, hole_par.get(hn, hole_par.get(str(hn))))
+                    nets.append((v[0] - (tp.get(hn, 0) if tp is not None else (v[1] or 0)),
+                                 _par, m["scoring_round_id"]))
+                elif not m.get("blind"):
+                    waiting_on = True
+            if waiting_on or not nets:
+                continue
+            nets.sort(key=lambda x: x[0])
+            k = min(_team_n, len(nets))
+            hv = sum(x[0] for x in nets[:k])
+            total += hv
+            thru += 1
+            any_hole = True
+            if all(x[1] is not None for x in nets[:k]):
+                to_par += hv - sum(x[1] for x in nets[:k])
+            else:
+                par_ok = False
+            _cut = nets[k - 1][0]
+            team_holes[str(hn)] = {"net": hv, "balls": k,
+                                   "counted": [x[2] for x in nets if x[0] <= _cut]}
+        _start = None
+        for _n, c, _b in names:
+            if c is not None and int(c) in _start_by_cid:
+                _start = _start_by_cid[int(c)]
+                break
+        if _start is None:
+            _start = _start_by_group.get(tn[0] if isinstance(tn, tuple) else tn)
         teams.append({
             "team_num": (f"{tn[0]}{tn[1]}" if isinstance(tn, tuple)
                          else tn),
             "players": members,
             "total_net": total if any_hole else None,
+            "to_par": to_par if (any_hole and par_ok) else None,
+            "thru": thru,
+            "holes_total": len(hole_cols),
+            "complete": bool(hole_cols) and thru == len(hole_cols),
+            "team_holes": team_holes,
+            "start_line": _start,
+            "upcoming": _upcoming,
             "purse": None, "gg_position": None, "gg_total": None})
 
     def _member_hits(members, gs):
@@ -15898,16 +15987,30 @@ def get_event_leaderboard(event_name: str,
             t["official"] = _gg_pos_num(t) is not None
             t["position"] = t["gg_position"] if t["official"] else ""
     else:
-        teams.sort(key=lambda t: (t["total_net"] is None,
-                                  t["total_net"] or 0))
+        # RANK ON ±, THEN HOLES PLAYED, THEN NAME (Kerry 10/19, handoff
+        # 11.4 / 11.6): mid-round a raw total ranks a team thru 9 below
+        # one thru 3. Ties share a place on ±. When a scored team has no
+        # par for a counted ball (tees disagree, no card data) every team
+        # falls back to the total rather than mixing the two measures.
+        _use_tp = all(t["to_par"] is not None for t in teams
+                      if t["total_net"] is not None)
+
+        def _metric(t):
+            return t["to_par"] if _use_tp else t["total_net"]
+
+        def _tname(t):
+            return " ".join((m.get("player_name") or "")
+                            for m in t["players"]).lower()
+        teams.sort(key=lambda t: (_metric(t) is None, _metric(t) or 0,
+                                  -(t.get("thru") or 0), _tname(t)))
         _last, _rank = object(), 0
         for i, t in enumerate(teams, 1):
-            if t["total_net"] != _last:
-                _rank, _last = i, t["total_net"]
-            tied = (t["total_net"] is not None and sum(
-                1 for x in teams if x["total_net"] == t["total_net"]) > 1)
+            if _metric(t) != _last:
+                _rank, _last = i, _metric(t)
+            tied = (_metric(t) is not None and sum(
+                1 for x in teams if _metric(x) == _metric(t)) > 1)
             t["position"] = (("T" if tied else "") + str(_rank)
-                             if t["total_net"] is not None else "")
+                             if _metric(t) is not None else "")
             t["official"] = False
     # TEAM MONEY, SLOT BY SLOT, FROM THE GAMES MONEY (Kerry 2026-10-13:
     # "GAMES and FLIGHTS and PAIRINGS in events dictates all items for
@@ -16090,6 +16193,10 @@ def get_event_leaderboard(event_name: str,
                   "score_source": ev.get("score_source") or "record"},
         "team_allowance": team_allowance,
         "team_basis": team_basis,
+        # Team Net's ball count (Best 1/2/3) and unit, so the TEAM tab sums
+        # the same N balls and its heading reads the same dial
+        "team_balls": _team_n,
+        "team_unit": "cart" if _cart_mode else "team",
         "tee_by_player": tee_by_player,
         "tee_legend": tee_legend,
         "money_visible": money_visible,
@@ -27002,6 +27109,15 @@ def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH,
         state["variant_pins"] = _variant_pins_for(fb)
     if meta.get("event_id"):
         state["blinds"] = _ls_event_blinds(meta, state["players"], db_path=db_path)
+        try:
+            with _connect(db_path) as _c_tb:
+                _ev_tb = _c_tb.execute("SELECT * FROM events WHERE id = ?",
+                                       (meta["event_id"],)).fetchone()
+                if _ev_tb:
+                    state["team_balls"] = event_team_net_dial(_c_tb, dict(_ev_tb))[0]
+        except Exception:
+            logger.exception("Non-fatal: team ball count unavailable for session %s",
+                             session_id)
     formulas = (get_championship_formulas(db_path=db_path)
                 if meta.get("championship")
                 else get_scoring_formulas(db_path))
@@ -27177,6 +27293,13 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
     championship = "championship" in ev["item_name"].lower()
     meta = {"event_id": ev["id"], "event_name": ev["item_name"],
             "holes": n_holes, "championship": championship}
+    # Team Net's ball count (Best 1/2/3/4) so the engine sums the same N
+    # balls the EVENTS board and the untethered payouts do (Kerry 10/19).
+    try:
+        with _connect(db_path) as _c_tb:
+            meta["team_balls"] = event_team_net_dial(_c_tb, ev)[0]
+    except Exception:
+        logger.exception("Non-fatal: team ball count unavailable for %s", ev["id"])
     # Par / SI come from the event's most-played tee (as the seeded sandbox
     # does). A card with NO tee of its own is scored on that tee — say so by
     # name rather than let it pass silently (rehearsal 9/28: the women's Red

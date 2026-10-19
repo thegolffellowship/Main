@@ -733,6 +733,42 @@
             font: 700 14px/1.6 'Bitter', serif; letter-spacing: 1px; padding: 7px 12px;
             white-space: normal; }
         .evlb-holes tr.evlb-band[data-team] td { cursor: pointer; }
+        /* TEAM tab collapsed (Kerry 10/19, B8): one row a team — # | TEAM |
+           THRU | NET | ± | WON; tap a row for today's full team board. */
+        .evlb-tdial { display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; margin: 4px 0 6px; }
+        .evlb-tdial-l { font: 700 13px/1.3 'Bitter', serif; letter-spacing: .3px; color: #1B1B1B; }
+        .evlb-tall { font: 700 12px/1 'Bitter', serif; padding: 5px 12px; border-radius: 999px;
+            border: 1.5px solid #1B1B1B; background: #fff; color: #1B1B1B; cursor: pointer; white-space: nowrap; }
+        /* fixed layout: an opened team's wide hole grid scrolls inside its
+           own cell instead of widening the collapsed table */
+        table.evlb-tsum { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        table.evlb-tsum th.pos { width: 34px; }
+        table.evlb-tsum th.thru { width: 78px; }
+        table.evlb-tsum th.sc { width: 46px; }
+        table.evlb-tsum th.tp { width: 42px; }
+        table.evlb-tsum th.won { width: 68px; }
+        table.evlb-tsum th { background: #1B1B1B; color: #fff; font: 700 11px/1.4 'Bitter', serif;
+            letter-spacing: .5px; text-transform: uppercase; padding: 5px 8px; text-align: center; }
+        table.evlb-tsum th.nm, table.evlb-tsum td.nm { text-align: left; }
+        table.evlb-tsum tr.evlb-tsum-row td { padding: 7px 8px; border-bottom: 1px solid #E5E7EB;
+            text-align: center; font-variant-numeric: tabular-nums; cursor: pointer; }
+        table.evlb-tsum tr.evlb-tsum-row td.nm { white-space: normal; line-height: 1.35; }
+        table.evlb-tsum tr.evlb-tsum-row:hover td { background: #FAFAF8; }
+        table.evlb-tsum tr.evlb-tsum-row.open td { background: #F3F1EC; border-bottom-color: #1B1B1B; }
+        table.evlb-tsum tr.evlb-tsum-row .tchev { margin-right: 4px; }
+        table.evlb-tsum tr.evlb-tsum-row.open .tchev { transform: rotate(90deg); }
+        table.evlb-tsum tr.evlb-tsum-row td.pos { font-weight: 700; width: 34px; }
+        table.evlb-tsum tr.evlb-tsum-row td.thru { white-space: nowrap; }
+        table.evlb-tsum tr.evlb-tsum-row td.tp { color: #6B7280; }
+        table.evlb-tsum td.won, table.evlb-tsum th.won { min-width: 58px; }
+        table.evlb-tsum td.won { color: var(--money-green, #15803D); font-weight: 700; }
+        table.evlb-tsum.no-won td.won, table.evlb-tsum.no-won th.won { display: none; }
+        .evlb-tstart { color: #6B7280; font-size: 12px; }
+        .evlb-tmem { white-space: nowrap; }
+        table.evlb-tsum tr.evlb-tsum-exp > td { padding: 0 0 10px; background: #fff; }
+        /* the toggles sit once above the collapsed table, not in each team */
+        table.evlb-tsum tr.evlb-tsum-exp .evlb-togrow { display: none; }
         .evlb-circ.evlb-ghost { border-color: #9CA3AF !important; color: #6B7280 !important; }
         .evlb-ghostkey { font-size: 12px; color: #6B7280; margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
         .evlb-ghostkey .evlb-circ { position: static; }
@@ -3969,7 +4005,7 @@
                 ? `Tonight is <b>Skins \u00bd Net</b> (fewer buyers, so the side-games matrix runs the net form): each buyer gets half his playing handicap, off the lowest among the players who bought in, and the dots on a hole score are those strokes. The low NET score on a hole, alone, wins the skin. `
                 : "") + `A circled hole score is a skin won in that flight. <b>Won</b> = Skins money only; OVERALL shows everything collected at this event.`,
             points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole. <b>Won</b> = MVP money only.`,
-            team: `Hole scores are each player's GROSS with their pops marked; gross less pops is the net the team played, and the green cell is the ball that counted. The TEAM NET row closes each band with the team's holes, total and whole purse; a player row's <b>Won</b> is that player's share.`,
+            team: `<b>${escapeHtml(evlbTeamDialLabel(d))}</b>. Each hole the team scores the ${evlbTeamBalls(d) === 1 ? "lowest net ball" : `sum of its ${evlbTeamBalls(d)} lowest net balls`}, and a hole counts only once every player on the team has posted it (a blind never holds a hole). <b>Thru</b> is those holes, <b>Net</b> their total, and <b>&plusmn;</b> is against par for each ball counted. Teams rank on &plusmn;, then holes played. Before a team tees off, Thru shows its start; F means every hole is in. Tap a team to open its board: hole scores are each player's GROSS with their pops marked, gross less pops is the net the team played, and every green cell is a ball that counted (ties count all the tied balls). The TEAM NET row closes the band with the team's holes, total and whole purse; a player row's <b>Won</b> is that player's share.`,
             prox: `Closest-to-the-pin and other proximity winners, hole by hole.`,
         };
         if (noGames) out.push(sec("This event", "No games at this event, so the boards are just the scores: Net ranks by net total, Gross by gross total. Nobody bought in and nothing is paid."));
@@ -3980,7 +4016,9 @@
         if (!noGames) out.push(sec("Colors",
             `Money winners are colour-coded by FLIGHT: ${[1, 2, 3].map(f => `<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`).join(" ")}. `
             + `On the Net, Gross, Skins and MVP/Points tabs a <span class="lg" style="background:var(--buyin-row,#FFFFFF);color:#1B1B1B;border:1px solid #E5E7EB;">white</span> row bought into that game and a <span class="lg" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">grey</span> row did not; non-buyers are placed in the flight their handicap would have flighted them. Show All Players brings the non-buyers back onto a Net or Gross board.`));
-        out.push(sec("Tapping", "Tap a player for their scorecard, or a team for its best-ball card. Tap a column header to sort and re-rank. Dots in the corner of a hole are the strokes received there. Hole by hole and Handicaps add those columns."));
+        out.push(sec("Tapping", game === "team"
+            ? "Tap a team to open or close its board; Expand all opens every team. Dots in the corner of a hole are the strokes received there. Hole by hole and Handicaps add those columns."
+            : "Tap a player for their scorecard. Tap a column header to sort and re-rank. Dots in the corner of a hole are the strokes received there. Hole by hole and Handicaps add those columns."));
         const ev = d.event || {};
         out.push(sec("Where the scores come from", ev.score_source === "entry"
             ? "Straight from the players' live scoring on their phones, hole by hole as each group posts."
@@ -4302,17 +4340,232 @@
         const tp = evlbTeamPopsOf(t, rid, n);
         return h[1] - (tp != null ? tp : (h[2] || 0));
     }
+    // ── TEAM NET, N BALLS (Kerry 10/19, leaderboard review 12.4 / 12.6:
+    //    "TEAM Net 2 and 3 ball options too, where we're adding cumulative
+    //    of the two best or three best net scores"). N is the event's dial
+    //    (`team_balls` from get_event_leaderboard, event_team_net_dial on
+    //    the server); a payload without it is Best 1, as before.
+    function evlbTeamBalls(d) {
+        const n = parseInt(d && d.team_balls, 10);
+        return n > 0 ? n : 1;
+    }
+    // Per hole: the SUM of the N lowest nets, and only once EVERY player on
+    // the team has a score there (a blind's card is pre-filled and never
+    // holds a hole; a no-card or N/H seat is not a ball). mins[n] is that
+    // team number or null; `_counted[n]` is every round id whose ball
+    // counted (a tie at the cutoff counts all the tied balls); `_balls[n]`
+    // how many balls the hole summed. The server's teams[].total_net
+    // (database.py get_event_leaderboard) plays the same rule, and the
+    // untethered payouts rank on that, so board and payouts agree.
     function evlbTeamMins(d, t) {
-        const mins = {};
+        const N = evlbTeamBalls(d);
+        const mins = {}, counted = {}, balls = {};
+        const members = ((t && t.players) || [])
+            .filter(p => p && p.scoring_round_id != null && p.scoring_round_id !== "" && !p.nh);
         (d.hole_cols || []).forEach(n => {
-            const vals = (t.players || [])
-                .map(p => evlbNetOf(d, p.scoring_round_id, n, t))
-                .filter(v => v != null);
-            mins[n] = vals.length ? Math.min(...vals) : null;
+            const nets = [];
+            let waiting = false;
+            members.forEach(p => {
+                if (Array.isArray(p.blind_holes) && p.blind_holes.length
+                    && !p.blind_holes.map(Number).includes(Number(n))) return;
+                const v = evlbNetOf(d, p.scoring_round_id, n, t);
+                if (v != null) nets.push([v, String(p.scoring_round_id)]);
+                else if (!evlbIsBlind(p)) waiting = true;
+            });
+            if (waiting || !nets.length) { mins[n] = null; return; }
+            nets.sort((a, b) => a[0] - b[0]);
+            const k = Math.min(N, nets.length);
+            const cut = nets[k - 1][0];
+            mins[n] = nets.slice(0, k).reduce((s2, x) => s2 + x[0], 0);
+            counted[n] = new Set(nets.filter(x => x[0] <= cut).map(x => x[1]));
+            balls[n] = k;
         });
         // the team rides along so the player rows can draw THEIR team pops
         Object.defineProperty(mins, "_team", { value: t, enumerable: false });
+        Object.defineProperty(mins, "_counted", { value: counted, enumerable: false });
+        Object.defineProperty(mins, "_balls", { value: balls, enumerable: false });
         return mins;
+    }
+    // did this ball count for the team on this hole (B5: every counted
+    // ball is green — one for Best 1, two for Best 2, three for Best 3)
+    function evlbTeamCounted(mins, rid, n) {
+        const c = mins && mins._counted && mins._counted[n];
+        return !!(c && c.has(String(rid)));
+    }
+    // The team's one-line standing, hole by hole (Kerry 10/19: "follow
+    // hole by hole calculations like we just discussed on NET, rather
+    // than cumulative score minus total PH"): THRU = holes the whole team
+    // has posted; NET = the sum of those holes' team numbers; ± = NET
+    // against par for each counted ball (N x par). GG's posted total is
+    // the score of record when there is one, exactly as the TEAM NET row.
+    function evlbTeamSummary(d, t, mins) {
+        mins = mins || evlbTeamMins(d, t);
+        const cols = d.hole_cols || [];
+        const hp = d.hole_par || {};
+        let thru = 0, net = 0, toPar = 0, parOk = true;
+        cols.forEach(n => {
+            if (mins[n] == null) return;
+            thru++;
+            net += mins[n];
+            const p = hp[String(n)];
+            if (p == null) parOk = false;
+            else toPar += mins[n] - (mins._balls[n] || 1) * p;
+        });
+        const posted = ((t && t.players) || []).some(p =>
+            ((d.cards || {})[String(p.scoring_round_id)] || []).some(h => h[1] != null));
+        const complete = cols.length > 0 && thru === cols.length;
+        const gg = t && t.gg_total != null ? Number(t.gg_total) : null;
+        let shownNet = thru ? net : null, shownPar = thru ? (parOk ? toPar : (t && t.to_par != null ? t.to_par : null)) : null;
+        if (gg != null) {
+            shownNet = gg;
+            const N = evlbTeamBalls(d);
+            const full = cols.every(n => hp[String(n)] != null)
+                ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : null;
+            // GG's total is a whole round: ± against N x the round's par
+            // (the hole pars when every one is known, else the players'
+            // own round par, the TEAM NET row's long-standing reference)
+            const rp = Math.max(0, ...((t && t.players) || []).map(p => {
+                const b = (d.overall_board || []).find(
+                    r => String(r.scoring_round_id) === String(p.scoring_round_id));
+                return (b && b.par != null) ? b.par : 0;
+            }));
+            shownPar = full != null ? gg - N * full : (rp ? gg - N * rp : null);
+        }
+        return { thru, net: shownNet, toPar: shownPar, complete,
+                 upcoming: !thru && !posted, posted };
+    }
+    // The THRU cell (Kerry 10/19, PGA style): the start before the team
+    // tees off, holes the whole team has posted while it plays, "F" and
+    // the team net once every hole is in.
+    function evlbTeamThru(t, s) {
+        if (s.complete) return `F <b>${s.net ?? ""}</b>`;
+        if (s.upcoming) return `<span class="evlb-tstart">${escapeHtml((t && t.start_line) || "\u2014")}</span>`;
+        return String(s.thru);
+    }
+    // "Team Net · best 2 of 4 · 85% allowance" — read off the same dial the
+    // starter sheet prints, so the heading can never claim another game.
+    function evlbTeamDialLabel(d) {
+        const N = evlbTeamBalls(d);
+        const cart = (d && d.team_unit) === "cart";
+        const size = Math.max(cart ? 2 : 4, 0, ...((d && d.teams) || []).map(t =>
+            ((t && t.players) || []).filter(p => p && !p.nh).length));
+        const pct = d && d.team_allowance != null ? Math.round(Number(d.team_allowance) * 100) : null;
+        return `${cart ? "Cart" : "Team"} Net \u00b7 best ${N} of ${cart ? 2 : size}`
+            + (pct != null && !isNaN(pct) ? ` \u00b7 ${pct}% allowance` : "");
+    }
+    // ONE team's band on the TEAM board — the rows of today's expanded
+    // view, shared by the collapsed panel and its expansion so the two
+    // can never name a player two ways. PH on this tab is the TEAM
+    // handicap (Kerry 2026-09-15); a blind is named plainly (Kerry 10/13).
+    function evlbTeamSection(ovIx, t) {
+        return {
+            label: `${t.position ? t.position + " \u00b7 " : ""}` +
+                `${(t.players || []).map(evlbTeamMemberName).join(" \u00b7 ")}`,
+            rows: (t.players || []).map(x => {
+                const base = evlbOvOf(ovIx, x);
+                if (!base) return base;
+                const extra = {};
+                if (x.team_hcp != null) extra._teamHcp = x.team_hcp;
+                if (evlbIsBlind(x)) extra._blind = true;
+                if ("team_won" in x) extra._teamWon = x.team_won;
+                return Object.keys(extra).length ? Object.assign({}, base, extra) : base;
+            }).filter(Boolean),
+        };
+    }
+    // ── TEAM tab, COLLAPSED (Kerry 10/19: "the collapsed state to show a
+    //    single row for each team with their net score ... Then players can
+    //    click to expand a team into it's current state"). One row a team:
+    //    # | TEAM | THRU | NET | ± | WON. Tap a row for today's full team
+    //    board (band, player rows with holes, the green counted balls, the
+    //    TEAM NET row) and nothing further inside it. Rank on ±, then holes
+    //    played, then name; a GG-era event keeps GG's recorded order.
+    function evlbTeamRows(d) {
+        const teams = (d.teams || []).map((t, i) => {
+            const mins = evlbTeamMins(d, t);
+            return { t, i, mins, s: evlbTeamSummary(d, t, mins),
+                     name: (t.players || []).map(evlbTeamMemberName).join(", ") };
+        });
+        if (teams.some(x => x.t.gg_position)) {
+            teams.forEach(x => { x.pos = x.t.position || ""; });
+            return teams;
+        }
+        teams.sort((a, b) => {
+            const pa = a.s.thru ? a.s.toPar : null, pb = b.s.thru ? b.s.toPar : null;
+            if ((pa == null) !== (pb == null)) return pa == null ? 1 : -1;
+            if (pa != null && pa !== pb) return pa - pb;
+            if (a.s.thru !== b.s.thru) return b.s.thru - a.s.thru;
+            return a.name.toLowerCase() < b.name.toLowerCase() ? -1
+                : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0;
+        });
+        let rank = 0, last = {};
+        teams.forEach((x, i) => {
+            const v = x.s.thru ? x.s.toPar : null;
+            if (v == null) { x.pos = ""; return; }
+            if (v !== last.v) { rank = i + 1; last = { v }; }
+            const tied = teams.filter(y => y.s.thru && y.s.toPar === v).length > 1;
+            x.pos = (tied ? "T" : "") + rank;
+        });
+        return teams;
+    }
+    function evlbTeamPanel(d, teamBoard, note) {
+        const ovIx = {};
+        (d.overall_board || []).forEach(r => {
+            if (r.scoring_round_id != null) ovIx[String(r.scoring_round_id)] = r;
+        });
+        const noWon = d._moneyHeld || evlbNoGames(d);
+        const rows = evlbTeamRows(d);
+        const body = rows.map(x => {
+            const t = x.t, s = x.s;
+            const names = (t.players || []).map(p =>
+                `<span class="evlb-tmem">${escapeHtml(evlbTeamMemberName(p))}${evlbTeeDot(d, p)}</span>`).join(", ");
+            const money = t.purse != null && Number(t.purse) > 0 ? "$" + Number(t.purse).toFixed(2) : "";
+            const one = Object.assign({}, teamBoard, {
+                teamBands: true, teams: [t], sections: [evlbTeamSection(ovIx, t)] });
+            return `<tr class="evlb-tsum-row${s.upcoming ? " upcoming" : ""}" data-ti="${x.i}" tabindex="0" role="button" aria-expanded="false">` +
+                `<td class="pos">${escapeHtml(x.pos || "")}</td>` +
+                `<td class="nm"><span class="tchev tgf-exp">&#9654;</span> ${names}</td>` +
+                `<td class="thru">${evlbTeamThru(t, s)}</td>` +
+                `<td class="sc"><b>${s.net ?? ""}</b></td>` +
+                `<td class="tp">${s.thru || t.gg_total != null ? evlbToPar(s.toPar) : ""}</td>` +
+                `<td class="won">${money}</td></tr>` +
+                `<tr class="evlb-tsum-exp" data-ti="${x.i}" hidden><td colspan="6">${evlbStdBoard(d, one)}</td></tr>`;
+        }).join("");
+        const showHoles = evlbHolesFor(teamBoard, d);
+        return (note || "") +
+            `<div class="evlb-tpanel">` +
+            `<div class="evlb-togrow"><div class="evlb-togs">${evlbTogs(teamBoard, d, showHoles)}</div>${evlbTeeLegend(d)}</div>` +
+            `<div class="evlb-tdial"><span class="evlb-tdial-l">${escapeHtml(evlbTeamDialLabel(d))}</span>` +
+            `<button type="button" class="evlb-tall" data-evlb-team-all aria-expanded="false">Expand all</button></div>` +
+            `<div class="evlb-scroll"><table class="evlb-tsum${noWon ? " no-won" : ""}"><thead><tr>` +
+            `<th class="pos">#</th><th class="nm">Team</th><th class="thru">Thru</th>` +
+            `<th class="sc">Net</th><th class="tp">&plusmn;</th><th class="won">Won</th></tr></thead>` +
+            `<tbody>${body || `<tr><td colspan="6" style="color:var(--text-muted);">No teams yet.</td></tr>`}</tbody></table></div>` +
+            `</div>`;
+    }
+    // Open / close ONE team (each team opens and closes on its own), and
+    // the Expand all / Collapse all control that follows what is open.
+    function evlbTeamSetOpen(sumRow, open) {
+        const exp = sumRow && sumRow.nextElementSibling;
+        if (!exp || !exp.classList.contains("evlb-tsum-exp")) return;
+        exp.hidden = !open;
+        sumRow.classList.toggle("open", !!open);
+        sumRow.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    function evlbTeamAllOpen(panel) {
+        const rs = panel ? Array.from(panel.querySelectorAll("tr.evlb-tsum-row")) : [];
+        return rs.length > 0 && rs.every(r => r.classList.contains("open"));
+    }
+    function evlbTeamSyncAll(panel) {
+        const btn = panel && panel.querySelector("[data-evlb-team-all]");
+        if (!btn) return;
+        const all = evlbTeamAllOpen(panel);
+        btn.textContent = all ? "Collapse all" : "Expand all";
+        btn.setAttribute("aria-expanded", all ? "true" : "false");
+    }
+    function evlbTeamToggleAll(panel, open) {
+        if (!panel) return;
+        panel.querySelectorAll("tr.evlb-tsum-row").forEach(r => evlbTeamSetOpen(r, open));
+        evlbTeamSyncAll(panel);
     }
     // ── MVP badges under the player's name on OVERALL (Kerry
     //    2026-09-14: "OVERALL should have badges for Event MVP and TGF
@@ -4374,10 +4627,10 @@
                 const tp = evlbTeamPopsOf(netMins._team, r.scoring_round_id, n);
                 const sr = tp != null ? tp : (hh[2] || 0);
                 const net = hh[1] - sr;
-                const ct = net === netMins[n];
+                const ct = evlbTeamCounted(netMins, r.scoring_round_id, n);
                 return `<td class="h${ct ? " count" : ""}" title="${
                     hh[1]}${sr ? " \u2212 " + sr + " = net " + net : " (no stroke)"
-                }${ct ? " \u2014 the ball that counted for the team" : ""}">${evlbPops(sr)}${hh[1]}</td>`;
+                }${ct ? " \u2014 a ball that counted for the team" : ""}">${evlbPops(sr)}${hh[1]}</td>`;
             }
             // A GROSS skins board (no Net column) shows no pops (Kerry
             // 10/19: "Do not show hole pops on skins when it's Gross
@@ -4502,13 +4755,20 @@
         const shown = t.gg_total != null ? t.gg_total : recon;
         const ttl = t.gg_total != null
             ? `GG posted team total${off ? " — best ball under the Team Net pops sums to " + recon : ""}`
-            : "best ball per hole under the Team Net pops (allowance, off the lowest, no pop on a par 3)";
-        // par over the holes the team actually played
-        const par = Math.max(0, ...(t.players || []).map(p => {
-            const b = (d.overall_board || []).find(
-                r => String(r.scoring_round_id) === String(p.scoring_round_id));
-            return (b && b.par != null) ? b.par : 0;
-        }));
+            : `best ${evlbTeamBalls(d)} net ball${evlbTeamBalls(d) === 1 ? "" : "s"} per hole under the Team Net pops (allowance, off the lowest, no pop on a par 3), counted once the whole team has posted the hole`;
+        // ± against N x par for the holes counted (Kerry 10/19), the same
+        // number the collapsed row shows; when the hole pars are not all
+        // known, the old reference (the players' own round par) x N
+        const sum = evlbTeamSummary(d, t, mins);
+        let tpv = sum.toPar;
+        if (tpv == null) {
+            const par = Math.max(0, ...(t.players || []).map(p => {
+                const b = (d.overall_board || []).find(
+                    r => String(r.scoring_round_id) === String(p.scoring_round_id));
+                return (b && b.par != null) ? b.par : 0;
+            }));
+            tpv = par ? shown - evlbTeamBalls(d) * par : null;
+        }
         const money = t.purse != null ? t.purse : 0;
         return `<tr class="teamrow">` +
             `<td>${escapeHtml(t.position || "")}</td>` +
@@ -4520,7 +4780,7 @@
             (grossCol === false ? "" : `<td class="bl sc"></td><td class="tp"></td>`) +
             (netCol === false ? "" :
                 `<td class="bl sc" title="${ttl}"><b>${shown}</b></td>` +
-                `<td class="tp br">${par ? evlbToPar(shown - par) : ""}</td>`) +
+                `<td class="tp br">${evlbToPar(tpv)}</td>`) +
             (afterWon ? "" : gcTeam) +
             `</tr>`;
     }
@@ -4621,8 +4881,10 @@
                 evlbRankBand(d, rows, sortKey, board.gameCol, game);
             }
             if (sec.label) {
-                html += `<tr class="evlb-band"${board.teamBands ? ` data-team="${si}"` : ""}>` +
-                    `<td colspan="${ncols}">${board.teamBands ? '<span class="tchev tgf-exp">&#9654;</span> ' : ""}${escapeHtml(sec.label)}</td></tr>`;
+                // a TEAM band is a heading, not a tap target (Kerry 10/19:
+                // "There should not be any additional player expansion")
+                html += `<tr class="evlb-band">` +
+                    `<td colspan="${ncols}">${escapeHtml(sec.label)}</td></tr>`;
             }
             // a team band renders in NET and closes with its total row
             const tm = board.teamBands ? (board.teams || [])[si] : null;
@@ -4910,31 +5172,15 @@
                 teams: d.teams || [],
                 // the band names the team; the TEAM NET row at the foot
                 // of the band carries the per-hole score, the total and
-                // the purse, so those numbers are stated ONCE
-                sections: (d.teams || []).map(t => ({
-                    // BLINDS NAMED PLAINLY (Kerry 10/13: "What we're not
-                    // doing a good job on the team leaderboard is showing
-                    // who the blinds are"): "Robert Straiton (blind)", never
-                    // the raw "Bl[...]" key.
-                    label: `${t.position ? t.position + " · " : ""}` +
-                        `${t.players.map(evlbTeamMemberName).join(" · ")}`,
-                    // PH on this tab is the TEAM handicap (Kerry
-                    // 2026-09-15: "For team/cart net, PH should show
-                    // their team/cart net handicap for that game, not
-                    // the 100% PH") — the strokes that actually played
-                    // in THIS game, carried through as an extra so the
-                    // shared row renderer stays one function.
-                    rows: (t.players || []).map(x => {
-                        const base = ovOf(x);
-                        if (!base) return base;
-                        const extra = {};
-                        if (x.team_hcp != null) extra._teamHcp = x.team_hcp;
-                        if (evlbIsBlind(x)) extra._blind = true;
-                        if ("team_won" in x) extra._teamWon = x.team_won;
-                        return Object.keys(extra).length ? Object.assign({}, base, extra) : base;
-                    }).filter(Boolean),
-                })).filter(sec => sec.rows.length),
+                // the purse, so those numbers are stated ONCE. One
+                // builder (evlbTeamSection) for the collapsed panel's
+                // expansion and this board.
+                sections: (d.teams || []).map(t => evlbTeamSection(ovIx, t)),
                 sort: "keep",
+                // The expanded team IS today's board with its holes
+                // (Kerry 10/19), and nothing opens inside it: no
+                // tap-a-player scorecard on TEAM.
+                holesOnLanding: true, noCard: true,
             },
         };
         // SKINS: GG-style overall chart — buyers per flight, hole-by-hole
@@ -5021,10 +5267,9 @@
             ? `<div class="evlb-winbox" style="margin:12px 0 0;">${ovWinStrips}</div>` : "";
         const panels = {
             overall: evlbStdBoard(d, boards.overall) + ovLegend + stripsBelow,
+            // collapsed by default, one row a team (Kerry 10/19, B8)
             team: (d.teams || []).length
-                ? evlbStdBoard(d, Object.assign({ teamBands: true, teams: d.teams }, boards.team),
-                    offNotes)
-                    + evlbLegendFor("team")
+                ? evlbTeamPanel(d, boards.team, offNotes) + evlbLegendFor("team")
                 : teamHtml,
             net: evlbStdBoard(d, boards.net) + evlbLegendFor("net"),
             gross: evlbStdBoard(d, boards.gross, offNotes) + evlbLegendFor("gross"),
@@ -5058,10 +5303,10 @@
             cols.map(n => {
                 const v = netOf(p.scoring_round_id, n);
                 if (v == null) return '<td class="h"></td>';
-                return `<td class="h${v === mins[n] ? " count" : ""}">${v}</td>`;
+                return `<td class="h${evlbTeamCounted(mins, p.scoring_round_id, n) ? " count" : ""}">${v}</td>`;
             }).join("") + `<td class="sc"></td></tr>`).join("");
         const teamTotal = cols.reduce((s, n) => s + (mins[n] ?? 0), 0);
-        const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ball)</td>` +
+        const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ${evlbTeamBalls(d)})</td>` +
             cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
             `<td class="sc">${teamTotal}</td></tr>`;
         // The card's per-hole nets play the Team Net pops (v2.525.10);
@@ -5084,7 +5329,7 @@
             `<tr><th class="nm">NET SCORES</th>${cols.map(n => `<th class="h">${n}</th>`).join("")}<th class="sc">${nineLbl}</th></tr>` +
             parRow +
             `</thead><tbody>${rows}${teamRow}</tbody></table>` +
-            `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the ball that counted for the team score${ggNote}</span></div>`;
+            `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the balls that counted for the team score${ggNote}</span></div>`;
     }
     // ── Line the expanded scorecard's hole columns up with the hole
     //    columns of the board it drops out of (Kerry 2026-09-14: "Hard
@@ -5252,70 +5497,30 @@
                     p.hidden = p.dataset.panel !== btn.dataset.sub);
             }));
         evlbWireBoards(body);
-        // TEAM board: a band IS a team — tap it for EVERY PLAYER'S OWN
-        // CARD (Kerry 2026-09-15: "The Team chevron should not do what
-        // it's doing. It should expand each player in the group to see
-        // their cards. The current expansion is just showing the same
-        // thing."). He is right: the band already lists each player's
-        // holes with the counting ball highlighted and closes with the
-        // TEAM NET row, so expanding to a best-ball grid restated it.
-        // The thing you cannot see from the band is a player's actual
-        // scorecard — pars, strokes received, the nine's totals — so
-        // that is what the chevron opens, one per member, through the
-        // same universal renderer every other expand uses.
-        body.addEventListener("click", async (e) => {
-            const band = e.target.closest("tr.evlb-band[data-team]");
-            if (!band || !body.contains(band)) return;
-            const st = EVLB_BOARDS[(band.closest("table[data-board]") || {}).dataset?.board];
-            const team = st && (st.board.teams || [])[+band.dataset.team];
-            if (!team) return;
-            const nxt = band.nextElementSibling;
-            if (nxt && nxt.classList.contains("evlb-card-row")) { nxt.remove(); return; }
-            const row = document.createElement("tr");
-            row.className = "evlb-card-row";
-            const span = band.firstElementChild.colSpan;
-            row.innerHTML = `<td colspan="${span}" style="white-space:normal;">Loading cards&hellip;</td>`;
-            band.after(row);
-            const members = (team.players || []).filter(p => p.scoring_round_id);
-            if (!members.length) {
-                row.firstElementChild.textContent =
-                    "No cards for this team yet.";
+        // TEAM tab (Kerry 10/19, B8): a collapsed row opens and closes ITS
+        // team's board; Expand all / Collapse all does every team. The band
+        // inside an open team is a heading only: the v2.437 "every player's
+        // card" chevron is gone ("There should not be any additional player
+        // expansion"), and the player rows carry noCard.
+        body.addEventListener("click", (e) => {
+            const all = e.target.closest("[data-evlb-team-all]");
+            if (all && body.contains(all)) {
+                const panel = all.closest(".evlb-tpanel");
+                evlbTeamToggleAll(panel, !evlbTeamAllOpen(panel));
                 return;
             }
-            try {
-                const cards = await Promise.all(members.map(async p => {
-                    try {
-                        const res = await fetch("/api/scoring/scorecard/" + p.scoring_round_id);
-                        const c = await res.json();
-                        if (!res.ok || c.error) throw new Error(c.error || res.statusText);
-                        return `<div class="evlb-team-pcard">`
-                            + `<div class="evlb-team-pname">${escapeHtml(p.player_name || "")}`
-                            + evlbTeeDot(st.d, p)
-                            + (p.team_hcp != null
-                                ? `<span class="evlb-team-ph">team hcp ${p.team_hcp}</span>` : "")
-                            + `</div>`
-                            + `<div class="evlb-scroll">`
-                            + (window.tgfRenderScorecard
-                                ? window.tgfRenderScorecard(c)
-                                : "Scorecard renderer unavailable.")
-                            + `</div></div>`;
-                    } catch (err) {
-                        return `<div class="evlb-team-pcard"><div class="evlb-team-pname">`
-                            + `${escapeHtml(p.player_name || "")}</div>`
-                            + `<p style="color:var(--text-muted);">Couldn't load this card `
-                            + `(${escapeHtml(err.message || String(err))}).</p></div>`;
-                    }
-                }));
-                // NOT column-aligned to the board. These are whole
-                // scorecards — par, yards, stroke index, two points rows
-                // — stacked one per player, and forcing them onto the
-                // board's hole grid squashed the label column until
-                // "GROSS SCORE" ran over hole 1. They read as cards.
-                row.firstElementChild.innerHTML = cards.join("");
-            } catch (err) {
-                row.firstElementChild.textContent =
-                    "Couldn't load the cards (" + (err.message || err) + ").";
-            }
+            const row = e.target.closest("tr.evlb-tsum-row");
+            if (!row || !body.contains(row)) return;
+            evlbTeamSetOpen(row, !row.classList.contains("open"));
+            evlbTeamSyncAll(row.closest(".evlb-tpanel"));
+            if (body._evlbFitKeys) requestAnimationFrame(body._evlbFitKeys);
+        });
+        body.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            const row = e.target.closest && e.target.closest("tr.evlb-tsum-row");
+            if (!row || !body.contains(row) || e.target !== row) return;
+            e.preventDefault();
+            row.click();
         });
         // Player-row scorecard expansion — DELEGATED so rows re-rendered
         // by a sort (or any future re-paint) keep the behavior
