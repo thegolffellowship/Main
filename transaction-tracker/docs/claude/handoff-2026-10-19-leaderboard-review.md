@@ -431,3 +431,84 @@ Suggested ship order for the next deploy that is safe before Tuesday's 3:35 PM: 
 2. Where does SUMMARY sit in the tab row (my lean: last)?
 3. Team hole counts when all four balls are posted (my rule) or as soon as one is? (I recommend all four; one ball makes the team number jump.)
 4. Ship the safe display items before Tuesday, or hold everything for 10/27?
+
+
+---
+
+## 12. Kerry's second round, 10/19 evening (verbatim), and the build-ready spec
+
+Kerry: "Not sure about having both FINAL and OFFICIAL. Not much difference and probably confusing to players. PROVISIONAL may be better said as IN REVIEW." / "Thru should be considered like in the PGA. When Thru is done, doesn't it show the final score there on the PGA leaderboards? So you'd show Thru and the +/- column, but after the round is complete, it would show the total Gross score. Before event starts it shows time and hole." / "Casing needs to respect the prefix casing. So DelCarmen would be DelCARMEN for member casing view. Like if MacBride was a member then it would be MacBRIDE." / "Make sure to highlight the scores that are counted for the team. If one player got the Team net low, then highlight green. If two players got it then highlight both green. Of course we need to build in TEAM Net 2 and 3 ball options too, where we're adding cumulative of the two best or three best net scores." / "Use CTPs if it's only CTP's that event. Use PROXIES if it includes something besides just CTPs like a LONGEST PUTT... That should be recognized by the GAMES tab based on course details and side chosen. Could also be the case where we want 4 proxies for an 18 hole event but there's only 3 Par 3s." / "SUMMARY would go first once the event is over and it reveals itself." / "Team's hole count...not sure exactly what you're asking, but I'm thinking you're saying it only counts once all players are entered?" / "I want everything built."
+
+This section supersedes section 11 where they differ. Research and proposals only: **I cannot build; this lane writes the spec and Tracker Build builds it.** Nothing deploys without Kerry's "Deploy", and nothing goes out inside Tuesday's window (3:40 PM first tee through closeout).
+
+### 12.1 Four words, not five
+
+| Word | Means to a player | Board |
+|---|---|---|
+| UPCOMING | Pairings are set; nobody has teed off. | THRU column shows tee time and start hole |
+| LIVE | Scores are coming in hole by hole. | Everything "to date"; WON blank |
+| IN REVIEW | Every score is in. The money shows, but it is not settled: a score can still be corrected and results have not closed. | WON shows (marked in review). Lasts until closeout runs, about 20 minutes on a clean night |
+| FINAL | Results are closed and prizes are set. | **SUMMARY appears, first in the tab row.** WON normal weight |
+
+Behind the scenes nothing changes (the 15-minute card lock, the +5 closeout, `PROVISIONAL / FINAL / OFFICIAL` as internal states in code). Players just see two end words. FINAL = closeout fired and payouts recorded. A hold keeps the board at IN REVIEW with one line ("Results are being checked"). A correction after FINAL keeps it FINAL and adds "Corrected 8:30 PM".
+
+My reading of "SUMMARY would go first once the event is over": it appears at FINAL, as the first tab, and the landing tab becomes SUMMARY from then on (TEAM before). Tell me if you meant it should appear at IN REVIEW, when the money first shows.
+
+### 12.2 THRU, PGA style
+
+Columns on a board that is not showing hole by hole: `± | THRU`, one cell with three states:
+
+| Moment | THRU cell |
+|---|---|
+| Before the player tees off | tee time and start hole, "3:40 PM · 10" |
+| In play | holes completed, "5" (the ± column beside it is to par for those holes) |
+| Finished | the player's total for that tab's game: gross total on GROSS ("39"), net total on NET, points on MVP, team net on TEAM |
+
+Suggested: show the finished state as "F 39" so a stroke total is never mistaken for a hole count. Question 1 below asks whether each tab shows its own score or always gross.
+
+### 12.3 Casing (already coded, only the form changes)
+
+`member_caps_name` (`database.py`, Kerry 9/11) already implements Kerry's rule for the "Last, First" form: a known prefix keeps its shape and the rest of the last name goes to capitals, so "McCrary" shows "McCRARY" and "DelCarmen" shows "DelCARMEN". It guards the false match: "Delgado" has no capital after "Del", so it is just "DELGADO". Members only (`is_member`); non-members and guests keep their normal case. Today it has one caller (`database.py` ~10936, Season Contests' member display). Needed: a First Last variant on the same tokenizer, used on every board, so "Michelle DelCarmen" reads "Michelle DelCARMEN", "Adam Baker" reads "Adam BAKER" for a member, and MacBride shows "MacBRIDE". One-line caveat: the boot step `_migrate_normalize_customer_name_case` rewrites all-uppercase names to proper case, so a hand-set "DelCarmen" is safe but an all-caps "DELCARMEN" arriving from an import would lose its prefix shape.
+
+### 12.4 TEAM: counted balls, and 1 / 2 / 3-ball Team Net
+
+- **Highlight every counted ball.** On each hole, every ball that counted for the team is green: one ball for Best 1; two for Best 2; three for Best 3. A tie that touches the cutoff highlights all the tied balls (they have the same net, so the score is the same either way). Today the cell shading is driven by the single low ball.
+- **The board does not do N-ball yet.** `evlbTeamMins` (`contests.html` ~4305) takes `Math.min` of the four nets, i.e. Best 1 only, while the server already knows the event's ball count (`event_team_net_dial`, `allowance_pct_by_balls`) and pays by it. So a Best 2 night would pay on one thing and display another. This is the part that has to be built.
+- **The number.** TEAM NET per hole = the sum of the N lowest net scores on that hole. The row total is the sum of those; ± is against N × par for the holes counted (so "-6" still means six under for a 2-ball). The collapsed row uses the same sum.
+- **Allowances are already ruled** (side-games.md, Kerry 9/16): Best 1 75%, Best 2 85%, Best 3 and Best 4 100%. The standing rotation is Best 1 / Best 2 on alternating events, overridable to Best 3 / Best 4. The two-player cart ladder is still unresolved (CA Queue #8) and is not part of this.
+- Heading and HOW IT WORKS read the same dial: "Team Net · best 2 of 4 · 85% allowance".
+
+### 12.5 CTPs or PROXIES: one tab label, derived from the GAMES tab
+
+- Label = **CTPs** when every contest at the event is Closest to the Pin; **PROXIES** when any is something else (a Longest Putt). Derived from the event's proxy slots before anyone wins, so the label is right from UPCOMING.
+- The slot rule already exists (live-scoring spec and Test Center): CTP max 2 per nine; more par 3s than slots, the shortest are chosen; fewer par 3s than slots, the leftover becomes a **Longest Putt on the last hole** of the side. The reader already prints "Putt · n" (events.md). Kerry's examples fit: a nine with one par 3 is one CTP plus a Longest Putt on hole 9 of the side played; an 18 with three par 3s and four slots is three CTPs plus a Longest Putt on the last hole.
+- To check, not assume: the side chosen. A back nine's last hole is 18; a shotgun start does not change "last hole of the side". Course card with no par-3 data (the Brackenridge seed case, events.md ~2855) must show a blank hole, never a made-up one.
+- Open for Event Ops / Kerry: the CTP pot is split over the proxy contests today. Adding a Longest Putt adds a contest; whether the per-contest dollars change is a payout question (not in this lane).
+
+### 12.6 TEAM hole count (Kerry's question, answered)
+
+Yes: a hole counts toward the team's THRU and net only once **every player on that team has a score on it** (blinds are pre-filled and never wait). It keeps the team number steady: if the team counted a hole as soon as the first ball posted, the number would drop every time a better ball arrived. The cost: if a team's players are in different groups, the team's THRU follows the slowest player. Picked-up or no-card holes: a stuck or missing card is the Event Ops stale-card rule (out of scope here); a hole where a player has no score should still count as posted for the team if the card is closed. **[CONFIRM with Event Ops]**
+
+### 12.7 Build list, in the order I would hand it over
+
+| # | Build | Tier | Why this tier |
+|---|---|---|---|
+| B1 | Tab order TEAM, MVP, NET, GROSS, SKINS, PROXIES/CTPs; OVERALL off behind one setting | 1 | Display only, no numbers change |
+| B2 | CTPs / PROXIES label from the slots (12.5) | 1 | Label only |
+| B3 | First LAST casing for members on every board (12.3) | 1 | Display only |
+| B4 | State strip with UPCOMING / LIVE / IN REVIEW / FINAL; one source for the minutes (12.1) | 1 | Wording and one line; reads existing state |
+| B5 | Counted-ball highlight on the existing best-ball view | 1 | Shading only |
+| B6 | Rank on to-par then holes done, on TEAM, MVP, SKINS (NET and GROSS already) | 2 | Changes the order members see |
+| B7 | THRU column per 12.2 | 2 | New column and a layout change on phones |
+| B8 | TEAM collapsed row, expanded = today's board, no player expansion (11.6, 12.6) | 2 | New layout on the landing tab |
+| B9 | Team Net 2- and 3-ball on the board (12.4) | 2 | Board must match what the payouts do |
+| B10 | SUMMARY first at FINAL (section 7, 12.1) | 2 | First place money appears together |
+| B11 | "Playing for" line per tab (Build #2057) | 2 | Reads the GAMES tab |
+
+Tier 1 is small and display-only: it can ride one deploy before Tuesday's 3:35 PM if Build has room and Kerry says "Deploy". Tier 2 changes what members read on a live night; it is safest built and tested against Tuesday's real data (a read-only walk, no push in the window) and deployed Wed 10/21 or by 10/27. Kerry may choose otherwise (rule 3b, member-facing).
+
+### 12.8 Questions for Kerry, one at a time
+
+1. On THRU: when a player finishes, does each tab show its own total (gross on GROSS, net on NET, points on MVP) or always the gross total?
+2. FINAL / SUMMARY timing: appears when results close (about 20 minutes after the last score), or when the money first shows (IN REVIEW)?
+3. Tier 1 before Tuesday, or all of it after?
