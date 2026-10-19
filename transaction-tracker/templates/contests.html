@@ -726,6 +726,28 @@
            (Kerry 2026-09-14). CSS rather than a re-render, so the
            checkbox brings it straight back. */
         .evlb-ovr.no-holes tr.evlb-ptsrow { display: none; }
+        /* THRU, PGA style (Kerry 10/19, handoff 12.2): shown only while the
+           hole-by-hole grid is off — with the grid on, the holes ARE the
+           progress. "F 39" when the card is done, the tee time before it. */
+        .evlb-ovr:not(.no-holes) .thru { display: none; }
+        /* a board whose payload carries no THRU (the Cup's boards) shows none */
+        .evlb-ovr.no-thru .thru { display: none; }
+        .evlb-ovr td.thru, .evlb-ovr th.thru { text-align: center; white-space: nowrap;
+            font-variant-numeric: tabular-nums; }
+        .evlb-ovr td.thru .f { font-weight: 700; margin-right: 3px; }
+        .evlb-ovr td.thru.pre { color: #6B7280; font-size: 11px; }
+        /* the state strip (handoff 12.1): one word, one plain line */
+        .evlb-state { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+            margin: 0 0 10px; padding: 6px 10px; border: 1px solid #E5E7EB;
+            border-radius: 6px; background: #F8FAFC; color: #374151; font-size: 12px; }
+        .evlb-state .w { font: 700 11px/1 'Bitter', serif; letter-spacing: .5px;
+            padding: 4px 9px; border-radius: 99px; background: #1B1B1B; color: #fff; }
+        .evlb-state.s-upcoming .w { background: #6B7280; }
+        .evlb-state.s-live .w { background: #DC2626; }
+        .evlb-state.s-in_review .w { background: #B45309; }
+        .evlb-state.s-final .w { background: #15803D; }
+        /* "CTPs" keeps its small s inside the uppercase tab row (Kerry 10/19) */
+        .evlb-seg button .evlb-keepcase { text-transform: none; }
         /* a BAND row — a flight on Net/Gross/Skins, a team on Team */
         /* larger (Kerry 10/19: "Flight Section headings should show larger
            font size. The fact that it's Flight 1 or Flight 2 is kind of lost.") */
@@ -3970,7 +3992,9 @@
                 : "") + `A circled hole score is a skin won in that flight. <b>Won</b> = Skins money only; OVERALL shows everything collected at this event.`,
             points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole. <b>Won</b> = MVP money only.`,
             team: `Hole scores are each player's GROSS with their pops marked; gross less pops is the net the team played, and the green cell is the ball that counted. The TEAM NET row closes each band with the team's holes, total and whole purse; a player row's <b>Won</b> is that player's share.`,
-            prox: `Closest-to-the-pin and other proximity winners, hole by hole.`,
+            prox: d.proxy_tab_label === "PROXIES"
+                ? `The proximity contests, hole by hole: Closest to the Pin on the par 3s and a Longest Putt where there are fewer par 3s than contests.`
+                : `Closest to the Pin winners, hole by hole.`,
         };
         if (noGames) out.push(sec("This event", "No games at this event, so the boards are just the scores: Net ranks by net total, Gross by gross total. Nobody bought in and nothing is paid."));
         // the game notes that used to sit on the board (Kerry 10/19)
@@ -3981,6 +4005,13 @@
             `Money winners are colour-coded by FLIGHT: ${[1, 2, 3].map(f => `<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`).join(" ")}. `
             + `On the Net, Gross, Skins and MVP/Points tabs a <span class="lg" style="background:var(--buyin-row,#FFFFFF);color:#1B1B1B;border:1px solid #E5E7EB;">white</span> row bought into that game and a <span class="lg" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">grey</span> row did not; non-buyers are placed in the flight their handicap would have flighted them. Show All Players brings the non-buyers back onto a Net or Gross board.`));
         out.push(sec("Tapping", "Tap a player for their scorecard, or a team for its best-ball card. Tap a column header to sort and re-rank. Dots in the corner of a hole are the strokes received there. Hole by hole and Handicaps add those columns."));
+        // State words (Kerry 10/19: "State words. Explain each"), from the
+        // server so the minutes come from the dials
+        const words = d.board_state_guide || [];
+        if (words.length) out.push(sec("State words", words.map(w =>
+            `<b>${escapeHtml(w.word)}</b>${w.state === d.board_state ? " (now)" : ""}: ${escapeHtml(w.text)}`).join("<br>")
+            + "<br>A hold keeps the board IN REVIEW with the line \u201cResults are being checked.\u201d"));
+        out.push(sec("Thru", "With Hole by hole off, Thru is the holes a player has played. F means finished, beside that tab's total: gross on Gross, net on Net, points on MVP, the team net on a team's row. Before the first tee it shows the tee time and starting hole. While scores are coming in, the boards rank on to-par first, then on holes played."));
         const ev = d.event || {};
         out.push(sec("Where the scores come from", ev.score_source === "entry"
             ? "Straight from the players' live scoring on their phones, hole by hole as each group posts."
@@ -4013,6 +4044,8 @@
         // NOT FINAL YET (Kerry 2026-10-13: "amounts should show but
         // non-final until 15 minutes have passed"). The field is in, the
         // money shows; it locks 15 minutes after the last group's last score.
+        // the state strip says this now (IN REVIEW, with the lock time)
+        if (d && d.board_state) return "";
         if (d && !d._moneyHeld && d.money_final === false && !evlbNoGames(d)) {
             const t = d.money_final_at ? new Date(d.money_final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : "";
             return `<div style="margin:0 0 8px;padding:7px 10px;border:1px solid #FCD34D;background:#FFFBEB;border-radius:6px;font-size:12px;color:#92400E;">
@@ -4199,6 +4232,104 @@
     function evlbToPar(v) {
         if (v == null) return "";
         return v === 0 ? "E" : (v > 0 ? "+" + v : String(v));
+    }
+    // ── THE STATE STRIP (Kerry 10/19, handoff 12.1): UPCOMING / LIVE /
+    //    IN REVIEW / FINAL, one plain line. The server decides the word and
+    //    writes the line (its minutes come from the dials); a hold reads
+    //    "Results are being checked." and stays IN REVIEW.
+    function evlbStateStrip(d) {
+        if (!d || !d.board_state) return "";
+        let line = d.board_state_text || "";
+        if (d.board_state === "in_review" && !d.board_state_held
+                && d.money_final === false && d.money_final_at) {
+            const t = new Date(d.money_final_at);
+            if (!isNaN(t)) line += " Cards lock at "
+                + t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ".";
+        }
+        return `<div class="evlb-state s-${escapeHtml(d.board_state)}" data-state="${escapeHtml(d.board_state)}">`
+            + `<span class="w">${escapeHtml(d.board_state_word || "")}</span>`
+            + `<span class="t">${escapeHtml(line)}</span></div>`;
+    }
+    // ── LIVE = the field is not all in yet. While it is, a total says
+    //    nothing (three holes beat nine), so boards rank on to-par and then
+    //    on holes done (Kerry 10/19, B6; NET and GROSS since 9/15).
+    const evlbLive = d => !!d && d.field_complete === false;
+    // MVP's to-par is POINTS against par: net par earns `pts_par_hole`
+    // (the Stableford table's par rung, from the server), so points less
+    // that per hole played is how far ahead of a par round he is.
+    function evlbPtsPace(d, r) {
+        if (!r || r.net_pts == null) return null;
+        return r.net_pts - (d.pts_par_hole ?? 1) * (r.thru || 0);
+    }
+    // ── THRU, PGA style (Kerry 10/19, handoff 12.2 + 13): before the tee,
+    //    the tee time and starting hole; in play, holes played; finished,
+    //    "F" and THIS tab's own total (gross on GROSS, net on NET, points
+    //    on MVP; the team net sits on the TEAM NET row).
+    function evlbTeeStartText(st) {
+        if (!st) return "";
+        return [st.tee_time ? String(st.tee_time) : "",
+                st.start_hole != null && st.start_hole !== "" ? String(st.start_hole) : ""]
+            .filter(Boolean).join(" · ");
+    }
+    function evlbThruTotal(r, game) {
+        if (game === "gross") return r.gross;
+        if (game === "net") return r.net;
+        if (game === "points") return r.net_pts;
+        return null;
+    }
+    function evlbThruCell(d, r, game) {
+        if (!r || r.thru == null) return `<td class="thru"></td>`;
+        if (r.finished) {
+            const t = evlbThruTotal(r, game);
+            return `<td class="thru" title="finished"><span class="f">F</span>${t ?? ""}</td>`;
+        }
+        if (r.thru > 0) return `<td class="thru" title="holes played">${r.thru}</td>`;
+        const st = evlbTeeStartText(r.tee_start);
+        return `<td class="thru pre"${st ? ' title="tee time and starting hole"' : ""}>${st ? escapeHtml(st) : "–"}</td>`;
+    }
+    // ── A TEAM'S STANDING (handoff 11.6 / 12.6): a hole counts once every
+    //    player on the team has a score on it, so the number never jumps as
+    //    balls arrive; net = the team's per-hole score (evlbTeamMins) over
+    //    those holes, to-par against par x balls counted. Shared hook for
+    //    the TEAM tab's live order (B6) and its THRU (B7).
+    function evlbTeamStanding(d, t) {
+        const cols = d.hole_cols || [];
+        const mins = evlbTeamMins(d, t);
+        const balls = (t && t.balls) || d.team_balls || 1;
+        let thru = 0, net = 0, par = 0, parOk = true;
+        cols.forEach(n => {
+            const all = (t.players || []).length && (t.players || []).every(p => {
+                const h = ((d.cards || {})[String(p.scoring_round_id)] || []).find(x => x[0] === n);
+                return h && h[1] != null;
+            });
+            if (!all || mins[n] == null) return;
+            thru++; net += mins[n];
+            const hp = (d.hole_par || {})[String(n)];
+            if (hp == null) parOk = false; else par += hp;
+        });
+        return { thru, net, toPar: thru && parOk ? net - par * balls : null,
+                 finished: cols.length > 0 && thru === cols.length };
+    }
+    // While LIVE the teams rank on to-par, then holes done, then their
+    // order as given; the position label follows ("T1"). Once every score
+    // is in the server's order (and Golf Genius's, on an old event) stands.
+    function evlbTeamsLiveOrder(d, teams) {
+        const st = new Map((teams || []).map(t => [t, evlbTeamStanding(d, t)]));
+        const out = (teams || []).map((t, i) => [t, i]).sort((a, b) => {
+            const sa = st.get(a[0]), sb = st.get(b[0]);
+            if ((sa.toPar == null) !== (sb.toPar == null)) return sa.toPar == null ? 1 : -1;
+            if (sa.toPar !== sb.toPar) return sa.toPar - sb.toPar;
+            if (sa.thru !== sb.thru) return sb.thru - sa.thru;
+            return a[1] - b[1];
+        }).map(x => x[0]);
+        out.forEach((t, i) => {
+            const s = st.get(t);
+            if (s.toPar == null) { t.position = ""; return; }
+            const first = out.findIndex(u => st.get(u).toPar === s.toPar);
+            const tied = out.filter(u => st.get(u).toPar === s.toPar).length > 1;
+            t.position = (tied ? "T" : "") + (first + 1);
+        });
+        return out;
     }
     const EVLB_MVP_TINT = "background:rgba(109,40,217,.14);color:#6D28D9;font-weight:700;border-radius:4px;";
     // Per-tab scoping (Kerry 2026-09-13: "Only want results, winnings
@@ -4446,6 +4577,7 @@
             (netCol === false ? "" :
                 `<td class="bl sc" style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
                 `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>`) +
+            evlbThruCell(d, r, game) +
             (afterWon ? "" : gcTd) +
             `</tr>`;
     }
@@ -4480,6 +4612,7 @@
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
             (grossCol === false ? "" : `<td class="bl sc"></td><td class="tp"></td>`) +
             (netCol === false ? "" : `<td class="bl sc"></td><td class="tp br"></td>`) +
+            `<td class="thru"></td>` +
             (afterWon ? "" : gcPts) +
             `</tr>`;
     }
@@ -4521,6 +4654,11 @@
             (netCol === false ? "" :
                 `<td class="bl sc" title="${ttl}"><b>${shown}</b></td>` +
                 `<td class="tp br">${par ? evlbToPar(shown - par) : ""}</td>`) +
+            // THRU for the team (B7): holes every ball has posted, "F" and
+            // the team net once all are in
+            ((stg) => stg.finished
+                ? `<td class="thru" title="finished"><span class="f">F</span>${shown}</td>`
+                : `<td class="thru">${stg.thru || ""}</td>`)(evlbTeamStanding(d, t)) +
             (afterWon ? "" : gcTeam) +
             `</tr>`;
     }
@@ -4539,6 +4677,8 @@
         if (k === "tpg") return r.to_par_gross;
         if (k === "tpn") return r.to_par_net;
         if (k === "won") { const m = evlbGameMoney(r, game); return m > 0 ? m : null; }
+        if (k === "thru") return r.thru == null ? null : r.thru;
+        if (k === "ptspace") return evlbPtsPace(d, r);
         if (k === "gamecol") {
             const v = gameCol && gameCol.value ? gameCol.value(d, r) : r.net_pts;
             return (v === "" || v == null) ? null : v;
@@ -4569,12 +4709,12 @@
     //    scoreboard" (2026-09-14). The band stopped before the last
     //    to-par column on every flighted board.
     //
-    //    Ten fixed columns: # | Player | Won | Idx | PH | G | ± | N | ± |
-    //    Pts — less the ones this board drops — plus the holes. The guard
+    //    Eleven fixed columns: # | Player | Won | Idx | PH | G | ± | N | ± |
+    //    Thru | Pts — less the ones this board drops — plus the holes. The guard
     //    asserts this equals the real <th> count on every tab, because an
     //    off-by-one here has no symptom except a band that stops short.
     function evlbColCount(d, board) {
-        return 10
+        return 11
             - (board.gameCol === false ? 1 : 0)
             - (board.grossCol === false ? 2 : 0)
             - (board.netCol === false ? 2 : 0)
@@ -4608,6 +4748,18 @@
                 // where they WOULD have fallen rather than in a heap at
                 // the bottom (Kerry 2026-09-14). Ascending: lower is
                 // better in golf, whichever way the tapped column ran.
+                // WHILE LIVE a total says nothing (B6, Kerry 10/19): a tie
+                // on Skins breaks on gross to-par, then every board puts
+                // the player with more holes done first.
+                if (evlbLive(d)) {
+                    if (game === "skins" && sortKey === "gamecol") {
+                        const pa = a.to_par_gross, pb = b.to_par_gross;
+                        if (pa != null && pb != null && pa !== pb) return pa - pb;
+                        if ((pa == null) !== (pb == null)) return pa == null ? 1 : -1;
+                    }
+                    const ta = a.thru || 0, tb = b.thru || 0;
+                    if (ta !== tb) return tb - ta;
+                }
                 const sa = (game === "gross" || game === "skins") ? a.gross : a.net;
                 const sb = (game === "gross" || game === "skins") ? b.gross : b.net;
                 if (sa == null && sb == null) return 0;
@@ -4645,8 +4797,9 @@
         // no score yet sit under the field with their tee time.
         if (game !== "team" && (d.waiting || []).length) {
             d.waiting.forEach(w => {
-                const tt = [w.tee_time ? escapeHtml(String(w.tee_time)) : "",
-                            w.start_hole && w.start_hole !== 1 ? "Hole " + w.start_hole : ""].filter(Boolean).join(" &middot; ");
+                // "3:40 PM · 10", the THRU column's pre-tee form (B7)
+                const tt = escapeHtml(evlbTeeStartText({ tee_time: w.tee_time,
+                    start_hole: w.start_hole && w.start_hole !== 1 ? w.start_hole : null }));
                 html += `<tr class="evlb-plr evlb-wait"><td></td>` +
                     `<td class="nm">${escapeHtml(w.player_name)}${evlbTeeDot(d, w, "right")}</td>` +
                     `<td class="tt" colspan="${Math.max(1, ncols - 2)}">${tt || "Not started"}</td></tr>`;
@@ -4678,6 +4831,7 @@
                 `<td class="bl sc">${tot}</td><td class="tp"></td>`) +
             (netCol === false ? "" :
                 `<td class="bl sc">${tot}</td><td class="tp br"></td>`) +
+            `<td class="thru"></td>` +
             (afterWon ? "" : gcEmpty) +
             `</tr>`;
     }
@@ -4691,7 +4845,7 @@
         const dflt = board.sort || "net";
         EVLB_BOARDS[id] = {
             d, board, sortKey: dflt,
-            sortDir: (dflt === "gamecol" || dflt === "won") ? -1 : 1,
+            sortDir: (dflt === "gamecol" || dflt === "won" || dflt === "ptspace") ? -1 : 1,
         };
         const gl = (board.gameCol && board.gameCol.label) || "Pts";
         const active = k => (dflt !== "keep" && k === dflt) ? " asc" : "";
@@ -4715,7 +4869,7 @@
                 ? `<div class="evlb-ghostkey evlb-only-all"><span class="evlb-circ evlb-ghost">3</span> would have won the skin (not in the skins)</div>` : "") +
             // no WON column on an event with no games (Kerry 10/9: "Won
             // column shouldn't show at all if there aren't any side games")
-            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp && !board.noHcp ? "" : " no-hcp"}${d._moneyHeld || evlbNoGames(d) ? " no-won" : ""}" data-board="${id}"${board.noHcp ? " data-nohcp" : ""}><thead>` +
+            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp && !board.noHcp ? "" : " no-hcp"}${d._moneyHeld || evlbNoGames(d) ? " no-won" : ""}${(d.overall_board || []).some(r => r && r.thru != null) ? "" : " no-thru"}" data-board="${id}"${board.noHcp ? " data-nohcp" : ""}><thead>` +
             `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
             `<th data-k="player" class="nm sortable">Player</th>` +
             // Won sits right of the name (Kerry 2026-09-13) — the money
@@ -4731,6 +4885,7 @@
             (board.netCol === false ? "" :
                 `<th data-k="net" class="sortable bl sc${active("net")}" title="Net score">N</th>` +
                 `<th data-k="tpn" class="sortable tp br" title="Net to par">&plusmn;</th>`) +
+            `<th data-k="thru" class="sortable thru" title="Holes played; F = finished, with this tab's total; before the tee, the tee time and starting hole">Thru</th>` +
             (board.gameColAfterWon ? "" : gcTh) +
             `</tr>` +
             evlbParRow(d, board.gameCol, board.grossCol, board.netCol, board.gameColAfterWon) + `</thead>` +
@@ -4746,11 +4901,22 @@
         // OVERALL moves to the end and the board lands on TEAM (Kerry 10/19:
         // player feedback found OVERALL confusing). An event with no team
         // board lands on NET.
+        // B1 (Kerry 10/19: "Retire the OVERALL tab but keep the idea around in
+        // case we want to bring it back"): OVERALL leaves the tab row unless
+        // app setting `evlb_overall_tab` is on; its board and the whole-event
+        // Won roll-up are still built below. The no-games event keeps its
+        // single Overall board (Kerry 10/9, the practice round) — the simpler
+        // of the two paths, and that board is Gross and Net side by side.
+        // B2: the last game tab reads CTPs when every proxy is a Closest to
+        // the Pin, PROXIES when any is not (the server's proxy_tab_label).
         const tabs = noGames ? [["overall", "Overall"]]
             : [["team", "Team"], ["points", "MVP"], ["net", "Net"],
                ["gross", "Gross"],
                ["skins", (d.skins_variant || {}).basis === "net" ? "\u00bd Net Skins" : "Skins"],
-               ["prox", "CTPs"], ["overall", "Overall"]];
+               ["prox", d.proxy_tab_label || "CTPs"]]
+              .concat(d.overall_tab ? [["overall", "Overall"]] : []);
+        // B6: while LIVE the teams rank on to-par, then holes done
+        if (evlbLive(d) && (d.teams || []).length) d.teams = evlbTeamsLiveOrder(d, d.teams);
         const first = noGames ? "overall" : ((d.teams || []).length ? "team" : "net");
         // no games, no money: nothing to hold or explain
         // Status (money held / not final) stays on the board; explanations
@@ -4891,7 +5057,10 @@
                     label: null,
                     rows: (d.points_board || []).map(x => ovOf(x, x.mvp_note)).filter(Boolean),
                 }],
-                sort: "keep",
+                // while LIVE, points against par then holes done (B6);
+                // once the field is in, the server's order and its MVP
+                // tiebreak notes stand
+                sort: evlbLive(d) ? "ptspace" : "keep",
                 game: "points",
                 // Points is played off NET stableford, so a gross total
                 // beside it is another game's number (Kerry 2026-09-14),
@@ -5033,9 +5202,9 @@
             prox: proxHtml,
         };
         // one board, no tab bar to choose from (the no-games Overall)
-        return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? ' style="display:none"' : ""}>` +
+        return evlbStateStrip(d) + `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? ' style="display:none"' : ""}>` +
             tabs.map(([k, l]) =>
-                `<button class="evlb-subtab${k === first ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
+                `<button class="evlb-subtab${k === first ? " active" : ""}" data-sub="${k}">${k === "prox" ? `<span class="evlb-keepcase">${escapeHtml(l)}</span>` : l}</button>`).join("") +
             `</div><div class="evlb-hiw-row"><button type="button" class="pr-hiw-link evlb-hiw-btn" data-evlb-hiw>How it works</button></div></div>` +
             tabs.map(([k]) =>
                 `<div class="evlb-panel" data-panel="${k}"${k === first ? "" : " hidden"}>${panels[k]}</div>`).join("") +
@@ -5171,7 +5340,7 @@
             tbl.querySelectorAll("th[data-k]").forEach(th =>
                 th.addEventListener("click", () => {
                     const k = th.dataset.k;
-                    const deft = (k === "gamecol" || k === "won") ? -1 : 1;
+                    const deft = (k === "gamecol" || k === "won" || k === "thru") ? -1 : 1;
                     st.sortDir = k === st.sortKey ? -st.sortDir : deft;
                     st.sortKey = k;
                     tbl.querySelector("tbody").innerHTML = evlbBoardBody(tbl.dataset.board);

@@ -3482,3 +3482,75 @@ them like Cart Net should hide or turn off."
   cell. No non-LSC event carries a $0 fee today, and the LSC theme already
   prints a single PH on the practice round.
 - Guard: `test_event_games_off.py`.
+
+## EVENTS leaderboard: tabs, state strip, THRU, member casing (10/19 rulings B1-B4, B6, B7)
+
+Kerry's 10/19 rulings, specced in
+`docs/claude/handoff-2026-10-19-leaderboard-review.md` sections 11-13 (13 is
+final). This slice built B1, B2, B3, B4, B6 and B7 of the 12.7 build list;
+the TEAM collapsed row, counted-ball highlight, N-ball Team Net, SUMMARY and
+the "Playing for" line are other slices. `get_event_leaderboard` gains a
+post-step, `_evlb_board_extras` (database.py), that only reads and adds
+fields beside the board's numbers; each part is wrapped so the board opens
+even if one part cannot be worked out.
+
+- **B1 Tabs.** TEAM, MVP, NET, GROSS, SKINS, then CTPs/PROXIES. OVERALL is
+  retired behind app setting **`evlb_overall_tab`** (off unless it reads
+  on; payload `overall_tab`). Its board, the whole-event Won roll-up and
+  the renderer stay in the code. An event with **no games** keeps its single
+  Overall board (Gross and Net side by side, Kerry 10/9), the simpler of the
+  two paths. Landing stays TEAM, or NET with no team board.
+- **B2 CTPs / PROXIES.** Payload `proxy_tab_label`: "CTPs" when every proxy
+  contest is Closest to the Pin, "PROXIES" when any is something else. The
+  contests played (`proxies[].game`) decide once there are any; before that
+  the event's slots from `event_proximity_report` (via the cached
+  `score_entry._ctp_report`) decide: fewer par 3s than slots makes a Longest
+  Putt, so PROXIES. The tab keeps its small s (`.evlb-keepcase`).
+- **B3 Member casing.** `member_caps_first_last(name, last_name=None)` is
+  the First LAST form of `member_caps_name`, on the same tokenizer
+  (`_member_caps_last`): "Michelle DelCARMEN", "Adam BAKER", "Sean MacBRIDE",
+  "Tom DELGADO" (no false Del prefix). A "Last, First" name is turned round;
+  the stored `customers.last_name` marks where a two-word last name starts;
+  Jr/Sr/II-V keep their case. `_evlb_member_casing` applies it to every
+  board's `player_name` (overall, net/gross/skins, points, waiting, team
+  members incl. `Bl[...]`, proxies and HIO by customer_id or by the same
+  name) for players `derive_member_financial_status_bulk` calls "member".
+  Non-members keep the name as stored. **Display only: nothing is written.**
+- **B4 State strip.** Payload `board_state` (`upcoming` / `live` /
+  `in_review` / `final`), `board_state_word`, `board_state_text`,
+  `board_state_held`, `board_state_guide` (the four words, one line each).
+  Rule (`_evlb_board_state`): no hole posted = UPCOMING; field not complete
+  = LIVE; every score in = IN REVIEW until results close; FINAL when the
+  payouts are recorded (`tgf_payouts` rows), or the auto-payouts state says
+  final with nothing to pay, or the event has no games. A hold (the
+  `auto_payouts_hold` setting, a held or refused record in
+  `auto_payouts_fp`, or an unconfirmed CTP takeover) keeps it IN REVIEW with
+  the line "Results are being checked." Minutes in the copy come from
+  `se_card_lock_minutes` and `leaderboard_money_hold_minutes`. The strip sits
+  above the tabs (`evlbStateStrip`); the old "Winnings are not final yet"
+  banner yields to it (the strip adds "Cards lock at <time>"). HOW IT WORKS
+  gains "State words" and "Thru" sections.
+- **B6 Live ranking.** While `field_complete === false`: NET and GROSS rank
+  on to-par as before and now break a tie on more holes done; MVP ranks on
+  points against par (`evlbPtsPace` = points less `pts_par_hole`, the
+  Stableford table's par rung, per hole played); SKINS keeps skins won first
+  (the count is the game) and breaks ties on gross to-par, then holes; TEAM
+  reorders the teams on to-par then holes (`evlbTeamsLiveOrder`; the
+  position label, e.g. "T1", follows). Once the field is in, every board
+  returns to its settled order.
+- **B7 THRU.** Each overall row carries `thru` (holes posted), `finished`,
+  and with no hole yet `tee_start` {tee_time, start_hole} from the saved
+  sheet (`_evlb_tee_starts`: shotgun = start time + the slot's hole; tee
+  times = the slot). The board's Thru column (after the score pairs) shows
+  "3:40 PM · 10" before the tee, the hole count in play, and "F" plus the
+  tab's own total when done (gross on GROSS, net on NET, points on MVP; the
+  TEAM NET row shows the team's THRU and "F" + team net; other tabs show
+  "F"). Hidden while the hole-by-hole grid shows, and on a payload with no
+  THRU (the Cup boards, `no-thru`). The waiting rows read "3:40 PM · 10" too.
+- **Hooks for the TEAM slice:** `evlbTeamStanding(d, t)` (a hole counts once
+  every ball posted it; net from `evlbTeamMins`; to-par against par x
+  `t.balls || d.team_balls || 1`) feeds the live team order and the TEAM NET
+  row's Thru cell. The N-ball build should set the ball count there.
+- Guards: `test_evlb_rulings_b1_b7.py` (server), `test_evlb_rulings_b1_b7.js`
+  (renderer); `test_scorer_nav.py` now counts six tabs and measures name
+  cells on the visible board.

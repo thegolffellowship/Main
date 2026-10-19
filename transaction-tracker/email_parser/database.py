@@ -8464,13 +8464,54 @@ def member_caps_name(name: str | None) -> str:
     if "," not in s:
         return s
     last, first = [x.strip() for x in s.split(",", 1)]
+    return f"{_member_caps_last(last)}, {first}"
+
+
+def _member_caps_last(last: str) -> str:
+    """The member casing of a LAST name, the one tokenizer both forms use:
+    every word (and each half of a hyphenated word) goes to capitals, but a
+    known prefix keeps the shape it was stored with when the letter after it
+    is a capital ("DelCarmen" -> "DelCARMEN", "McCrary" -> "McCRARY"); a
+    false match ("Delgado") is just "DELGADO"."""
     def _tok(t):
         m = _NAME_PREFIXES.match(t)
         if m and t[len(m.group(1)):].lower() != t[len(m.group(1)):]:
             return m.group(1) + t[len(m.group(1)):].upper()
         return t.upper()
-    last_caps = " ".join("-".join(_tok(h) for h in w.split("-")) for w in last.split())
-    return f"{last_caps}, {first}"
+    return " ".join("-".join(_tok(h) for h in w.split("-")) for w in (last or "").split())
+
+
+_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+
+def member_caps_first_last(name: str | None, last_name: str | None = None) -> str:
+    """The "First LAST" form of `member_caps_name` (Kerry 10/19: "First
+    Last, but show last names with the capitalization rules we have";
+    "DelCarmen would be DelCARMEN for member casing view ... if MacBride was
+    a member then it would be MacBRIDE"). "Michelle DelCarmen" ->
+    "Michelle DelCARMEN", "Adam Baker" -> "Adam BAKER". A "Last, First" name
+    is turned round to First LAST. `last_name` (the customer's stored last
+    name) marks where the last name starts, so "Van Dyke" or "De La Cruz"
+    caps whole; without it the last word is the last name, and a trailing
+    Jr / Sr / II / III / IV / V keeps its own case. Display only: callers
+    never write the result back."""
+    s = " ".join((name or "").split())
+    if not s:
+        return s
+    if "," in s:
+        last, first = [x.strip() for x in s.split(",", 1)]
+        return f"{first} {_member_caps_last(last)}".strip()
+    ln = " ".join((last_name or "").split())
+    if ln and len(ln) < len(s) and s.lower().endswith(" " + ln.lower()):
+        return s[:len(s) - len(ln)] + _member_caps_last(s[len(s) - len(ln):])
+    words = s.split(" ")
+    i = len(words)
+    while i > 1 and words[i - 1].lower().strip(".,") in _NAME_SUFFIXES:
+        i -= 1
+    if i < 2:
+        return s
+    words[i - 1] = _member_caps_last(words[i - 1])
+    return " ".join(words)
 
 
 def customer_merge_preview(source_cid: int, target_cid: int,
@@ -15149,6 +15190,8 @@ def get_event_leaderboard(event_name: str,
         # should unhide and amounts should show but non-final until 15
         # minutes have passed"). Until the auto-payouts job records the
         # final money, the board reads its preview (auto_payouts.py).
+        # Recorded rows are what makes the board FINAL (B4, handoff 12.1).
+        _won_recorded = bool(won)
         if not won and _money_preview:
             for pr in _money_preview.get("rows") or []:
                 if not pr.get("customer_id") or not pr.get("amount"):
@@ -16081,7 +16124,7 @@ def get_event_leaderboard(event_name: str,
         logger.warning("event leaderboard matrix threshold failed",
                        exc_info=True)
 
-    return {
+    out = {
         "event": {"id": ev["id"], "name": ev["item_name"], "date": ev["event_date"],
                   "course": ev["course"], "chapter": ev["chapter"],
                   "holes": ev["holes"],
@@ -16139,6 +16182,251 @@ def get_event_leaderboard(event_name: str,
         "n_net_buyers": len(net_buyers),
         "n_gross_buyers": len(gross_buyers),
     }
+    # B1-B4, B6, B7 of the 10/19 leaderboard rulings (handoff 12.7): the
+    # tab dial, the CTPs / PROXIES label, member casing, the state strip
+    # and each player's THRU. Each step is wrapped: the board must open
+    # even when one of them cannot be worked out.
+    _evlb_board_extras(out, dict(_evc) if _evc else dict(ev),
+                       no_games=bool(_no_games), recorded=_won_recorded,
+                       preview=_money_preview, db_path=db_path)
+    return out
+
+
+# ── EVENT LEADERBOARD EXTRAS (Kerry's 10/19 rulings, handoff 12.7 / 13) ──
+# Everything below reads; nothing here writes to the database. The board's
+# own numbers are untouched: these add a few fields beside them.
+
+# The four words a player sees (handoff 12.1). Internally the money still
+# runs PROVISIONAL / FINAL / OFFICIAL; the board shows two end words.
+EVLB_STATE_WORDS = {
+    "upcoming": "UPCOMING",
+    "live": "LIVE",
+    "in_review": "IN REVIEW",
+    "final": "FINAL",
+}
+
+
+def _evlb_truthy(v) -> bool:
+    return str(v or "").strip().lower() in ("1", "on", "true", "yes")
+
+
+def evlb_state_guide(lock_minutes: int, hold_minutes: int) -> list:
+    """The four state words with one plain line each, for the strip and
+    HOW IT WORKS. The minutes come from the dials (card lock
+    `se_card_lock_minutes`, money hold `leaderboard_money_hold_minutes`);
+    they are never typed into the copy."""
+    return [
+        {"state": "upcoming", "word": "UPCOMING",
+         "text": "Pairings are set; nobody has teed off yet. THRU shows each "
+                 "player's tee time and starting hole."},
+        {"state": "live", "word": "LIVE",
+         "text": "Scores are coming in hole by hole and standings move as groups "
+                 "post. THRU is the holes played; no money shows yet."},
+        {"state": "in_review", "word": "IN REVIEW",
+         "text": f"Every score is in. The money shows, but it is not settled: a "
+                 f"score can still be corrected. Cards lock {lock_minutes} minutes "
+                 f"after a group's last score and results close after that."},
+        {"state": "final", "word": "FINAL",
+         "text": "Results are closed and prizes are set."},
+    ]
+
+
+def _evlb_tee_starts(conn, ev: dict) -> dict:
+    """{customer_id: {"tee_time", "start_hole"}} from the SAVED pairings, the
+    Starter Sheet's own source. Shotgun: the start time and the hole (the
+    slot "10A" starts on 10). Tee times: the slot IS the time. A generic
+    "Group N" slot knows no hole and says none."""
+    out: dict = {}
+    shotgun = (ev.get("start_type") or "").strip().lower().startswith("shotgun")
+    try:
+        clock = datetime.strptime(str(ev.get("start_time")), "%H:%M").strftime(
+            "%I:%M %p").lstrip("0")
+    except (ValueError, TypeError):
+        clock = None
+    try:
+        rows = conn.execute(
+            "SELECT customer_id, slot_label FROM event_pairings "
+            "WHERE event_id = ? AND customer_id IS NOT NULL ORDER BY group_num",
+            (ev["id"],)).fetchall()
+    except sqlite3.OperationalError:
+        return out
+    for r in rows:
+        lab = (r["slot_label"] or "").strip()
+        if re.match(r"^group\s+\d+$", lab, re.I):
+            tt, hole = (clock if shotgun else None), None
+        elif shotgun:
+            m = re.match(r"^(?:hole\s+)?(\d+)", lab, re.I)
+            tt, hole = clock, (m.group(1) if m else None)
+        else:
+            tt, hole = (lab or clock), None
+        out.setdefault(int(r["customer_id"]), {"tee_time": tt, "start_hole": hole})
+    return out
+
+
+def _evlb_board_state(out: dict, *, no_games: bool, recorded: bool,
+                      fp: dict | None, hold: dict | None) -> tuple[str, bool]:
+    """(state, held) from fields the board already has (handoff 12.1):
+    UPCOMING before any hole is posted; LIVE until every hole of the field is
+    in; IN REVIEW once it is, until results close; FINAL when they have
+    (payouts recorded, or nothing to pay, or an event with no games). A hold
+    — the verifier's or Kerry's, a refused record, or a closest-to-the-pin
+    takeover nobody has confirmed — keeps it IN REVIEW."""
+    if not out.get("field_complete"):
+        return ("live" if (out.get("holes_posted") or 0) > 0 else "upcoming"), False
+    fp = fp if isinstance(fp, dict) else {}
+    held = bool(hold) or bool(fp.get("held")) or bool(fp.get("refused")) \
+        or any(p.get("pending") for p in out.get("proxies") or [])
+    if held or out.get("money_visible") is False or out.get("money_final") is False:
+        return "in_review", held
+    closed = (no_games or recorded
+              or (fp.get("final") and not fp.get("display_only")
+                  and not fp.get("held") and not fp.get("refused")))
+    return ("final" if closed else "in_review"), False
+
+
+def _evlb_board_extras(out: dict, ev: dict, *, no_games: bool, recorded: bool,
+                       preview, db_path=None) -> None:
+    eid = ev.get("id")
+    # B1: OVERALL is retired behind one dial (Kerry 10/19: "Retire the OVERALL
+    # tab but keep the idea around"). Off unless it reads on.
+    try:
+        out["overall_tab"] = _evlb_truthy(get_app_setting("evlb_overall_tab", db_path))
+    except Exception:
+        out["overall_tab"] = False
+
+    # B2: CTPs when every proxy contest is Closest to the Pin, PROXIES when any
+    # is something else (Kerry 10/19). The contests played (recorded or
+    # claimed) decide once there are any; before that the event's slots do
+    # (the Proximity report: shortest par 3s, a leftover is a Longest Putt
+    # on the last hole of the side), so the label is right from UPCOMING.
+    try:
+        kinds = {p.get("game") for p in out.get("proxies") or [] if p.get("game")}
+        if not kinds and not no_games and eid is not None:
+            from email_parser import score_entry as _se_p
+            rep = _se_p._ctp_report(int(eid), db_path) or {}
+            kinds = {c.get("kind") for c in rep.get("contests") or [] if c.get("kind")}
+        out["proxy_tab_label"] = "PROXIES" if any(k != "ctp" for k in kinds) else "CTPs"
+    except Exception:
+        logger.exception("Non-fatal: proxy tab label unavailable for %s", eid)
+        out["proxy_tab_label"] = "CTPs"
+
+    # B7 (with B6): each player's THRU — holes posted, finished or not, and
+    # before the first hole his tee time and starting hole. Stableford points
+    # for a net par (the formula table's "0" rung) let the MVP tab rank on
+    # points against par while the round is on.
+    cards = out.get("cards") or {}
+    n_holes = len(out.get("hole_cols") or [])
+    starts = None
+    for r in out.get("overall_board") or []:
+        hs = cards.get(str(r.get("scoring_round_id"))) or []
+        thru = sum(1 for h in hs if h and len(h) > 1 and h[1] is not None)
+        r["thru"] = thru
+        r["finished"] = bool(n_holes) and thru >= n_holes
+        if thru == 0 and r.get("customer_id") is not None:
+            if starts is None:
+                try:
+                    with _connect(db_path) as conn:
+                        starts = _evlb_tee_starts(conn, ev)
+                except Exception:
+                    logger.exception("Non-fatal: tee starts unavailable for %s", eid)
+                    starts = {}
+            st = starts.get(int(r["customer_id"]))
+            if st:
+                r["tee_start"] = st
+    try:
+        out["pts_par_hole"] = int(
+            (get_scoring_formulas(db_path).get("stableford_net_table") or {}).get("0", 1))
+    except Exception:
+        out["pts_par_hole"] = 1
+
+    # B4: the state strip.
+    try:
+        from email_parser import auto_payouts as _apx_s
+        from email_parser import score_entry as _se_s
+        hold = _apx_s.holds(db_path).get(str(eid)) if eid is not None else None
+        fp = _apx_s._fps(db_path).get(str(eid)) if eid is not None else None
+        lock = _se_s.card_lock_minutes(db_path)
+    except Exception:
+        logger.exception("Non-fatal: hold state unavailable for %s", eid)
+        hold, fp, lock = None, None, 15
+    state, held = _evlb_board_state(out, no_games=no_games, recorded=recorded,
+                                    fp=fp, hold=hold)
+    guide = evlb_state_guide(lock, int(out.get("money_hold_minutes") or 10))
+    line = next(g["text"] for g in guide if g["state"] == state)
+    if held:
+        line = "Results are being checked."
+    elif state == "in_review" and out.get("money_visible") is False:
+        line = (f"Every score is in. The money posts "
+                f"{int(out.get('money_hold_minutes') or 10)} minutes after the "
+                f"last score; a score can still be corrected.")
+    out["board_state"] = state
+    out["board_state_word"] = EVLB_STATE_WORDS[state]
+    out["board_state_text"] = line
+    out["board_state_held"] = held
+    out["board_state_guide"] = guide
+
+    # B3: members show First LAST on every board (Kerry 10/19); non-members
+    # keep the name as stored. Display only — nothing is written back.
+    try:
+        _evlb_member_casing(out, db_path)
+    except Exception:
+        logger.exception("Non-fatal: member casing unavailable for %s", eid)
+
+
+def _evlb_member_casing(out: dict, db_path=None) -> None:
+    rows: list = []
+    rows += out.get("overall_board") or []
+    for k in ("net_board", "gross_board", "skins_board"):
+        for sec in out.get(k) or []:
+            rows += (sec or {}).get("rows") or []
+    rows += out.get("points_board") or []
+    rows += out.get("waiting") or []
+    team_players = [p for t in out.get("teams") or [] for p in (t or {}).get("players") or []]
+    cids = sorted({int(x["customer_id"]) for x in rows + team_players + (out.get("proxies") or [])
+                   if isinstance(x, dict) and x.get("customer_id") is not None})
+    if not cids:
+        return
+    with _connect(db_path) as conn:
+        status = derive_member_financial_status_bulk(conn, cids)
+        q = ",".join("?" * len(cids))
+        last = {r["customer_id"]: r["last_name"] for r in conn.execute(
+            f"SELECT customer_id, last_name FROM customers WHERE customer_id IN ({q})", cids)}
+    members = {c for c in cids if status.get(c) == "member"}
+    if not members:
+        return
+    renamed: dict = {}
+
+    def _fix(nm, cid):
+        if cid is None or int(cid) not in members or not nm:
+            return nm
+        new = member_caps_first_last(nm, last.get(int(cid)))
+        renamed[str(nm).strip().lower()] = new
+        return new
+
+    for x in rows:
+        if isinstance(x, dict) and x.get("player_name"):
+            x["player_name"] = _fix(x["player_name"], x.get("customer_id"))
+    for p in team_players:
+        nm = p.get("player_name") or ""
+        m = re.match(r"^Bl\[(.*)\]$", nm)
+        if m:
+            p["player_name"] = f"Bl[{_fix(m.group(1), p.get('customer_id'))}]"
+        elif nm:
+            p["player_name"] = _fix(nm, p.get("customer_id"))
+    # proxies / hole-in-one name the player; a Golf Genius row carries no
+    # customer_id, so it follows the rename of the same name on the board
+    for p in (out.get("proxies") or []) + (out.get("hio") or []):
+        nm = p.get("player")
+        if not nm:
+            continue
+        if p.get("customer_id") is not None:
+            p["player"] = _fix(nm, p["customer_id"])
+        else:
+            k = str(nm).strip().lower()
+            if k not in renamed and "," in k:   # GG's "LAST, First" vs the board's First Last
+                ln_, fn_ = [s.strip() for s in k.split(",", 1)]
+                k = f"{fn_} {ln_}".strip()
+            p["player"] = renamed.get(k, nm)
 
 
 # Spotlight shares the expensive, customer-INDEPENDENT reads (each
