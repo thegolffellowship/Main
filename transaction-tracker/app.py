@@ -2420,6 +2420,28 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # 7:00 PM TEE-TIMES EMAIL, three versions (CMO #2076/#2101): player,
+    # course contact, manager, for tomorrow's events with saved pairings.
+    # BESIDE the pairing auto-send above, not instead of it. Does nothing
+    # unless dial `teetimes_email_auto` = on, and each version only with its
+    # wording stamp. email_parser/teetimes_email.py.
+    def teetimes_email_job():
+        from email_parser.teetimes_email import auto_check
+        try:
+            res = auto_check()
+            if res.get("events"):
+                logger.info("Tee-times email: %s", res["events"])
+        except Exception:
+            logger.exception("Tee-times email failed (non-fatal)")
+    scheduler.add_job(
+        teetimes_email_job,
+        "cron", minute="0-59/15",
+        timezone="US/Central",
+        id="teetimes_email",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
