@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.573.11";
+window.TGF_VERSION = "2.573.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.573.12",
+    date: "2026-10-19",
+    title: "No approval email for a sheet already approved",
+    changes: ["Kerry 10/19: \"Robert had already approved his I believe. You didn't need to send his.\" send_prompt (the job and the resend bridge alike) now skips a sheet whose current fingerprint is already approved. Guard test_pairings_approval.py."]
+  },
   {
     version: "2.573.11",
     date: "2026-10-19",

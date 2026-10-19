@@ -107,6 +107,9 @@ check("Robert's approval signs off the sheet and emails NO player tonight (Kerry
 check("…and records who approved which sheet",
       pa.event_state(AUS, DB).get("approved_fp") == fp
       and pa.event_state(AUS, DB).get("approved_by") == "manager (Austin)")
+SENT.clear()
+check("an approved sheet is never prompted again, even on a resend (Kerry 10/19)",
+      "already approved" in (pa.send_prompt(AUS, DB).get("skipped") or "") and not SENT)
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
 db.set_app_setting(pa.DIAL, "0", db_path=DB)
 check("dial off: no prompts", pa.prompt_check(mon_5_05, DB) == {"status": "off"})
