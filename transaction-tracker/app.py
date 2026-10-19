@@ -12342,6 +12342,14 @@ def api_events_leaderboard_event():
     d = get_event_leaderboard(request.args.get("name", ""))
     if d and only_ev and (d.get("event") or {}).get("id") != only_ev:
         return jsonify({"error": "this link reads its own event only"}), 403
+    if d:
+        # board state, SUMMARY's money, projected WON, pots, Match Play
+        # (Kerry 10/19, B10-B12) — read-only decoration of the same payload
+        try:
+            from email_parser.board_summary import attach as _bs_attach
+            _bs_attach(d)
+        except Exception:
+            logger.exception("Non-fatal: board summary decoration failed")
     return (jsonify(d), 200) if d else (jsonify({"error": "event not found"}), 404)
 
 
