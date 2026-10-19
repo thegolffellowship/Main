@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.18";
+window.TGF_VERSION = "2.571.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.19",
+    date: "2026-10-19",
+    title: "Health: slow line for the invite-send bridge",
+    changes: [
+      "Digest #2032 (10/19). The staff bridge scoring-event-invite flagged HIGH at 17.4 s against its 10 s line: that was Sunday's extra Fall Championship reminder (Kerry #2011), one call sending to part of 236 recipients through Microsoft at host load 93. Its reads (p50 723 ms) are unchanged and stay on the 10 s line in practice; the slow line for this bridge is now 90 s, like the other sending bridges, so a normal send no longer raises a HIGH item. No email, audience, wording or send behaviour changes."
+    ]
+  },
   {
     version: "2.571.18",
     date: "2026-10-18",
