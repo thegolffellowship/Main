@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.571.20";
+window.TGF_VERSION = "2.571.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.571.21",
+    date: "2026-10-19",
+    title: "Docs: GHIN posting options after Golf Genius (research memo)",
+    changes: [
+      "Handicap Management & Research lane (CGO), Kerry 10/19. New docs/claude/handoff-2026-10-19-ghin-options.md: how TGF could post scores to GHIN after Golf Genius retires 10/31, with a sourced comparison (USGA GPA API, becoming a TGA member club, members posting their own scores, Golf Genius), what members keep and lose, assumptions, unknowns, a recommendation and a revisit trigger. Prices appear only with a link and the date seen; the USGA API fee, the TGA club fee and the per-golfer rate are UNKNOWN. Docs only: no code, schema, member-facing or money change, nothing bought, sent or contacted."
+    ]
+  },
   {
     version: "2.571.20",
     date: "2026-10-19",
