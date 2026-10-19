@@ -4740,9 +4740,9 @@
         // player feedback found OVERALL confusing). An event with no team
         // board lands on NET.
         const tabs = noGames ? [["overall", "Overall"]]
-            : [["team", "Team"], ["net", "Net"],
+            : [["team", "Team"], ["points", "MVP"], ["net", "Net"],
                ["gross", "Gross"], ["skins", "Skins"],
-               ["points", "MVP/Points"], ["prox", "Proxies"], ["overall", "Overall"]];
+               ["prox", "CTPs"], ["overall", "Overall"]];
         const first = noGames ? "overall" : ((d.teams || []).length ? "team" : "net");
         // no games, no money: nothing to hold or explain
         // Status (money held / not final) stays on the board; explanations

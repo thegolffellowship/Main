@@ -159,6 +159,29 @@ check("7:00 PM sent exactly the unapproved event's two players", len(SENT) == 2,
 SENT.clear()
 r = pa.auto_send_check(datetime(2026, 10, 26, 19, 15), DB)
 check("7:15 PM: nothing resends", not SENT, r)
+# A failed 7 PM send emails Kerry and retries hourly (Kerry 10/19)
+E_FAIL = 9313
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, "
+                 "start_time, course) VALUES (?, 's9.62 WILL FAIL', '2026-10-27', 'San Antonio', 'active', "
+                 "'9-hole', 'Shotgun', '16:30', 'Test GC')", (E_FAIL,))
+    for cid, fn, ln in ((990101, "Ann", "Able"), (990102, "Bob", "Baker")):
+        conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, side_games, "
+                     "transaction_status, order_date, order_id, email_uid, merchant) VALUES "
+                     "(?, ?, 's9.62 WILL FAIL', ?, '9', 'NONE', 'active', '2026-10-01', ?, ?, 'GoDaddy')",
+                     (f"{fn} {ln}", cid, E_FAIL, f"R{cid}{E_FAIL}", f"m-{cid}-{E_FAIL}"))
+    conn.commit()
+db.save_event_pairings(E_FAIL, SHEET, db_path=DB)
+db.set_app_setting(ede.APPROVAL_KEY, "", db_path=DB)        # wording unapproved -> send refused
+SENT.clear()
+r = pa.auto_send_check(datetime(2026, 10, 26, 19, 30), DB)
+check("a failed 7 PM send emails Kerry",
+      "error" in r["events"].get(E_FAIL, {}) and any("FAILED" in x.get("subject", "") and
+      x.get("to_address") == "kerry@thegolffellowship.com" for x in SENT), (r["events"].get(E_FAIL), [x.get("subject") for x in SENT]))
+SENT.clear()
+r = pa.auto_send_check(datetime(2026, 10, 26, 19, 45), DB)
+check("…and does not retry inside the hour", "hourly" in (r["events"].get(E_FAIL, {}).get("skipped") or ""), r["events"].get(E_FAIL))
+db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
 db.set_app_setting(pa.AUTO_DIAL, "off", db_path=DB)
 check("dial off: auto-send stops", pa.auto_send_check(datetime(2026, 10, 26, 19, 30), DB) == {"status": "off"})
 

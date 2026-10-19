@@ -7,7 +7,8 @@ window.TGF_CHANGELOG = [
     changes: [
       "Kerry 10/19: \"not in badge should only show when 'Show All Players' is checked.\" The grey 'not in' legend chip and the Skins would-have-won key now show only while Show All Players is ticked, and follow the box when it is ticked or unticked (it used to need a reload).",
       "\"HOW IT WORKS is our standard for any explanations.\" The board's button is now HOW IT WORKS (was How to read this), on the same line as the game tabs on desktop. Explanations such as \"Individual Gross activates at 16 ...\" and the Team tab's paragraph moved into it (a Tonight's games section); status notices (money held / not final yet) stay on the board.",
-      "\"Let's move OVERALL to the end for every view and event. Then let's land on TEAM rather than OVERALL.\" Tabs read Team, Net, Gross, Skins, MVP/Points, Proxies, Overall; the board opens on Team, or on Net when the event has no team board. An event with no games keeps its single Overall board. Display only. Guards test_events_leaderboard_all.py, test_events_board.js."
+      "\"Let's move OVERALL to the end for every view and event. Then let's land on TEAM rather than OVERALL.\" Tabs read Team, MVP, Net, Gross, Skins, CTPs, Overall (Kerry 10/19, second pass); the board opens on Team, or on Net when the event has no team board. An event with no games keeps its single Overall board. Display only. Guards test_events_leaderboard_all.py, test_events_board.js.",
+      "7 PM auto-send safety (Kerry 10/19: \"it needs to send me an email of failure, and then try again hourly\"): a failed 7 PM send emails Kerry and retries once an hour until it goes or a manager approves. Guard test_pairings_approval.py."
     ]
   },
   {
