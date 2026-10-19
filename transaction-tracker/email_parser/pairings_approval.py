@@ -243,7 +243,8 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
     html_body = (
         f"<p>Hi {_e(mgr['name'] or 'there')},</p>"
         f"<p>The pairings for <b>{_e(ev['name'])}</b> ({_e(ev['date'])}, {_e(ev['course'])}) are ready. "
-        f"Please review and approve them. Tonight at 7:00 PM players get the tee times; "
+        f"Please review and approve them. When you approve, the tee-times email goes to the players, "
+        f"the course and you (at 7:00 PM if nobody approves); "
         f"their full Event Info email goes at {EVENT_INFO_HOUR}:00 AM on event day: "
         f"<b>{c.get('ready', 0)} players</b>"
         + (f", {c.get('held')} held" if c.get("held") else "") + ".</p>"
@@ -359,7 +360,16 @@ def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
         except Exception:
             pass
         rv = review(event_id, db_path)
-        return {"status": "approved", "fingerprint": cur,
+        # The tee-times email goes on approval (Kerry 10/19), each version
+        # only with its stamp and the dial on.
+        tt = None
+        try:
+            from email_parser.teetimes_email import _deliver
+            tt = _deliver(int(event_id), db_path)
+        except Exception as exc:
+            logger.exception("tee-times send on approval failed for %s", event_id)
+            tt = {"error": str(exc)}
+        return {"status": "approved", "fingerprint": cur, "teetimes": tt,
                 "sends_at": f"{EVENT_INFO_HOUR}:00 AM on the event day",
                 "counts": {"approved": 1, "ready": (rv.get("counts") or {}).get("ready", 0),
                            "held": (rv.get("counts") or {}).get("held", 0)}}

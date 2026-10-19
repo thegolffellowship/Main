@@ -3540,6 +3540,6 @@ them like Cart Net should hide or turn off."
 
 "I thought we're just sending tee times tonight and then the full event info email at 7:00am."
 - 5:00 PM the day before: pairings generate; the manager gets the approval prompt (every 15 min from :05).
-- Approve (5-7 PM) signs off the sheet only; no player email.
+- Approve (5-7 PM) signs off the sheet and sends that event's TEE-TIMES email at once (v2.572.1; each version needs its stamp and `teetimes_email_auto` on). The personal Event Info email is not sent.
 - 7:00 PM: an unapproved sheet is auto-approved as it stands (still no player email); the TEE-TIMES email (players / course / manager) goes once its wordings are stamped and `teetimes_email_auto` is on.
 - 7:00 AM event day: `pairings_approval.auto_send_check` sends every event's personal Event Info email (`event_day_email.send_event_day_emails`), on the sheet as it stands; failure emails Kerry, hourly retry until noon. Dial `pairings_auto_send`.

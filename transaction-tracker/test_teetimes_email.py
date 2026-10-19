@@ -169,7 +169,10 @@ r = tt.auto_check(now=datetime(2026, 10, 26, 19, 0), db_path=DB)
 check("dial off: the job does nothing", r == {"status": "off"} and not SENT, r)
 db.set_app_setting(tt.AUTO_DIAL, "on", db_path=DB)
 r = tt.auto_check(now=datetime(2026, 10, 26, 18, 45), db_path=DB)
-check("before 7:00 PM: nothing", r.get("status") == "not yet" and not SENT, r)
+check("6:45 PM, nobody approved: waits for approval or 7 PM (Kerry 10/19)",
+      "approval or 7 PM" in (r["events"].get(EV, {}).get("skipped") or "") and not SENT, r)
+check("4:45 PM: before the review window, nothing",
+      tt.auto_check(now=datetime(2026, 10, 26, 16, 45), db_path=DB).get("status") == "not yet" and not SENT)
 r = tt.auto_check(now=datetime(2026, 10, 26, 19, 0), db_path=DB)
 res = r["events"].get(EV) or {}
 check("dial on but no stamp: every version locked, nothing sent",

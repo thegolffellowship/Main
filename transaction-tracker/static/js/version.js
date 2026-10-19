@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.572.0";
+window.TGF_VERSION = "2.572.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.572.1",
+    date: "2026-10-19",
+    title: "Tee-times email goes on approval, or at 7 PM",
+    changes: [
+      "Kerry 10/19: \"Initial tee sheets email that CMO mocked up goes out to the parties as designated between 5-7 either upon manager approval or 7pm end of review window. Then the full event info email (same as we sent last week) goes out at 7am tomorrow morning.\" Approving the pairings now sends that event's tee-times email (players, course, manager) at once; from 5 PM the job also sends any approved sheet, and at 7 PM every sheet. Each version still needs its wording stamp and the teetimes_email_auto dial. Guards test_teetimes_email.py, test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.572.0",
     date: "2026-10-19",

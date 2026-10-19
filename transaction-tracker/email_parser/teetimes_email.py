@@ -66,6 +66,7 @@ SPOTS_CHOICES = ("off", "rsvp_in", "invited")
 MAILING_ADDRESS_KEY = "tgf_mailing_address"  # CA #1793 footer; waits on #1795
 SENT_KEY = "teetimes_email_sent:{event_id}"
 SEND_HOUR = 19
+OPEN_HOUR = 17      # the review window opens with the 5 PM pairings
 DEFAULT_PREVIEW_TO = "kerry@thegolffellowship.com"
 
 # Template variables that may be empty (each renders as a whole block or
@@ -645,7 +646,10 @@ def auto_check(now: datetime | None = None, db_path=None) -> dict:
     if now is None:
         from email_parser.timezone_utils import now_central
         now = now_central()
-    if now.hour < SEND_HOUR:
+    # Kerry 10/19: "goes out to the parties as designated between 5-7 either
+    # upon manager approval or 7pm end of review window". From 5 PM an
+    # approved sheet goes at once; at 7 PM every sheet goes.
+    if now.hour < OPEN_HOUR:
         return {"status": "not yet"}
     tomorrow = (now.date() + timedelta(days=1)).isoformat()
     with db._connect(db_path) as conn:
@@ -661,9 +665,15 @@ def auto_check(now: datetime | None = None, db_path=None) -> dict:
                 out[eid] = {"skipped": why}
                 continue
             from email_parser.pairings_approval import sheet_fingerprint
-            if not sheet_fingerprint(eid, db_path):
+            fp = sheet_fingerprint(eid, db_path)
+            if not fp:
                 out[eid] = {"skipped": "no saved pairings"}
                 continue
+            if now.hour < SEND_HOUR:
+                from email_parser.pairings_approval import event_state
+                if event_state(eid, db_path).get("approved_fp") != fp:
+                    out[eid] = {"skipped": "waiting for the manager's approval or 7 PM"}
+                    continue
             out[eid] = _deliver(eid, db_path)
         except Exception as exc:
             logger.exception("teetimes auto failed for %s", eid)
