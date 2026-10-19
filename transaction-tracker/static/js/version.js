@@ -1,11 +1,19 @@
-window.TGF_VERSION = "2.571.19";
+window.TGF_VERSION = "2.571.20";
 window.TGF_CHANGELOG = [
   {
-    version: "2.571.19",
+    version: "2.571.20",
     date: "2026-10-19",
     title: "Health: slow line for the invite-send bridge",
     changes: [
       "Digest #2032 (10/19). The staff bridge scoring-event-invite flagged HIGH at 17.4 s against its 10 s line: that was Sunday's extra Fall Championship reminder (Kerry #2011), one call sending to part of 236 recipients through Microsoft at host load 93. Its reads (p50 723 ms) are unchanged and stay on the 10 s line in practice; the slow line for this bridge is now 90 s, like the other sending bridges, so a normal send no longer raises a HIGH item. No email, audience, wording or send behaviour changes."
+    ]
+  },
+  {
+    version: "2.571.19",
+    date: "2026-10-19",
+    title: "Undo for an ended membership",
+    changes: [
+      "Kerry 10/18 (CoS #2031): \"You don't need to end his membership. He's just not going to be active and he's opted out of communications. If for some reason he decides he wants to play with us again, he's perfectly welcome to.\" New memberships.undo_end_membership (bridge scoring-membership-end:<customer_id>|<kerry-ok post>|undo[|apply]) puts back what end_membership changed: the original end date from the term's note, roster_choice cleared, the notice stamps it set cleared, then the status sync. The invitation opt-out list is left alone. Guard test_membership_end.py."
     ]
   },
   {

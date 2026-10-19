@@ -1642,3 +1642,54 @@ def end_membership(customer_id: int, kerry_ok_post, reason: str = "",
         conn.commit()
     out["applied"] = True
     return out
+
+
+def undo_end_membership(customer_id: int, kerry_ok_post, apply: bool = False,
+                        db_path=None) -> dict:
+    """Put back what end_membership changed (Kerry 2026-10-18, #2031: "You
+    don't need to end his membership. He's just not going to be active and
+    he's opted out of communications ... He hasn't burned any bridges.").
+
+    For each term end_membership touched (roster_choice_at set): the
+    original expires_at comes back from the "was to <date>; ended early"
+    note and the note is removed, roster_choice is cleared, and every notice
+    column end_membership stamped (same timestamp as roster_choice_at) is
+    cleared again. The status sync then reads the running term. The
+    invitation opt-out list is not touched. Kerry-OK post; dry run default.
+    """
+    import re as _re
+    from email_parser.customer_query import _kerry_ok
+    cols = [c for c, _o, _l in NOTICE_WINDOWS] + ["roster_admin_notified_at"]
+    with _connect(db_path) as conn:
+        ensure_membership_tables(conn)
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+        if not ok:
+            return {"refused": f"rule 3b: {why}"}
+        terms = [dict(r) for r in conn.execute(
+            "SELECT * FROM customer_memberships WHERE customer_id = ? "
+            "AND roster_choice = 'remove' AND roster_choice_at IS NOT NULL ORDER BY started_at",
+            (int(customer_id),)).fetchall()]
+        pat = _re.compile(r"\s*\|?\s*was to (\d{4}-\d{2}-\d{2}); ended early [^|]*$")
+        plan = []
+        for t in terms:
+            m = pat.search(t.get("notes") or "")
+            plan.append({"term_id": t["id"], "expires_at": t["expires_at"],
+                         "restore_expires_at": m.group(1) if m else t["expires_at"],
+                         "notes_after": pat.sub("", t.get("notes") or "") or None,
+                         "clear_stamps": [c for c in cols if t.get(c) and t[c] == t["roster_choice_at"]]})
+        out = {"customer_id": int(customer_id), "authority": why, "terms": plan, "dry_run": not apply}
+        if not apply or not terms:
+            return out
+        for p in plan:
+            sets = ["roster_choice = NULL", "roster_choice_at = NULL", "updated_at = datetime('now')",
+                    "expires_at = ?", "notes = ?"] + [f"{c} = NULL" for c in p["clear_stamps"]]
+            conn.execute(f"UPDATE customer_memberships SET {', '.join(sets)} WHERE id = ?",
+                         (p["restore_expires_at"], p["notes_after"], p["term_id"]))
+        res = sync_player_status_with_terms(conn)
+        conn.commit()
+        st = conn.execute("SELECT current_player_status FROM customers WHERE customer_id = ?",
+                          (int(customer_id),)).fetchone()
+    out["applied"] = True
+    out["status_after"] = st["current_player_status"] if st else None
+    out["sync"] = res
+    return out

@@ -1499,3 +1499,9 @@ bridge `scoring-membership-end:<customer_id>|<kerry-ok post>[|apply]`:
 Setting the status alone does not hold: `sync_player_status_with_terms`
 upgrades anyone with a running term back to active_member. No money moves.
 Guard `test_membership_end.py`.
+
+**Undo (v2.571.19+, Kerry #2031).** `undo_end_membership` / `...|undo[|apply]` puts an
+end back: original `expires_at` from the "was to <date>; ended early" note, `roster_choice`
+cleared, the notice stamps that carry the same timestamp as `roster_choice_at` cleared, then
+`sync_player_status_with_terms`. Used for Randy Copper (32) the day after: Kerry wants him
+kept as a member who has opted out of invitations, welcome back any time.
