@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.574.2";
+window.TGF_VERSION = "2.574.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.574.3",
+    date: "2026-10-19",
+    title: "Scorecards print only the tees someone plays",
+    changes: ["Kerry 10/19, a9.28 Avery Ranch card: \"Why are forward tees showing here when there's no one playing forward tees?\" The printed tee rows now keep only the designated tees a player on the event's sheet plays (scorecards._tees_in_play), in legend order. Dots, each player's own stroke index and name circles still read every designated tee. An empty sheet and the Lone Star Cup keep the full legend. Guard test_scorecards.py."]
+  },
   {
     version: "2.574.2",
     date: "2026-10-19",

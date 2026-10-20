@@ -82,6 +82,26 @@ def _master(name: str) -> str:
     return _gg_tee_parts(name or "")["master"]
 
 
+def _tees_in_play(tees: list, pack: dict, lsc) -> list:
+    """ONLY THE TEES SOMEONE PLAYS (Kerry 2026-10-19, a9.28 Avery Ranch card:
+    "Why are forward tees showing here when there's no one playing forward
+    tees?"). The printed tee rows keep the designated sets a player on this
+    event's sheet actually plays, in legend order; a designated tee nobody
+    plays drops off the card. The per-player lookups (dots, own stroke index,
+    name circles) still read every designated tee. With no tee on any seat
+    (an empty sheet, the Cup's own legend) every designated tee prints, as
+    before."""
+    if lsc:
+        return tees
+    used = {str(p.get("tee_choice") or "").strip().lower()
+            for g in pack.get("groups") or [] for p in g.get("players") or []}
+    used.discard("")
+    if not used:
+        return tees
+    kept = [t for t in tees if str(t.get("band") or "").strip().lower() in used]
+    return kept or tees
+
+
 def merge_shared_tees(tees: list, grids: dict) -> list:
     """ONE LINE PER TEE (Kerry 2026-10-06, Avery Ranch card: "In the case
     where two tee groups share a tee, just have one and put 65+ & Forward
@@ -633,7 +653,8 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         "lsc": ({**lsc, "navy": _lc.LSC_NAVY, "sessions": lsc_sessions, "session": session,
                  "preview": bool(preview), "course": (course_name or "").upper()}
                 if lsc else None),
-        "tees": merge_shared_tees(tees, grids), "grids": grids, "cards": cards, "sheets": sheets,
+        "tees": merge_shared_tees(_tees_in_play(tees, pack, lsc), grids), "grids": grids,
+        "cards": cards, "sheets": sheets,
         "net": {"word": net_word, "short": net_short, "name": net_name,
                 "pct": allow_pct, "pct_note": pct_note, "unit": unit,
                 "basis": pack.get("team_basis"), "low": off_low.get("low"),
