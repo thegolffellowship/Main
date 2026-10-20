@@ -268,7 +268,7 @@ conn.execute("DELETE FROM event_pairings WHERE event_id = 900 AND customer_id = 
 conn.commit()
 with contextlib.redirect_stdout(io.StringIO()):
     s3 = se.seed_round_from_pairings(900, "9")
-check("re-seed drops a player taken off the sheet who has no scores (Kerry 10/20, Paul Reed)",
+check("re-seed drops a player taken off the sheet (Kerry 10/20, Paul Reed)",
       [d["customer_id"] for d in s3.get("dropped_off_sheet", [])] == [102]
       and sorted(p["customer_id"] for p in se.get_entered_scores(900, s["round_id"])["rounds"][0]["players"]) == [101],
       s3)
