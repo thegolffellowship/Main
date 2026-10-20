@@ -264,6 +264,19 @@ check("shotgun: tee time is the one start clock", grp["tee_time"] == "5:30 PM", 
 with contextlib.redirect_stdout(io.StringIO()):
     s2 = se.seed_round_from_pairings(900, "9")
 check("re-seed reuses the round", s2["round_id"] == s["round_id"], s2)
+conn.execute("DELETE FROM event_pairings WHERE event_id = 900 AND customer_id = 102")
+conn.commit()
+with contextlib.redirect_stdout(io.StringIO()):
+    s3 = se.seed_round_from_pairings(900, "9")
+check("re-seed drops a player taken off the sheet who has no scores (Kerry 10/20, Paul Reed)",
+      [d["customer_id"] for d in s3.get("dropped_off_sheet", [])] == [102]
+      and sorted(p["customer_id"] for p in se.get_entered_scores(900, s["round_id"])["rounds"][0]["players"]) == [101],
+      s3)
+conn.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, player_name, cart_pos, customer_id) "
+             "VALUES (900, '9', 3, 'HOLE 4', 'Adam Baker', 2, 102)")
+conn.commit()
+with contextlib.redirect_stdout(io.StringIO()):
+    se.seed_round_from_pairings(900, "9")
 
 print("Lone Star Cup rounds from the dial, tees from lsc_tees (Track B #875/#876)")
 db.set_app_setting("lsc_matches", json.dumps({"event_id": 900, "sessions": [

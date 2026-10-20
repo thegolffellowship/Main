@@ -1151,6 +1151,31 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
                       "seat": p.get("cart_pos")} for p in g.get("players") or []],
             db_path=db_path)
         skipped += res.get("skipped_no_customer_id", [])
+    # A player taken OFF the sheet (credited / WD) leaves the card too (Kerry
+    # 2026-10-20, Paul Reed at a9.28: "I removed Paul Reed from the pairings
+    # and credited him ... the live scoring link still shows him"). Only a
+    # player with no score or mark is dropped; one who has played keeps his
+    # row (his card is a record) and is reported for a manager.
+    on_sheet = {int(p["customer_id"]) for g in groups for p in g.get("players") or []
+                if p.get("customer_id")}
+    dropped, kept_scored = [], []
+    with _closing(_conn(db_path)) as conn:
+        for row in conn.execute("SELECT customer_id, display_name FROM se_players WHERE round_id = ?",
+                                (rid,)).fetchall():
+            cid = int(row[0])
+            if cid in on_sheet:
+                continue
+            key = f"c:{cid}"
+            played = conn.execute(
+                "SELECT (SELECT COUNT(*) FROM se_hole_scores WHERE round_id = ? AND subject_key = ?) + "
+                "(SELECT COUNT(*) FROM se_hole_marks WHERE round_id = ? AND subject_key = ?)",
+                (rid, key, rid, key)).fetchone()[0]
+            if played:
+                kept_scored.append({"customer_id": cid, "name": row[1]})
+                continue
+            conn.execute("DELETE FROM se_players WHERE round_id = ? AND customer_id = ?", (rid, cid))
+            dropped.append({"customer_id": cid, "name": row[1]})
+        conn.commit()
     from email_parser.database import event_games_off
     if not event_games_off(evrow):        # no games, no team handicap (Kerry 10/8)
         set_game_handicaps(rid, {p["customer_id"]: p.get("team_handicap")
@@ -1162,6 +1187,10 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
            "course_holes": len(course_holes)}
     if skipped:
         out["skipped_no_customer_id"] = skipped
+    if dropped:
+        out["dropped_off_sheet"] = dropped
+    if kept_scored:
+        out["off_sheet_with_scores"] = kept_scored
     if len(course_holes) < n_holes:
         out["warning"] = (f"course card gave {len(course_holes)} of {n_holes} holes; "
                           "set par and stroke index before scoring")
