@@ -561,7 +561,7 @@
 {% endfor %}
 <div class="plog noprint">
   {{ sc.event.item_name }} · {{ sc.layout_meta.label }} · {{ 'one card per cart' if sc.grouping == 'cart' else 'one card per group' }} · {{ sc.net.name }} ·
-  pairings saved {{ sc.pairings_saved or '—' }} · handicaps as of {{ sc.handicap_as_of }} · printed {{ sc.printed_at }}
+  pairings saved {{ sc.pairings_saved or '—' }} · handicaps as of {{ sc.handicap_as_of }} · <span class="pstamp">printed {{ sc.printed_at }}</span>
   {% for l in sc.log %}<br>• {{ l }}{% endfor %}
 </div>
 {% endif %}

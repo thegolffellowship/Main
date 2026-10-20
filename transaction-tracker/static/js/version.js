@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.3";
+window.TGF_VERSION = "2.575.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.4",
+    date: "2026-10-20",
+    title: "Print pack re-sent for nothing: the scorecards' printed-at time",
+    changes: ["Kerry 10/20: \"what changed between 6 and 7\" / \"Do it now.\" Nothing had: the scorecards' footer prints 'printed <minute>' outside the pstamp span the once-per-change hash strips, so the pack's fingerprint moved every minute and the 6–9 AM routine re-sent an unchanged pack each hour. Found with the new diffself bridge (only the scorecards part's fingerprint moved between builds minutes apart). The stamp now sits inside the pstamp span. Guard test_print_pack.py."]
+  },
   {
     version: "2.575.3",
     date: "2026-10-20",

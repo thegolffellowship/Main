@@ -131,6 +131,10 @@ check("a course with a contact gets no morning pack, even after a change (Kerry 
 pp.course_contact_for_event = _orig_cc
 fetcher.send_mail_graph = orig
 
+check("a clock stamp in any pack part sits inside a pstamp span, so the once-per-change hash ignores it (Kerry 10/20)",
+      '<span class="pstamp">printed {{ sc.printed_at }}</span>' in open("templates/scorecards.html").read()
+      and pp._hash_view('a <span class="pstamp">printed 2026-10-20 12:05 UTC</span> b')
+      == pp._hash_view('a <span class="pstamp">printed 2026-10-20 13:07 UTC</span> b'))
 print("4. Graph attachments")
 src = open("email_parser/fetcher.py", encoding="utf-8").read()
 check("send_mail_graph takes attachments as fileAttachment", "#microsoft.graph.fileAttachment" in src and "attachments: list | None = None" in src)
