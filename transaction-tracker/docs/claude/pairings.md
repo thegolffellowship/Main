@@ -2293,3 +2293,107 @@ Kerry, verbatim: "Only thing I'd like to add for rules is for 1st Timers/New Mem
 - **Every name** must be on `_event_roster_rows` and not already seated.
 - **Refused:** a started or past event.
 - **Default:** a dry run. `|apply` saves and returns the audit.
+
+
+## All events in history, solo carts by season, newer players in foursomes, the generation log (Kerry 2026-10-19)
+
+Kerry, verbatim (all ratified: "Fixes - I'm good with those"):
+- "You need to add ALL events into the pairings generator history...LSC too."
+- "I kind of like that newer players would be able to get foursomes where possible to maximize new connections."
+- On solo carts: "We need to look at season totals ... Definitely need to be counting our own."
+- "I definitely don't want someone to have 3 solo carts in a season before other qualified solo players have even one."
+- He wants the generator's reasoning logged so he can review it.
+
+The case was s9.28 TPC Canyons (event 3301, Tue 10/20). Kerry and Michael
+Mesa read 1 meeting but had also played two Lone Star Cup matches together;
+Michael Murphy (two GG solos, 9/22 and 9/29) and Mary Wade (three solos) were
+seated alone again; Kerry went out with Jeff Rideout a 3rd time.
+
+### History: every source (`_played_history_rows`)
+
+The ONE reader behind the pair counts, R-G cart counts, solo season totals and
+streaks (`_pair_counts_from_conn`, `_rode_counts_from_conn`,
+`_solo_season_from_conn`, `_solo_streaks_from_conn`):
+- `pairing_history` rows that are not the app's plans, played before today
+  (the 2026-09-08 rules unchanged): Golf Genius rows and the `entry` rows the
+  closeout writes.
+- **No double count:** an event with Golf Genius rows counts those only; its
+  `entry` rows are dropped.
+- **Entered groups not yet written** (an entry-era event the closeout has not
+  written, and every **Lone Star Cup** session) are computed from the
+  score-entry groups: `score_entry.rounds_index` names the rounds and
+  `score_entry.get_entered_scores` gives the groups (only score_entry.py
+  touches se_*). Rules from `closeout_checks.pairing_history_from_entry`: no
+  entered hole = played with nobody, PREVIEW rounds (label, `lscprev:`) never
+  count, seats 1&2 / 3&4 rode. A Cup session (`pairings_holes` `lsc:<id>`)
+  scores alternate shot as TEAM rows, so a team card counts its players as
+  played; Cup seats are match sides, not carts, so Cup pairs never count as a
+  shared cart or toward a solo cart. Cached per event per se version.
+- The History line on the cards, the audit and the generator all read it.
+
+### Solo carts by SEASON total (R-C)
+
+- `_solo_season_from_conn`: solo carts this calendar year, every round with a
+  cart record (Golf Genius tee sheet, entered groups written or live).
+  `_solo_streaks_from_conn` now reads the same rows (it read `gg_teesheet`
+  only, so every round from 10/13 was invisible).
+- **Seater:** seat 3 of a threesome costs `min(6 × season solos, 30)` (+2 if
+  the player rode alone last time). Still below the 1st Timer / First Year
+  terms (35-50), a request (100) and Match Play (1000).
+- **Composition:** the sheet cost (below) carries `1000 ** season solos` of the
+  qualified rider the seater puts in seat 3, so the threesomes are FORMED
+  around the fewest-solo qualified players: nobody qualified takes a solo
+  while another qualified player could take it at fewer. "Qualified" = not
+  `no_solo` (1st Timers and First Year members, rule 16).
+
+### The sheet cost, lexicographic (random mode)
+
+Per group, additive over the sheet, compared in this order:
+1. 1st Timer / First Year / guest misses (rules 14, 16, 18);
+2. lone <50 tee + leaderless group (rules 12, 7) — now strictly above repeats
+   (it was 999 per miss, below a 2nd-level repeat);
+3. solo seat by season total;
+4. repeats in sequence (`_repeat_cost`, deepest first);
+5. newer players (1Y, 1st Timer) outside a full-size group: "newer players
+   would be able to get foursomes where possible".
+
+Every restart is scored on it. After the restarts, **`_deep_improve`** (the
+final pass) tries pair swaps, then 3-way rotations, of unlocked players across
+groups, guarded so no rule-miss term grows, until no move lowers the cost
+(time cap 6 s, logged if hit).
+
+### Why Kerry + Rideout went out a 3rd time on 10/20
+
+Rule 7 (a captain or Ambassador in every group) dictated it. The 21-player
+field had seven leaders for six groups, and Jeff Rideout had played with every
+one of them at least twice this season (Sharitz 4, Vasquez 4, Baker 3,
+Mazanec 3, Wade 3, Young 2, Kerry 2). Rideout's zero-count partners were all
+newer players (Allen, Johnson, Mesa, Lewis, Copeland). So any group Rideout
+joined made a 3rd meeting with a leader, and Kerry (or Young) was the
+shallowest; the restarts and the repair passes kept the leader in. It was not
+the local search stalling. The log's `repeat_reasons` now says this for every
+repeat ("the cheapest split ... breaks: no captain or Ambassador (rule 7)").
+The missing Cup history also hid that Kerry + Mesa were at 3, not 1.
+
+### The generation log
+
+`generate_event_pairings` returns `result["gen_log"]` and keeps it in app
+setting `pairings_gen_log:<event_id>` (latest run only). Per holes set:
+`inputs` (history counts for every roster pair, solo season totals, streaks,
+flags: captains, Ambassadors, 1Y, 1st Timers, no_solo, solo_back_ok, lone
+guests, locked, requests), `passes` (each repair / swap pass of the winning
+restart with who moved and why, and every final-pass move with its cost
+change), `groups` (players, repeat depth and pairs, the solo rider and his
+season count, rule misses, cost), `final_cost`, `alternatives` (the cheapest
+distinct restarts) and `repeat_reasons`. The audit, the regroup dry run and
+`debug_generate_pairings` pass `save_log=False`.
+
+### Bridges
+
+- `scoring-pairings-gen-log:<event_id>` — the latest Generate's log.
+- `scoring-pairings-generate-preview:<event_id>` — runs the generator WITHOUT
+  saving anything (no `event_pairings`, no `blind_draws`, no log setting, no
+  action log) and returns the proposed groups, the cost, the audit's checks on
+  the proposed sheet (`event_pairing_audit(sheet=..., with_alternative=False)`,
+  with each solo rider's season count from every source) and the log.
+- Guard: `test_pairings_gen_fixes.py`.

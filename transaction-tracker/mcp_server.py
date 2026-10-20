@@ -1949,6 +1949,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    sheet with the generator (every rule) and,
                                    with |apply, save it; refused once the
                                    event has started (Kerry 2026-10-12)
+      scoring-pairings-generate-preview:<event_id>  run the generator WITHOUT
+                                   saving anything (no sheet, no blinds, no log
+                                   setting): proposed groups, cost, audit
+                                   flags on the proposed sheet, the gen log
+      scoring-pairings-gen-log:<event_id>  the latest Generate's reasoning
+                                   (app setting pairings_gen_log:<id>)
       scoring-pairings-add-group:<event_id>|<a>;<b>[;...][|apply]  append
                                    one hand-built group on the next slot
       scoring-pairings-remove:<event>|<player>[|dry]  pull one player from
@@ -6429,6 +6435,60 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _apply and "error" not in _res:
                 _audit("scoring-pairings-swap", f"event {_ev} swap {_a}<->{_b}")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-pairings-gen-log":
+            # "<event_id>" (Kerry 2026-10-19: the generator's reasoning,
+            # logged for review). The latest Generate's log from app setting
+            # pairings_gen_log:<event_id>. Read-only.
+            _a = (arg or "").strip()
+            if not _a.isdigit():
+                return json.dumps({"error": "give scoring-pairings-gen-log:<event_id>"})
+            _raw = db.get_app_setting(f"pairings_gen_log:{int(_a)}")
+            if not _raw:
+                return json.dumps({"event_id": int(_a), "log": None,
+                                   "note": "no Generate has run for this event since the log was added"})
+            try:
+                return json.dumps({"event_id": int(_a), "log": json.loads(_raw)}, indent=2, default=str)
+            except ValueError:
+                return json.dumps({"event_id": int(_a), "log_raw": _raw})
+        if cmd == "scoring-pairings-generate-preview":
+            # "<event_id>" (Kerry 2026-10-19). Runs the generator exactly as
+            # the 5 PM routine / Generate does (random, partner requests
+            # protected) WITHOUT saving anything: no event_pairings, no
+            # blind_draws, no gen-log setting, no action log. Returns the
+            # proposed groups, the cost summary, the audit's checks applied
+            # to the proposed sheet, and the generation log.
+            _a = (arg or "").strip()
+            if not _a.isdigit():
+                return json.dumps({"error": "give scoring-pairings-generate-preview:<event_id>"})
+            _eid = int(_a)
+            try:
+                res = db.generate_event_pairings(_eid, mode="random", protect_partner_requests=True,
+                                                 save_log=False)
+            except ValueError as e:
+                return json.dumps({"error": str(e)})
+            sets = {h: res[h] for h in ("9", "18") if res.get(h)}
+            _glog = res.get("gen_log") or {}
+            out = {"event_id": _eid, "preview": True, "saved": False,
+                   "notes": res.get("mp_notes") or [],
+                   "groups": {h: [{"slot": g.get("slot_label"),
+                                   "players": [p["name"] for p in sorted(g["players"], key=lambda p: p["cart_pos"])]}
+                                  for g in gs] for h, gs in sets.items()},
+                   "cost": {h: (v or {}).get("final_cost") for h, v in (_glog.get("holes") or {}).items()}}
+            try:
+                from email_parser.pairings_audit import event_pairing_audit
+                _au = event_pairing_audit(_eid, sheet=sets, with_alternative=False)
+                out["audit"] = {"summary": _au.get("summary"), "flags": _au.get("flags"),
+                                "repeats": _au.get("repeats"),
+                                "solo_carts": [{"player": p["name"],
+                                                "season_solos_all_sources": (p.get("solo_history") or {}).get("season_solos_all_sources")}
+                                               for g in _au.get("groups") or [] for c in g.get("carts") or []
+                                               if len(c) == 1 and len(g.get("players") or []) > 1
+                                               for p in (_au.get("players") or []) if p["name"] == c[0]]}
+            except Exception as e:  # noqa: BLE001 — the preview still returns the sheet
+                import traceback as _tb
+                out["audit"] = {"error": str(e), "where": _tb.format_exc()[-600:]}
+            out["gen_log"] = _glog
+            return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-pairings-generate":
             # "<event_id>[|apply]" (Kerry 2026-10-12: "Deploy and then
             # re-generate yourself and review it against our rules."). The

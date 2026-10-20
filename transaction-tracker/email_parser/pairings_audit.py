@@ -29,6 +29,10 @@ from __future__ import annotations
 BACK_BAND = "<50"
 
 
+class _NoAlt(Exception):
+    pass
+
+
 def _band(tee) -> str:
     return str(tee or "").strip()
 
@@ -39,7 +43,11 @@ def _carts(players: list) -> list[list]:
     return [c for c in (ps[0:2], ps[2:]) if c]
 
 
-def event_pairing_audit(event_id: int, db_path=None) -> dict:
+def event_pairing_audit(event_id: int, db_path=None, sheet: dict | None = None,
+                        with_alternative: bool = True) -> dict:
+    """`sheet` (2026-10-19): audit a PROPOSED sheet ({"9": [groups], "18": [...]},
+    the generator's shape) instead of the saved one -- the preview bridge.
+    `with_alternative=False` skips running the generator again."""
     from email_parser import database as db
     from email_parser.ambassadors import chapter_ambassadors
     from email_parser.cos_reads import pairing_history_view
@@ -107,7 +115,19 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
                     gates[c] = f"unread: {e}"
     year = int(ev_date[:4]) if ev_date[:4].isdigit() else None
     counts = db.get_pairing_history_counts(year=year, db_path=db_path, exclude_event_id=event_id)
-    sheet = db.get_event_pairings(event_id, db_path=db_path, roster_rows=roster, hcp_map=hcp)
+    proposed = sheet is not None
+    if proposed:
+        _ids = {K(r.get("customer") or ""): r.get("customer_id") for r in roster}
+        sheet = {h: [{**g, "players": [{**p, "customer_id": p.get("customer_id") or _ids.get(K(p.get("name") or ""))}
+                                         for p in g.get("players", [])]}
+                     for g in gs] for h, gs in sheet.items() if h in ("9", "18") and isinstance(gs, list)}
+    else:
+        sheet = db.get_event_pairings(event_id, db_path=db_path, roster_rows=roster, hcp_map=hcp)
+    try:
+        with db._connect(db_path) as _sc:
+            season_solos = db._solo_season_from_conn(_sc, year=year, exclude_event_id=event_id)
+    except Exception:  # noqa: BLE001
+        season_solos = {}
     requests = db.get_event_partner_requests(event_id, db_path=db_path,
                                              roster_rows=roster).get("requests", [])
     try:
@@ -144,6 +164,9 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
                               "solo_carts": sum(1 for e in rec if e.get("solo_cart")),
                               "solo_streak_before_tonight": streak,
                               "last_solo": next((e.get("date") for e in rec if e.get("solo_cart")), None)}
+            # every source (Golf Genius tee sheets AND entered groups), Kerry 2026-10-19
+            _nm = (by_cid.get(cid) or {}).get("customer")
+            solo_hist[cid]["season_solos_all_sources"] = int(season_solos.get(K(_nm or ""), 0))
         except Exception as e:  # noqa: BLE001
             solo_hist[cid] = {"error": str(e)}
 
@@ -337,7 +360,9 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
     # the generator's alternative (read-only: generate_event_pairings never saves)
     alt = {}
     try:
-        gen = db.generate_event_pairings(event_id, db_path=db_path)
+        if not with_alternative:
+            raise _NoAlt()
+        gen = db.generate_event_pairings(event_id, db_path=db_path, save_log=False)
         for holes in ("9", "18"):
             if holes not in gen:
                 continue
@@ -347,6 +372,8 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
                 sc = sum(prior(ns[i], ns[j]) for i in range(len(ns)) for j in range(i + 1, len(ns)))
                 gg.append({"slot_label": g.get("slot_label"), "players": ns, "pair_score": sc})
             alt[holes] = {"groups": gg, "total_pair_score": sum(x["pair_score"] for x in gg)}
+    except _NoAlt:
+        alt = {"skipped": "proposed sheet: the preview is the generator's own sheet"}
     except Exception as e:
         alt = {"error": str(e)}
 
@@ -390,7 +417,7 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
         "flags": flags,
         "summary": {"groups": len(groups_out), "players": len(players_out),
                     "sheet_pair_score": sheet_score,
-                    "generator_pair_score": {h: v.get("total_pair_score") for h, v in alt.items()} if "error" not in alt else alt,
+                    "generator_pair_score": {h: v.get("total_pair_score") for h, v in alt.items()} if ("error" not in alt and "skipped" not in alt) else alt,
                     "hard_flags": sum(1 for f in flags if f["kind"] == "hard"),
                     "soft_flags": sum(1 for f in flags if f["kind"] == "soft"),
                     "repeat_pairs": len(repeats),

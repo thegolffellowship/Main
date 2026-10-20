@@ -810,6 +810,22 @@ def round_event_id(round_id: int, db_path=None) -> int | None:
     return int(r[0]) if r else None
 
 
+def rounds_index(db_path=None) -> list[dict]:
+    """Every score-entry round, one row each: {round_id, event_id,
+    round_date, label, pairings_holes, status}. Read-only. The pairings
+    history (Kerry 2026-10-19: "You need to add ALL events into the pairings
+    generator history...LSC too.") reads it to find played entry rounds and
+    Lone Star Cup sessions (`pairings_holes` 'lsc:<session>'); the groups
+    themselves still come through get_entered_scores."""
+    with _closing(_conn(db_path)) as conn:
+        return [{"round_id": r["id"], "event_id": r["event_id"],
+                 "round_date": r["round_date"], "label": r["label"],
+                 "pairings_holes": r["pairings_holes"], "status": r["status"]}
+                for r in conn.execute(
+                    "SELECT id, event_id, round_date, label, pairings_holes, status "
+                    "FROM se_rounds ORDER BY id")]
+
+
 def event_version(event_id: int, db_path=None) -> int:
     with _closing(_conn(db_path)) as conn:
         r = conn.execute("SELECT version FROM se_event_versions WHERE event_id = ?",

@@ -62941,7 +62941,8 @@ def _regroup_after_removal(event_id: int, holes: str, groups: list,
         out["reason"] = "group count already fits the field"
         return out
     try:
-        res = generate_event_pairings(event_id, mode="random", db_path=db_path)
+        res = generate_event_pairings(event_id, mode="random", db_path=db_path,
+                                      save_log=False)
     except Exception as e:
         logger.exception("regroup after removal failed for event %s", event_id)
         out["reason"] = f"generator failed: {e}"
@@ -68172,36 +68173,222 @@ def get_pairing_history_counts(year: int | None = None, db_path=None,
                                       exclude_event_id=exclude_event_id)
 
 
+def _conn_db_path(conn):
+    """The file a connection is open on, so a history read can hand the
+    same database to the score-entry reader (which opens its own)."""
+    try:
+        for r in conn.execute("PRAGMA database_list").fetchall():
+            if (r[1] if not hasattr(r, "keys") else r["name"]) == "main":
+                return (r[2] if not hasattr(r, "keys") else r["file"]) or None
+    except Exception:
+        return None
+    return None
+
+
+#: Pair rows that carry a CART record: the Golf Genius tee sheet (seat order
+#: 1&2 / 3&4) and the entered groups (seat order). `gg_teamnet` rows say who
+#: played together but not who rode together (`rode` there is always 0).
+_CART_SOURCES = ("gg_teesheet", "entry", "se")
+
+#: {(db file, event_id, se version): [pair rows]} -- the entered groups of
+#: one event, read once per score-entry version (`score_entry.event_version`
+#: bumps on every write, so a new score re-reads; a frozen event never does).
+_ENTRY_PAIRS_CACHE: dict = {}
+
+
+def _entry_pairs_for_event(conn, event_id: int, rounds: list[dict], db_path) -> list[dict]:
+    """Who played together in one event's ENTERED groups, one row per pair
+    per score-entry round. Read only through score_entry.get_entered_scores
+    (only score_entry.py touches the se_* tables; test_score_entry.py).
+
+    Kerry 2026-10-19: "You need to add ALL events into the pairings generator
+    history...LSC too." The rules are closeout_checks.pairing_history_from_entry's:
+    a player with no entered hole played with nobody; preview rounds never
+    count; seats 1&2 / 3&4 rode together. Two additions:
+      * a Lone Star Cup session (`pairings_holes` 'lsc:<session>') scores
+        alternate-shot and best-ball sides as TEAM rows, so a player counts
+        as having played when his own card OR a team card he is on has a
+        score. The cup's seat order is the match dial's (sides), not a cart,
+        so cup pairs carry rode=None: they count as played-with, never as a
+        cart and never toward a solo cart.
+      * the round date is the round's own date (the Cup ran 10/9-10/11)."""
+    from email_parser import score_entry as se
+    from email_parser import entry_publish as ep
+    try:
+        ver = se.event_version(event_id, db_path=db_path)
+    except Exception:
+        ver = None
+    ck = (str(db_path or ""), int(event_id), ver)
+    if ver is not None and ck in _ENTRY_PAIRS_CACHE:
+        return _ENTRY_PAIRS_CACHE[ck]
+    want = {int(r["round_id"]): r for r in rounds}
+    read = se.get_entered_scores(int(event_id), db_path=db_path)
+    out: list[dict] = []
+    cids_all: set = set()
+    per_round = []
+    for rnd in read.get("rounds") or []:
+        meta = want.get(int(rnd["round_id"]))
+        if meta is None or ep._is_preview(rnd):
+            continue
+        ph = str(meta.get("pairings_holes") or "").lower()
+        if ph.startswith("lscprev:"):
+            continue
+        cup = ph.startswith("lsc:")
+        team_played: set = set()
+        for t in rnd.get("teams") or []:
+            if any(v is not None for v in (t.get("scores") or {}).values()):
+                team_played.update(c for c in (t.get("customer_ids") or []) if c)
+        groups: dict = {}
+        for p in rnd.get("players") or []:
+            cid = p.get("customer_id")
+            if not cid:
+                continue
+            played = (any(v is not None for v in (p.get("scores") or {}).values())
+                      or cid in team_played)
+            if played:
+                groups.setdefault(p.get("group_id"), []).append(int(cid))
+        per_round.append((rnd, meta, cup, groups))
+        cids_all.update(c for g in groups.values() for c in g)
+    names = {}
+    if cids_all:
+        ids = sorted(cids_all)
+        for r in conn.execute(
+                "SELECT customer_id, TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS nm "
+                f"FROM customers WHERE customer_id IN ({','.join('?' * len(ids))})", ids):
+            if (r["nm"] or "").strip():
+                names[int(r["customer_id"])] = r["nm"]
+    for rnd, meta, cup, groups in per_round:
+        date = str(rnd.get("date") or meta.get("round_date") or "")[:10]
+        for g in groups.values():
+            for i in range(len(g)):
+                for j in range(i + 1, len(g)):
+                    a, b = g[i], g[j]
+                    if a not in names or b not in names:
+                        continue
+                    out.append({"a": names[a], "b": names[b], "a_id": a, "b_id": b,
+                                "round": f"se:{rnd['round_id']}", "date": date,
+                                "rode": None if cup else (1 if i // 2 == j // 2 else 0),
+                                "source": "lsc_cup" if cup else "se", "cup": cup})
+    if ver is not None:
+        if len(_ENTRY_PAIRS_CACHE) > 400:
+            _ENTRY_PAIRS_CACHE.clear()
+        _ENTRY_PAIRS_CACHE[ck] = out
+    return out
+
+
+def _played_history_rows(conn, year: int | None = None,
+                         exclude_event_id: int | None = None,
+                         with_entry: bool = True) -> list[dict]:
+    """EVERY played pairing on record, one row per pair per round:
+    {a, b (display names), ka, kb (_pair_key_name keys), event_id, round,
+    date, rode (1 / 0 / None = no cart record), source}.
+
+    Kerry 2026-10-19: "You need to add ALL events into the pairings
+    generator history...LSC too." The one reader behind the pair counts,
+    the cart (R-G) counts, the solo-cart season totals and the streaks:
+      1. `pairing_history` rows that are not the app's plans (Golf Genius
+         rows and the entered groups written by the closeout), played
+         before today, Central -- the 2026-09-08 rules, unchanged;
+      2. an event that has Golf Genius rows AND entry rows counts its
+         Golf Genius rows only (never twice);
+      3. every played score-entry round with no rows yet -- the entry-era
+         events the closeout has not written and the Lone Star Cup match
+         sessions -- computed from the entered groups
+         (`_entry_pairs_for_event`), never for an event Golf Genius covers.
+    `year` limits to that calendar year (None = every year, as R-G uses).
+    The event being generated for is never its own history."""
+    _ensure_pairing_tables(conn)
+    today = today_central_str()
+    q = ("SELECT player_a, player_b, event_id, event_date, COALESCE(rode, 0) AS rode, "
+         "lower(COALESCE(source, 'app')) AS src, round_id "
+         "FROM pairing_history ph "
+         "WHERE ph.event_date < ? "
+         "AND lower(COALESCE(ph.source, 'app')) <> 'app' "
+         "AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)")
+    args: list = [today, exclude_event_id, exclude_event_id]
+    if year is not None:
+        q += " AND ph.event_date BETWEEN ? AND ?"
+        args += [f"{year}-01-01", f"{year}-12-31"]
+    raw = [dict(r) for r in conn.execute(q, args).fetchall()]
+    gg_events = {r["event_id"] for r in raw if r["src"] != "entry"}
+    rows: list[dict] = []
+    entry_rounds: set = set()
+    for r in raw:
+        if r["src"] == "entry":
+            if r["event_id"] in gg_events:
+                continue                      # rule 2: Golf Genius owns the event
+            entry_rounds.add((r["event_id"], str(r["round_id"] or "")))
+        rode = (int(r["rode"]) if r["src"] in _CART_SOURCES else None)
+        rows.append({"a": r["player_a"], "b": r["player_b"],
+                     "ka": _pair_key_name(r["player_a"]), "kb": _pair_key_name(r["player_b"]),
+                     "event_id": r["event_id"], "round": str(r["round_id"] or ""),
+                     "date": str(r["event_date"] or "")[:10], "rode": rode, "source": r["src"]})
+    if not with_entry:
+        return rows
+    db_path = _conn_db_path(conn)
+    try:
+        from email_parser import score_entry as se
+        idx = se.rounds_index(db_path=db_path)
+    except Exception:
+        logger.exception("pairing history: score-entry index unavailable (non-fatal)")
+        return rows
+    ev_dates = {}
+    by_event: dict = {}
+    for rd in idx:
+        eid = rd.get("event_id")
+        if eid is None or (exclude_event_id is not None and int(eid) == int(exclude_event_id)):
+            continue
+        if eid in gg_events:
+            continue
+        if (eid, f"se:{rd['round_id']}") in entry_rounds:
+            continue
+        by_event.setdefault(int(eid), []).append(rd)
+    if not by_event:
+        return rows
+    ids = sorted(by_event)
+    for r in conn.execute(f"SELECT id, event_date FROM events WHERE id IN ({','.join('?' * len(ids))})", ids):
+        ev_dates[int(r["id"])] = str(r["event_date"] or "")[:10]
+    for eid, rds in by_event.items():
+        keep = []
+        for rd in rds:
+            d = str(rd.get("round_date") or ev_dates.get(eid) or "")[:10]
+            if not d or d >= today:
+                continue                       # played, not planned
+            if year is not None and d[:4] != str(year):
+                continue
+            keep.append(rd)
+        if not keep:
+            continue
+        try:
+            for p in _entry_pairs_for_event(conn, eid, keep, db_path):
+                if (eid, p["round"]) in entry_rounds:
+                    continue
+                rows.append({"a": p["a"], "b": p["b"], "ka": _pair_key_name(p["a"]),
+                             "kb": _pair_key_name(p["b"]), "event_id": eid,
+                             "round": p["round"], "date": p["date"] or ev_dates.get(eid, ""),
+                             "rode": p["rode"], "source": p["source"]})
+        except Exception:
+            logger.exception("pairing history: entered groups for event %s failed (non-fatal)", eid)
+    return rows
+
+
 def _pair_counts_from_conn(conn, year: int | None = None,
                            exclude_event_id: int | None = None) -> dict:
     """The pair-count query itself, on a connection the caller already
     holds. `get_pairing_history_counts` (generator) and the /pairings GET
     (the History line on the cards) both read THIS — one set of rules
     about what counts, so the sheet and the card can never disagree.
-    The docstring above is the contract."""
+    The docstring above is the contract; since 2026-10-19 the rows are
+    `_played_history_rows` (every source, the Lone Star Cup included)."""
     if year is None:
         year = today_central().year
-    year_start = f"{year}-01-01"
-    year_end = f"{year}-12-31"
-    today = today_central_str()
-    _ensure_pairing_tables(conn)
-    rows = conn.execute(
-        """
-        SELECT player_a, player_b, COUNT(*) as cnt
-        FROM pairing_history ph
-        WHERE event_date BETWEEN ? AND ?
-          AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
-          AND ph.event_date < ?                  -- played, not planned
-          AND COALESCE(ph.source, 'app') <> 'app'  -- GG is the record
-        GROUP BY player_a, player_b
-        """,
-        (year_start, year_end, exclude_event_id, exclude_event_id, today),
-    ).fetchall()
     counts: dict = {}
-    for r in rows:
-        a, b = _pair_key_name(r["player_a"]), _pair_key_name(r["player_b"])
+    for r in _played_history_rows(conn, year=year, exclude_event_id=exclude_event_id):
+        a, b = r["ka"], r["kb"]
+        if not a or not b or a == b:
+            continue
         key = (min(a, b), max(a, b))
-        counts[key] = counts.get(key, 0) + r["cnt"]
+        counts[key] = counts.get(key, 0) + 1
     return counts
 
 
@@ -68214,46 +68401,42 @@ def _rode_counts_from_conn(conn, exclude_event_id: int | None = None) -> dict:
     only, never the app's own saved sheets), across all years: a shared
     cart is a shared cart whenever it was. `rode` is the tee-sheet seat
     order (1&2 / 3&4) for Golf Genius rows and the entered groups' seat
-    order for `entry` rows after the entry-record cutover."""
-    _ensure_pairing_tables(conn)
-    rows = conn.execute(
-        """SELECT player_a, player_b, COUNT(*) AS cnt FROM pairing_history ph
-           WHERE COALESCE(ph.rode, 0) = 1
-             AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
-             AND ph.event_date < ?
-             AND lower(COALESCE(ph.source, 'app')) <> 'app'
-           GROUP BY player_a, player_b""",
-        (exclude_event_id, exclude_event_id, today_central_str())).fetchall()
+    order for entry rounds (written or read live, `_played_history_rows`)."""
     out: dict = {}
-    for r in rows:
-        a, b = _pair_key_name(r["player_a"]), _pair_key_name(r["player_b"])
+    for r in _played_history_rows(conn, year=None, exclude_event_id=exclude_event_id):
+        if r["rode"] != 1:
+            continue
+        a, b = r["ka"], r["kb"]
         key = (min(a, b), max(a, b))
-        out[key] = out.get(key, 0) + r["cnt"]
+        out[key] = out.get(key, 0) + 1
     return out
+
+
+def _cart_rounds_from_rows(rows: list[dict]) -> dict:
+    """{player key: {(date, event_id, round): rode with anyone}} over the
+    rows that carry a cart record. A round where the player has pair rows
+    but no rode partner is a SOLO CART."""
+    rounds: dict = {}
+    for r in rows:
+        if r["rode"] is None:
+            continue
+        ek = (r["date"], r["event_id"], r["round"])
+        for k in (r["ka"], r["kb"]):
+            d = rounds.setdefault(k, {})
+            d[ek] = d.get(ek, False) or bool(r["rode"])
+    return rounds
 
 
 def _solo_streaks_from_conn(conn, exclude_event_id: int | None = None) -> dict:
     """R-C (Kerry 2026-10-06, Olympia Hills, event 3308: Michael Murphy rode
     alone 9/22 and 9/29 and was seated alone again). {name key: how many of
-    the player's most recent played rounds in a row he rode ALONE}. Same
-    record as `cos_reads.pairing_history_view`'s cart_record: Golf Genius
-    tee-sheet rows on played dates; a round with pair rows but no `rode`
-    partner is a solo cart."""
-    _ensure_pairing_tables(conn)
-    rows = conn.execute(
-        """SELECT player_a, player_b, event_id, event_date, COALESCE(rode, 0) AS rode
-             FROM pairing_history
-            WHERE lower(COALESCE(source, '')) = 'gg_teesheet'
-              AND event_date < ?
-              AND (? IS NULL OR event_id IS NULL OR event_id <> ?)""",
-        (today_central_str(), exclude_event_id, exclude_event_id)).fetchall()
-    rounds: dict = {}            # key -> {(date, event_id): rode_any}
-    for r in rows:
-        for nm in (r["player_a"], r["player_b"]):
-            k = _pair_key_name(nm)
-            ek = (str(r["event_date"] or ""), r["event_id"])
-            d = rounds.setdefault(k, {})
-            d[ek] = d.get(ek, False) or bool(r["rode"])
+    the player's most recent played rounds in a row he rode ALONE}. Since
+    2026-10-19 every round with a cart record counts (Golf Genius tee sheet
+    AND the entered groups); it used to read the tee sheet only, so every
+    round from 10/13 on was invisible. The seater now ranks by the SEASON
+    total (`_solo_season_from_conn`); the streak stays as a tie-break."""
+    rounds = _cart_rounds_from_rows(
+        _played_history_rows(conn, year=None, exclude_event_id=exclude_event_id))
     out: dict = {}
     for k, d in rounds.items():
         n = 0
@@ -68264,6 +68447,23 @@ def _solo_streaks_from_conn(conn, exclude_event_id: int | None = None) -> dict:
         if n:
             out[k] = n
     return out
+
+
+def _solo_season_from_conn(conn, year: int | None = None,
+                           exclude_event_id: int | None = None) -> dict:
+    """{name key: solo carts this calendar year}. Kerry 2026-10-19: "We need
+    to look at season totals ... Definitely need to be counting our own."
+    and "I definitely don't want someone to have 3 solo carts in a season
+    before other qualified solo players have even one." Every played round
+    with a cart record: Golf Genius tee sheets, the entered groups (written
+    or read live). Lone Star Cup sessions and Golf Genius Team Net rows
+    carry no cart record and are left out."""
+    if year is None:
+        year = today_central().year
+    rounds = _cart_rounds_from_rows(
+        _played_history_rows(conn, year=year, exclude_event_id=exclude_event_id))
+    return {k: n for k, n in ((k, sum(1 for v in d.values() if not v))
+                              for k, d in rounds.items()) if n}
 
 
 def roster_rode_counts(conn, event_id: int, names) -> dict:
@@ -69298,7 +69498,7 @@ def debug_generate_pairings(event_id: int,
     history' from 'the UI passed locked seeds'."""
     counts = get_pairing_history_counts(db_path=db_path,
                                         exclude_event_id=int(event_id))
-    res = generate_event_pairings(int(event_id), db_path=db_path)
+    res = generate_event_pairings(int(event_id), db_path=db_path, save_log=False)
     out: dict = {"event_id": int(event_id), "n_pair_keys": len(counts)}
     for holes in ("9", "18"):
         if holes not in res:
@@ -70673,8 +70873,14 @@ def generate_event_pairings(
     mp_pairs: list | None = None,
     race_key: str | None = None,
     db_path=None,
+    save_log: bool = True,
 ) -> dict:
     """Generate pairings for an event and return (but do NOT save) the result.
+
+    save_log: keep this run's reasoning in app setting
+        `pairings_gen_log:<event_id>` (latest run only). The preview bridge
+        passes False so a preview writes nothing at all. The log is always
+        returned as result["gen_log"].
 
     mode: 'random' | 'abcd' | 'standings'
         'standings' orders by the chapter's points race with the LEADERS
@@ -70852,6 +71058,40 @@ def generate_event_pairings(
     except Exception:
         logger.exception("R-C solo history failed for event %s (non-fatal)", event_id)
         solo_streak = {}
+    # R-C by SEASON TOTAL (Kerry 2026-10-19: "We need to look at season
+    # totals ... Definitely need to be counting our own." / "I definitely
+    # don't want someone to have 3 solo carts in a season before other
+    # qualified solo players have even one."). Every played round with a
+    # cart record this calendar year, Golf Genius and entered groups alike.
+    _ev_year = (int(str(ev.get("event_date") or "")[:4])
+                if str(ev.get("event_date") or "")[:4].isdigit() else None)
+    try:
+        with _connect(db_path) as _rc:
+            solo_season = _solo_season_from_conn(_rc, year=_ev_year,
+                                                 exclude_event_id=event_id)
+    except Exception:
+        logger.exception("R-C season solos failed for event %s (non-fatal)", event_id)
+        solo_season = {}
+    # THE GENERATION LOG (Kerry 2026-10-19: he wants the generator's
+    # reasoning logged so he can review it). Filled as the run goes;
+    # returned as result["gen_log"] and kept in app setting
+    # `pairings_gen_log:<event_id>` (latest run only) unless the caller
+    # is a preview (`save_log=False`).
+    gen_log: dict = {
+        "event_id": int(event_id), "event": ev.get("item_name"),
+        "event_date": str(ev.get("event_date") or "")[:10], "mode": mode,
+        "generated_at": now_central().strftime("%Y-%m-%d %H:%M:%S"),
+        "seed": f"{PAIRINGS_SEED}:{int(event_id)}",
+        "rules_order": [
+            "Match Play opponents (opposite carts), seeds/locks, partner requests, host + guests",
+            "1st Timer / First Year / guest rules (rules 14, 16, 18, 18a)",
+            "lone <50 tee (rule 12), a captain or Ambassador in every group (rule 7)",
+            "solo cart by SEASON total: the fewest-solo qualified player takes it (R-C, Kerry 10/19)",
+            "repeats in sequence: deepest repeat first (REPEAT_LEVEL_BASE ** count)",
+            "newer players in foursomes (Kerry 10/19)",
+        ],
+        "holes": {},
+    }
 
     # ── Confirmed Match Play pairs: roster + holes validation ────────
     # (rule 8 amendment — opponents must share a holes bucket to share
@@ -71202,15 +71442,28 @@ def generate_event_pairings(
             n = [x + y for x, y in zip(_rule_misses(ng), _rule_misses(nh))]
             return all(nv <= ov for nv, ov in zip(n, o))
 
-        def _rules_fix(gp, improve: bool):
+        def _rules_fix(gp, improve: bool, trace: list | None = None):
+            def _t(stage, why, before, after):
+                if trace is not None:
+                    mv = _gen_moves(before, after)
+                    if mv:
+                        trace.append({"pass": stage, "why": why, "moved": mv})
+            _b = [list(g) for g in gp]
             gp, n1 = _repair_lone_back_tee(gp, tee_map, solo_ok, locked_names, pair_counts)
+            _t("lone back tee (rule 12)", "a <50 player alone on the back tees", _b, gp)
+            _b = [list(g) for g in gp]
             gp, n2 = _spread_leaders(gp, leaders, locked_names, pair_counts, tee_map, solo_ok)
+            _t("spread leaders (rule 7)", "a group without a captain or Ambassador", _b, gp)
+            _b = [list(g) for g in gp]
             gp, n3 = _pair_first_timers_with_ambassadors(
                 gp, ambassadors, first_timers, tee_map, locked_names, pair_counts, solo_ok)
+            _t("1st Timer + Ambassador (rule 14)", "a 1st Timer's group without an Ambassador", _b, gp)
             # Kerry 2026-10-12: first year players never alone, guests with
             # an Ambassador. Swaps only when the sheet's total rule misses
             # drop, so the rules above are never traded away for these.
+            _b = [list(g) for g in gp]
             gp = _fix_rule_misses_by_swap(gp, _rule_misses, locked_names, pair_counts)
+            _t("rule-miss swaps (rules 16, 18)", "a First Year player alone or a guest without an Ambassador", _b, gp)
             n4 = []
             for g in gp:
                 _m = _rule_misses(g)
@@ -71227,12 +71480,94 @@ def generate_event_pairings(
                 # The fixes swap by cheapest history but never re-optimise;
                 # on 10/5 that left Baker + Rideout together a 4th time. A
                 # second, guarded pass lowers repeats without undoing them.
+                _b = [list(g) for g in gp]
                 gp = _swap_improve(gp, pair_counts, locked_names, guard=_keeps_rules)
+                _t("guarded repeat swaps", "lower repeats without breaking a rule above", _b, gp)
             return gp, n1 + n2 + n3 + n4
 
+        # ── Sheet cost, lexicographic (Kerry 2026-10-19) ───────────────
+        # Per group, in priority order:
+        #   0 1st Timer / First Year / guest misses (rules 14, 16, 18)
+        #   1 lone <50 + leaderless group (rules 12, 7)
+        #   2 the solo seat by SEASON total: REPEAT_LEVEL_BASE ** solos of the
+        #     qualified player the seater puts in seat 3 of a threesome, so
+        #     one solo at 2 outweighs any number at 1, and nobody qualified
+        #     takes it while another qualified player could at fewer
+        #   3 repeats in sequence (sum of _repeat_cost)
+        #   4 newer players (1Y / 1st Timer) outside a full-size group
+        # Every term is additive over groups, so a move is judged on the
+        # groups it touches.
+        _new_k = {_pair_key_name(n) for n in newbies | first_timers}
+        _full = max_group
+
+        # Seat order within a settled group (foursomes already decided —
+        # this only decides who RIDES with whom): every group runs the
+        # exact seater. Priority when they conflict (Kerry 2026-07-21):
+        # MP opponents in OPPOSITE carts (seats 1/2 vs 3/4) > partner-
+        # request pairs in the SAME cart (requests supersede tees) >
+        # same-tee players share a cart. The old sort-by-tee ordering
+        # for unconstrained groups could split a tee pair across carts
+        # when a third tee was present — the seater can't. Rule 13 adds
+        # captain-with-newest and the driver order (seats 1 and 3).
+        # The solo seat reads SEASON totals since 2026-10-19.
+        def _seat(names: list[str]) -> list[str]:
+            return _arrange_group_seats(names, mp_opponents,
+                                        partner_adj, tee_map,
+                                        captains=captains, newbies=newbies,
+                                        experience=experience,
+                                        ambassadors=ambassadors,
+                                        first_timers=first_timers | lone_guests | early_new,
+                                        rode_before=rode_before,
+                                        solo_streak=solo_streak,
+                                        no_solo=no_solo,
+                                        amb_fit=amb_fit,
+                                        solo_season=solo_season)
+
+        _seat_memo: dict = {}
+
+        def _seat_sorted(g):
+            key = tuple(sorted(g))
+            r = _seat_memo.get(key)
+            if r is None:
+                r = _seat_memo[key] = _seat(list(key))
+            return r
+
+        def _solo_rider(g):
+            if len(g) != 3:
+                return None
+            return _seat_sorted(g)[2]
+
+        _gvec_memo: dict = {}
+
+        def _gvec(g) -> tuple:
+            key = tuple(sorted(g))
+            v = _gvec_memo.get(key)
+            if v is not None:
+                return v
+            m = _rule_misses(list(key))
+            rider = _solo_rider(list(key))
+            solo = 0
+            if rider is not None and _pair_key_name(rider) not in no_solo:
+                solo = REPEAT_LEVEL_BASE ** int(solo_season.get(_pair_key_name(rider), 0))
+            short = (sum(1 for n in key if _pair_key_name(n) in _new_k)
+                     if len(key) < _full else 0)
+            v = _gvec_memo[key] = (m[2] + m[3] + m[4], m[0] + m[1], solo,
+                                   _group_score(list(key), pair_counts), short)
+            return v
+
+        def _sheet_cost(gs) -> tuple:
+            tot = [0, 0, 0, 0, 0]
+            for g in gs:
+                for i, x in enumerate(_gvec(g)):
+                    tot[i] += x
+            return tuple(tot)
+
+
+        hlog: dict = {"passes": [], "alternatives": []}
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map, max_group)
-            groups_players, _rnotes2 = _rules_fix(groups_players, improve=False)
+            groups_players, _rnotes2 = _rules_fix(groups_players, improve=False,
+                                                  trace=hlog["passes"])
             mp_notes.extend(_rnotes2)
         elif mode == "standings":
             _rank_map, _race_used, _rnotes, _meta = _standings_rank_map(
@@ -71255,7 +71590,8 @@ def generate_event_pairings(
                 # silently producing an order that looks intentional.
                 groups_players = _abcd_groups(free_players, hcp_map, max_group)
                 mp_notes.append("Standings unavailable — used ABCD instead.")
-            groups_players, _rnotes2 = _rules_fix(groups_players, improve=False)
+            groups_players, _rnotes2 = _rules_fix(groups_players, improve=False,
+                                                  trace=hlog["passes"])
             mp_notes.extend(_rnotes2)
         else:
             # Best-of-K restarts + swap hill-climb. The greedy alone has a
@@ -71269,11 +71605,20 @@ def generate_event_pairings(
             # (Kerry 2026-10-06, Olympia Hills, event 3308): the same roster
             # gives the same sheet, and each candidate is scored as it will
             # actually be saved, not before rules 7/12/14 move people.
+            #
+            # Scored by `_sheet_cost` (2026-10-19): 1st Timer / First Year /
+            # guest misses, then lone-back + leader misses, then the solo
+            # seat by season total, then repeats in sequence, then newer
+            # players outside foursomes.
             rng = _random.Random(f"{PAIRINGS_SEED}:{int(event_id)}:{holes}")
             best_groups: list | None = None
-            best_score: int | None = None
+            best_score: tuple | None = None
             best_notes: list = []
+            best_trace: list = []
+            seen_alts: dict = {}
+            restarts_run = 0
             for _ in range(PAIRINGS_RESTARTS):
+                restarts_run += 1
                 cand = _random_groups(
                     free_players, partner_map, pair_counts,
                     protect_partner_requests, fixed_units=mp_units,
@@ -71281,42 +71626,44 @@ def generate_event_pairings(
                     max_group=max_group, rng=rng
                 )
                 cand = _swap_improve(cand, pair_counts, locked_names)
-                cand, cand_notes = _rules_fix(cand, improve=True)
+                _trace: list = []
+                cand, cand_notes = _rules_fix(cand, improve=True, trace=_trace)
                 # Kerry 2026-10-12: "1st Timer and First Year member rules do
                 # need to supercede count rules, only if there's a conflict."
-                # So their misses (terms 2 and 3) compare FIRST; repeat
-                # counts only break ties among sheets that miss them equally.
-                _m = [_rule_misses(g) for g in cand]
-                score = (sum(m[2] + m[3] + m[4] for m in _m),
-                         sum(m[0] + m[1] for m in _m) * _repeat_cost(1)
-                         + sum(_group_score(g, pair_counts) for g in cand))
+                # So their misses compare FIRST; repeat counts only break
+                # ties among sheets that miss them equally.
+                score = _sheet_cost(cand)
+                _sig = tuple(sorted(tuple(sorted(g)) for g in cand))
+                if _sig not in seen_alts:
+                    seen_alts[_sig] = (score, [list(g) for g in cand])
                 if best_score is None or score < best_score:
-                    best_groups, best_score, best_notes = cand, score, cand_notes
-                if best_score == (0, 0):
+                    best_groups, best_score, best_notes, best_trace = cand, score, cand_notes, _trace
+                if best_score == (0, 0, 0, 0, 0):
                     break
             groups_players = best_groups or []
             mp_notes.extend(best_notes)
-
-        # Seat order within a settled group (foursomes already decided —
-        # this only decides who RIDES with whom): every group runs the
-        # exact seater. Priority when they conflict (Kerry 2026-07-21):
-        # MP opponents in OPPOSITE carts (seats 1/2 vs 3/4) > partner-
-        # request pairs in the SAME cart (requests supersede tees) >
-        # same-tee players share a cart. The old sort-by-tee ordering
-        # for unconstrained groups could split a tee pair across carts
-        # when a third tee was present — the seater can't. Rule 13 adds
-        # captain-with-newest and the driver order (seats 1 and 3).
-        def _seat(names: list[str]) -> list[str]:
-            return _arrange_group_seats(names, mp_opponents,
-                                        partner_adj, tee_map,
-                                        captains=captains, newbies=newbies,
-                                        experience=experience,
-                                        ambassadors=ambassadors,
-                                        first_timers=first_timers | lone_guests | early_new,
-                                        rode_before=rode_before,
-                                        solo_streak=solo_streak,
-                                        no_solo=no_solo,
-                                        amb_fit=amb_fit)
+            hlog["restarts"] = restarts_run
+            hlog["passes"] = best_trace
+            hlog["best_restart_cost"] = _cost_view(best_score) if best_score else None
+            # The FINAL improvement pass (Kerry 2026-10-19, repeats in
+            # sequence near-hard): pair swaps and 3-way rotations of unlocked
+            # players across groups, guarded by the rules, until no move
+            # lowers the lexicographic cost.
+            if groups_players:
+                _b = [list(g) for g in groups_players]
+                groups_players, _moves_done, _capped = _deep_improve(
+                    groups_players, _gvec, _rule_misses, locked_names)
+                if _moves_done:
+                    hlog["passes"].append({
+                        "pass": "final improvement (swaps + 3-way rotations)",
+                        "why": "lower the sheet cost without breaking any rule",
+                        "moves": _moves_done, "moved": _gen_moves(_b, groups_players)})
+                if _capped:
+                    hlog["final_pass_capped"] = True
+            alts = sorted(seen_alts.values(), key=lambda t: t[0])
+            hlog["alternatives"] = [
+                {"cost": _cost_view(sc), "groups": gs}
+                for sc, gs in alts[:3]]
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -71524,6 +71871,54 @@ def generate_event_pairings(
 
         result[holes] = ordered
 
+        # ── Generation log for this holes set (Kerry 2026-10-19) ──────
+        try:
+            _roster_k = {_pair_key_name(n): n for n in all_names}
+            hlog["inputs"] = {
+                "players": len(all_names),
+                "history_counts": sorted(
+                    ({"a": _roster_k[a], "b": _roster_k[b], "count": n}
+                     for (a, b), n in pair_counts.items()
+                     if n and a in _roster_k and b in _roster_k),
+                    key=lambda r: (-r["count"], r["a"], r["b"])),
+                "solo_season": {n: int(solo_season.get(_pair_key_name(n), 0)) for n in all_names},
+                "solo_streak": {n: int(solo_streak.get(_pair_key_name(n), 0))
+                                for n in all_names if solo_streak.get(_pair_key_name(n))},
+                "flags": {
+                    "captains": sorted(captains), "ambassadors": sorted(ambassadors),
+                    "new_1y": sorted(newbies), "first_timers": sorted(first_timers),
+                    "no_solo": sorted(n for n in all_names if _pair_key_name(n) in no_solo),
+                    "solo_back_ok": sorted(solo_ok), "lone_guests": sorted(lone_guests),
+                    "locked": sorted(locked_names),
+                    "requests": sorted(" + ".join(sorted(_roster_k.get(k, k) for k in pr))
+                                       for pr in partner_adj),
+                },
+            }
+            _final_free = [[p["name"] for p in g["players"] if p.get("name")] for g in ordered]
+            hlog["groups"] = [_gen_group_view(g["slot_label"], names, _gvec, _rule_misses,
+                                              pair_counts, solo_season, no_solo, _seat_sorted)
+                              for g, names in zip(ordered, _final_free)]
+            _fc = _sheet_cost([n for n in _final_free if n])
+            hlog["final_cost"] = _cost_view(_fc)
+            hlog["repeat_reasons"] = _explain_repeats(
+                [n for n in _final_free if n], _gvec, _rule_misses, locked_names,
+                pair_counts, partner_adj)
+            if hlog.get("alternatives"):
+                hlog["vs_alternatives"] = (
+                    "the final sheet costs no more than the best restart; alternatives listed "
+                    "are the cheapest distinct restarts before the final pass")
+            gen_log["holes"][holes] = hlog
+        except Exception as e:                        # the log never sinks a Generate
+            logger.exception("pairings gen log failed for event %s", event_id)
+            gen_log["holes"][holes] = {"error": str(e)}
+
+    result["gen_log"] = gen_log
+    if save_log:
+        try:
+            set_app_setting(f"pairings_gen_log:{int(event_id)}",
+                            json.dumps(gen_log, default=str), db_path=db_path)
+        except Exception:
+            logger.exception("pairings gen log save failed for event %s (non-fatal)", event_id)
     result["slots_9"] = slots_9
     result["slots_18"] = slots_18
     if mp_pairs or mp_notes:
@@ -71857,6 +72252,225 @@ def _group_seat_misses(names: list[str], partner_adj: set, ambassadors: set,
     return (0 if solo_ok else 1), (0 if amb_ok else 1)
 
 
+_RULE_MISS_NAMES = ("lone <50 tee (rule 12)", "no captain or Ambassador (rule 7)",
+                    "1st Timer without an Ambassador (rule 14)",
+                    "First Year player alone (rule 16)",
+                    "guest without an Ambassador cart (rule 18)")
+
+
+def _cost_view(t) -> dict:
+    """A sheet / group cost tuple from `generate_event_pairings._sheet_cost`,
+    named for the generation log."""
+    t = tuple(t or (0, 0, 0, 0, 0))
+    return {"first_timer_first_year_guest_misses": t[0],
+            "lone_back_or_leaderless_misses": t[1],
+            "solo_season_cost": t[2],
+            "repeat_cost": t[3],
+            "new_players_outside_foursomes": t[4]}
+
+
+def _gen_moves(before: list[list[str]], after: list[list[str]]) -> list[str]:
+    """Who changed group between two versions of a sheet (groups keep their
+    index through every pass)."""
+    where_b = {n: i for i, g in enumerate(before) for n in g}
+    where_a = {n: i for i, g in enumerate(after) for n in g}
+    return [f"{n}: group {where_b[n] + 1} -> group {where_a[n] + 1}"
+            for n in sorted(where_a) if n in where_b and where_b[n] != where_a[n]]
+
+
+def _deep_improve(groups: list[list[str]], gvec, misses, locked: set,
+                  max_rounds: int = 40, time_cap: float = 6.0):
+    """THE FINAL IMPROVEMENT PASS (Kerry 2026-10-19, repeats in sequence
+    near-hard): pair swaps, then 3-way rotations, of unlocked players across
+    groups, taking any move that lowers the lexicographic sheet cost
+    (`gvec(group) -> tuple`, additive over groups) while no rule-miss term
+    (`misses(group)`) grows, until no move does. Group sizes are kept; a
+    locked player (request, host unit, Match Play) never moves. Returns
+    (groups, moves made, capped by time)."""
+    import time as _t
+    groups = [list(g) for g in groups]
+    lockk = {_pair_key_name(n) for n in locked}
+    t0 = _t.monotonic()
+    moves: list = []
+
+    def _free(n):
+        return _pair_key_name(n) not in lockk
+
+    def _sum(gs):
+        tot = None
+        for g in gs:
+            v = gvec(g)
+            tot = list(v) if tot is None else [a + b for a, b in zip(tot, v)]
+        return tuple(tot)
+
+    def _ok(old, new):
+        mo = [sum(x) for x in zip(*(misses(g) for g in old))]
+        mn = [sum(x) for x in zip(*(misses(g) for g in new))]
+        return all(b <= a for a, b in zip(mo, mn))
+
+    for _ in range(max_rounds):
+        if _t.monotonic() - t0 > time_cap:
+            return groups, moves, True
+        G = len(groups)
+        best = None
+        for gi in range(G):
+            for gj in range(gi + 1, G):
+                base = _sum([groups[gi], groups[gj]])
+                for xi, x in enumerate(groups[gi]):
+                    if not _free(x):
+                        continue
+                    for yi, y in enumerate(groups[gj]):
+                        if not _free(y):
+                            continue
+                        g2, h2 = list(groups[gi]), list(groups[gj])
+                        g2[xi], h2[yi] = y, x
+                        new = _sum([g2, h2])
+                        if new < base:
+                            d = tuple(a - b for a, b in zip(new, base))
+                            if (best is None or d < best[0]) and _ok(
+                                    [groups[gi], groups[gj]], [g2, h2]):
+                                best = (d, {gi: g2, gj: h2}, f"swap {x} <-> {y}")
+        if best is None:
+            # 3-way rotation: x (gi) -> gj, y (gj) -> gk, z (gk) -> gi
+            for gi in range(G):
+                for gj in range(G):
+                    if gj == gi:
+                        continue
+                    for gk in range(G):
+                        if gk in (gi, gj):
+                            continue
+                        base = _sum([groups[gi], groups[gj], groups[gk]])
+                        for xi, x in enumerate(groups[gi]):
+                            if not _free(x):
+                                continue
+                            for yi, y in enumerate(groups[gj]):
+                                if not _free(y):
+                                    continue
+                                for zi, z in enumerate(groups[gk]):
+                                    if not _free(z):
+                                        continue
+                                    a2, b2, c2 = list(groups[gi]), list(groups[gj]), list(groups[gk])
+                                    a2[xi], b2[yi], c2[zi] = z, x, y
+                                    new = _sum([a2, b2, c2])
+                                    if new < base and _ok([groups[gi], groups[gj], groups[gk]],
+                                                          [a2, b2, c2]):
+                                        best = (tuple(a - b for a, b in zip(new, base)),
+                                                {gi: a2, gj: b2, gk: c2},
+                                                f"rotate {x} -> group {gj + 1}, {y} -> group {gk + 1}, "
+                                                f"{z} -> group {gi + 1}")
+                                        break
+                                if best:
+                                    break
+                            if best:
+                                break
+                        if best:
+                            break
+                    if best:
+                        break
+                if best:
+                    break
+                if _t.monotonic() - t0 > time_cap:
+                    return groups, moves, True
+        if best is None:
+            break
+        d, repl, what = best
+        for i, g in repl.items():
+            groups[i] = g
+        moves.append({"move": what, "cost_change": _cost_view(d)})
+    return groups, moves, False
+
+
+def _gen_group_view(label, names: list[str], gvec, misses, pair_counts: dict,
+                    solo_season: dict, no_solo: set, seat_sorted=None) -> dict:
+    """One group of the final sheet for the generation log: repeat depth,
+    the solo seat and its season count, rule misses, cost."""
+    if not names:
+        return {"slot": label, "players": []}
+    v = gvec(names)
+    m = misses(names)
+    pairs = []
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            c = _pair_count(pair_counts, names[i], names[j])
+            if c:
+                pairs.append({"a": names[i], "b": names[j], "count": c, "tonight_makes": c + 1})
+    out = {"slot": label, "players": names, "size": len(names),
+           "repeat_depth": max([p["count"] for p in pairs], default=0),
+           "repeat_pairs": pairs,
+           "rule_misses": [_RULE_MISS_NAMES[i] for i, x in enumerate(m) if x],
+           "new_players_outside_foursomes": v[4], "cost": _cost_view(v)}
+    if len(names) == 3:
+        rider = names[2]
+        k = _pair_key_name(rider)
+        out["solo_cart"] = {"rider": rider, "season_solos_before": int(solo_season.get(k, 0)),
+                            "qualified": k not in no_solo}
+    return out
+
+
+def _explain_repeats(groups: list[list[str]], gvec, misses, locked: set,
+                     pair_counts: dict, partner_adj: set, limit: int = 12) -> list[dict]:
+    """For every repeat pair left on the final sheet, why it stayed: the
+    pair is locked, or the cheapest single swap that splits it and what it
+    would cost (the rule it would break, or a deeper repeat / a higher solo
+    season count it would create)."""
+    lockk = {_pair_key_name(n) for n in locked}
+    out = []
+    reps = []
+    for gi, g in enumerate(groups):
+        for i in range(len(g)):
+            for j in range(i + 1, len(g)):
+                c = _pair_count(pair_counts, g[i], g[j])
+                if c and frozenset((_pair_key_name(g[i]), _pair_key_name(g[j]))) not in partner_adj:
+                    reps.append((c, gi, g[i], g[j]))
+    reps.sort(key=lambda r: -r[0])
+    for c, gi, a, b in reps[:limit]:
+        row = {"pair": f"{a} + {b}", "count": c, "tonight_makes": c + 1}
+        movable = [n for n in (a, b) if _pair_key_name(n) not in lockk]
+        if not movable:
+            row["why"] = "both are bound (request, host unit or Match Play)"
+            out.append(row)
+            continue
+        base_v = None
+        best = None
+        for x in movable:
+            xi = groups[gi].index(x)
+            for hj, h in enumerate(groups):
+                if hj == gi:
+                    continue
+                for yi, y in enumerate(h):
+                    if _pair_key_name(y) in lockk:
+                        continue
+                    g2, h2 = list(groups[gi]), list(h)
+                    g2[xi], h2[yi] = y, x
+                    old_v = [a_ + b_ for a_, b_ in zip(gvec(groups[gi]), gvec(h))]
+                    new_v = [a_ + b_ for a_, b_ in zip(gvec(g2), gvec(h2))]
+                    mo = [p + q for p, q in zip(misses(groups[gi]), misses(h))]
+                    mn = [p + q for p, q in zip(misses(g2), misses(h2))]
+                    broke = [_RULE_MISS_NAMES[k] for k in range(5) if mn[k] > mo[k]]
+                    key = (len(broke), tuple(n - o for n, o in zip(new_v, old_v)))
+                    if best is None or key < best[0]:
+                        deep = max([_pair_count(pair_counts, p, q) for gg in (g2, h2)
+                                    for ii, p in enumerate(gg) for q in gg[ii + 1:]], default=0)
+                        best = (key, f"swap {x} <-> {y}", broke,
+                                new_v[2] - old_v[2], new_v[3] - old_v[3], deep)
+        if best is None:
+            row["why"] = "no unlocked player in another group to swap with"
+        else:
+            _, mv, broke, dsolo, drep, deep = best
+            if broke:
+                why = f"the cheapest split ({mv}) breaks: " + "; ".join(broke)
+            elif dsolo > 0:
+                why = f"the cheapest split ({mv}) hands the solo cart to a player with more season solos"
+            elif drep >= 0:
+                why = (f"the cheapest split ({mv}) costs as much or more in repeats "
+                       f"(deepest pair it leaves: {deep} prior)")
+            else:
+                why = f"the cheapest split ({mv}) raises a higher-priority cost"
+            row["why"] = why
+        out.append(row)
+    return out
+
+
 def _fix_rule_misses_by_swap(groups: list[list[str]], misses, locked: set,
                              pair_counts: dict, max_rounds: int = 40
                              ) -> list[list[str]]:
@@ -71919,7 +72533,8 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                          rode_before: set | None = None,
                          solo_streak: dict | None = None,
                          no_solo: set | None = None,
-                         amb_fit: dict | None = None) -> list[str]:
+                         amb_fit: dict | None = None,
+                         solo_season: dict | None = None) -> list[str]:
     """Seat order for a settled group — foursomes are already decided;
     this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
     (Kerry's cart-pair ruling).
@@ -72008,7 +72623,17 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                     cost += 0.4
         if len(perm) == 3:
             streak = solo_streak.get(keys[perm[2]], 0)
-            if streak >= 2:
+            if solo_season is not None:
+                # SEASON TOTALS (Kerry 2026-10-19: "We need to look at
+                # season totals" / "I definitely don't want someone to have
+                # 3 solo carts in a season before other qualified solo
+                # players have even one."): 6 per solo this season, capped
+                # at 30 so it stays below the 1st Timer / First Year terms
+                # (35-50); last-time-solo adds 2 as a tie-break.
+                cost += min(6 * int(solo_season.get(keys[perm[2]], 0)), 30)
+                if streak >= 1:
+                    cost += 2
+            elif streak >= 2:
                 cost += 30
             elif streak == 1:
                 cost += 2
