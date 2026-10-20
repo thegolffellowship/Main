@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.8";
+window.TGF_VERSION = "2.575.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.9",
+    date: "2026-10-20",
+    title: "Kerry CC'd on handicap and Venmo asks; member nav LEADERBOARD | PLAYERS | HANDICAPS",
+    changes: ["Kerry 10/20: \"CC me on any emails that go out for handicap/venmo for now.\" Every handicap-ask and payout-ask email copies app setting asks_cc (default kerry@thegolffellowship.com; set it to off to stop).", "Kerry 10/20: \"Make nav: LEADERBOARD | PLAYERS | HANDICAPS.\" The member shell's tabs now read in that order."]
+  },
   {
     version: "2.575.8",
     date: "2026-10-20",

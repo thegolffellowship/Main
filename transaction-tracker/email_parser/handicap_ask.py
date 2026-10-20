@@ -398,11 +398,12 @@ def _event_row(event_id: int, db_path=None) -> dict | None:
 def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:
     from email_parser import database as db
     if sender is None:
-        from email_parser.event_day_email import _creds, _graph_send
+        from email_parser.event_day_email import _creds, _graph_send, asks_cc
         creds = _creds()
         if not creds:
             return {"error": "Email credentials not configured on server"}
-        sender = lambda to, s, h: _graph_send(creds, to, s, h)   # noqa: E731
+        _cc = asks_cc(db_path)
+        sender = lambda to, s, h: _graph_send(creds, to, s, h, cc=_cc)   # noqa: E731
     sent, failed, held = [], [], []
     for p in people:
         ev = _event_row(p["event_id"], db_path)

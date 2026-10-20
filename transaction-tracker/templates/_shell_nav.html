@@ -40,10 +40,10 @@
 </header>
     {% elif not SHELL_SLIM %}
     <nav class="shell-member-tabs">
-        {# Order + labels (Kerry 2026-07-14): Spotlight first (member landing
-           = the individual player), Season Contests renamed Leaderboard. #}
-        <a href="/member/spotlight" class="{{ 'active' if SHELL_ACTIVE == 'spotlight' else '' }}">Players</a>
+        {# Order (Kerry 2026-10-20: "Make nav: LEADERBOARD | PLAYERS | HANDICAPS");
+           Season Contests is labelled Leaderboard (2026-07-14). #}
         <a href="/member/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Leaderboard</a>
+        <a href="/member/spotlight" class="{{ 'active' if SHELL_ACTIVE == 'spotlight' else '' }}">Players</a>
         <a href="/member/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
     </nav>
     {# R5 (Kerry-ratified #149/#151): one CTA → a two-button chooser sheet.

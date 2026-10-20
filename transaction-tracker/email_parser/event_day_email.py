@@ -896,11 +896,29 @@ def _creds():
     return c if all(c) else None
 
 
-def _graph_send(creds, to, subject, html_body) -> bool:
+def _graph_send(creds, to, subject, html_body, cc=None) -> bool:
     from email_parser import fetcher
     return fetcher.send_mail_graph(tenant_id=creds[0], client_id=creds[1],
                                    client_secret=creds[2], from_address=creds[3],
-                                   to_address=to, subject=subject, html_body=html_body)
+                                   to_address=to, subject=subject, html_body=html_body,
+                                   cc_address=cc or None)
+
+
+#: Kerry 2026-10-20: "CC me on any emails that go out for handicap/venmo for
+#: now". App setting `asks_cc` (default Kerry's address; "off" stops it) is
+#: copied on every handicap-ask and payout-ask email.
+ASKS_CC_DEFAULT = "kerry@thegolffellowship.com"
+
+
+def asks_cc(db_path=None) -> str | None:
+    from email_parser import database as db
+    try:
+        v = (db.get_app_setting("asks_cc", db_path=db_path) or "").strip()
+    except Exception:
+        v = ""
+    if v.lower() == "off":
+        return None
+    return v or ASKS_CC_DEFAULT
 
 
 def _ensure_scoring(event_id: int, db_path=None) -> None:
