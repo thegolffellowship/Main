@@ -38,5 +38,10 @@ check("a games change still resends",
       not pp._handicap_only_change(9, built(seats, {**base, "games-payouts": "q"}), db_path=DB))
 check("nothing on record: send as before", not pp._handicap_only_change(10, built(seats, base), db_path=DB))
 
+_bad = {"event": {"id": 9}, "scorecards": {"gaps": ["Adam Wilson (group 2): no playing handicap"]}}
+check("a pack whose scorecards have a gap is never mailed (course files)",
+      pp.send_course_files(_bad, db_path=DB).get("sent") is False and "gaps" in pp.send_course_files(_bad, db_path=DB)["why"])
+check("a render failure is held too", pp._unprintable({"scorecards": {"error": "boom"}}) is not None)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILED: {F}"))
 sys.exit(1 if F else 0)

@@ -468,6 +468,9 @@ def send_course_files(built: dict, db_path=None) -> dict:
     """Course Files to the course's primary TGF contact; its other TGF
     contacts and Kerry's pack recipients on CC."""
     ev = built.get("event") or {}
+    held = _unprintable(built)
+    if held:
+        return {"sent": False, "why": held}
     rec = course_recipients_for_event(ev, db_path)
     if not rec.get("ok"):
         # Kerry 10/19: "If there is a course contact - send to course contact
@@ -620,6 +623,20 @@ def split_print_pack(built: dict, only=None) -> list[tuple[str, bytes]]:
     if at != len(reader.pages):
         raise ValueError(f"page counts {at} do not match the pack's {len(reader.pages)} pages")
     return out
+
+
+def _unprintable(built: dict) -> str | None:
+    """Kerry 2026-10-20, after TPC got a Scorecards PDF that was the "These
+    cards can't print yet" page: "This is NOT good!!!" A pack whose scorecards
+    carry a gap (or failed to render) is never mailed; the gap page is for a
+    manager's screen, never an attachment to a course. (Staff copies still
+    carry it: it tells a manager what to fix.)"""
+    sc = built.get("scorecards") or {}
+    if sc.get("error"):
+        return f"scorecards did not render: {sc['error']}"
+    if sc.get("gaps"):
+        return "scorecards have gaps, nothing sent: " + "; ".join(sc["gaps"])[:400]
+    return None
 
 
 def send_print_pack_files(built: dict, to_address: str | None = None, db_path=None,
