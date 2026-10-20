@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.0";
+window.TGF_VERSION = "2.575.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.2",
+    date: "2026-10-20",
+    title: "No morning print pack when the course has a contact",
+    changes: ["Kerry 10/20, after two morning print packs per event (6:05 and 7:05 AM): \"Neither should have come because there are course contacts at both courses, so the only print packs that should have gone were theirs at noon with managers CCd.\" The 6–9 AM day-of print pack routine now skips any event whose course has a TGF course contact; those files go only through Course Files at noon (To the course, CC the managers). Events at a course with no contact keep the morning pack. Guard test_print_pack.py; events.md."]
+  },
   {
     version: "2.575.0",
     date: "2026-10-19",

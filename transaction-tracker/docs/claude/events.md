@@ -3233,6 +3233,12 @@ emailed to me."
   so the first check sends and the later ones re-send only a sheet that
   changed. (v2.465.0–2.468.4 sent the evening before, 5–10 PM; Kerry
   2026-09-21: "probably shouldn't be sent until 6:00a day of".)
+- **No morning pack when the course has a contact (v2.575.2, Kerry
+  2026-10-20):** "Neither should have come because there are course contacts
+  at both courses, so the only print packs that should have gone were theirs
+  at noon with managers CCd." The 6–9 AM routine skips an event whose course
+  has a TGF course contact (`course_contact_for_event`); that event's files
+  go only by Course Files at noon (To the course, CC the managers).
 - **SEND PACK (v2.468.5):** button on the pairings toolbar beside Starter
   Sheet / Cart Signs (saved sheet only) → `POST
   /api/events/<id>/print-pack/send` builds and mails the pack now and

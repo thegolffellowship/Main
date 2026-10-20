@@ -695,6 +695,19 @@ def send_due_print_packs(render, static_dir: str, db_path=None) -> list[dict]:
     from email_parser import database as db
     out = []
     for ev in print_packs_due(db_path):
+        # Kerry 2026-10-20: "Neither should have come because there are course
+        # contacts at both courses, so the only print packs that should have
+        # gone were theirs at noon with managers CCd." An event whose course
+        # has a TGF contact gets its files only through Course Files (To the
+        # course, CC the managers); this morning pack is for the rest.
+        try:
+            _contact = course_contact_for_event(ev, db_path=db_path)
+        except Exception:
+            _contact = None
+        if _contact:
+            out.append({"event_id": ev["id"], "sent": False,
+                        "why": f"course contact on file ({_contact}): Course Files go to the course"})
+            continue
         built = build_event_print_pack(render, ev["id"], static_dir, db_path=db_path)
         if not built or built.get("error"):
             out.append({"event_id": ev["id"], "sent": False,
