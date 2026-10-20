@@ -417,13 +417,17 @@
         <div class="wm">{{ sc.event.chapter }}</div>
       </div>
       <div class="mid">
-        <div class="course">{{ sc.event.course }}</div>
+        {# FULL COURSE NAME (Kerry 2026-10-19: "Seems like full course name should be
+           able to fit"): a long name steps its size down to fit beside the QR
+           instead of ending in an ellipsis. #}
+        {% set _cn = (sc.event.course or '')|length %}{% set _ccap = 22 if (c.qr and c.qr.svg) else 30 %}
+        <div class="course"{% if _cn > _ccap %} style="font-size:{{ '%.2f'|format(2.7 * _ccap / _cn) }}em"{% endif %}>{{ sc.event.course }}</div>
         <div class="date">{{ sc.event.date }}</div>
       </div>
       {% endif %}
       {% if c.qr and c.qr.svg %}
       <div class="qr"><div class="code">{{ c.qr.svg | safe }}</div>
-        <div class="cap">SCAN TO KEEP SCORE</div></div>
+        <div class="cap">SCAN TO SCORE</div></div>
       {% endif %}
       <div class="start"><div class="cap">START</div><div class="t">{{ c.start_time }}</div></div>
       <div class="badge-wrap"><div class="badge">{{ hcell(c.start_hole) }}</div>

@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.574.4";
+window.TGF_VERSION = "2.574.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.574.5",
+    date: "2026-10-19",
+    title: "Scorecards: full course name, SCAN TO SCORE",
+    changes: ["Kerry 10/19, s9.28 TPC cards: \"Seems like full course name should be able to fit. QR code text could just say SCAN TO SCORE.\" The card header's course name now steps its font size down when it is long (past 22 characters beside a QR, 30 without) instead of ending in an ellipsis, and the QR caption on scorecards, cart signs and the Cup's cart signs reads SCAN TO SCORE."]
+  },
   {
     version: "2.574.4",
     date: "2026-10-19",
