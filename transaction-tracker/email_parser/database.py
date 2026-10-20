@@ -72243,12 +72243,28 @@ def _group_seat_misses(names: list[str], partner_adj: set, ambassadors: set,
                    if frozenset((p[i], p[j])) in partner_adj)
 
     perms = [p for p in permutations(ks) if _keeps_requests(p)] or list(permutations(ks))
-    solo_ok = not want_solo or any(p[-1] not in no_solo for p in perms)
-    amb_ok = not want_amb or any(
-        all(any(_cart(j) == _cart(i) and p[j] in (amb_fit or {}).get(p[i], ambassadors)
+
+    def _solo_fine(p):
+        return not want_solo or p[-1] not in no_solo
+
+    def _amb_fine(p):
+        return not want_amb or all(
+            any(_cart(j) == _cart(i) and p[j] in (amb_fit or {}).get(p[i], ambassadors)
                 for j in range(len(p)) if j != i)
             for i in range(len(p)) if p[i] in need_amb_cart and p[i] not in ambassadors)
-        for p in perms)
+
+    # ONE seating has to keep both rules (s9.28 TPC, event 3301, 10/20: an
+    # Ambassador, a 1st Timer and a First Year player as a threesome passed
+    # each test on a different seating, so McCormick rode alone at 0 misses).
+    if any(_solo_fine(p) and _amb_fine(p) for p in perms):
+        return 0, 0
+    solo_ok = any(_solo_fine(p) for p in perms)
+    amb_ok = any(_amb_fine(p) for p in perms)
+    if solo_ok and amb_ok:
+        # Each rule alone can be kept but not both: the seater keeps the
+        # 1st Timer with his Ambassador (40 < 50), so the First Year player
+        # is the one who rides alone. Count that miss.
+        return 1, 0
     return (0 if solo_ok else 1), (0 if amb_ok else 1)
 
 
