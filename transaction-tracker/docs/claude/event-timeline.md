@@ -47,6 +47,15 @@ out a whole new set of updates. There would just be an email sent to that
 player and the players group letting them know they now have a 4th. In
 future these are push notifications as well as emails."
 
+Late add, WHICH SEAT (RULED, Kerry 2026-10-20): "we fill threesomes starting
+later to forward on a tee time start. So if it were automated, Pat would have
+automatically been entered into the 4:00p slot and then Adam in the 3:50 slot.
+If it's automation on a shotgun, then we would fill them from earlier holes to
+later holes. Like if there were threesomes on 3A, 4A & 4B, we'd fill them
+starting with 3A, then 4B, then 4A." Tee times: the latest threesome first,
+then earlier. Shotgun: the lowest hole first; on one hole, B before A.
+NOT BUILT YET (10/20: late adds sit in Unassigned until placed).
+
 Late add (RULED): the player gets their own info email right after signing
 up; the group is told they have a 4th and who; the course is told there is
 another player on that time, with that group's scorecard and cart sign only

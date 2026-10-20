@@ -269,10 +269,13 @@ def parse_venmo(text) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _upcoming_events(conn, today: str, days: int = LOOKAHEAD_DAYS) -> list[dict]:
+    # TODAY counts (Kerry 2026-10-20, Adam Wilson signed up at 9:02 AM for that
+    # evening: "there should be no limitations on an email being sent to
+    # someone that we don't have a handicap for...or Venmo").
     end = (date.fromisoformat(today) + timedelta(days=days)).isoformat()
     return [dict(r) for r in conn.execute(
         "SELECT * FROM events WHERE COALESCE(status, 'active') = 'active' "
-        "AND substr(event_date, 1, 10) > ? AND substr(event_date, 1, 10) <= ? "
+        "AND substr(event_date, 1, 10) >= ? AND substr(event_date, 1, 10) <= ? "
         "ORDER BY event_date, id", (today, end)).fetchall()]
 
 

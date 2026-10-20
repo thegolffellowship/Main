@@ -6679,9 +6679,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _holes = "18" if _fmt in ("18 Holes", "27 Holes") else "9"
             _seats = {db._pair_key_name(p["name"]): p for g in (_sheet.get(_holes) or [])
                       for p in g.get("players") or [] if p.get("name")}
+            # a roster player not yet seated (a late add, Kerry 10/20) may be
+            # placed too; everyone already seated must still appear
+            with db._connect() as _c:
+                _roster = {db._pair_key_name(r["name"]): r for r in db._event_roster_players(_c, _eid)}
+            _pool = dict(_roster)
+            _pool.update(_seats)
             _given = [db._pair_key_name(n) for g in _gnames for n in g]
-            _bad = {"not seated on the current sheet": [n for g in _gnames for n in g
-                                                        if db._pair_key_name(n) not in _seats],
+            _bad = {"not on the roster": [n for g in _gnames for n in g
+                                          if db._pair_key_name(n) not in _pool],
                     "named twice": sorted({n for n in _given if _given.count(n) > 1}),
                     "left out": [p["name"] for k, p in _seats.items() if k not in _given]}
             if any(_bad.values()):
@@ -6691,7 +6697,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
             for i, g in enumerate(_gnames):
                 _players = []
                 for j, n in enumerate(g):
-                    _old = _seats[db._pair_key_name(n)]
+                    _old = _pool[db._pair_key_name(n)]
                     _players.append({"name": _old["name"], "cart_pos": j + 1,
                                      "customer_id": _old.get("customer_id"),
                                      "tee_choice": _old.get("tee_choice"),

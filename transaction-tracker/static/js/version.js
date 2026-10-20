@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.7";
+window.TGF_VERSION = "2.575.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.8",
+    date: "2026-10-20",
+    title: "Handicap ask reaches same-day sign-ups; set-sheet seats late adds",
+    changes: ["Kerry 10/20, Adam Wilson signed up at 9:02 AM for that evening's s9.28 TPC and got no handicap/Venmo email: \"there should be no limitations on an email being sent to someone that we don't have a handicap for...or Venmo.\" The handicap ask's event window now includes TODAY (it read only events after today). Guard test_handicap_ask.py.", "scoring-pairings-set-sheet may now place a roster player who is not yet seated (a late add), so Kerry's placements can be saved; everyone already seated must still appear exactly once."]
+  },
   {
     version: "2.575.7",
     date: "2026-10-20",
