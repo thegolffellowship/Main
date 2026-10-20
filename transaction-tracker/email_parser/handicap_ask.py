@@ -456,6 +456,33 @@ def auto_check(now: datetime | None = None, db_path=None, sender=None) -> dict:
     return {"asks": a, "reminders": r}
 
 
+def resend(customer_id: int, kerry_ok_post, confirm: bool = False, db_path=None) -> dict:
+    """The ask again to ONE player, on Kerry's word (Kerry 2026-10-20: "Have
+    another email sent to Adam requesting his handicap & venmo. He said he
+    didn't receive the one this morning."). Same message and link as the
+    first ask, CC asks_cc; refused without a mailbox post carrying Kerry's
+    word; dry run without confirm; never to someone who has answered."""
+    from email_parser import database as db
+    from email_parser.customer_query import _kerry_ok
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+    finally:
+        conn.close()
+    if not ok:
+        return {"refused": f"rule 3b: {why}"}
+    if (load_state(db_path).get(str(int(customer_id))) or {}).get("answer"):
+        return {"refused": "already answered"}
+    person = next((c for c in candidates(db_path=db_path) if int(c["customer_id"]) == int(customer_id)), None)
+    if not person:
+        return {"refused": f"customer {customer_id} is not on an upcoming roster without a handicap"}
+    if not person.get("email"):
+        return {"refused": "no sendable email"}
+    if confirm is not True:
+        return {"dry_run": True, "authority": why, "to": person["email"], "event_id": person["event_id"]}
+    return {"authority": why, **_deliver([person], "ask", db_path=db_path)}
+
+
 def send_preview(event_id: int, to_address: str | None = None, kind: str = "ask",
                  db_path=None) -> dict:
     """ONE sample email to STAFF only, for Kerry's wording approval. Its link

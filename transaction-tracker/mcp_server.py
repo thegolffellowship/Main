@@ -7324,6 +7324,14 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_ha.send_preview(int(_p[1]), _addr, _kind), indent=2, default=str)
             if _p[0].lower() == "state":
                 return json.dumps(_ha.load_state(), indent=2, default=str)
+            if _p[0].lower() == "resend":
+                # "resend|<cid>|<kerry-ok post>[|confirm]" (Kerry 10/20, Adam)
+                if len(_p) < 3 or not _p[1].isdigit():
+                    return json.dumps({"error": "resend|<customer_id>|<kerry-ok post id>[|confirm]"})
+                db.log_agent_action("mcp-claude", "scoring-handicap-ask", arg)
+                return json.dumps(_ha.resend(int(_p[1]), int(_p[2].lstrip("#")),
+                                             confirm=(len(_p) > 3 and _p[3].lower() == "confirm")),
+                                  indent=2, default=str)
             _pl = _ha.plan()
             _slim = lambda xs: [{k: x.get(k) for k in ("customer_id", "name", "event_id", "event",
                                                         "event_date", "why")} for x in xs]

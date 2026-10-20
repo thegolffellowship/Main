@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.14";
+window.TGF_VERSION = "2.575.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.15",
+    date: "2026-10-20",
+    title: "Handicap ask: resend to one player on Kerry's word",
+    changes: ["Kerry 10/20: \"Have another email sent to Adam requesting his handicap & venmo. He said he didn't receive the one this morning.\" handicap_ask.resend(customer_id, post) sends the same ask and link again to one player (CC asks_cc), refused without a mailbox post carrying Kerry's word, dry run without confirm, never to someone who has answered. Bridge scoring-handicap-ask:resend|<cid>|<post>[|confirm]."]
+  },
   {
     version: "2.575.14",
     date: "2026-10-20",
