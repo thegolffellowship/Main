@@ -188,6 +188,19 @@ page = mts.render_teesheet(td)
 check("the member tee sheet lists every group with its anchor and players",
       'id="g1"' in page and 'id="g2"' in page and "Ann Able" in page and "Gus Gray" in page
       and "Hole 1A \u00b7 8:00 AM" in page, page[:300])
+check("each seated player shows his TGF index or No handicap (Kerry 10/20)",
+      all(("HCP " in r or "No handicap" in r) for r in page.split('<div class="p"')[1:]), page[:600])
+with db._connect(DB) as conn:
+    db._ensure_pairing_tables(conn)
+    _g1 = td["groups"][0]
+    conn.execute("INSERT INTO blind_draws (event_id, holes, group_num, cart_pos, player_name, slot_key, reason) "
+                 "VALUES (?, ?, ?, 4, 'Bob Blind', 'k', 'open_seat')",
+                 (EV, str(next(g for g in db.get_event_print_pack(EV, db_path=DB)["groups"]
+                               if g["group_num"] == _g1["group_num"])["holes"]), _g1["group_num"]))
+    conn.commit()
+_pb = mts.render_teesheet(mts.build_teesheet(EV, db_path=DB))
+check("a drawn blind shows with the reason", "BLIND</span> Bob Blind" in _pb and "Blind for the open seat" in _pb,
+      _pb[_pb.find('id="g1"'):][:900])
 check("…and carries no email, phone or money",
       "@" not in page.replace("@media", "") and "$" not in page, page)
 _pre = mts.render_teesheet(mts.build_teesheet(EV2, db_path=DB))
@@ -370,8 +383,8 @@ check("no line for a regular", ede.welcome_line("Al", None) == "")
 check("kinds", ede.newcomer_kind({"is_first_timer": True}) == "first"
       and ede.newcomer_kind({"current_player_status": "active_guest"}) == "guest"
       and ede.newcomer_kind({"is_new": True}) == "new" and ede.newcomer_kind({}) is None)
-b = ede.late_add_banner(["Adam Wilson"], [ede.welcome_line("Adam", "first", "M")])
-check("the welcome line rides in the UPDATED GROUP notice", "first time playing with us" in b)
+_bn = ede.late_add_banner(["Adam Wilson"], [ede.welcome_line("Adam", "first", "M")])
+check("the welcome line rides in the UPDATED GROUP notice", "first time playing with us" in _bn)
 check("rules note links the Rules of Play PDF", ede.RULES_OF_PLAY_URL in ede.rules_note())
 _cs = ede.card_strip({"si_by_hole": {1: 1}, "ph_dots": {1: 1, 2: 1}, "net_dots": {1: 1}},
                      {"holes": [1, 2], "par": {1: 4, 2: 5}}, {}, None, None)

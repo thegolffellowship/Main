@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.12";
+window.TGF_VERSION = "2.575.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.13",
+    date: "2026-10-20",
+    title: "Tee sheet shows TGF indexes and blinds with the reason; ADD HANDICAP in the email; gender from men's tees",
+    changes: ["Kerry 10/20: \"Blinds should also show on this tee sheet, along with raw TGF Handicap Indexes. If a player like Adam doesn't have a handicap, then it should say no handicap ... and then when the blind is shown it needs to show the explanation.\" The member tee sheet (/member/teesheet/<id>) shows each player's 18-hole TGF index (or No handicap) under his name, and each drawn blind as its own amber row: BLIND, the name, and why (the open seat, or the player with no TGF handicap it stands in for).", "An event-day email to a player with no handicap opens with NO HANDICAP ON FILE and an ADD HANDICAP button to his handicap ask page.", "Gender from tees: \"65+, 50-64, <50 are all men's tees. Forward tees are for women generally.\" A registration on a men's band with no rated rounds now infers M (Forward still F; both is a conflict for a manager). Still only while app setting gender_infer is on."]
+  },
   {
     version: "2.575.12",
     date: "2026-10-20",

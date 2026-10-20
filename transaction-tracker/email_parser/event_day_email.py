@@ -760,6 +760,11 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             seen.add(key)
             people.append(r)
 
+        try:
+            nh_cids = set((db.event_nh_seat_set(conn, int(event_id), db_path=db_path) or {}).get("cids") or ())
+        except Exception:
+            logger.exception("event-day email: N/H set unavailable for %s", event_id)
+            nh_cids = set()
         messages, held = [], []
         used = set(_TAG_RE.findall((tpl or {}).get("subject", "") + (tpl or {}).get("html_body", "")))
         for r in people:
@@ -867,6 +872,12 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             if why:
                 held.append({**base, "reason": "; ".join(why)})
                 continue
+            if cid in nh_cids:
+                from email_parser.handicap_ask import ask_url, make_token
+                hurl = ask_url(make_token(cid, int(event_id)))
+                msg["html"] = with_banner(msg["html"], add_handicap_note(hurl))
+                msg["text"] = f"No handicap on file: add yours at {hurl}\n\n" + msg["text"]
+                msg["no_handicap"] = True
             if kind:
                 msg["html"] = with_banner(msg["html"], rules_note())
                 msg["text"] = f"New to TGF? Please review our TGF Rules of Play: {RULES_OF_PLAY_URL}\n\n" + msg["text"]
@@ -1189,6 +1200,19 @@ def newcomer_kind(r: dict) -> str | None:
     if r.get("is_new"):
         return "new"
     return None
+
+
+def add_handicap_note(url: str) -> str:
+    """Kerry 10/20: a player with no handicap sees it in his own email, with
+    a button to the handicap ask page (/handicap/<token>)."""
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td bgcolor="#FFF7ED" style="background:#FFF7ED;'
+            f'border:2px solid {ORANGE};border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">NO HANDICAP ON FILE</div>'
+            f'<div style="padding-top:4px;color:{INK};">We don\'t have a handicap for you yet, so a blind '
+            f'stands in for your team score. Add yours and the blind comes off.</div>'
+            f'<div style="padding-top:10px;"><a href="{_e(url)}" style="display:inline-block;background:{ORANGE};'
+            f'color:#ffffff;text-decoration:none;font:bold 14px Arial,sans-serif;border-radius:999px;'
+            f'padding:9px 18px;">ADD HANDICAP</a></div></td></tr></table>')
 
 
 def rules_note() -> str:
