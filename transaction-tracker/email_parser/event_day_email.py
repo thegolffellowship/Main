@@ -1152,6 +1152,114 @@ def reissue_key(event_id: int, messages: list) -> str:
     return f"event_day_reissue:{int(event_id)}:{hashlib.sha256(sig.encode()).hexdigest()[:12]}"
 
 
+LATE_ADD_PREFIX = "UPDATED GROUP: "
+
+
+def late_add_banner(names: list) -> str:
+    """The orange notice for a group that just gained a late add."""
+    who = _e(" and ".join(n for n in names if n))
+    verb = "join" if len(names) > 1 else "joins"
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td bgcolor="#FFF7ED" '
+            f'style="background:#FFF7ED;border:2px solid {ORANGE};border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">UPDATED GROUP</div>'
+            f'<div style="padding-top:4px;color:{INK};"><strong>{who}</strong> {verb} your group. '
+            f'Your start is the same. This replaces the earlier email; '
+            f'your group and cart are below.</div></td></tr></table>')
+
+
+def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: bool = False,
+                             db_path=None) -> dict:
+    """LATE ADD (event-timeline.md, Kerry 10/17 + 10/20): each late add gets
+    the approved event-day email as-is, and everyone already in that group
+    gets it again with "UPDATED GROUP: " before the subject and a notice
+    naming who joined. Nobody else is mailed. Same gates as the re-issue
+    (approved template hash, Kerry-OK mailbox post, confirm=True to send);
+    once per player per group state (app setting event_day_lateadd:...)."""
+    import json as _json
+    from email_parser import database as db
+    from email_parser.customer_query import _kerry_ok
+    late = {int(c) for c in late_cids}
+    tpl = load_template(db_path)
+    appr = approval_state(tpl, db_path)
+    if not appr["approved"]:
+        return {"refused": "template not approved: app setting "
+                           f"{APPROVAL_KEY} must equal the current template hash", **appr}
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+    finally:
+        conn.close()
+    if not ok:
+        return {"refused": f"rule 3b: {why}"}
+    _ensure_scoring(event_id, db_path)
+    built = build_event_day_emails(event_id, db_path=db_path)
+    if built.get("error"):
+        return built
+    if built["template_hash"] != appr["template_hash"]:
+        return {"refused": "template changed during the build"}
+    msgs = built["messages"]
+    missing = sorted(late - {m["customer_id"] for m in msgs})
+    if missing:
+        held = [h for h in built["held"] if h.get("customer_id") in late]
+        return {"refused": f"no sendable message for late add(s) {missing}", "held": held}
+    groups = {}
+    for m in msgs:
+        if m["customer_id"] in late:
+            groups.setdefault(m.get("group"), []).append(m["name"])
+    todo = [m for m in msgs if m.get("group") in groups]
+    sig = "|".join(sorted(f"{m['customer_id']}:{m.get('group')}" for m in todo))
+    key = f"event_day_lateadd:{int(event_id)}:{hashlib.sha256(sig.encode()).hexdigest()[:12]}"
+    try:
+        done = set(_json.loads(db.get_app_setting(key, db_path=db_path) or "[]"))
+    except Exception:
+        done = set()
+    todo = [m for m in todo if m["customer_id"] not in done]
+
+    def _shape(m):
+        if m["customer_id"] in late:
+            return m["subject"], m["html"], "LATE ADD "
+        return (LATE_ADD_PREFIX + m["subject"],
+                with_banner(m["html"], late_add_banner(groups[m.get("group")])), "LATE-ADD GROUP ")
+
+    out = {"event": built["event"], "authority": why, "key": key,
+           "late_adds": {g: n for g, n in groups.items()}, "already_sent": sorted(done),
+           "counts": {"to_send": len(todo)}}
+    if confirm is not True:
+        return {**out, "dry_run": True,
+                "plan": [{"customer_id": m["customer_id"], "name": m["name"], "email": m["email"],
+                          "group": m.get("group"), "subject": _shape(m)[0]} for m in todo]}
+    creds = _creds()
+    if not creds:
+        return {"error": "Email credentials not configured on server"}
+    sent, failed = [], []
+    for m in todo:
+        subject, html, tag = _shape(m)
+        good = False
+        try:
+            good = _graph_send(creds, m["email"], subject, html)
+        except Exception:
+            logger.exception("event-day late add failed for cid %s", m["customer_id"])
+        row = {"customer_id": m["customer_id"], "name": m["name"], "email": m["email"],
+               "group": m.get("group")}
+        (sent if good else failed).append(row)
+        if good:
+            done.add(m["customer_id"])
+            try:
+                db.set_app_setting(key, _json.dumps(sorted(done)), db_path=db_path)
+            except Exception:
+                logger.exception("event-day late add: could not record cid %s", m["customer_id"])
+        try:
+            db.log_message({"event_name": built["event"]["name"], "channel": "email",
+                            "recipient_name": m["name"], "recipient_address": m["email"],
+                            "subject": subject, "body_preview": tag + m["text"][:180],
+                            "status": "sent" if good else "failed",
+                            "sent_by": "event_day_email_late_add"}, db_path=db_path)
+        except Exception:
+            pass
+    return {**out, "sent": sent, "failed": failed,
+            "counts": {**out["counts"], "sent": len(sent), "failed": len(failed)}}
+
+
 def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
                            db_path=None) -> dict:
     """RE-ISSUE the event-day email after the start holes change: every ready

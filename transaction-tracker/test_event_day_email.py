@@ -336,6 +336,31 @@ with db._connect(DB) as conn:
     n = conn.execute("SELECT COUNT(*) FROM event_day_email_sends WHERE event_id = ?", (EV,)).fetchone()[0]
 check("…and event_day_email_sends is untouched", n == 5, n)
 
+print("4d. Late add: the new player plus their group only (Kerry 10/20)")
+SENT.clear()
+_b = ede.build_event_day_emails(EV, db_path=DB)
+_late = _b["messages"][0]
+_grp = [m for m in _b["messages"] if m.get("group") == _late.get("group")]
+r = ede.send_event_day_late_adds(EV, [_late["customer_id"]], lane_post, confirm=True, db_path=DB)
+check("a late-add send without Kerry's word is refused", "refused" in r and not SENT, r)
+r = ede.send_event_day_late_adds(EV, [_late["customer_id"]], ok_post, db_path=DB)
+check("dry run plans the late add and their group only",
+      r.get("dry_run") and r["counts"]["to_send"] == len(_grp) and not SENT, r.get("counts"))
+r = ede.send_event_day_late_adds(EV, [_late["customer_id"]], ok_post, confirm=True, db_path=DB)
+_mine = [x for x in SENT if x["to_address"] == _late["email"]]
+_mates = [x for x in SENT if x["to_address"] != _late["email"]]
+check("the late add gets the plain approved message",
+      len(_mine) == 1 and _mine[0]["subject"] == _late["subject"]
+      and "UPDATED GROUP" not in _mine[0]["html_body"], [x["subject"] for x in _mine])
+check("…groupmates get UPDATED GROUP naming who joined",
+      len(_mates) == len(_grp) - 1
+      and all(x["subject"].startswith("UPDATED GROUP: ") and _late["name"] in x["html_body"] for x in _mates))
+n = len(SENT)
+r = ede.send_event_day_late_adds(EV, [_late["customer_id"]], ok_post, confirm=True, db_path=DB)
+check("the same group state is never sent twice", len(SENT) == n and r["counts"]["sent"] == 0, r.get("counts"))
+r = ede.send_event_day_late_adds(EV, [99999999], ok_post, db_path=DB)
+check("a cid with no sendable message is refused", "refused" in r, r)
+
 print("5. The bridge")
 os.environ["DATABASE_PATH"] = DB
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

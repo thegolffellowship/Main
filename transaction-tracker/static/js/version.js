@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.10";
+window.TGF_VERSION = "2.575.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.11",
+    date: "2026-10-20",
+    title: "Late adds: event info to the new player, UPDATED GROUP to their group",
+    changes: ["Kerry 10/20, s9.28 TPC Canyons: \"send each new player and their groups the event info per our standards.\" event_day_email.send_event_day_late_adds sends the approved event-day message to each late add unchanged, and to their groupmates with \"UPDATED GROUP: \" before the subject and an orange notice naming who joined. Nobody else is mailed. Same gates as the re-issue: approved template hash, a mailbox post carrying Kerry's word, dry run without confirm, once per player per group state. Bridge: scoring-event-day-email:<id>|lateadd|<cid,cid>|<post>[|confirm]. Guard test_event_day_email.py 4d."]
+  },
   {
     version: "2.575.10",
     date: "2026-10-20",

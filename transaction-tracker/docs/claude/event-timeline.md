@@ -62,6 +62,17 @@ another player on that time, with that group's scorecard and cart sign only
 (not the whole print pack). The scorer is NOT chosen in advance (decided at
 the course).
 
+Requests after the lock (RULED, Kerry 2026-10-20): "Requests should not be
+honored after the 5:00p lock deadline and generator goes. Only a manager can
+honor that." A late add's pairing request is ignored by the seat-fill; a
+manager may still place them by hand.
+
+The emails (BUILT v2.575.11, manual): scoring-event-day-email:<id>|lateadd|
+<cid,cid>|<kerry-ok post>[|confirm] sends the approved event-day message to
+each late add as-is, and to everyone else in that group the same message with
+"UPDATED GROUP: " before the subject and a notice naming who joined. Nobody
+outside those groups is mailed. The course notice is still manual.
+
 ## 3. Adds and withdrawals after lock (PROPOSAL, Kerry: "the messiest and most complex of all")
 
 Kerry 10/17: "if there were open seats after a foursome lock and then
