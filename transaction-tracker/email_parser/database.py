@@ -68188,7 +68188,9 @@ def _conn_db_path(conn):
 #: Pair rows that carry a CART record: the Golf Genius tee sheet (seat order
 #: 1&2 / 3&4) and the entered groups (seat order). `gg_teamnet` rows say who
 #: played together but not who rode together (`rode` there is always 0).
-_CART_SOURCES = ("gg_teesheet", "entry", "se")
+#: `tee_sheet` = a played sheet loaded by hand (import_manual_pairing_groups,
+#: seat order 1&2 / 3&4): a cart record too (GG Retirement audit A3, 10/19).
+_CART_SOURCES = ("gg_teesheet", "tee_sheet", "entry", "se")
 
 #: {(db file, event_id, se version): [pair rows]} -- the entered groups of
 #: one event, read once per score-entry version (`score_entry.event_version`

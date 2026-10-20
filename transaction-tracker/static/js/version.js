@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.574.3";
+window.TGF_VERSION = "2.574.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.574.4",
+    date: "2026-10-19",
+    title: "Cart record counts our own rounds (GG Retirement A2/A3)",
+    changes: ["Kerry 10/19: \"Another GG bug sticking around\" / \"Definitely need to be counting our own.\" A2: the CoS pairing-history cart record and solo-cart count (cos_reads.pairing_history_view) skipped any event without Golf Genius tee-sheet rows, so every round since 10/7 was missing; it now accepts every source with a cart record (database._CART_SOURCES) and COUNTED_RULE says so. A3: hand-loaded tee sheets (import_manual_pairing_groups, source tee_sheet, seat order 1&2 / 3&4) now count as a cart record in the generator's history too; 45 such rows in 2026 had read as 'no cart data'. Guard test_cos_reads.py."]
+  },
   {
     version: "2.574.3",
     date: "2026-10-19",

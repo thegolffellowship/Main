@@ -56,12 +56,14 @@ def score_entry_card(event_id: int, group: int | None = None, customer_id: int |
 
 
 # ── tool 8 ─────────────────────────────────────────────────────────────────
-COUNTED_RULE = ("Counts Golf Genius rows only (source gg_teesheet / gg_teamnet; app-saved "
-                "sheets are plans, Kerry 2026-09-08) on dates before today, Central. "
-                "'rode' is the tee-sheet cart pairing (sequence 1&2 / 3&4). "
-                "A solo cart is an event where the player has pair rows from the tee sheet "
-                "but no rode partner; events with only gg_teamnet rows carry no cart data "
-                "and are left out of the cart record.")
+COUNTED_RULE = ("Counts played rows only (not app-saved sheets, which are plans, Kerry "
+                "2026-09-08) on dates before today, Central: Golf Genius (gg_teesheet / "
+                "gg_teamnet), hand-loaded tee sheets (tee_sheet) and the entered groups the "
+                "closeout writes (entry). 'rode' is the cart pairing by seat (1&2 / 3&4). "
+                "A solo cart is an event where the player has pair rows from a source with a "
+                "cart record (gg_teesheet, tee_sheet, entry) but no rode partner; events with "
+                "only gg_teamnet rows carry no cart data and are left out of the cart record "
+                "(GG Retirement audit A2, Kerry 2026-10-19: \"Definitely need to be counting our own\").")
 
 
 def _name_map(conn, cids) -> dict:
@@ -130,7 +132,7 @@ def pairing_history_view(customer_id: int = 0, event_id: int = 0, year: int = 0,
                 e["rode_with"] = oname
         cart = []
         for e in events.values():
-            if "gg_teesheet" not in e["sources"]:
+            if not (e["sources"] & set(db._CART_SOURCES)):
                 continue
             cart.append({"event_id": e["event_id"], "event": e["event"], "date": e["date"],
                          "round_id": e["round_id"], "rode_with": e["rode_with"],
