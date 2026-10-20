@@ -156,7 +156,15 @@ def may_approve(role: str | None, session_chapter: str | None, event_chapter: st
 def review(event_id: int, db_path=None) -> dict:
     from email_parser import database as db
     from email_parser.event_day_email import build_event_day_emails, approval_state, load_template
+    from email_parser import perf
+    # Where the page's time goes (10-12 s at host load 90 on 10/19): laps on
+    # the route's own stopwatch, so the next digest names the slow section.
+    _sw = perf.current()
+    _lap = _sw.lap if _sw else (lambda label: 0)
+    if _sw:
+        _sw.mark()
     pack = db.get_event_print_pack(int(event_id), db_path=db_path)
+    _lap("print_pack")
     if not pack:
         return {"error": f"event {event_id} not found"}
     ev = pack.get("event") or {}
@@ -175,7 +183,9 @@ def review(event_id: int, db_path=None) -> dict:
         flags = [f for f in au.get("flags") or [] if f.get("kind") == "hard"]
     except Exception:
         logger.exception("pairings approval: audit failed (non-fatal)")
+    _lap("audit")
     built = build_event_day_emails(int(event_id), db_path=db_path)
+    _lap("build_emails")
     tpl = load_template(db_path)
     st = event_state(event_id, db_path)
     return {"event": {"id": int(event_id), "name": ev.get("item_name"), "date": ev.get("event_date"),

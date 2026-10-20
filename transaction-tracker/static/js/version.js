@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.575.0";
+window.TGF_VERSION = "2.575.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.1",
+    date: "2026-10-19",
+    title: "Health: approve-pairings slow lines and laps, one retry on a cut-off Graph reply",
+    changes: [
+      "Digest #2083 (10/20). (1) approve_pairings_page took 10.4 s and 11.6 s and the Approve press (approve_pairings_api) 97.6 s on 10/19 at host load 80-90. The page builds every player's Event Info email to show the counts and a sample, and Approve sends the tee-times emails inline, one Graph call each. Neither is a fault; the slow lines were set for pages that read one table (2 s). They are now 15 s for the page and 180 s for the Approve press. The page's sample now carries laps (print_pack, audit, build_emails) so the next digest names the slow section before anything is changed. (2) The staff bridges scoring-pairings-run (|resend and |prompt send mail; 15-20 s) and scoring-health (the report with its fresh replica read, 33.6 s) get 60 s and 90 s lines. (3) inbox_check failed twice in two days (10/18 and 10/19 12:04 UTC) with a JSONDecodeError: Microsoft's reply arrived cut off at 110 KB and 243 KB, each time with the host at load 80-90 and a mail send running. A Graph read whose body will not parse is now asked for once more (reads only; a repeat is safe); if it fails twice the job fails as before. No email, audience, wording, send behaviour or money changes."
+    ]
+  },
   {
     version: "2.575.0",
     date: "2026-10-19",

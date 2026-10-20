@@ -82,7 +82,11 @@ SLOW_MS = {
     "scoring-teetimes-email": 60_000,  # |preview builds three versions + one Graph send
     "teetimes_email": 900_000,        # job: one Graph send per roster player, course and manager
     "scoring-event-day-email": 60_000, # sends one email per roster player through Graph: p50 6.7 s, 12 s on 10/12
-    "scoring-health": 30_000,        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; cached reads are fast
+    "approve_pairings_page": 15_000,  # route: builds every player's Event Info email to show the counts and a sample (10.4 s and 11.6 s on 10/19 at load 90); laps in the sample say which part
+    "approve_pairings_api": 180_000,  # route: Approve also sends the tee-times emails inline, one Graph call each (97.6 s on 10/19 at load 80)
+    "scoring-pairings-run": 60_000,   # staff bridge: |resend and |prompt send mail (15-20 s on 10/19 at load 76-91)
+    "scoring-health": 90_000,        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; the 5:00 read may wait up to 75 s on the replica (33.6 s on 10/19)
+        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; cached reads are fast
     "scoring-recap-draft-email": 30_000,
     "auto_gg_results_sync": 600_000,
     # Live score entry: a phone waits on these. One save is ~40 ms of write
