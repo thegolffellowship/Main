@@ -142,6 +142,16 @@
         /* NOT BOUGHT IN: soft grey row, muted text, BUY IN pill (Kerry 2026-10-12, option A) */
         #pr-table-container tbody tr.pr-nobuy > td { color: #6B7280; }
         #pr-table-container tr.pr-nobuy .cell-link, #pr-table-container tr.pr-nobuy .pr-nm-l { color: #6B7280; }
+        /* CHAPTER COLOUR BAR on the row's left edge (Kerry 2026-10-20: "No reason for two lines on these. Let's do
+           color bars for the chapter on the left of each entry like we've done elsewhere, rather than the chapter
+           badges"). The Events table's own pattern, same classes, width and tokens (events.html .events-table
+           tr.ev-ch-*): 8px, Austin burnt orange, SA slate (the -alt), joint TGF black, a row with no chapter the
+           neutral edge so every name still lines up. Rows on cross-chapter boards carry it (prChapterBarClass). */
+        #pr-table-container tbody tr[class*="ev-ch-"] > td:first-child { border-left: 8px solid #E5E7EB; }
+        #pr-table-container tbody tr.ev-ch-austin > td:first-child { border-left-color: var(--chapter-austin, #BF5700); }
+        #pr-table-container tbody tr.ev-ch-sa > td:first-child { border-left-color: var(--chapter-sa-alt, #8FA8B8); }
+        #pr-table-container tbody tr.ev-ch-tgf > td:first-child { border-left-color: #1B1B1B; }
+        #pr-table-container tbody tr.ev-ch-other > td:first-child { border-left-color: var(--chapter-national, #374151); }
         .pr-buyin { display: inline-block; flex: none; background: var(--primary, #E87C3E); color: #fff !important; border-radius: 9999px;
             padding: 3px 11px; font: 700 10px/1.3 'Bitter', Georgia, serif; letter-spacing: .6px; text-decoration: none; white-space: nowrap; margin-left: 8px; }
         .pr-buyin:hover { background: var(--primary-hover, #D06B2E); }
@@ -1458,6 +1468,10 @@
         .mpv2 .mp-pool-toggle:active { background: #333330; }
         .mpv2 .mp-pool-toggle:focus-visible { outline: 2px solid var(--mp-accent); outline-offset: -2px; }
         .mpv2 .mp-pool-toggle.open .mp-matches-chip { background: var(--mp-accent); color: #fff; border-color: var(--mp-accent); }
+        /* The house arrow (Kerry 2026-10-20, was a "›"): turns 90° with the pool; on the open chip's
+           orange fill it reads white, the one colour exception, so it does not vanish. */
+        .mpv2 .mp-mc-chev { margin-left: 2px; vertical-align: -1px; }
+        .mpv2 .mp-pool-toggle.open .mp-mc-chev { transform: rotate(90deg); color: #fff; }
         .mpv2 .mp-pool-name { font: 700 0.82rem/1.25 'Bitter', Georgia, serif; letter-spacing: 0.05em; text-transform: uppercase; color: #F3F1EC; }
         .mpv2 .mp-pool-meta { font-size: 0.72rem; color: rgba(243,241,236,0.65); }
         .mpv2 .mp-matches-chip {
@@ -2404,6 +2418,12 @@
         /* PAST CHAMPIONS strip under the plaque (Kerry 2026-10-12): collapsed, year + name, photo when we have one. */
         .past-champs { margin: 0 0 0.7rem; border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; }
         .past-champs > summary { cursor: pointer; padding: 0.55rem 0.8rem; font: 700 0.82rem/1.2 'Bitter', Georgia, serif; color: #7A5C0B; }
+        /* the house arrow, not the browser's own black disclosure triangle (Kerry 2026-10-20: the chevrons "don't match
+           our standard"); it turns 90° open, as on the Events board. */
+        .past-champs > summary { list-style: none; }
+        .past-champs > summary::-webkit-details-marker { display: none; }
+        .past-champs > summary .pc-chev { margin-right: 6px; }
+        .past-champs[open] > summary .pc-chev { transform: rotate(90deg); }
         .past-champs-list { display: flex; flex-wrap: wrap; gap: 14px; padding: 0.2rem 0.8rem 0.8rem; }
         .past-champ { display: flex; flex-direction: column; align-items: center; width: 100px; text-align: center; }
         .past-champ img, .past-champ .pc-ph { width: 92px; height: 92px; border-radius: 8px; object-fit: cover; border: 2px solid #D4A017; cursor: zoom-in; display: block; background: #F7F1DC; }
@@ -2781,7 +2801,7 @@
                          championship morning — the board should be one thumb
                          away). Desktop is unchanged; the LIVE banner never
                          folds. -->
-                    <button id="pr-preamble-toggle" type="button" aria-expanded="false">Pot &amp; details <span class="pr-pre-chev tgf-exp">&#9654;</span></button>
+                    <button id="pr-preamble-toggle" type="button" aria-expanded="false">Pot &amp; details <span class="pr-pre-chev tgf-exp">&#9654;&#xFE0E;</span></button>
                     <div id="pr-preamble">
                         <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
                         <div id="pr-payouts"></div>
@@ -3900,7 +3920,7 @@
                     : ev.chapter === "San Antonio"
                     ? '<span style="background:var(--chapter-sa,#D3DDE4);color:#1B1B1B;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700;">SAN ANTONIO</span>' : "";
                 return `<details class="evlb-ev" data-ev="${escapeHtml(ev.item_name)}">` +
-                    `<summary><span class="chev tgf-exp">&#9654;</span>` +
+                    `<summary><span class="chev tgf-exp">&#9654;&#xFE0E;</span>` +
                     `<div><div class="nm">${escapeHtml(ev.item_name)}</div>` +
                     `<div class="meta">${evlbDate(ev.event_date)}${ev.course ? " &middot; " + escapeHtml(ev.course) : ""} &middot; ${ev.field} players ${ch}</div></div>` +
                     (ev.money_visible === false
@@ -3950,7 +3970,7 @@
                     // leaderboard to show"): his event's board opens anyway,
                     // every player listed with a tee time until they post.
                     box.innerHTML = `<details class="evlb-ev" data-ev="${escapeHtml(window.SOLO_EVENT)}">` +
-                        `<summary><span class="chev tgf-exp">&#9654;</span><div><div class="nm">${escapeHtml(window.SOLO_EVENT)}</div></div></summary>` +
+                        `<summary><span class="chev tgf-exp">&#9654;&#xFE0E;</span><div><div class="nm">${escapeHtml(window.SOLO_EVENT)}</div></div></summary>` +
                         `<div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
                     const el = box.querySelector("details.evlb-ev");
                     el.addEventListener("toggle", () => { if (el.open) evlbLoadEvent(el); });
@@ -4862,7 +4882,7 @@
                 teamBands: true, teams: [t], sections: [evlbTeamSection(ovIx, t)] });
             return `<tr class="evlb-tsum-row${s.upcoming ? " upcoming" : ""}" data-ti="${x.i}" tabindex="0" role="button" aria-expanded="false">` +
                 `<td class="pos">${escapeHtml(x.pos || "")}</td>` +
-                `<td class="nm"><span class="tchev tgf-exp">&#9654;</span> ${names}</td>` +
+                `<td class="nm"><span class="tchev tgf-exp">&#9654;&#xFE0E;</span> ${names}</td>` +
                 `<td class="thru">${evlbTeamThru(t, s)}</td>` +
                 `<td class="sc"><b>${s.net ?? ""}</b></td>` +
                 `<td class="tp">${s.thru || t.gg_total != null ? evlbToPar(s.toPar) : ""}</td>` +
@@ -5594,7 +5614,7 @@
                     ? `<span class="tnet">${t.gg_total}</span>`
                     : `<span class="tnet"${anyGGTotal ? ' style="color:#9CA3AF;font-style:italic;" title="our reconstruction — GG posted no total for this team"' : ""}>${t.total_net ?? ""}</span>`;
                 return `<details class="evlb-team${win ? " win" : ""}" data-ti="${ti}">` +
-                    `<summary><span class="tchev tgf-exp">&#9654;</span>` +
+                    `<summary><span class="tchev tgf-exp">&#9654;&#xFE0E;</span>` +
                     `<span style="min-width:26px;font-weight:700;">${escapeHtml(t.position || "")}</span>` +
                     `<span class="tm">${names}</span>` +
                     tot +
@@ -6887,7 +6907,7 @@
                  aria-expanded="false" aria-label="Show matches for ${escapeHtml(pool.pool_name)}">
                 <span class="mp-pool-name">${escapeHtml(pool.pool_name)}</span>
                 <span class="mp-pool-meta">${n} player${n===1?'':'s'} &middot; ${statusTxt}</span>
-                <span class="mp-matches-chip" aria-hidden="true">Matches &rsaquo;</span>
+                <span class="mp-matches-chip" aria-hidden="true">Matches <span class="mp-mc-chev tgf-exp">&#9654;&#xFE0E;</span></span>
             </div>
             <div class="mp-col-head"><span></span><span>Player</span><span class="mp-ch-wlt">W-L-T</span><span class="mp-ch-pts">Pts</span><span></span></div>
             <div class="mp-standings">${listRows}</div>
@@ -6920,7 +6940,7 @@
             <span class="mp-name-cell"><span class="mp-name">${escapeHtml(r.player_name)}</span>${chip}</span>
             ${dots}
             <span class="mp-pts">${r.stableford_pts != null ? r.stableford_pts : '&mdash;'}</span>
-            <span class="mp-chev tgf-exp" aria-hidden="true">&#9654;</span>
+            <span class="mp-chev tgf-exp" aria-hidden="true">&#9654;&#xFE0E;</span>
         </div>
         <div class="mp-expand" style="display:none;"></div>`;
     }
@@ -7391,8 +7411,8 @@
     // word (Kerry 2026-10-13: "On mobile you can reduce OPEN CARD to OPEN").
     function mpToggleHintHtml(open) {
         return open
-            ? '&#9652; <span class="mp-hint-long">collapse card</span><span class="mp-hint-short">close</span>'
-            : '&rsaquo; open<span class="mp-hint-long"> card</span>';
+            ? '<span class="tgf-exp is-open">&#9654;&#xFE0E;</span> <span class="mp-hint-long">collapse card</span><span class="mp-hint-short">close</span>'
+            : '<span class="tgf-exp">&#9654;&#xFE0E;</span> open<span class="mp-hint-long"> card</span>';
     }
 
     function mpMatchCard(o, opts) {
@@ -9986,33 +10006,28 @@
         return cid ? `/customers?cid=${cid}` : `/customers?name=${encodeURIComponent(name || "")}`;
     }
 
-    // "San Antonio" -> SA, "Austin" -> AUS: initials for multi-word chapter
-    // names, first three letters otherwise (full name stays in the title)
-    function prAbbrevChapter(v) {
-        const words = String(v || "").trim().split(/\s+/).filter(Boolean);
-        if (!words.length) return "";
-        return (words.length > 1 ? words.map(w => w[0]).join("") : words[0].slice(0, 3)).toUpperCase();
+    // The standings rows carry the chapter as a COLOUR BAR on the row's
+    // left edge, not the badge above (Kerry 2026-10-20: "No reason for two
+    // lines on these. Let's do color bars for the chapter on the left of
+    // each entry like we've done elsewhere, rather than the chapter
+    // badges"). It replaces prChapterBadge (the "A" / "SA" chip of
+    // 2026-08-02, which sat on the second line). Same classes as the
+    // Events table (ev-ch-*), styled at the
+    // top of this page with that table's width and tokens. Every chapter,
+    // rule 3d; one we do not know yet gets the national grey.
+    function prChapterBarClass(chapter) {
+        const low = String(chapter || "").trim().toLowerCase();
+        if (!low) return "ev-ch-none";
+        if (low.includes("austin")) return "ev-ch-austin";
+        if (low.includes("san antonio") || low === "sa") return "ev-ch-sa";
+        if (low === "tgf") return "ev-ch-tgf";
+        return "ev-ch-other";
     }
-
-    // Chapter identity as a small colored badge beside the name — replaces
-    // the Chapter COLUMN on cross-chapter boards (Kerry 2026-08-02:
-    // "Rather than a chapter column can we do a chapter badge with the
-    // chapter color. Simple SA or A"). Brand chapter colors from the
-    // dashboard.css semantic layer; unknown future chapters fall back to
-    // initials on the national gray.
-    function prChapterBadge(chapter) {
+    // The bar names the chapter only by colour, so the row says it in words
+    // for a screen reader and on a long press.
+    function prChapterBarAttr(chapter) {
         const ch = String(chapter || "").trim();
-        if (!ch) return "";
-        const low = ch.toLowerCase();
-        let label, bg, fg;
-        if (low.includes("austin")) {
-            label = "A"; bg = "var(--chapter-austin, #BF5700)"; fg = "#fff";
-        } else if (low.includes("san antonio") || low === "sa") {
-            label = "SA"; bg = "var(--chapter-sa, #D3DDE4)"; fg = "#1B1B1B";
-        } else {
-            label = prAbbrevChapter(ch); bg = "var(--chapter-national, #374151)"; fg = "#fff";
-        }
-        return ` <span title="${escapeHtml(ch)}" style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:0.6rem;font-weight:700;letter-spacing:0.04em;background:${bg};color:${fg};vertical-align:1px;">${label}</span>`;
+        return ch ? ` title="${escapeHtml(ch)}"` : "";
     }
 
 
@@ -10369,7 +10384,6 @@
         // RANK and PROJECTED money on the cup boards (Kerry 2026-08-13:
         // "hide … in mobile view or put it in expanded view") — they
         // all live here instead.
-        if (tr.dataset.chapter) bits.push(prChapterBadge(tr.dataset.chapter).trim());
         if (tr.dataset.hcp) bits.push(`HCP <b>${escapeHtml(tr.dataset.hcp)}</b>`);
         if (tr.dataset.cityRank) bits.push(`City rank <b>${escapeHtml(tr.dataset.cityRank)}</b>`);
         if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">${prRaceFinal ? "Won" : "Projected"} <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
@@ -10521,9 +10535,10 @@
             ? `2026 THE PLAYERS CUP ${coChamp ? "Co-" : ""}Champion`
             : capSeparate ? `2026 City ${coChamp ? "Co-" : ""}Champion`
             : `2026 City ${coChamp ? "Co-" : ""}Champion — Lone Star Cup ${coChamp ? "Co-" : ""}Captain`;
-        // Chapter renders as a colored badge beside the name, not a column
-        // (Kerry 2026-08-02) — showChapter only decides whether the badge
-        // renders, so the column count no longer varies by race scope.
+        // Chapter renders as a colour bar on the row's left edge, not a
+        // column (Kerry 2026-08-02; a bar, not a badge, since 2026-10-20) —
+        // showChapter only decides whether the bar renders, so the column
+        // count does not vary by race scope.
         // CUP MODE (Kerry 2026-08-13): post-reset races with live TGF
         // Championship boards resolve reset + Rd 1 + Rd 2 — grouped
         // TGF CHAMP header over per-round columns plus a CUP TOTAL.
@@ -10602,7 +10617,7 @@
                 : escapeHtml(r.display_name || r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
-                ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;&#xFE0E;</span>'
                 : '';
             const hcp = r.handicap_index != null
                 ? ` <span class="pr-hcp" style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
@@ -10651,7 +10666,6 @@
                 + (cupMode ? ` data-cup="1" data-cc-race="${String(r.player_chapter || r.chapter || "").toLowerCase().includes("austin") ? "austin_net" : "san_antonio_net"}"` : "")
                 // Slim cup rows hide the chapter badge + handicap — the
                 // expansion stat line re-serves them off these attrs.
-                + (cupSlim && showChapter && r.player_chapter ? ` data-chapter="${escapeHtml(r.player_chapter)}"` : "")
                 + (cupSlim && r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : "");
             // Live: MOVE gets its own column (PGA-style); the season view
             // keeps its inline last-event arrow in the rank cell.
@@ -10688,10 +10702,10 @@
                 ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
             const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
-            return `<tr class="${nobuy ? "pr-nobuy" : ""}${prRowShimmer(buyHtml) ? " pr-buyin-row" : ""}" style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
+            return `<tr class="${nobuy ? "pr-nobuy" : ""}${prRowShimmer(buyHtml) ? " pr-buyin-row" : ""}${showChapter ? " " + prChapterBarClass(r.player_chapter) : ""}"${showChapter ? prChapterBarAttr(r.player_chapter) : ""} style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
                 <td class="pr-rk" style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? `<span class="pr-opt">${prChapterBadge(r.player_chapter)}</span>` : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
@@ -10833,7 +10847,7 @@
             const open = pre.classList.toggle("open");
             tog.setAttribute("aria-expanded", String(open));
             const ch = tog.querySelector(".pr-pre-chev");
-            if (ch) ch.innerHTML = open ? "&#9660;" : "&#9654;";
+            if (ch) ch.classList.toggle("is-open", open);
         });
     })();
 
@@ -10862,7 +10876,7 @@
         const potC = d && d.projected_payouts && d.projected_payouts.pot_cents;
         tog.innerHTML = (potC ? `Pot ${prFmtMoney(potC)} &middot; ` : "")
             + (d && d.n_players ? `${d.n_enrolled}/${d.n_players} in &middot; ` : "")
-            + `details <span class="pr-pre-chev tgf-exp">${open ? "&#9660;" : "&#9654;"}</span>`;
+            + `details <span class="pr-pre-chev tgf-exp${open ? " is-open" : ""}">&#9654;&#xFE0E;</span>`;
     }
 
     // DAY movement while a championship is live: start-of-day season rank
@@ -11013,7 +11027,7 @@
     function prSyncHidden() {
         document.querySelectorAll("#pr-table-container tbody tr[data-cid]").forEach(tr => {
             const chev = tr.querySelector(".pr-chevron");
-            const open = !!chev && chev.textContent.indexOf("\u25BC") > -1;
+            const open = !!chev && chev.classList.contains("is-open");
             const detail = tr.nextElementSibling;
             if (!open || !detail || !detail.matches(".pr-detail-row, .pr-mo-detail")) return;
             const td = detail.firstElementChild;
@@ -11099,7 +11113,7 @@
                     : `<div class="pc-ph"></div>`;
                 return `<div class="past-champ">${ph}<div class="pc-y">${r.year}</div><div class="pc-n">${nm}</div></div>`;
             }).join("");
-            box.innerHTML = `<summary>Past Champions &middot; ${rows.length}</summary><div class="past-champs-list">${cards}</div>`;
+            box.innerHTML = `<summary><span class="pc-chev tgf-exp">&#9654;&#xFE0E;</span>Past Champions &middot; ${rows.length}</summary><div class="past-champs-list">${cards}</div>`;
             box.hidden = false;
             box.dataset.done = "1";
             box.querySelectorAll("img[data-cap]").forEach(img => {
@@ -11236,19 +11250,19 @@
             // Slim cup rows hide the chapter badge, handicap and the
             // PROJECTED money — the expansion stat line re-serves them.
             const slimAttrs = cupSlimF
-                ? `${r.chapter ? ` data-chapter="${escapeHtml(r.chapter)}"` : ""}${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-proj="${r._pay}" data-proj-title="${escapeHtml(r._payTitle || "")}"` : ""}`
+                ? `${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-proj="${r._pay}" data-proj-title="${escapeHtml(r._payTitle || "")}"` : ""}`
                 : "";
             const expandableF = cupChamp && r.customer_id && (r.champ_points != null || r.champ_thru);
             const chevF = expandableF
-                ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;&#xFE0E;</span>'
                 : '';
-            return `<tr class="${nobuyF ? "pr-nobuy" : ""}"${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
+            return `<tr class="${nobuyF ? "pr-nobuy" : ""} ${prChapterBarClass(r.chapter)}"${prChapterBarAttr(r.chapter)}${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td class="pr-rk" style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td class="pr-name-td"${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}</span><span class="pr-nm-chev">${chevF}</span></span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
+                <td class="pr-name-td"${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${cupSlimF ? "" : hcp}</span><span class="pr-nm-chev">${chevF}</span></span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
-                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${prBuyBtn(r)}</div>${thruSubF}</td>
+                    : ""}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${prBuyBtn(r)}</div>${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
@@ -11418,16 +11432,16 @@
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
                 : escapeHtml(r.display_name || r.player_name);
             const chevron = r.customer_id
-                ? ' <span class="pr-chevron tgf-exp" title="This month&#39;s rounds & scorecards">&#9654;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="This month&#39;s rounds & scorecards">&#9654;&#xFE0E;</span>'
                 : '';
             let purse = "";
             if (win && sel.complete) purse = `<strong>$${sel.winners[0].share}</strong>`;
             else if (win) purse = `<span title="Paid when the month closes">$${sel.purse}</span>`;
             else if (!sel.complete && r.rank === 1)
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
+            return `<tr class="${prChapterBarClass(r.chapter)}"${prChapterBarAttr(r.chapter)}${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td class="pr-rk" style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap pr-name-td"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact, win)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${name}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</span></span></div></div></td>
+                <td class="pr-wrap pr-name-td"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact, win)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${name}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b"></span></span></div></div></td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td class="pr-pts" style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>
@@ -11483,17 +11497,17 @@
         const next = tr.nextElementSibling;
         if (next && next.classList.contains("pr-mo-detail")) {
             next.remove();
-            if (chev) chev.innerHTML = "&#9654;";
+            if (chev) chev.classList.remove("is-open");
             return;
         }
         const cont = $("pr-table-container");
         cont.querySelectorAll("tr.pr-mo-detail").forEach(x => x.remove());
-        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9654;");
+        cont.querySelectorAll(".pr-chevron").forEach(c => c.classList.remove("is-open"));
         const detail = document.createElement("tr");
         detail.className = "pr-mo-detail";
         detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 0"};color:var(--text-muted);">Loading rounds…</td>`;
         tr.after(detail);
-        if (chev) chev.innerHTML = "&#9660;";
+        if (chev) chev.classList.add("is-open");
         const cell = detail.firstElementChild;
         try {
             // GG points detail (the chapter's season page AND its fall page
@@ -11547,18 +11561,18 @@
         const next = tr.nextElementSibling;
         if (next && next.classList.contains("pr-detail-row")) {
             next.remove();
-            if (chev) chev.innerHTML = "&#9654;";
+            if (chev) chev.classList.remove("is-open");
             return;
         }
         const cont = $("pr-table-container");
         cont.querySelectorAll("tr.pr-detail-row").forEach(x => x.remove());
-        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9654;");
+        cont.querySelectorAll(".pr-chevron").forEach(c => c.classList.remove("is-open"));
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
         detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 0"};color:var(--text-muted);">Loading player detail…</td>`;
         tr.after(detail);
-        if (chev) chev.innerHTML = "&#9660;";
+        if (chev) chev.classList.add("is-open");
         const cell = detail.firstElementChild;
 
         // LIVE championship expansion (Kerry 2026-08-01, PGA-style): while
@@ -11603,7 +11617,7 @@
                 cell.innerHTML = _togglesHtml
                     + `<div class="pr-champ-card-box">${prRenderChampCard(data)}</div>`
                     + `<div style="margin-top:0.55rem;">
-                         <button type="button" class="pr-hist-toggle" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:#F3F2EF;color:#4B5563;border:1px solid var(--border);border-radius:9999px;font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Season history <span class="tgf-exp">&#9654;</span></button>
+                         <button type="button" class="pr-hist-toggle" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:#F3F2EF;color:#4B5563;border:1px solid var(--border);border-radius:9999px;font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Season history <span class="tgf-exp">&#9654;&#xFE0E;</span></button>
                          <a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}" style="margin-left:6px;">Full Spotlight &rarr;</a>
                        </div>
                        <div class="pr-hist-body" style="display:none;margin-top:0.5rem;"></div>`;
@@ -11612,11 +11626,11 @@
                 hTog.addEventListener("click", async () => {
                     if (hBody.style.display !== "none") {
                         hBody.style.display = "none";
-                        hTog.querySelector("span").innerHTML = "&#9654;";
+                        hTog.querySelector(".tgf-exp").classList.remove("is-open");
                         return;
                     }
                     hBody.style.display = "block";
-                    hTog.querySelector("span").innerHTML = "&#9660;";
+                    hTog.querySelector(".tgf-exp").classList.add("is-open");
                     if (hBody.dataset.loaded) return;
                     hBody.innerHTML = '<span style="color:var(--text-muted);">Loading season history…</span>';
                     try {

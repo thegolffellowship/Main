@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.575.4";
+window.TGF_VERSION = "2.575.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.5",
+    date: "2026-10-20",
+    title: "Leaderboard: chapter colour bars, one line, and the house chevron everywhere",
+    changes: [
+      "Kerry 10/20, on the Monthly board on his phone: \"No reason for two lines on these. Let's do color bars for the chapter on the left of each entry like we've done elsewhere, rather than the chapter badges.\" The A / SA chapter badge is gone from every Season Contests standings board. Each row now carries the chapter as an 8px colour bar on its left edge, using the Events table's own classes and tokens (ev-ch-*: Austin burnt orange, SA slate, joint TGF black, any other chapter the national grey). The bar shows on Monthly, THE FELLOWSHIP CUP and every cross-chapter Points Race board (the cups). Monthly rows are one line (the month-won trophy sits beside the name), and the Fellowship Cup handicap moved up onto the name line. Champion, captain and guest badges keep their own line, as ruled 10/12.",
+      "\"Also, the chevrons don't match our standard. Review all chevrons across the leaderboard and match standard.\" The boxed blue play button was the house arrow itself: inside a Bitter name cell the iPhone found no ▶ in Bitter or Georgia and drew the colour emoji. The house arrow (.tgf-exp) now uses the system font and asks for text presentation, and every leaderboard arrow is written with U+FE0E, so it is the plain orange triangle the Events board shows. Every open state is now a 90° turn like the Events board, instead of a swap to ▼: standings, Monthly, Pot & details, Season history, and the scorecard / city-championship / Not Counted lines. Match Play's › and ▴ markers and the browser's own triangle on Past Champions are now the house arrow too.",
+      "New guard test_lb_chapter_bars_chevrons.js; lone-star-cup-board.md."
+    ]
+  },
   {
     version: "2.575.4",
     date: "2026-10-20",
