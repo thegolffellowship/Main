@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.574.0";
+window.TGF_VERSION = "2.574.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.574.1",
+    date: "2026-10-19",
+    title: "Bridge to save a hand-picked pairings sheet",
+    changes: ["Kerry 10/19 (s9.28 TPC): \"Yes, use that sheet\" -- a sheet picked from the generation log. New bridge scoring-pairings-set-sheet:<event_id>|<a;b;c;d>/<e;f;g>...[|apply] replaces the whole saved sheet with the groups given, in order, on the event's own start slots (seats 1&2 and 3&4 ride together). Every seated player must appear exactly once; each keeps his tee and index. Refused once the event has started. Dry run returns the audit of the proposed sheet; apply saves, redraws the blinds and returns the audit. Guard test_pairings_gen_fixes.py."]
+  },
   {
     version: "2.574.0",
     date: "2026-10-19",

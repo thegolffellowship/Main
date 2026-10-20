@@ -1953,6 +1953,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    saving anything (no sheet, no blinds, no log
                                    setting): proposed groups, cost, audit
                                    flags on the proposed sheet, the gen log
+      scoring-pairings-set-sheet:<id>|<a;b;c;d>/<e;f;g>...[|apply]  replace the saved sheet
       scoring-pairings-gen-log:<event_id>  the latest Generate's reasoning
                                    (app setting pairings_gen_log:<id>)
       scoring-pairings-add-group:<event_id>|<a>;<b>[;...][|apply]  append
@@ -6586,6 +6587,83 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 from email_parser.pairings_audit import event_pairing_audit
                 _a = event_pairing_audit(_eid)
                 out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags")}
+            return json.dumps(out, indent=2, default=str)
+        if cmd == "scoring-pairings-set-sheet":
+            # "<event_id>|<name>;<name>;.../<name>;...[|apply]" (Kerry
+            # 2026-10-19, s9.28 TPC: "Yes, use that sheet" -- a sheet picked
+            # from the generation log). Replaces the WHOLE saved sheet with
+            # the groups given, in order, seats in the order given (1&2 and
+            # 3&4 ride together), on the event's own start slots. Every
+            # seated player must appear exactly once and nobody else; each
+            # keeps the tee and index already on his seat. Refused once the
+            # event has started or is past. Dry run by default (the audit of
+            # the proposed sheet); |apply saves, redraws the blinds for the
+            # new open seats, and returns the audit of the saved sheet.
+            _parts = [x.strip() for x in arg.split("|")]
+            _apply = len(_parts) > 2 and _parts[2].lower() == "apply"
+            try:
+                _eid = int(_parts[0])
+                _gnames = [[n.strip() for n in g.split(";") if n.strip()]
+                           for g in _parts[1].split("/") if g.strip()]
+            except (TypeError, ValueError, IndexError):
+                return json.dumps({"error": "<event_id>|<name>;<name>/<name>;...[|apply]"})
+            if not _gnames or any(not 1 <= len(g) <= 5 for g in _gnames):
+                return json.dumps({"error": "each group is 1 to 5 players"})
+            with db._connect() as _c:
+                _ev = _c.execute("SELECT * FROM events WHERE id = ?", (_eid,)).fetchone()
+                if not _ev:
+                    return json.dumps({"error": f"event {_eid} not found"})
+                _ev = dict(_ev)
+            from email_parser.timezone_utils import today_central_str
+            if str(_ev["event_date"] or "") < today_central_str() or db._event_started(_ev):
+                return json.dumps({"refused": "event has started or is past; its sheet is frozen"})
+            _sheet = db.get_event_pairings(_eid)
+            _fmt = (_ev.get("format") or "").strip()
+            _holes = "18" if _fmt in ("18 Holes", "27 Holes") else "9"
+            _seats = {db._pair_key_name(p["name"]): p for g in (_sheet.get(_holes) or [])
+                      for p in g.get("players") or [] if p.get("name")}
+            _given = [db._pair_key_name(n) for g in _gnames for n in g]
+            _bad = {"not seated on the current sheet": [n for g in _gnames for n in g
+                                                        if db._pair_key_name(n) not in _seats],
+                    "named twice": sorted({n for n in _given if _given.count(n) > 1}),
+                    "left out": [p["name"] for k, p in _seats.items() if k not in _given]}
+            if any(_bad.values()):
+                return json.dumps({"refused": {k: v for k, v in _bad.items() if v}})
+            _slots = db._pairing_time_slots(_ev, _holes, needed=len(_gnames))
+            _groups = []
+            for i, g in enumerate(_gnames):
+                _players = []
+                for j, n in enumerate(g):
+                    _old = _seats[db._pair_key_name(n)]
+                    _players.append({"name": _old["name"], "cart_pos": j + 1,
+                                     "customer_id": _old.get("customer_id"),
+                                     "tee_choice": _old.get("tee_choice"),
+                                     "handicap_index": _old.get("handicap_index")})
+                _groups.append({"group_num": i + 1,
+                                "slot_label": _slots[i] if i < len(_slots) else f"Group {i + 1}",
+                                "players": _players})
+            _sets = {h: gs for h, gs in _sheet.items() if h in ("9", "18") and gs}
+            _sets[_holes] = _groups
+            out = {"event_id": _eid, "event": _ev["item_name"], "applied": False,
+                   "groups": [{"slot": g["slot_label"], "players": [p["name"] for p in g["players"]]}
+                              for g in _groups]}
+            from email_parser.pairings_audit import event_pairing_audit
+            if not _apply:
+                _a = event_pairing_audit(_eid, sheet=_sets, with_alternative=False)
+                out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags"),
+                                "repeats": _a.get("repeats")}
+                return json.dumps(out, indent=2, default=str)
+            db.save_event_pairings(_eid, _sets)
+            db.log_agent_action("tracker-claude", "pairings-set-sheet",
+                                f"event {_eid}: sheet replaced, {len(_groups)} groups")
+            out["applied"] = True
+            try:
+                out["blinds"] = db.draw_event_blinds(_eid, dry_run=False, redraw=True)
+            except Exception as e:  # noqa: BLE001 -- the sheet is saved either way
+                out["blinds"] = {"error": str(e)}
+            _a = event_pairing_audit(_eid, with_alternative=False)
+            out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags"),
+                            "repeats": _a.get("repeats")}
             return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-pairings-remove":
             # "<event>|<player>[|dry]" — pull one player from the event's

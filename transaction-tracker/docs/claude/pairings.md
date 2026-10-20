@@ -2391,6 +2391,7 @@ distinct restarts) and `repeat_reasons`. The audit, the regroup dry run and
 ### Bridges
 
 - `scoring-pairings-gen-log:<event_id>` — the latest Generate's log.
+- `scoring-pairings-set-sheet:<event_id>|<a;b;c;d>/<e;f;g>...[|apply]` (v2.574.1, Kerry 10/19 "Yes, use that sheet") — replaces the WHOLE saved sheet with hand-picked groups in the order given, on the event's own slots (seats 1&2 / 3&4 ride together); every seated player exactly once, each keeps his tee and index; refused once the event has started; dry run = audit of the proposed sheet, apply = save + blinds redraw + audit.
 - `scoring-pairings-generate-preview:<event_id>` — runs the generator WITHOUT
   saving anything (no `event_pairings`, no `blind_draws`, no log setting, no
   action log) and returns the proposed groups, the cost, the audit's checks on

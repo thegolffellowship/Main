@@ -283,6 +283,26 @@ check("preview kept no log setting", n_log == 0, n_log)
 gl = json.loads(_ms._scoring_dispatch_inner("", "scoring-pairings-gen-log:6002"))
 check("gen-log bridge reads the latest Generate's log", (gl.get("log") or {}).get("event_id") == 6002, gl)
 
+# scoring-pairings-set-sheet (Kerry 10/19 "Yes, use that sheet"): replace the
+# saved sheet with hand-picked groups; everyone seated exactly once.
+_g9 = pv["groups"]["9"]
+db.save_event_pairings(6003, {"9": [{"group_num": i + 1, "slot_label": g["slot"],
+                                      "players": [{"name": n, "cart_pos": j + 1} for j, n in enumerate(g["players"])]}
+                                     for i, g in enumerate(_g9)]}, db_path=DB)
+_names = [n for g in _g9 for n in g["players"]]
+_new = [_names[i:i + 4] for i in range(0, len(_names), 4)][::-1]
+_arg = "6003|" + "/".join(";".join(g) for g in _new)
+ss = json.loads(_ms._scoring_dispatch_inner("", "scoring-pairings-set-sheet:" + _arg))
+check("set-sheet dry run returns the groups and an audit, saves nothing",
+      ss.get("applied") is False and len(ss.get("groups") or []) == len(_new) and "audit" in ss, ss)
+bad = json.loads(_ms._scoring_dispatch_inner("", "scoring-pairings-set-sheet:" + _arg.rsplit(";", 1)[0]))
+check("set-sheet refuses a sheet that leaves a player out", "left out" in (bad.get("refused") or {}), bad)
+ss = json.loads(_ms._scoring_dispatch_inner("", "scoring-pairings-set-sheet:" + _arg + "|apply"))
+_saved = db.get_event_pairings(6003, db_path=DB).get("9") or []
+check("set-sheet apply saves the groups in the order given",
+      ss.get("applied") and [[p["name"] for p in sorted(g["players"], key=lambda p: p["cart_pos"])] for g in _saved] == _new,
+      ([[p["name"] for p in g["players"]] for g in _saved], _new))
+
 print()
 print("ALL PASS" if not F else f"FAILED: {F}")
 sys.exit(1 if F else 0)
