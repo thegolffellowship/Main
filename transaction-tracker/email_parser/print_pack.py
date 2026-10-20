@@ -26,6 +26,7 @@ sends nothing here; the pack goes to Kerry.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import html as html_mod
 import os
@@ -679,8 +680,49 @@ def send_event_print_pack(built: dict, to_address: str | None = None,
                          attachments=[(built["filename"], built["pdf"], "application/pdf")])
     if ok:
         db.set_app_setting(f"print_pack_sent:{ev['id']}", built["sha"], db_path=db_path)
+        try:
+            db.set_app_setting(f"print_pack_sent_seats:{ev['id']}", json.dumps(
+                {"seats": seat_signature(built), "parts": built.get("part_shas") or {}}),
+                db_path=db_path)
+        except Exception:
+            logger.exception("print pack: could not record the seat signature for %s", ev.get("id"))
     return {"sent": bool(ok), "to": to_address, "sha": built["sha"],
             "filename": built["filename"], "bytes": len(built["pdf"])}
+
+
+# Parts a handicap (or the blind it brings or removes) can change. Kerry
+# 2026-10-20: "If a handicap comes in later, just update it on the tracker and
+# remove the blind. That's not reason to resend the print pack or even just
+# his affected printouts."
+HANDICAP_PARTS = ("starter-sheet", "scorecards", "cart-signs")
+
+
+def seat_signature(built: dict) -> str:
+    """Who sits where on which tee, blinds left out: the part of a sheet a
+    handicap can never change."""
+    rows = []
+    for g in ((built.get("pack") or {}).get("groups") or []):
+        for p in g.get("players") or []:
+            rows.append((str(g.get("holes")), g.get("group_num"), g.get("slot_label"),
+                         p.get("cart_pos"), p.get("customer_id") or (p.get("name") or "").strip().lower(),
+                         p.get("tee_choice")))
+    rows.sort(key=lambda r: tuple(str(x) for x in r))
+    return hashlib.sha256(json.dumps(rows, default=str).encode()).hexdigest()[:16]
+
+
+def _handicap_only_change(event_id: int, built: dict, db_path=None) -> bool:
+    """True when the seats are what was last sent and every part that changed
+    is one a handicap or its blind touches."""
+    from email_parser import database as db
+    try:
+        prev = json.loads(db.get_app_setting(f"print_pack_sent_seats:{event_id}", db_path=db_path) or "{}")
+    except (TypeError, ValueError):
+        return False
+    if not prev.get("seats") or prev["seats"] != seat_signature(built):
+        return False
+    now, before = built.get("part_shas") or {}, prev.get("parts") or {}
+    changed = {sl for sl in set(now) | set(before) if now.get(sl) != before.get(sl)}
+    return bool(changed) and changed <= set(HANDICAP_PARTS)
 
 
 def print_packs_due(db_path=None) -> list[dict]:
@@ -721,6 +763,10 @@ def send_due_print_packs(render, static_dir: str, db_path=None) -> list[dict]:
         last = db.get_app_setting(f"print_pack_sent:{ev['id']}", db_path=db_path)
         if last == built["sha"]:
             out.append({"event_id": ev["id"], "sent": False, "why": "unchanged since last send"})
+            continue
+        if _handicap_only_change(ev["id"], built, db_path=db_path):
+            out.append({"event_id": ev["id"], "sent": False,
+                        "why": "only handicaps / blinds changed: Tracker updated, no resend (Kerry 10/20)"})
             continue
         res = send_event_print_pack(built, db_path=db_path)
         res["event_id"] = ev["id"]

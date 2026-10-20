@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.13";
+window.TGF_VERSION = "2.575.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.14",
+    date: "2026-10-20",
+    title: "No handicap prints blank and never holds or reprints the course files",
+    changes: ["Kerry 10/20: \"Send them now with Adam blank. And make this standard. If a handicap comes in later, just update it on the tracker and remove the blind. That's not reason to resend the print pack or even just his affected printouts.\" A player with no TGF index yet is a print-log note on the scorecards (his card prints PH and net blank), never a gap that holds the print.", "The morning print-pack routine records who sat where on which tee (blinds left out) with each send. When the seats are unchanged and only the Starter Sheet, Scorecards or Cart Signs changed, it does not send again: that is a handicap or its blind. A moved player, a tee change or a games change still resends. Guard test_nh_no_reprint.py."]
+  },
   {
     version: "2.575.13",
     date: "2026-10-20",

@@ -79,6 +79,14 @@ event-day email to a newcomer) opens with a link to the TGF Rules of Play
 (v2.575.12). An N/H blind is cleared the moment that player gets a starting
 handicap (Kerry 10/20, `drop_stale_nh_blinds`).
 
+No handicap at print time (RULED, Kerry 2026-10-20): "Send them now with Adam
+blank. And make this standard. If a handicap comes in later, just update it on
+the tracker and remove the blind. That's not reason to resend the print pack or
+even just his affected printouts." The player's line prints blank (N/H) and
+never holds Course Files; a later handicap is entered on the Tracker, the N/H
+blind comes off, and nothing is reprinted or resent (v2.575.14:
+`scorecards` flags it instead of a gap; `print_pack._handicap_only_change`).
+
 ## 3. Adds and withdrawals after lock (PROPOSAL, Kerry: "the messiest and most complex of all")
 
 Kerry 10/17: "if there were open seats after a foursome lock and then
