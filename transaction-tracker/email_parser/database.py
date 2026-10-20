@@ -69970,6 +69970,12 @@ def _pair_cost(pair_counts: dict, a: str, b: str) -> int:
 #: compares sheets deepest-repeat first, then how many pairs sit there.
 REPEAT_LEVEL_BASE = 1000
 
+# Rule 16 window (Kerry 2026-10-19: "First year player hard miss for first 10
+# events only"): a First Year member is never seated alone while he has
+# played fewer than this many events (distinct round dates before the event,
+# every chapter). The pairings audit reads the same constant.
+FIRST_YEAR_NO_SOLO_EVENTS = 10
+
 
 def _repeat_cost(count: int) -> int:
     """0 for a new pair; BASE**count - 1 for a pair already played
@@ -71404,6 +71410,14 @@ def generate_event_pairings(
                 logger.exception("played counts failed for event %s (non-fatal)", event_id)
         early_new = {n for n in newbies
                      if _ids_r.get(n) is not None and _played.get(int(_ids_r[n]), 0) < 3}
+        # Kerry 2026-10-19: "First year player hard miss for first 10 events
+        # only." A 1Y player from his 11th event on may take the solo seat like
+        # anyone else (and is then ranked by season solos, R-C). A 1st Timer is
+        # always in his first event. No customer_id = unknown count = protected.
+        no_solo = {_pair_key_name(n) for n in first_timers} | {
+            _pair_key_name(n) for n in newbies
+            if _ids_r.get(n) is None
+            or _played.get(int(_ids_r[n]), 0) < FIRST_YEAR_NO_SOLO_EVENTS}
         need_amb_cart = (_lg | {_pair_key_name(n) for n in first_timers}
                          | {_pair_key_name(n) for n in early_new})
         _amb_names = [n for n in all_names if _pair_key_name(n) in _amb]

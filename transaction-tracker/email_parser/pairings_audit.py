@@ -284,7 +284,10 @@ def event_pairing_audit(event_id: int, db_path=None, sheet: dict | None = None,
             # Kerry 2026-10-12: "I don't want any first year players riding on
             # their own in initial pairings unless it can't be avoided."
             for c in carts:
-                if len(c) == 1 and len(ps) > 1 and (c[0]["is_new"] or c[0]["is_first_timer"]):
+                # Kerry 2026-10-19: a 1Y player only for his first 10 events.
+                if len(c) == 1 and len(ps) > 1 and (c[0]["is_first_timer"] or (
+                        c[0]["is_new"] and (c[0]["events_played_before"] is None or
+                                            c[0]["events_played_before"] < db.FIRST_YEAR_NO_SOLO_EVENTS))):
                     hit("first year player alone", "hard", False,
                         f"{c[0]['name']} ({'1st Timer' if c[0]['is_first_timer'] else '1Y'}) rides alone")
             # Kerry 2026-10-12: "all guests to always be placed with an ambassador,

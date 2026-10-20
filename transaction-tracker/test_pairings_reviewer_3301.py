@@ -218,5 +218,19 @@ a = event_pairing_audit(EV, db_path=DB)
 hard = [f for f in a["flags"] if f["kind"] == "hard"]
 check("audit: zero hard flags", not hard, hard)
 
+print("rule 16 window: a First Year player is protected for his first 10 events only (Kerry 10/19)")
+flags = res["gen_log"]["holes"]["9"]["inputs"]["flags"]
+check("all six 1Y players (5 events each) and the 1st Timer are no_solo",
+      set(flags["no_solo"]) == {p[0] for p in P if p[5]} | {FIRST_TIMER}, flags["no_solo"])
+with db._connect(DB) as c:      # Steven Hunt reaches 10 events before tonight
+    for r in range(5):
+        c.execute("INSERT INTO scoring_rounds (customer_id,player_name,round_date,holes_played,gross,source) "
+                  "VALUES (?,?,?,9,40,'gg')", (CID["Steven Hunt"], "Steven Hunt", f"2026-09-{10 + r}"))
+    c.commit()
+flags = gen()[1]["gen_log"]["holes"]["9"]["inputs"]["flags"]
+check("a 1Y player with 10 events is no longer no_solo", "Steven Hunt" not in flags["no_solo"], flags["no_solo"])
+check("he keeps the 1Y tag", "Steven Hunt" in flags["new_1y"], flags["new_1y"])
+check("the other 1Y players stay protected", "Michele McCormick" in flags["no_solo"], flags["no_solo"])
+
 print(f"\n{'ALL PASS' if not F else str(len(F)) + ' FAILED'}")
 sys.exit(1 if F else 0)
