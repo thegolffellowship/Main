@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.11";
+window.TGF_VERSION = "2.575.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.12",
+    date: "2026-10-20",
+    title: "Newcomer welcome + Rules of Play link; YOUR CARD totals and colours; N/H blind drops when a handicap arrives",
+    changes: ["Kerry 10/20: a late add who is a 1st timer, guest or new member gets a line in their group's UPDATED GROUP notice (\"This is Adam's first time playing with us! Welcome him in and help him understand our rules.\"; him/her from the profile's gender, them when unknown).", "Every event-day email to a 1st timer, guest or new member opens with a NEW TO TGF? box linking the TGF Rules of Play PDF.", "YOUR CARD: a TOT column (par total and the pops each game gives), more room left of PAR / NET / TEAM, a gap after the tee colour dot, and NET pops black / TEAM (CART) pops orange to match the scorecards, online scoring and the Tracker.", "Kerry: \"If and when we get a handicap for Adam, that blind would go away immediately.\" set_starting_handicap now clears any N/H blind whose seat's player has a handicap, on events from today on (drop_stale_nh_blinds); before, the draw only reported it as stale. Open-seat blinds are never touched.", "Bridge scoring-blinds:<event>|set|<holes>|<group>|<pos>|<cid|clear> chooses one seat's blind (the CHOOSE the pairings screen already has)."]
+  },
   {
     version: "2.575.11",
     date: "2026-10-20",

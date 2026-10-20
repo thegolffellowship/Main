@@ -238,13 +238,21 @@ _e = db.set_event_blind(EV, "9", 1, 4, free, db_path=tmp)
 check("single-seat CHOOSE completes quickly (< 1.5 s on the fixture)", _time.time() - _t0 < 1.5 and _e.get("name"),
       (_time.time() - _t0, _e))
 
-print("\n== Nat gets a starting handicap: the N/H blind is REPORTED stale, not removed ==")
-db.set_starting_handicap(9, 20.0, set_by="test", db_path=tmp)
+print("\n== Nat gets a starting handicap: the N/H blind goes away at once (Kerry 10/20) ==")
+_before = db.draw_event_blinds(EV, dry_run=True, team_unit="group", db_path=tmp)
+check("before: the seat's blind is still a live N/H blind",
+      not _before["stale_nh"] and any(b["cart_pos"] == 4 for b in db.get_event_blinds(EV, db_path=tmp)["9"][1]))
+_res = db.set_starting_handicap(9, 20.0, set_by="test", db_path=tmp)
+check("the starting handicap drops the N/H blind and says so",
+      any(d["event_id"] == EV and d["cart_pos"] == 4 and d["group_num"] == 1 for d in _res["nh_blinds_dropped"]),
+      _res.get("nh_blinds_dropped"))
+check("...and the row is gone", not any(b["cart_pos"] == 4 for b in
+                                        (db.get_event_blinds(EV, db_path=tmp).get("9") or {}).get(1, [])))
 r = db.draw_event_blinds(EV, dry_run=True, team_unit="group", db_path=tmp)
-check("stale_nh names the seat", any(s["cart_pos"] == 4 and s["group_num"] == 1 for s in r["stale_nh"]),
-      r["stale_nh"])
-check("...and the row is still there", any(b["cart_pos"] == 4 for b in
-                                           db.get_event_blinds(EV, db_path=tmp)["9"][1]))
+check("nothing stale is left", not r["stale_nh"], r["stale_nh"])
+# put Nat back to N/H and redraw his seat for the read-side checks below
+db.set_starting_handicap(9, None, set_by="test", db_path=tmp)
+db.draw_event_blinds(EV, dry_run=False, team_unit="group", db_path=tmp)
 
 print("\n== the engine: Team Net reads the blinds ==")
 holes = [{"hole": h, "par": 4, "stroke_index": h} for h in range(1, 4)]

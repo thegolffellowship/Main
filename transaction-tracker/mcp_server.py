@@ -1973,7 +1973,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    open seats: no arg / draw = preview,
                                    apply = write, clear = drop this
                                    event's app-drawn blinds, pool = who is
-                                   eligible and who is not, with reasons
+                                   eligible and who is not, with reasons;
+                                   |set|<holes>|<group>|<pos>|<cid|clear>
+                                   chooses one seat's blind
       scoring-blinds-history[:<year>[|backfill]]  who has been a blind
                                    this year (backfill reads the year's
                                    Golf Genius team strings into the store)
@@ -6413,6 +6415,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _mode == "clear":
                 return json.dumps({"event": _ev["item_name"],
                                    "cleared": db.clear_event_blinds(_ev["id"])},
+                                  indent=2, default=str)
+            if _mode == "set":
+                # "<event>|set|<holes>|<group>|<cart_pos>|<cid|clear>" (Kerry
+                # 10/20 "put Reggie back as the 3:40 blind"): CHOOSE one seat.
+                if len(_parts) < 6:
+                    return json.dumps({"error": "<event>|set|<holes>|<group>|<cart_pos>|<cid|clear>"})
+                db.log_agent_action("mcp-claude", "scoring-blinds", arg)
+                _cid = None if _parts[5].lower() == "clear" else int(_parts[5])
+                return json.dumps(db.set_event_blind(_ev["id"], _parts[2], int(_parts[3]),
+                                                     int(_parts[4]), _cid),
                                   indent=2, default=str)
             if _mode == "pool":
                 with db._connect() as _c2:

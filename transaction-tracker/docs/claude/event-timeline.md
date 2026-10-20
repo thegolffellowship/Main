@@ -72,6 +72,12 @@ The emails (BUILT v2.575.11, manual): scoring-event-day-email:<id>|lateadd|
 each late add as-is, and to everyone else in that group the same message with
 "UPDATED GROUP: " before the subject and a notice naming who joined. Nobody
 outside those groups is mailed. The course notice is still manual.
+A late add who is a 1st timer, guest or new member: their group's notice
+carries Kerry's welcome line ("This is Adam's first time playing with us!
+Welcome him in and help him understand our rules."), and their own email (any
+event-day email to a newcomer) opens with a link to the TGF Rules of Play
+(v2.575.12). An N/H blind is cleared the moment that player gets a starting
+handicap (Kerry 10/20, `drop_stale_nh_blinds`).
 
 ## 3. Adds and withdrawals after lock (PROPOSAL, Kerry: "the messiest and most complex of all")
 

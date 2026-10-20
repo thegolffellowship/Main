@@ -360,7 +360,7 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
             white = sw.lower() in ("#ffffff", "#fff")
             dot = (f'<span style="display:inline-block;width:12px;height:12px;border-radius:6px;'
                    f'background:{"#ffffff" if white or tee.get("ring") else sw};'
-                   f'border:2px solid {"#9CA3AF" if white else sw};vertical-align:middle;"></span> ')
+                   f'border:2px solid {"#9CA3AF" if white else sw};vertical-align:middle;margin-right:6px;"></span>')
         foot.append(f'<td width="50%" style="font-size:14px;vertical-align:top;">'
                     f'<span style="{_EYEBROW}color:{MUTED};">TEES</span><br>{dot}<b>{_e(tee["name"])}</b></td>')
     if format_line:
@@ -560,14 +560,30 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
     ph_d, net_d = row.get("ph_dots") or {}, row.get("net_dots") or {}
     net_short = "CART" if (net or {}).get("unit") == "cart" else "TEAM"
     cell = 'align="center" style="padding:3px 0;font-size:12px;border-top:1px solid ' + LINE + ';"'
-    lab = f'style="padding:3px 6px 3px 0;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"'
+    lab = f'style="padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"'
     head = "".join(f'<td align="center" style="padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in holes)
     pars = "".join(f"<td {cell}>{par.get(h, '')}</td>" for h in holes)
-    ph_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(ph_d.get(h))}</span></td>' for h in holes)
-    net_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(net_d.get(h))}</span></td>' for h in holes)
+    ph_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(ph_d.get(h))}</span></td>' for h in holes)
+    net_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(net_d.get(h))}</span></td>' for h in holes)
+    # TOT column (Kerry 10/20): par total, and the pops each game gives.
+    def _sum(d, keys):
+        t = 0
+        for h in keys:
+            try:
+                t += int(d.get(h) or 0)
+            except (TypeError, ValueError):
+                pass
+        return t
+    tcell = ('align="center" style="padding:3px 6px;font:bold 12px Arial,sans-serif;border-top:1px solid '
+             + LINE + ';border-left:1px solid ' + LINE + ';"')
+    head += (f'<td align="center" style="padding:3px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;'
+             f'color:#ffffff;" bgcolor="{INK}">TOT</td>')
+    pars += f"<td {tcell}>{_sum(par, holes) or ''}</td>"
+    ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, holes)}</span></td>'
+    net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, holes)}</span></td>'
     grid_html = (
         f'<table {_T} style="border:1px solid {LINE};border-radius:6px;">'
-        f'<tr><td bgcolor="{INK}" style="padding:3px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
+        f'<tr><td bgcolor="{INK}" style="padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
         f'<tr><td {lab}>PAR</td>{pars}</tr>'
         f'<tr><td {lab}>NET</td>{ph_row}</tr>'
         f'<tr><td {lab}>{net_short}</td>{net_row}</tr></table>')
@@ -842,13 +858,18 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             if "{spot_card}" in tpl["html_body"]:
                 body = frame(body, chapter_label, title)
             why = _guard(subject, body, text, used, vals_html)
+            kind = newcomer_kind(r)
             msg = {**base, "subject": subject, "html": body, "text": text,
+                   "newcomer": kind, "first_name": first,
                    "start_line": g.get("start_line"), "group": g.get("slot_label"),
                    "games_shown": bool(gcard or games_block),
                    "scoring_link": bool(scoring_block or sbutton)}
             if why:
                 held.append({**base, "reason": "; ".join(why)})
                 continue
+            if kind:
+                msg["html"] = with_banner(msg["html"], rules_note())
+                msg["text"] = f"New to TGF? Please review our TGF Rules of Play: {RULES_OF_PLAY_URL}\n\n" + msg["text"]
             messages.append(msg)
     finally:
         conn.close()
@@ -1153,9 +1174,49 @@ def reissue_key(event_id: int, messages: list) -> str:
 
 
 LATE_ADD_PREFIX = "UPDATED GROUP: "
+RULES_OF_PLAY_URL = "https://tgf-tracker.up.railway.app/static/print/TGF_Rules_of_Play.pdf"
 
 
-def late_add_banner(names: list) -> str:
+def newcomer_kind(r: dict) -> str | None:
+    """Kerry 10/20: "1st Timers, Guests or New Members". 'first' (first TGF
+    event, _mark_first_timers), 'guest', 'new' (joined as a new member this
+    year), else None."""
+    if r.get("is_first_timer"):
+        return "first"
+    st = f"{r.get('user_status') or ''} {r.get('current_player_status') or ''}".lower()
+    if "guest" in st:
+        return "guest"
+    if r.get("is_new"):
+        return "new"
+    return None
+
+
+def rules_note() -> str:
+    """Rules of Play link for a new player (Kerry 10/20)."""
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td style="border:1px solid {LINE};'
+            f'border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{INK};">NEW TO TGF?</div>'
+            f'<div style="padding-top:4px;color:{INK};">Please review our '
+            f'<a href="{RULES_OF_PLAY_URL}" style="color:{ORANGE};font-weight:bold;">TGF Rules of Play</a> '
+            f'before your round.</div></td></tr></table>')
+
+
+def welcome_line(first: str, kind: str | None, gender: str | None = None) -> str:
+    """The UPDATED GROUP line for a newcomer (Kerry 10/20: "This is Adam's
+    first time playing with us! Welcome him in and help him understand our
+    rules."). Pronoun from the profile's gender; they/them when unknown."""
+    if not kind:
+        return ""
+    g = (gender or "").strip().upper()[:1]
+    pr = "him" if g == "M" else "her" if g == "F" else "them"
+    nm = _e(first)
+    lead = {"first": f"This is {nm}'s first time playing with us!",
+            "guest": f"{nm} is joining us as a guest!",
+            "new": f"{nm} is one of our new members!"}[kind]
+    return f"{lead} Welcome {pr} in and help {pr} understand our rules."
+
+
+def late_add_banner(names: list, welcomes: list | None = None) -> str:
     """The orange notice for a group that just gained a late add."""
     who = _e(" and ".join(n for n in names if n))
     verb = "join" if len(names) > 1 else "joins"
@@ -1164,7 +1225,10 @@ def late_add_banner(names: list) -> str:
             f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">UPDATED GROUP</div>'
             f'<div style="padding-top:4px;color:{INK};"><strong>{who}</strong> {verb} your group. '
             f'Your start is the same. This replaces the earlier email; '
-            f'your group and cart are below.</div></td></tr></table>')
+            f'your group and cart are below.</div>'
+            + "".join(f'<div style="padding-top:6px;color:{INK};font-weight:bold;">{w}</div>'
+                      for w in (welcomes or []) if w)
+            + '</td></tr></table>')
 
 
 def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: bool = False,
@@ -1202,10 +1266,19 @@ def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: b
     if missing:
         held = [h for h in built["held"] if h.get("customer_id") in late]
         return {"refused": f"no sendable message for late add(s) {missing}", "held": held}
-    groups = {}
-    for m in msgs:
-        if m["customer_id"] in late:
-            groups.setdefault(m.get("group"), []).append(m["name"])
+    groups, welcomes = {}, {}
+    conn = db.get_connection(db_path)
+    try:
+        for m in msgs:
+            if m["customer_id"] in late:
+                groups.setdefault(m.get("group"), []).append(m["name"])
+                g = conn.execute("SELECT gender FROM customers WHERE customer_id = ?",
+                                 (m["customer_id"],)).fetchone()
+                welcomes.setdefault(m.get("group"), []).append(
+                    welcome_line(m.get("first_name") or m["name"].split()[0],
+                                 m.get("newcomer"), g["gender"] if g else None))
+    finally:
+        conn.close()
     todo = [m for m in msgs if m.get("group") in groups]
     sig = "|".join(sorted(f"{m['customer_id']}:{m.get('group')}" for m in todo))
     key = f"event_day_lateadd:{int(event_id)}:{hashlib.sha256(sig.encode()).hexdigest()[:12]}"
@@ -1219,7 +1292,8 @@ def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: b
         if m["customer_id"] in late:
             return m["subject"], m["html"], "LATE ADD "
         return (LATE_ADD_PREFIX + m["subject"],
-                with_banner(m["html"], late_add_banner(groups[m.get("group")])), "LATE-ADD GROUP ")
+                with_banner(m["html"], late_add_banner(groups[m.get("group")], welcomes.get(m.get("group")))),
+                "LATE-ADD GROUP ")
 
     out = {"event": built["event"], "authority": why, "key": key,
            "late_adds": {g: n for g, n in groups.items()}, "already_sent": sorted(done),

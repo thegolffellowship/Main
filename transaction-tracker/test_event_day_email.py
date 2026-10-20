@@ -361,6 +361,22 @@ check("the same group state is never sent twice", len(SENT) == n and r["counts"]
 r = ede.send_event_day_late_adds(EV, [99999999], ok_post, db_path=DB)
 check("a cid with no sendable message is refused", "refused" in r, r)
 
+print("4e. Newcomers (Kerry 10/20): welcome line, Rules of Play, card totals")
+check("first timer gets Kerry's line, pronoun from gender",
+      ede.welcome_line("Adam", "first", "M") == "This is Adam's first time playing with us! Welcome him in and help him understand our rules.")
+check("…they/them when gender is unknown", "Welcome them in and help them" in ede.welcome_line("Adam", "first", None))
+check("guest and new member wording", "as a guest" in ede.welcome_line("Al", "guest") and "new members" in ede.welcome_line("Al", "new"))
+check("no line for a regular", ede.welcome_line("Al", None) == "")
+check("kinds", ede.newcomer_kind({"is_first_timer": True}) == "first"
+      and ede.newcomer_kind({"current_player_status": "active_guest"}) == "guest"
+      and ede.newcomer_kind({"is_new": True}) == "new" and ede.newcomer_kind({}) is None)
+b = ede.late_add_banner(["Adam Wilson"], [ede.welcome_line("Adam", "first", "M")])
+check("the welcome line rides in the UPDATED GROUP notice", "first time playing with us" in b)
+check("rules note links the Rules of Play PDF", ede.RULES_OF_PLAY_URL in ede.rules_note())
+_cs = ede.card_strip({"si_by_hole": {1: 1}, "ph_dots": {1: 1, 2: 1}, "net_dots": {1: 1}},
+                     {"holes": [1, 2], "par": {1: 4, 2: 5}}, {}, None, None)
+check("YOUR CARD has a TOT column with par and pop totals", ">TOT<" in _cs and ">9<" in _cs, _cs[:200])
+
 print("5. The bridge")
 os.environ["DATABASE_PATH"] = DB
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

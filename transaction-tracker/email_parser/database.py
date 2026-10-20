@@ -42416,7 +42416,14 @@ def set_starting_handicap(customer_id: int, index_18: float | None,
             (index_18, index_18, set_by if index_18 is not None else None,
              note if index_18 is not None else None, customer_id))
         conn.commit()
+    dropped = []
+    if index_18 is not None:
+        try:
+            dropped = drop_stale_nh_blinds(db_path=db_path)
+        except Exception:
+            logger.exception("starting handicap: N/H blind sweep failed for cid %s", customer_id)
     return {"customer_id": customer_id, "customer_name": row["customer_name"],
+            "nh_blinds_dropped": dropped,
             "starting_handicap_18": index_18,
             "starting_handicap_9": round(index_18 / 2, 1)
             if index_18 is not None else None,
@@ -63695,6 +63702,34 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
             "excluded": pool["excluded"],
             "already_drawn": [b for hs in existing.values()
                               for seats in hs.values() for b in seats]}
+
+
+def drop_stale_nh_blinds(event_ids=None, db_path=None) -> list:
+    """Kerry 2026-10-20: "If and when we get a handicap for Adam, that blind
+    would go away immediately." An 'nh' blind whose seat's player now has a
+    handicap is cleared on every event from today on (or the ones given),
+    instead of only being reported in the draw's `stale_nh`. An open-seat
+    blind is never touched."""
+    if event_ids is None:
+        from zoneinfo import ZoneInfo as _ZI
+        today = datetime.now(_ZI("America/Chicago")).date().isoformat()
+        with _connect(db_path) as conn:
+            try:
+                event_ids = [r[0] for r in conn.execute(
+                    """SELECT DISTINCT b.event_id FROM blind_draws b
+                         JOIN events e ON e.id = b.event_id
+                        WHERE b.reason = 'nh' AND COALESCE(e.event_date, '') >= ?""",
+                    (today,)).fetchall()]
+            except sqlite3.OperationalError:
+                return []
+    out = []
+    for eid in event_ids:
+        res = draw_event_blinds(int(eid), dry_run=True, db_path=db_path)
+        for st in (res or {}).get("stale_nh") or []:
+            set_event_blind(int(eid), st["holes"], st["group_num"], st["cart_pos"], None,
+                            db_path=db_path)
+            out.append({"event_id": int(eid), **st})
+    return out
 
 
 def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
