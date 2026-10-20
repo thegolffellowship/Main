@@ -1,5 +1,23 @@
-window.TGF_VERSION = "2.574.2";
+window.TGF_VERSION = "2.574.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.574.5",
+    date: "2026-10-19",
+    title: "Scorecards: full course name, SCAN TO SCORE",
+    changes: ["Kerry 10/19, s9.28 TPC cards: \"Seems like full course name should be able to fit. QR code text could just say SCAN TO SCORE.\" The card header's course name now steps its font size down when it is long (past 22 characters beside a QR, 30 without) instead of ending in an ellipsis, and the QR caption on scorecards, cart signs and the Cup's cart signs reads SCAN TO SCORE."]
+  },
+  {
+    version: "2.574.4",
+    date: "2026-10-19",
+    title: "Cart record counts our own rounds (GG Retirement A2/A3)",
+    changes: ["Kerry 10/19: \"Another GG bug sticking around\" / \"Definitely need to be counting our own.\" A2: the CoS pairing-history cart record and solo-cart count (cos_reads.pairing_history_view) skipped any event without Golf Genius tee-sheet rows, so every round since 10/7 was missing; it now accepts every source with a cart record (database._CART_SOURCES) and COUNTED_RULE says so. A3: hand-loaded tee sheets (import_manual_pairing_groups, source tee_sheet, seat order 1&2 / 3&4) now count as a cart record in the generator's history too; 45 such rows in 2026 had read as 'no cart data'. Guard test_cos_reads.py."]
+  },
+  {
+    version: "2.574.3",
+    date: "2026-10-19",
+    title: "Scorecards print only the tees someone plays",
+    changes: ["Kerry 10/19, a9.28 Avery Ranch card: \"Why are forward tees showing here when there's no one playing forward tees?\" The printed tee rows now keep only the designated tees a player on the event's sheet plays (scorecards._tees_in_play), in legend order. Dots, each player's own stroke index and name circles still read every designated tee. An empty sheet and the Lone Star Cup keep the full legend. Guard test_scorecards.py."]
+  },
   {
     version: "2.574.2",
     date: "2026-10-19",

@@ -381,7 +381,9 @@ submatrix), `hist|<event id or name>` (raw rows + totals by source).
 1. **CART-board weeks still played in real 3/4-somes** (Kerry). The
    foursomes come from the OneDrive `Seasons/<year>/2 Events` starter
    sheets via `scoring-pairings:manual|<event_id>|<json>[|apply]`
-   (source `'tee_sheet'` — the ruled PRIMARY source; replaces the
+   (source `'tee_sheet'` — the ruled PRIMARY source; since v2.574.4 a
+   cart record like `gg_teesheet`, in `_CART_SOURCES` and the CoS cart
+   record, GG Retirement audit A2/A3; replaces the
    event's rows). DONE: s18.5 WILLOW SPRINGS (271, 21 pairs) and
    HILL COUNTRY MATCHES (274, 45 pairs — from its Starter Sheet PDF;
    its own GG portal wasn't needed). STILL CART-ONLY: a9.17

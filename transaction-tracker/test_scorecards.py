@@ -499,5 +499,16 @@ check("a hole is the same width on both nines",
 check("OUT on the front equals IN/TOT/NET on the back",
       abs(cc["f_wide"] * _front - cc["b_wide"] * (1 - _front)) < 0.01, cc)
 
+print("only the tees someone plays (Kerry 10/19, Avery Ranch: no Forward row when nobody plays Forward)")
+_T = [{"band": b} for b in ("<50", "50-64", "65+", "Forward")]
+_pk = {"groups": [{"players": [{"tee_choice": "<50"}, {"tee_choice": "50-64"}, {"tee_choice": "65+"}]}]}
+check("a designated tee nobody plays drops off",
+      [t["band"] for t in scm._tees_in_play(_T, _pk, None)] == ["<50", "50-64", "65+"])
+check("a Forward player keeps the Forward row",
+      [t["band"] for t in scm._tees_in_play(_T, {"groups": [{"players": [{"tee_choice": "forward"}]}]}, None)]
+      == ["Forward"])
+check("no tee on any seat prints every designated tee", scm._tees_in_play(_T, {"groups": []}, None) == _T)
+check("the Cup keeps its own legend", scm._tees_in_play(_T, _pk, {"kind": "cup"}) == _T)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

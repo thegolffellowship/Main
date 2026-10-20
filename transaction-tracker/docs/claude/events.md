@@ -3025,6 +3025,10 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   same markers prints beside it ("Green (32.3/109 · 34.5/117)"). Players,
   chips, dots and the yardage grid keep reading each band
   (`merge_shared_tees`). Tees with different yardage keep their own rows.
+- **Only the tees someone plays (v2.574.3, Kerry 2026-10-19):** a designated
+  tee no player on the event's sheet plays prints no row (`_tees_in_play`,
+  applied before the merge). An empty sheet and the Lone Star Cup keep the
+  full legend.
 - **A women's band reads the women's row (v2.525.1):** `_event_tee_rows`
   (the playing-handicap tee resolver) takes the legend's own designated
   row when it is a candidate, else the row whose gender matches the band.
