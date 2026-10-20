@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.6";
+window.TGF_VERSION = "2.575.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.7",
+    date: "2026-10-20",
+    title: "Leaderboard: the rank gap, for real on phones",
+    changes: ["Kerry 10/20: \"I don't see the spacing fix.\" The phone standings table is table-layout:fixed, so the RK column takes its width from the header cell's inline 28px and ignored v2.575.6's row padding. A board whose rows carry the chapter bar now widens the RK header to 50px (CSS :has on the table), which gives the rank and name their gap on the Monthly and cross-chapter boards."]
+  },
   {
     version: "2.575.6",
     date: "2026-10-20",
