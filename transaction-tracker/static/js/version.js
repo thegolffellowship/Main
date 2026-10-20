@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.574.5";
+window.TGF_VERSION = "2.575.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.0",
+    date: "2026-10-19",
+    title: "Pairings generator: a First Year player riding alone is a real miss, for his first 10 events",
+    changes: [
+      "s9.28 TPC Canyons (event 3301): the generator seated Michele McCormick (First Year) alone and scored it as 0 rule misses while the audit called it hard. _group_seat_misses tested 'someone else can ride solo' and 'the 1st Timer can ride with an Ambassador' on DIFFERENT seatings, so Vasquez (Ambassador) + Copeland (1st Timer) + McCormick passed both though no single seating keeps both. One seating must now keep both; when only one can be kept the First Year player rides alone and the group counts a miss. The same hole let the final pass move a First Year player into the solo seat (cost 0) and accept a 3rd meeting for it; that trade is gone with it.",
+      "Kerry 10/19: \"First year player hard miss for first 10 events only.\" The never-alone protection (rule 16) now covers a First Year member while he has played fewer than 10 events (distinct round dates before the event, every chapter; FIRST_YEAR_NO_SOLO_EVENTS). A 1st Timer is always covered. From his 11th event a First Year player may take the solo seat like anyone else, ranked by season solos. The audit's 'first year player alone' hard flag reads the same window.",
+      "New guard test_pairings_reviewer_3301.py: the 10/19 TPC field as a fixture (21 players, three threesomes, the 7:40 PM generation log's history and flags). Over 20 seeds no First Year player or 1st Timer rides alone, the 1st Timer rides with an Ambassador, threesomes tee off first, the final pass never trades a deeper repeat for a solo point, the audit shows zero hard flags, and a First Year player at 10 events loses the protection. pairings.md."
+    ]
+  },
   {
     version: "2.574.5",
     date: "2026-10-19",

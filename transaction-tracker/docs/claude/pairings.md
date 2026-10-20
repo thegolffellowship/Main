@@ -2203,6 +2203,8 @@ The case was s9.27 The Quarry (event 3307, Tue 10/13). After Chris Espinosa came
 
 ### 16 — a first year player never rides alone
 
+*(Since v2.575.0: for his first 10 events only, and checked on ONE seating together with rules 14/18. See "Rule 16 checked on ONE seating, and its 10-event window" at the end.)*
+
 - **Who counts as first year.** The code's own two definitions: the 1Y tag (`is_new`, rule 13: joined as a NEW member this year and no handicap round before it), plus a 1st Timer (`is_first_timer`, rule 14). Rule 14 already puts a 1st Timer in an Ambassador's cart, so riding alone breaks it either way.
 - **Composition.** `_group_seat_misses` tries every seating of an odd-sized group that keeps requested partners in one cart. The group is a miss when every such seating leaves a first year player in the solo seat.
 - **Seating.** `_arrange_group_seats(no_solo=)` adds a cost of 50 to a first year player in seat 3 of a threesome. That is below a request (100) and the third-solo-in-a-row rule (500), and above the Ambassador cart (10).
@@ -2400,3 +2402,43 @@ distinct restarts) and `repeat_reasons`. The audit, the regroup dry run and
   the proposed sheet (`event_pairing_audit(sheet=..., with_alternative=False)`,
   with each solo rider's season count from every source) and the log.
 - Guard: `test_pairings_gen_fixes.py`.
+
+## Rule 16 checked on ONE seating, and its 10-event window (Kerry 2026-10-19, v2.575.0)
+
+Pairings Generator Reviewer lane (session_013PxgYg78BDjZaXqUx1n9KQ), first
+case s9.28 TPC Canyons (event 3301). Kerry: "This one is a really good one to
+use as a test case because of there being 3 threesomes required."
+
+- **The defect.** The generator's own sheet had Gus Vasquez (Ambassador),
+  Michael Copeland (1st Timer, unattached guest) and Michele McCormick (First
+  Year) as a threesome. `_group_seat_misses` asked "can someone who is not
+  `no_solo` take seat 3?" and "can every needy player ride with a fitting
+  Ambassador?" separately, over every request-respecting seating. Each answer
+  was yes on a DIFFERENT seating, so the group scored 0 misses; in the one
+  seating the seater could pick, McCormick rode alone. The audit flagged it
+  hard. The final pass then used the same hole: a `no_solo` rider costs 0 in
+  the solo-season term, so moving a First Year player into the solo seat read
+  as a saving and the pass accepted a 3rd meeting for it.
+- **The fix.** One seating must keep both rules. When each rule can be kept
+  but not both, the seater keeps the 1st Timer with his Ambassador (40 < 50)
+  and the group counts the First Year miss (rule 16), which outranks
+  everything below it in the sheet cost.
+- **The window (Kerry 10/19, verbatim): "First year player hard miss for first
+  10 events only."** `no_solo` = every 1st Timer, plus each First Year member
+  (`is_new`) who has played fewer than `FIRST_YEAR_NO_SOLO_EVENTS` (10) events:
+  distinct round dates in `scoring_rounds` before this event, every chapter
+  (the count the 18a "first three events" rule already uses). A roster row
+  with no customer_id stays protected. From his 11th event a First Year player
+  may take the solo seat, ranked by season solos like anyone else. He keeps
+  the 1Y tag for everything else (driver's seat, newer players in foursomes).
+  The audit's "first year player alone" hard flag reads the same constant.
+- **Guard.** `test_pairings_reviewer_3301.py`: the 10/19 field as a fixture
+  from the 7:40 PM generation log (pair counts, season solos, flags, tees).
+  Over 20 seeds: no First Year player or 1st Timer alone, the 1st Timer with
+  an Ambassador, threesomes first on tee times, no final-pass move that trades
+  a deeper repeat for a solo point, zero hard audit flags; and a First Year
+  player at 10 events drops out of `no_solo`.
+- **Not reproduced: threesomes after foursomes.** The staging rule
+  (`smalls_lead`, Kerry 2026-07-21) already sends threesomes to the earliest
+  tee times; the 10/19 sheet and a fresh preview both had them first. Kerry
+  10/19: "3somes go first on tee times." Nothing changed.
