@@ -5938,10 +5938,30 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     else:
                         out["send"] = send_print_pack_files(built, to_address=(parts[3] if len(parts) > 3 else None))
                 return json.dumps(out, indent=2, default=str)
+            if len(parts) > 1 and parts[1].lower() == "diffself":
+                # scoring-print-pack-pdf:<id>|diffself -- build the pack twice
+                # and report every part whose content differs between the two
+                # builds, with the first differing text (Kerry 10/20: a pack
+                # re-sent with nothing changed). Read-only, sends nothing.
+                import difflib
+                b1 = build_print_pack_for_event(int(parts[0]))
+                b2 = build_print_pack_for_event(int(parts[0]))
+                if not b1 or not b2:
+                    return json.dumps({"error": "event not found or nothing to print"})
+                v1, v2 = b1.get("_views") or {}, b2.get("_views") or {}
+                diffs = {}
+                for sl in v1:
+                    if v1.get(sl) != v2.get(sl):
+                        d = list(difflib.unified_diff((v1.get(sl) or "").splitlines(),
+                                                      (v2.get(sl) or "").splitlines(), lineterm="", n=0))
+                        diffs[sl] = [x[:300] for x in d[:12]]
+                return json.dumps({"sha": [b1.get("sha"), b2.get("sha")],
+                                   "part_shas": [b1.get("part_shas"), b2.get("part_shas")],
+                                   "differing_parts": diffs}, indent=2, default=str)
             built = build_print_pack_for_event(int(parts[0]))
             if not built:
                 return json.dumps({"error": "event not found or nothing to print"})
-            summary = {k: built.get(k) for k in ("parts", "sha", "filename", "engine", "engine_note", "assets", "error", "scorecards")}
+            summary = {k: built.get(k) for k in ("parts", "sha", "part_shas", "filename", "engine", "engine_note", "assets", "error", "scorecards")}
             summary["bytes"] = len(built.get("pdf") or b"")
             if len(parts) > 1 and parts[1].lower() == "send" and not built.get("error"):
                 db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)

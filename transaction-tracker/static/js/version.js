@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.2";
+window.TGF_VERSION = "2.575.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.3",
+    date: "2026-10-20",
+    title: "Print pack: per-part fingerprints and a self-diff check",
+    changes: ["Kerry 10/20: \"what changed between 6 and 7\" (a print pack re-sent with nothing changed) / \"Do it now.\" The pack build now returns one fingerprint per part (part_shas), and the read-only bridge scoring-print-pack-pdf:<id>|diffself builds the pack twice and names every part whose content differs between the two builds, with the first differing lines. It sends nothing; it finds the part that makes the once-per-change send fire for no reason."]
+  },
   {
     version: "2.575.2",
     date: "2026-10-20",

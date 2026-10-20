@@ -263,6 +263,11 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     pdf, parts = _append_rules_sheet(pdf, parts, rules)
     from email_parser.database import print_file_stub as _pfs
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
+            # one short hash per part, so a re-send can be traced to the part
+            # that changed (Kerry 10/20: "what changed between 6 and 7")
+            "part_shas": {sl: hashlib.sha256(_hash_view(h).encode("utf-8")).hexdigest()[:12]
+                          for sl, h in htmls},
+            "_views": {sl: _hash_view(h) for sl, h in htmls},
             "scorecards": sc_info, "games_sheet": gs_info, "skipped": skipped_parts,
             "engine_note": engine_note, "pack": sheet_pack,
             "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
