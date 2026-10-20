@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.5";
+window.TGF_VERSION = "2.575.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.6",
+    date: "2026-10-20",
+    title: "Leaderboard: room between rank and name",
+    changes: ["Kerry 10/20 on the Monthly board: \"Needs a little more space between rank and player\" (T10MARROQUIN ran together once the 8px chapter bar took space from the rank cell). Rows with a chapter bar give the rank cell 46px minimum and 10px before the name."]
+  },
   {
     version: "2.575.5",
     date: "2026-10-20",

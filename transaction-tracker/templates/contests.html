@@ -152,6 +152,9 @@
         #pr-table-container tbody tr.ev-ch-sa > td:first-child { border-left-color: var(--chapter-sa-alt, #8FA8B8); }
         #pr-table-container tbody tr.ev-ch-tgf > td:first-child { border-left-color: #1B1B1B; }
         #pr-table-container tbody tr.ev-ch-other > td:first-child { border-left-color: var(--chapter-national, #374151); }
+        /* the bar takes 8px out of the rank cell, so give the rank its room back and a gap before the name
+           ("T10MARROQUIN", Kerry 2026-10-20: "Needs a little more space between rank and player") */
+        #pr-table-container tbody tr[class*="ev-ch-"] > td.pr-rk { padding-left: 6px; padding-right: 10px; min-width: 46px; }
         .pr-buyin { display: inline-block; flex: none; background: var(--primary, #E87C3E); color: #fff !important; border-radius: 9999px;
             padding: 3px 11px; font: 700 10px/1.3 'Bitter', Georgia, serif; letter-spacing: .6px; text-decoration: none; white-space: nowrap; margin-left: 8px; }
         .pr-buyin:hover { background: var(--primary-hover, #D06B2E); }
