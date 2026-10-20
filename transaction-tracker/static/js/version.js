@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.574.1";
+window.TGF_VERSION = "2.574.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.574.2",
+    date: "2026-10-19",
+    title: "Bridge to set a player's pace rating",
+    changes: ["Kerry 10/19: \"I do want you to add a tool for it still\" (after setting Will Peterson and Michele McCormick to pace 1 by hand). New bridge scoring-pace-set:<customer_id>[,<id>...]|<1|2|3>[|apply], the twin of the Customers page 1-2-3 buttons: dry run shows each player's current rating, apply writes through set_customer_pace_rating (explicit value, source manager) and logs. 1 = slowest. Guard test_pairings_gen_fixes.py; customers.md."]
+  },
   {
     version: "2.574.1",
     date: "2026-10-19",

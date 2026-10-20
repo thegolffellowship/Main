@@ -1953,6 +1953,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    saving anything (no sheet, no blinds, no log
                                    setting): proposed groups, cost, audit
                                    flags on the proposed sheet, the gen log
+      scoring-pace-set:<cid>[,<cid>]|<1|2|3>[|apply]  pace rating (1 slowest)
       scoring-pairings-set-sheet:<id>|<a;b;c;d>/<e;f;g>...[|apply]  replace the saved sheet
       scoring-pairings-gen-log:<event_id>  the latest Generate's reasoning
                                    (app setting pairings_gen_log:<id>)
@@ -6587,6 +6588,42 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 from email_parser.pairings_audit import event_pairing_audit
                 _a = event_pairing_audit(_eid)
                 out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags")}
+            return json.dumps(out, indent=2, default=str)
+        if cmd == "scoring-pace-set":
+            # "<customer_id>[,<customer_id>...]|<1|2|3>[|apply]" (Kerry
+            # 2026-10-19: "I do want you to add a tool for it"). The bridge
+            # twin of the Customers page 1-2-3 pace buttons: writes through
+            # set_customer_pace_rating (explicit value, source 'manager').
+            # 1 = slowest, 3 = fastest. Dry run by default shows each
+            # player's current rating; |apply writes and logs.
+            _parts = [x.strip() for x in (arg or "").split("|")]
+            try:
+                _ids = [int(x) for x in _parts[0].split(",") if x.strip()]
+                _rating = int(_parts[1])
+            except (ValueError, IndexError):
+                return json.dumps({"error": "<customer_id>[,<id>...]|<1|2|3>[|apply]"})
+            if _rating not in (1, 2, 3) or not _ids:
+                return json.dumps({"error": "rating must be 1, 2 or 3 (1 = slowest)"})
+            _apply = len(_parts) > 2 and _parts[2].lower() == "apply"
+            with db._connect() as _c:
+                _rows = {r["customer_id"]: dict(r) for r in _c.execute(
+                    "SELECT customer_id, first_name, last_name, pace_rating, pace_rating_source "
+                    "FROM customers WHERE customer_id IN (%s)" % ",".join("?" * len(_ids)),
+                    _ids).fetchall()}
+            _missing = [i for i in _ids if i not in _rows]
+            if _missing:
+                return json.dumps({"refused": {"customer not found": _missing}})
+            out = {"rating": _rating, "applied": False, "players": [
+                {"customer_id": i,
+                 "name": f"{_rows[i]['first_name'] or ''} {_rows[i]['last_name'] or ''}".strip(),
+                 "current": _rows[i]["pace_rating"], "current_source": _rows[i]["pace_rating_source"]}
+                for i in _ids]}
+            if _apply:
+                for i in _ids:
+                    db.set_customer_pace_rating(i, _rating)
+                db.log_agent_action("tracker-claude", "pace-set",
+                                    f"pace {_rating} for customers {', '.join(map(str, _ids))}")
+                out["applied"] = True
             return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-pairings-set-sheet":
             # "<event_id>|<name>;<name>;.../<name>;...[|apply]" (Kerry

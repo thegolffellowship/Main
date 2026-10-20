@@ -507,7 +507,8 @@ scale 1=slowest → 3=fastest; NULL reads as 2 everywhere): a **PACE**
 column at the end of the list view plus an inline control on the mobile
 cards. The control is a 1|2|3 segmented button; the stored value renders
 solid orange, an unset rating renders a gray "implied" 2. A tap POSTs
-`/api/customers/<id>/pace` (`set_customer_pace_rating`), which always
+`/api/customers/<id>/pace` (`set_customer_pace_rating`; bridge twin
+`scoring-pace-set:<cid>[,<cid>]|<1|2|3>[|apply]`, v2.574.2), which always
 writes an EXPLICIT value with `pace_rating_source='manager'` — there is
 deliberately no clear-to-NULL, because the boot seed
 (`_seed_pace_ratings`) is fill-only-if-NULL and clearing a seeded player

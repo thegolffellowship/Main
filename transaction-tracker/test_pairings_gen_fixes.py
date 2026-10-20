@@ -303,6 +303,17 @@ check("set-sheet apply saves the groups in the order given",
       ss.get("applied") and [[p["name"] for p in sorted(g["players"], key=lambda p: p["cart_pos"])] for g in _saved] == _new,
       ([[p["name"] for p in g["players"]] for g in _saved], _new))
 
+# scoring-pace-set (Kerry 10/19: "I do want you to add a tool for it").
+with db._connect(DB) as c:
+    _pcid = c.execute("SELECT customer_id FROM customers ORDER BY customer_id LIMIT 1").fetchone()[0]
+ps = json.loads(_ms._scoring_dispatch_inner("", f"scoring-pace-set:{_pcid}|1"))
+check("pace-set dry run writes nothing", ps.get("applied") is False and ps["players"][0]["customer_id"] == _pcid, ps)
+ps = json.loads(_ms._scoring_dispatch_inner("", f"scoring-pace-set:{_pcid}|1|apply"))
+with db._connect(DB) as c:
+    _pr = c.execute("SELECT pace_rating, pace_rating_source FROM customers WHERE customer_id = ?", (_pcid,)).fetchone()
+check("pace-set apply writes 1 as a manager rating", ps.get("applied") and tuple(_pr) == (1, "manager"), tuple(_pr))
+check("pace-set refuses a rating of 4", "error" in json.loads(_ms._scoring_dispatch_inner("", f"scoring-pace-set:{_pcid}|4")))
+
 print()
 print("ALL PASS" if not F else f"FAILED: {F}")
 sys.exit(1 if F else 0)
