@@ -524,3 +524,31 @@ Kerry: "1. Yes  2. SUMMARY can show at IN REVIEW. But with IN REVIEW badge  3. B
 - **SUMMARY (Q2): appears at IN REVIEW, carrying an IN REVIEW badge, and the badge becomes FINAL when closeout fires.** This replaces the "appears at FINAL" rule in 11.3 and 12.1. It is the first tab as soon as it appears, and the landing tab from then on. Hidden through UPCOMING and LIVE. A hold keeps it at IN REVIEW. Cautions from section 7 apply: it is the first place all the money appears together, so the IN REVIEW badge must be unmistakable and the dollars carry the same "in review" weight as the WON column; an Unlock after IN REVIEW can change a figure and SUMMARY moves with it.
 - **Build scope (Q3): everything, now.** Build list B1 to B11 in 12.7 is one body of work, no tiering. Tiering survives only as a deploy-safety note: nothing deploys inside Tuesday's window (3:40 PM first tee through closeout), and nothing deploys without Kerry's "Deploy". If the build is tested and Kerry deploys before 3:35 PM Tue, it is live Tuesday; if not, it deploys after Tuesday's closeout. Tracker Build owns the code and the deploy call, per rule 3c.
 - **Open items still not ruled** (do not block the build): whether a Longest Putt changes the per-contest dollars (Event Ops); a team hole where a player has no score on a closed card (Event Ops stale-card rule).
+
+## 14. TEAM board order, alignment and blinds (Kerry 10/20, v2.575.10)
+
+Kerry, s9.28 TPC Canyons before the round: "These should show in Tee time
+order and be left aligned. Should also show their blinds in a different font
+color or somehow denote it, so they understand easily that player is a blind."
+
+- **Order.** `evlbTeamRows` sorted unscored teams by name. The server now
+  stamps every team with `start_order` (0 = first off) in
+  `get_event_leaderboard`: the print pack's slot label parsed into tee time,
+  start hole and A/B (a cart-mode team adds its cart letter), the pack's group
+  order as the tie-break, the live waiting list's tee time as the fallback.
+  The TEAM board ranks on to-par, then holes done, then `start_order`, then
+  name; `evlbTeamsLiveOrder` breaks ties the same way. A GG-era event keeps
+  GG's recorded order.
+- **Left-aligned.** `table.evlb-tsum tr.evlb-tsum-row td` centres every cell
+  and outweighed `table.evlb-tsum td.nm`; the row-level `td.nm` rule now says
+  `text-align: left` (one rule for desktop and phone).
+- **Blinds.** A blind playing his card was already a team member (`Bl[...]`,
+  `blind: true`). A blind drawn before the round has no card, so the board
+  dropped him. The team now carries `blinds_pending` [{customer_id, name,
+  reason}] from `get_event_blinds` (the Pairings tab's source), display only:
+  scoring reads `players`, never this list. On the collapsed row a blind is the
+  last name, tagged with the amber BLIND chip, italic brown
+  (`.evlb-tmem.blind`); the expanded band label names him "(blind)" and his
+  card row keeps its BLIND chip. Guards `test_team_board_order_blinds.js`,
+  `test_events_board_blinds.py`.
+

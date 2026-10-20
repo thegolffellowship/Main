@@ -15690,6 +15690,7 @@ def get_event_leaderboard(event_name: str,
     # blind's card counts on the listed holes only.
     _nh_seats: set = set()
     _blind_slots: list = []
+    _blind_pending: dict = {}
     try:
         _bl_all = get_event_blinds(ev["id"], db_path=db_path) or {}
         _bl = (_bl_all.get(str(ev["holes"] or 18))
@@ -15701,7 +15702,18 @@ def get_event_leaderboard(event_name: str,
                       or by_norm.get(_normalize_player_name(
                           _b.get("name") or "").lower()))
                 if not _p:
-                    continue          # the blind has no card yet
+                    # the blind has no card yet (before the round): the
+                    # board still NAMES him on his team, display only —
+                    # he plays no hole until his card exists (Kerry 10/20:
+                    # "show their blinds ... so they understand easily
+                    # that player is a blind")
+                    if _b.get("name") or _bcid is not None:
+                        _blind_pending.setdefault(
+                            _team_key(_gnum, _b.get("cart_pos")), []).append({
+                                "customer_id": (int(_bcid) if _bcid is not None else None),
+                                "name": _b.get("name") or "",
+                                "reason": _b.get("reason") or "open_seat"})
+                    continue
                 _reason = _b.get("reason") or "open_seat"
                 if _reason == "nh":
                     _nh_seats.add((_gnum, _b.get("cart_pos")))
@@ -15850,12 +15862,44 @@ def get_event_leaderboard(event_name: str,
     # fallback.
     _start_by_cid: dict = {}
     _start_by_group: dict = {}
+    # START ORDER (Kerry 10/20: "These should show in Tee time order"):
+    # the TEAM board lists unranked / tied teams in the order they go
+    # off — tee time, then start hole, then A before B on a shotgun.
+    _skey_by_cid: dict = {}
+    _skey_by_group: dict = {}
+
+    def _start_key(label, idx, hole=None):
+        s_ = str(label or "").strip()
+        tm = re.search(r"(\d{1,2}):(\d{2})\s*([AaPp])?", s_)
+        tmin = -1
+        if tm:
+            hh, mm, ap = int(tm.group(1)), int(tm.group(2)), (tm.group(3) or "").lower()
+            if ap:
+                hh = hh % 12 + (12 if ap == "p" else 0)
+            elif hh < 6:
+                hh += 12               # "1:10" on a golf day is the afternoon
+            tmin = hh * 60 + mm
+            s_ = s_[:tm.start()] + " " + s_[tm.end():]
+        hm = re.search(r"(\d{1,2})\s*([A-Za-z])?(?![A-Za-z])", s_)
+        hnum = int(hm.group(1)) if hm else 0
+        letter = (hm.group(2) or "").upper() if hm else ""
+        if hole not in (None, ""):
+            try:
+                hnum = int(hole)
+            except (TypeError, ValueError):
+                pass
+        return (tmin, hnum, letter, idx)
     try:
         _want_holes = str(ev["holes"] or 18)
         _pgroups = (_pack or {}).get("groups") or []
         if any(str(_g.get("holes")) == _want_holes for _g in _pgroups):
             _pgroups = [_g for _g in _pgroups if str(_g.get("holes")) == _want_holes]
-        for _g in _pgroups:
+        for _gi, _g in enumerate(_pgroups):
+            _sk = _start_key(_g.get("slot_label") or _g.get("start_line"), _gi)
+            _skey_by_group.setdefault(_g.get("group_num"), _sk)
+            for _p in _g.get("players") or []:
+                if _p.get("customer_id") is not None:
+                    _skey_by_cid.setdefault(int(_p["customer_id"]), _sk)
             _sl = _g.get("start_line")
             if not _sl:
                 continue
@@ -15871,6 +15915,9 @@ def get_event_leaderboard(event_name: str,
             continue
         _wc = int(_w["customer_id"])
         _waiting_cids.add(_wc)
+        if _wc not in _skey_by_cid and _w.get("tee_time"):
+            _skey_by_cid[_wc] = _start_key(_w.get("tee_time"), 10 ** 6,
+                                           _w.get("start_hole"))
         if _wc not in _start_by_cid and _w.get("tee_time"):
             _sh = _w.get("start_hole")
             _start_by_cid[_wc] = str(_w["tee_time"]) + (
@@ -15983,7 +16030,20 @@ def get_event_leaderboard(event_name: str,
                 break
         if _start is None:
             _start = _start_by_group.get(tn[0] if isinstance(tn, tuple) else tn)
+        _skey = None
+        for _n, c, _b in names:
+            if c is not None and not _b and int(c) in _skey_by_cid:
+                _skey = _skey_by_cid[int(c)]
+                break
+        if _skey is None:
+            _skey = _skey_by_group.get(tn[0] if isinstance(tn, tuple) else tn)
+        if _skey is not None and isinstance(tn, tuple):
+            _skey = _skey + (str(tn[1]),)        # cart A before cart B
         teams.append({
+            "_skey": _skey,
+            # drawn blinds with no card yet — named on the board, marked
+            # BLIND, never scored (display only; scoring reads `players`)
+            "blinds_pending": _blind_pending.get(tn, []),
             "team_num": (f"{tn[0]}{tn[1]}" if isinstance(tn, tuple)
                          else tn),
             "players": members,
@@ -15996,6 +16056,14 @@ def get_event_leaderboard(event_name: str,
             "start_line": _start,
             "upcoming": _upcoming,
             "purse": None, "gg_position": None, "gg_total": None})
+
+    # every team carries its place in the start order (0 = first off);
+    # a team with no known start sorts after, by team number
+    for _i, _t in enumerate(sorted(
+            teams, key=lambda t: (t["_skey"] is None, t["_skey"] or (), str(t["team_num"])))):
+        _t["start_order"] = _i
+    for _t in teams:
+        _t.pop("_skey", None)
 
     def _member_hits(members, gs):
         # Count MEMBERS found in GG's team string — full "LAST, First"

@@ -791,7 +791,14 @@
         table.evlb-tsum th.nm, table.evlb-tsum td.nm { text-align: left; }
         table.evlb-tsum tr.evlb-tsum-row td { padding: 7px 8px; border-bottom: 1px solid #E5E7EB;
             text-align: center; font-variant-numeric: tabular-nums; cursor: pointer; }
-        table.evlb-tsum tr.evlb-tsum-row td.nm { white-space: normal; line-height: 1.35; }
+        /* the names cell reads left like a list (Kerry 10/20: "be left
+           aligned") — the row rule above centres every cell, so the name
+           cell restates it at the same weight */
+        table.evlb-tsum tr.evlb-tsum-row td.nm { white-space: normal; line-height: 1.35; text-align: left; }
+        /* a drawn BLIND on the team row: tagged, italic, muted brown — the
+           Pairings tab's "BLIND · Name" (Kerry 10/20) */
+        .evlb-tmem.blind { font-style: italic; color: #92400E; }
+        .evlb-tmem.blind .evlb-blind { margin: 0 4px 0 0; font-style: normal; }
         table.evlb-tsum tr.evlb-tsum-row:hover td { background: #FAFAF8; }
         table.evlb-tsum tr.evlb-tsum-row.open td { background: #F3F1EC; border-bottom-color: #1B1B1B; }
         table.evlb-tsum tr.evlb-tsum-row .tchev { margin-right: 4px; }
@@ -4414,6 +4421,12 @@
     // While LIVE the teams rank on to-par, then holes done, then their
     // order as given; the position label follows ("T1"). Once every score
     // is in the server's order (and Golf Genius's, on an old event) stands.
+    // The start order the server stamps on each team (tee time, then
+    // hole, A before B — Kerry 10/20 "Tee time order"); unknown sorts last.
+    function evlbTeamStartOrder(t) {
+        const v = t && t.start_order;
+        return v == null || isNaN(Number(v)) ? Infinity : Number(v);
+    }
     function evlbTeamsLiveOrder(d, teams) {
         const st = new Map((teams || []).map(t => [t, evlbTeamStanding(d, t)]));
         const out = (teams || []).map((t, i) => [t, i]).sort((a, b) => {
@@ -4421,6 +4434,8 @@
             if ((sa.toPar == null) !== (sb.toPar == null)) return sa.toPar == null ? 1 : -1;
             if (sa.toPar !== sb.toPar) return sa.toPar - sb.toPar;
             if (sa.thru !== sb.thru) return sb.thru - sa.thru;
+            const oa = evlbTeamStartOrder(a[0]), ob = evlbTeamStartOrder(b[0]);
+            if (oa !== ob) return oa < ob ? -1 : 1;
             return a[1] - b[1];
         }).map(x => x[0]);
         out.forEach((t, i) => {
@@ -4463,6 +4478,33 @@
     function evlbTeamMemberName(x) {
         const nm = String((x && x.player_name) || "").replace(/^Bl\[(.*)\]$/, "$1");
         return evlbIsBlind(x) ? nm + " (blind)" : nm;
+    }
+    // A drawn blind with no card yet (before the round) rides on the team
+    // as `blinds_pending` — named and marked, never scored.
+    function evlbBlindBare(x) {
+        return String((x && x.player_name) || "").replace(/^Bl\[(.*)\]$/, "$1");
+    }
+    function evlbTeamPendingBlinds(t) {
+        const have = new Set(((t && t.players) || []).filter(evlbIsBlind)
+            .map(p => evlbBlindBare(p).trim().toLowerCase()));
+        return ((t && t.blinds_pending) || []).filter(b => b && b.name
+            && !have.has(String(b.name).trim().toLowerCase()));
+    }
+    function evlbTeamNames(t) {
+        return ((t && t.players) || []).map(evlbTeamMemberName)
+            .concat(evlbTeamPendingBlinds(t).map(b => b.name + " (blind)"));
+    }
+    // The collapsed TEAM row's names: members, then any blind tagged
+    // BLIND in its own colour (Kerry 10/20: "show their blinds in a
+    // different font color or somehow denote it").
+    function evlbTeamNamesHtml(d, t) {
+        const blind = (nm, dot) => `<span class="evlb-tmem blind" title="Blind draw: this player's card fills an open seat on this team">` +
+            `<span class="evlb-blind">BLIND</span>${escapeHtml(nm)}${dot || ""}</span>`;
+        return ((t && t.players) || []).map(p => evlbIsBlind(p)
+            ? blind(evlbBlindBare(p), evlbTeeDot(d, p))
+            : `<span class="evlb-tmem">${escapeHtml(evlbTeamMemberName(p))}${evlbTeeDot(d, p)}</span>`)
+            .concat(evlbTeamPendingBlinds(t).map(b => blind(b.name)))
+            .join(", ");
     }
     function evlbOvOf(ovIx, x, note) {
         const base = x && ovIx[String(x.scoring_round_id)];
@@ -4825,7 +4867,7 @@
     function evlbTeamSection(ovIx, t) {
         return {
             label: `${t.position ? t.position + " \u00b7 " : ""}` +
-                `${(t.players || []).map(evlbTeamMemberName).join(" \u00b7 ")}`,
+                `${evlbTeamNames(t).join(" \u00b7 ")}`,
             rows: (t.players || []).map(x => {
                 const base = evlbOvOf(ovIx, x);
                 if (!base) return base;
@@ -4848,7 +4890,7 @@
         const teams = (d.teams || []).map((t, i) => {
             const mins = evlbTeamMins(d, t);
             return { t, i, mins, s: evlbTeamSummary(d, t, mins),
-                     name: (t.players || []).map(evlbTeamMemberName).join(", ") };
+                     name: evlbTeamNames(t).join(", ") };
         });
         if (teams.some(x => x.t.gg_position)) {
             teams.forEach(x => { x.pos = x.t.position || ""; });
@@ -4859,6 +4901,9 @@
             if ((pa == null) !== (pb == null)) return pa == null ? 1 : -1;
             if (pa != null && pa !== pb) return pa - pb;
             if (a.s.thru !== b.s.thru) return b.s.thru - a.s.thru;
+            // unranked / tied: the order they go off, not the alphabet
+            const oa = evlbTeamStartOrder(a.t), ob = evlbTeamStartOrder(b.t);
+            if (oa !== ob) return oa < ob ? -1 : 1;
             return a.name.toLowerCase() < b.name.toLowerCase() ? -1
                 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0;
         });
@@ -4881,8 +4926,7 @@
         const rows = evlbTeamRows(d);
         const body = rows.map(x => {
             const t = x.t, s = x.s;
-            const names = (t.players || []).map(p =>
-                `<span class="evlb-tmem">${escapeHtml(evlbTeamMemberName(p))}${evlbTeeDot(d, p)}</span>`).join(", ");
+            const names = evlbTeamNamesHtml(d, t);
             const money = t.purse != null && Number(t.purse) > 0 ? "$" + Number(t.purse).toFixed(2) : "";
             const one = Object.assign({}, teamBoard, {
                 teamBands: true, teams: [t], sections: [evlbTeamSection(ovIx, t)] });

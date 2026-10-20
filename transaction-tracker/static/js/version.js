@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.9";
+window.TGF_VERSION = "2.575.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.10",
+    date: "2026-10-20",
+    title: "TEAM board: tee-time order, names left-aligned, blinds marked",
+    changes: ["Kerry 10/20, s9.28 TPC Canyons before the round: \"These should show in Tee time order and be left aligned.\" The collapsed TEAM rows sorted unscored teams by NAME. get_event_leaderboard now stamps each team's start_order (tee time, then start hole, A before B on a shotgun or in cart mode, from the print pack's slots); the TEAM board lists unranked teams in that order and breaks to-par ties on it (the live order too). Scored teams still rank on to-par.", "The names cell was centred because the row rule (td, text-align:center) outweighed the column's left rule; the row-level name cell now restates text-align:left, desktop and phone, with the chevron first.", "Kerry: \"Should also show their blinds in a different font color or somehow denote it.\" A drawn blind shows as the team's 4th name with the amber BLIND tag, italic and brown. Before the round the blind has no card, so the board used to drop him; the team now carries blinds_pending ({customer_id, name}) from the saved blind draws, display only, never scored. A blind playing his card (Bl[...]) is marked the same way. Guards test_team_board_order_blinds.js and test_events_board_blinds.py."]
+  },
   {
     version: "2.575.9",
     date: "2026-10-20",
