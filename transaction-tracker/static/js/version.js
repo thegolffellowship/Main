@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.573.12";
+window.TGF_VERSION = "2.574.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.574.0",
+    date: "2026-10-19",
+    title: "Pairings generator: every event in history, solo carts by season, newer players in foursomes, generation log",
+    changes: [
+      "Kerry 10/19: \"add ALL events into the pairings generator history...LSC too.\" One history reader now feeds pair counts, cart counts and solo counts for the generator, the cards' History line and the audit alike: Golf Genius rows, the closeout's entry rows, and score-entry rounds not yet published (every Lone Star Cup session). Preview rounds never count; an event with both GG and entry rows counts GG only.",
+      "Kerry 10/19: \"We need to look at season totals ... Definitely need to be counting our own.\" Solo carts are now counted across the season from every cart record, our own entered groups included. The solo seat goes to the qualified player with the fewest season solos; 1st Timers and First Year members are never solo.",
+      "Kerry 10/19: \"newer players would be able to get foursomes where possible to maximize new connections.\" A new lowest-priority term keeps newer players out of threesomes when the rest of the sheet allows it. Sheet cost order: 1st Timer/First Year/guest misses, then lone back tee and leaderless groups, then season solos, then repeat depth, then newer players outside foursomes. A final swap and 3-way rotation pass (capped at 6 s) lowers the cost without breaking a rule.",
+      "Generation log: inputs, every repair and swap with who moved and why, each group's breakdown, the final cost against the alternatives, and why each remaining repeat stayed. Stored in app setting pairings_gen_log:<event_id>; bridges scoring-pairings-gen-log:<id> and scoring-pairings-generate-preview:<id> (runs the generator and saves nothing). Guard test_pairings_gen_fixes.py; pairings.md."
+    ]
+  },
   {
     version: "2.573.12",
     date: "2026-10-19",
