@@ -14,6 +14,12 @@ to catch themselves. We have EVENT INVITATIONS - EVENT RESULTS - TGF INSIDER so 
 The first half is built on the branch as v2.577.4 (results_email.audience). It is
 waiting on "Deploy".
 
+Kerry, 10/21 addition (via the Front Desk): "Opt-out: I imagine there's some
+schema there to build. Also needs an opt out (unsubscribe) from all option."
+So step 1 carries a fourth choice, UNSUBSCRIBE FROM ALL, and storage leans to
+option A. db-claude designs the schema and gives it a PASS, and Kerry sees it
+before anything is filed.
+
 ## How it works today
 
 - There is one opt-out list. App setting `event_invite_optout` holds a JSON list
@@ -41,12 +47,16 @@ waiting on "Deploy".
    - TGF INSIDER.
 
    Each category shows its current state and gets a tick box. Only the
-   category of the email they came from is pre-ticked. Button: Continue.
+   category of the email they came from is pre-ticked. Below the three,
+   set apart, is UNSUBSCRIBE FROM ALL, which ticks all three (and any
+   category added later). Button: Continue.
 3. **Step 2, CONFIRM (POST of step 1, still records nothing).** "You will stop
    getting: ... You will still get: ..." Then a fixed line: emails about an
    event you have registered for are not affected (Event Info, tee times, the
-   handicap ask, the payout ask). If all three are ticked, the page asks once
-   more: "Stop everything?", showing what they will miss. Buttons:
+   handicap ask, the payout ask). If UNSUBSCRIBE FROM ALL (or all three) is
+   ticked, the page asks once more: "Stop everything?", showing what they
+   will miss. "Unsubscribe from all" is stored as one opt-out per category,
+   so a later category starts off for that person too. Buttons:
    - "Yes, stop these";
    - "Go back".
 4. **Done (POST of step 2, the only write).** It shows what changed and a
@@ -67,7 +77,11 @@ forms:
   categories, source email and time, so a scanner write could be found and
   undone like the 10/14 restore.
 
-## Storage: Kerry decides (schema, rule 3b)
+## Storage: db-claude designs it, Kerry sees it first (schema, rule 3b)
+
+The shape below is the input for db-claude. A person on UNSUBSCRIBE FROM ALL
+also needs an `all` flag (or an `all` category row), so that a category added
+later is off for them.
 
 - **A (recommended).** A new table `customer_email_prefs`, with migration:
   - `customer_id` (FK customers);
