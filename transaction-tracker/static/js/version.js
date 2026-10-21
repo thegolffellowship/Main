@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.17";
+window.TGF_VERSION = "2.576.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.576.0",
+    date: "2026-10-21",
+    title: "Events leaderboard, batch 1: one state, month list, state strip, tabs, TEAM",
+    changes: ["Design-claude's batch 1 (#2147 with #2148-#2150), Kerry-approved 10/20: \"2a - 2d is perfect\". One board state, computed once on the server (database.evlb_state), drives the strip word and colour, the list chip and the landing tab. board_summary.attach no longer recomputes it, which is how a LIVE-coloured strip could read UPCOMING or a held board turn FINAL.", "The state strip is the only money message: UPCOMING \"Pairings are set. First tee 3:40 PM.\", LIVE \"Money is projected until every card is in.\" with UPDATED m:ss AGO, IN REVIEW \"Every score is in. Cards lock at 7:34 PM.\" (the lock time from the event), held \"Results are being checked.\", FINAL \"Results are closed and prizes are set.\" The amber Round in play notice, its list of who is short, the not-final banner and every typed 10 minutes are gone. A LIVE board re-reads itself every 30 seconds.", "The events list is paged by month (older months are a dashed row that loads on tap) with a real season dropdown. Each card has its chapter colour bar, a state chip and the pot in one green with two decimals.", "Tabs are underline tabs; SUMMARY looks like the others; HOW IT WORKS is an outlined pill, a round i on a phone, where the tabs scroll sideways instead of wrapping. The Tap a player footer is gone.", "TEAM: the dial line carries the team pot once, then # | TEAM | +/- | THRU | WON (PROJ. while live). +/- is the big number; a finished team shows only its team net in THRU, no F (Kerry 10/20), and THRU drops the F on every tab. Names are First LAST in Bitter on one line with the tee dot after each name; a blind leads with the BLIND chip in italic brown. An opened team is its card: HOLE, PAR, each player's gross with Team Net pops and counted balls green, TEAM NET, then N, +/- and USED. On a phone the team cell is a 2 x 2 grid of last names and an opened team is a full-screen sheet that fits 390px.", "Money everywhere on the board now prints two decimals ($46.00). Guards test_evlb_batch1.py, test_team_board_collapsed.js (with the #2147 sample: 47 vs 54 = -7), test_team_board_order_blinds.js, test_evlb_rulings_b1_b7.js, test_lb_summary.js; docs events.md."]
+  },
   {
     version: "2.575.17",
     date: "2026-10-20",

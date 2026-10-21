@@ -99,7 +99,8 @@ TOK = se.make_group_token(gid)
 print("API tier")
 with appmod.app.test_client() as tc:
     r = tc.get("/api/events-leaderboard")
-    check("anonymous: 200, every event (member tier since v2.523.4, #1146-1)", r.status_code == 200 and len(r.get_json()["events"]) == 2, str(r.status_code))
+    # paged by month since Batch 1 (#2147 §1): every event is on a month row
+    check("anonymous: 200, every event (member tier since v2.523.4, #1146-1)", r.status_code == 200 and sum(m["count"] for m in r.get_json()["months"]) == 2, str(r.status_code))
     r = tc.get(f"/api/events-leaderboard?t={TOK}")
     check("scorer's link: 200 and his event only", r.status_code == 200 and [e["id"] for e in r.get_json()["events"]] == [900], (r.status_code, r.get_data()[:120]))
     r = tc.get(f"/api/events-leaderboard/event?name=s9.26%20Olympia%20Hills&t={TOK}")
@@ -118,12 +119,12 @@ with appmod.app.test_client() as tc:
     check("the member Leaderboard page renders the Events tab, open to members (v2.523.4)", r.status_code == 200 and b'<button class="top-tab" data-top="events">' in r.data and b'evlb-official' in r.data)
     tc.post("/api/auth/login", json={"pin": "5151"})
     r = tc.get("/api/events-leaderboard")
-    check("manager: 200, every event", r.status_code == 200 and len(r.get_json()["events"]) == 2, str(r.status_code))
+    check("manager: 200, every event", r.status_code == 200 and sum(m["count"] for m in r.get_json()["months"]) == 2, str(r.status_code))
     tc.post("/api/auth/logout")
     with tc.session_transaction() as s:
         s["role"] = "member"
     r = tc.get("/api/events-leaderboard")
-    check("member session without a link: 200, every event (v2.523.4)", r.status_code == 200 and len(r.get_json()["events"]) == 2, str(r.status_code))
+    check("member session without a link: 200, every event (v2.523.4)", r.status_code == 200 and sum(m["count"] for m in r.get_json()["months"]) == 2, str(r.status_code))
 
 try:
     from playwright.sync_api import sync_playwright

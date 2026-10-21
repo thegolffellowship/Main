@@ -12340,7 +12340,9 @@ def api_events_leaderboard():
         return jsonify({"error": "Manager access required."}), 403 if session.get("role") else 401
     d = get_events_leaderboard(
         chapter=request.args.get("chapter") or None,
-        year=request.args.get("year") or None)
+        year=request.args.get("year") or None,
+        month=request.args.get("month") or None,
+        event=request.args.get("event") or None)
     if only_ev:
         d["events"] = [e for e in d.get("events", []) if e.get("id") == only_ev]
     return jsonify(d)
