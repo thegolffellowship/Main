@@ -71359,7 +71359,7 @@ def generate_event_pairings(
             "Match Play opponents (opposite carts), seeds/locks, partner requests, host + guests",
             "1st Timer / First Year / guest rules (rules 14, 16, 18, 18a)",
             "lone <50 tee (rule 12), a captain or Ambassador in every group (rule 7)",
-            "solo cart by SEASON total: the fewest-solo qualified player takes it (R-C, Kerry 10/19)",
+            "solo cart by SEASON total: the fewest-solo qualified player takes it (R-C, Kerry 10/19); it outranks repeats (Kerry 10/21: \"Fair solo rotation wins\")",
             "repeats in sequence: deepest repeat first (REPEAT_LEVEL_BASE ** count)",
             "newer players in foursomes (Kerry 10/19)",
         ],
@@ -71770,7 +71770,8 @@ def generate_event_pairings(
         # Per group, in priority order:
         #   0 1st Timer / First Year / guest misses (rules 14, 16, 18)
         #   1 lone <50 + leaderless group (rules 12, 7)
-        #   2 the solo seat by SEASON total: REPEAT_LEVEL_BASE ** solos of the
+        #   2 the solo seat by SEASON total (above repeats: Kerry 2026-10-21,
+        #     "Fair solo rotation wins"): REPEAT_LEVEL_BASE ** solos of the
         #     qualified player the seater puts in seat 3 of a threesome, so
         #     one solo at 2 outweighs any number at 1, and nobody qualified
         #     takes it while another qualified player could at fewer

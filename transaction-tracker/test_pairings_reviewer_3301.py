@@ -218,6 +218,35 @@ a = event_pairing_audit(EV, db_path=DB)
 hard = [f for f in a["flags"] if f["kind"] == "hard"]
 check("audit: zero hard flags", not hard, hard)
 
+print("fair solo rotation wins over a 3rd meeting (Kerry 10/21)")
+check("sheet cost order: rule misses, then solo season, then repeats",
+      list(db._cost_view((1, 2, 3, 4, 5))) == ["first_timer_first_year_guest_misses",
+                                                "lone_back_or_leaderless_misses", "solo_season_cost",
+                                                "repeat_cost", "new_players_outside_foursomes"])
+orig_seed = db.PAIRINGS_SEED
+trades, worse = [], []
+try:
+    for t in range(RUNS):
+        db.PAIRINGS_SEED = f"rot-{t}"
+        h = gen()[1]["gen_log"]["holes"]["9"]
+        fc = h["final_cost"]
+        for alt in h.get("alternatives", []):
+            ac = alt["cost"]
+            same_rules = (ac["first_timer_first_year_guest_misses"], ac["lone_back_or_leaderless_misses"]) == \
+                         (fc["first_timer_first_year_guest_misses"], fc["lone_back_or_leaderless_misses"])
+            if same_rules and ac["solo_season_cost"] < fc["solo_season_cost"]:
+                worse.append((t, fc["solo_season_cost"], ac["solo_season_cost"]))
+        for p_ in h["passes"]:
+            for mv in p_.get("moves", []):
+                cc = mv["cost_change"]
+                if (cc["solo_season_cost"] > 0 and cc["first_timer_first_year_guest_misses"] >= 0
+                        and cc["lone_back_or_leaderless_misses"] >= 0):
+                    trades.append((t, mv["move"], cc))
+finally:
+    db.PAIRINGS_SEED = orig_seed
+check("final pass never gives up a solo-rotation point for fewer repeats", not trades, trades[:3])
+check("no restart with the same rule misses had fairer solo rotation than the final sheet", not worse, worse[:3])
+
 print("rule 16 window: a First Year player is protected for his first 10 events only (Kerry 10/19)")
 flags = res["gen_log"]["holes"]["9"]["inputs"]["flags"]
 check("all six 1Y players (5 events each) and the 1st Timer are no_solo",

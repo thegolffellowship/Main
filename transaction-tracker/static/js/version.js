@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.577.4";
+window.TGF_VERSION = "2.577.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.577.5",
+    date: "2026-10-21",
+    title: "Pairings: fair solo rotation outranks a 3rd meeting (Kerry's ruling recorded)",
+    changes: ["Kerry 10/21, verbatim: \"Fair solo rotation wins.\" When giving the solo cart to the qualified player with the fewest season solos costs a deeper repeat, the solo rotation wins. The generator's sheet cost already ranks the solo seat by season total above repeats (since v2.574.0), so no sheet changes: this records the ruling in pairings.md, the generation log's rules_order and the cost comment, and adds guards to test_pairings_reviewer_3301.py (cost order; no final-pass move gives up a solo-rotation point for fewer repeats; no restart with the same rule misses had fairer rotation than the final sheet)."]
+  },
   {
     version: "2.577.4",
     date: "2026-10-21",

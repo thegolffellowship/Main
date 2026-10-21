@@ -2442,3 +2442,31 @@ use as a test case because of there being 3 threesomes required."
   (`smalls_lead`, Kerry 2026-07-21) already sends threesomes to the earliest
   tee times; the 10/19 sheet and a fresh preview both had them first. Kerry
   10/19: "3somes go first on tee times." Nothing changed.
+
+## Fair solo rotation outranks a 3rd meeting (Kerry 2026-10-21)
+
+Kerry, verbatim (rule 3b, relayed by the Front Desk 10/21 8:00 AM): **"Fair
+solo rotation wins."** The question (#2123): when giving the solo cart to the
+qualified player with the fewest season solos costs a deeper repeat (a 3rd
+meeting), which wins?
+
+- **What the generator does.** The sheet cost has ranked the solo seat by
+  season total (term 3) above repeats in sequence (term 4) since v2.574.0, so
+  the ruling confirms the built order; nothing in the search changed. Every
+  restart, the final swap / 3-way rotation pass and the alternatives are
+  compared on that lexicographic cost, so no move is taken that gives up a
+  solo-rotation point to save repeats. The intermediate "guarded repeat swaps"
+  pass looks at repeats only, but the final pass always runs after it on the
+  full cost and undoes any such trade.
+- **Seen on 10/20, a9.28 Avery Ranch (3319, preview 10/21).** The final pass
+  swapped Eduardo Melchor (0 solos) into the solo seat for Chris Cannon (2),
+  which raised repeats; the next move removed the repeat. The result is the
+  fairest rotation with no 3rd meeting.
+- **Still above it:** 1st Timer / First Year / guest rules (14, 16, 18) and
+  lone <50 / a leader in every group (12, 7). Below it: repeats, then newer
+  players in foursomes.
+- **The log** says so in `rules_order`; the code comment at `_gvec` cites it.
+- **Guard** (`test_pairings_reviewer_3301.py`): the cost order is rule misses,
+  solo season, repeats; over 20 seeds no final-pass move raises the solo cost
+  without lowering a rule term; and no restart with the same rule misses had
+  fairer solo rotation than the final sheet.
