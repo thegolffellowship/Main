@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.576.0";
+window.TGF_VERSION = "2.576.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.576.1",
+    date: "2026-10-21",
+    title: "TEAM board: a Golf Genius name reads First LAST",
+    changes: ["Kerry 10/21, an opened team on a Golf Genius-era event showed \"JONES, James\" in the names and \"James\" as the surname on the card. Names stored LAST, First now split on the comma, so the board reads James JONES and the phone card JONES. Guard test_team_board_collapsed.js."]
+  },
   {
     version: "2.576.0",
     date: "2026-10-21",

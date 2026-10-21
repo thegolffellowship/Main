@@ -19,7 +19,7 @@ eval('const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g
   + lines.slice(a, b).join('\n')
   + '\nObject.assign(globalThis, {evlbTeamMins, evlbTeamCounted, evlbTeamSummary, evlbTeamRows,'
   + ' evlbTeamPanel, evlbTeamDialLabel, evlbTeamSetOpen, evlbTeamToggleAll, evlbTeamAllOpen,'
-  + ' evlbTeamSyncAll, evlbTeamThru, evlbTeamBalls, evlbTeamGrid});');
+  + ' evlbTeamSyncAll, evlbTeamThru, evlbTeamBalls, evlbTeamGrid, evlbSplitName, evlbNameFL});');
 const txt = h => String(h).replace(/<[^>]+>/g, '');
 
 let fails = 0;
@@ -227,6 +227,12 @@ console.log('== #2147 §5 sample: thru 7, best 2 nets 7·5·8·7·7·8·5 = 47 v
   const ss = evlbTeamSummary(ds, ds.teams[0], ms);
   ck('the collapsed row\'s ± is −7, thru 7, net 47', ss.toPar === -7 && ss.thru === 7 && ss.net === 47, JSON.stringify(ss));
 }
+
+console.log('== names ==');
+ck('First LAST splits on the last word', JSON.stringify(evlbSplitName('Michelle DelCARMEN')) === '{"first":"Michelle","last":"DelCARMEN"}');
+// Kerry 10/21: a Golf Genius-era name "JONES, James" showed as "James"
+ck('a GG "LAST, First" name reads First LAST', JSON.stringify(evlbSplitName('JONES, James')) === '{"first":"James","last":"JONES"}'
+   && txt(evlbNameFL('JONES, James')) === 'James JONES', txt(evlbNameFL('JONES, James')));
 
 console.log('== page wiring ==');
 ck('the TEAM panel replaces the always-open board',
