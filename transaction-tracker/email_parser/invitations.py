@@ -1136,14 +1136,20 @@ def _deliver(ev: dict, pl: dict, db_path=None) -> dict:
     return {"sent": sent, "failed": failed, "held": held}
 
 
-def restore_answers(customer_ids, kerry_ok_post, confirm: bool = False, db_path=None) -> dict:
+def restore_answers(customer_ids, kerry_ok_post, confirm: bool = False, keep_answers: bool = False,
+                    db_path=None) -> dict:
     """Undo answers that a person did not give (Kerry 10/14: "Yes, restore
     them"). On 10/14 mail scanners opened every button, and taps on a staff
     preview answered for the sample person. For each customer_id this puts
     them back on the invitation list, deletes their Tracker NOT PLAYING rows
     on upcoming events (so reminders reach them), and deletes their decline
     reasons on those events. A registration or a Golf Genius RSVP is never
-    touched. Kerry's word on the mailbox; dry run unless confirm."""
+    touched. Kerry's word on the mailbox; dry run unless confirm.
+
+    keep_answers (Kerry 10/20, Lou Schneider): the person DID give their
+    answers and only the "Remove me" was a mistake. Puts them back on the
+    invitation list and leaves every NOT PLAYING row and decline reason as
+    it is, so a real "Can't make it" keeps its reminders off."""
     from email_parser import database as db
     from email_parser.customer_query import _kerry_ok
     from email_parser.timezone_utils import today_central_str as today_iso
@@ -1160,13 +1166,13 @@ def restore_answers(customer_ids, kerry_ok_post, confirm: bool = False, db_path=
             f"SELECT email_uid, customer_id, matched_event FROM rsvps "
             f"WHERE customer_id IN ({marks}) AND response = 'NOT PLAYING' "
             f"AND substr(email_uid, 1, 8) = 'tracker:' AND event_date >= ?",
-            (*cids, today_iso())).fetchall()]
+            (*cids, today_iso())).fetchall()] if not keep_answers else []
         reasons = [dict(r) for r in conn.execute(
             f"SELECT r.event_id, r.customer_id, r.reason FROM event_decline_reasons r "
             f"JOIN events e ON e.id = r.event_id WHERE r.customer_id IN ({marks}) "
-            f"AND e.event_date >= ?", (*cids, today_iso())).fetchall()]
+            f"AND e.event_date >= ?", (*cids, today_iso())).fetchall()] if not keep_answers else []
         opted = _opted_out(db_path)
-        out = {"authority": why, "customer_ids": cids,
+        out = {"authority": why, "customer_ids": cids, "keep_answers": bool(keep_answers),
                "back_on_invitations": [c for c in cids if c in opted],
                "not_playing_rows_removed": nos, "decline_reasons_removed": reasons}
         if confirm is not True:

@@ -1847,7 +1847,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
       scoring-payout-ask[:preview[|<cid>][|<staff>][|reminder] | :send|<cid>,<cid> | :state]  THE PAYOUT ASK (Kerry 10/17): bare = who would be asked; send needs the wording stamp payout_ask_approved
       scoring-handicap-ask[:preview|<event_id>[|<staff addr>][|reminder] | :state]  THE HANDICAP ASK (Kerry 10/16): bare = who would be asked / reminded now; preview to STAFF only; member sends only from the job (dial handicap_ask_auto=on + wording stamp handicap_ask_approved)
-      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
+      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
       scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]  the 7 PM TEE-TIMES EMAIL, three versions (player / course contact / manager, CMO #2101): dry build = per-recipient ready / held with reasons, wording hashes, stamps (teetimes_<version>_approved) and dials (teetimes_email_auto, teetimes_spots_audience); |preview mails ONE combined preview to STAFF only. No send bridge: only the 7 PM job sends
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13). |lateadd|<cid,cid>|<kerry-ok post id>[|confirm] sends the approved message to each late add and "UPDATED GROUP:" + a notice to their groupmates only, same gates (Kerry 10/20)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
@@ -7374,13 +7374,17 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 # 10/14): undo answers a person did not give (mail scanners,
                 # preview taps): back on invitations, their Tracker NOT
                 # PLAYING rows and decline reasons on upcoming events removed.
+                # |keep-answers (Kerry 10/20): only the "Remove me" was a
+                # mistake; their real answers stay.
                 db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
                 if len(_p) < 4 or not _p[2].lstrip("#").isdigit():
-                    return json.dumps({"error": "0|restore|<kerry-ok post id>|<cid,cid>[|confirm]"})
+                    return json.dumps({"error": "0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm]"})
+                _flags = [x.lower() for x in _p[4:]]
                 return json.dumps(_inv.restore_answers(
                     [c for c in _p[3].split(",") if c.strip().isdigit()],
                     int(_p[2].lstrip("#")),
-                    confirm=("confirm" in [x.lower() for x in _p[4:]])), indent=2, default=str)
+                    confirm=("confirm" in _flags),
+                    keep_answers=("keep-answers" in _flags)), indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "send":
                 db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
                 if len(_p) < 3 or not _p[2].lstrip("#").isdigit():
