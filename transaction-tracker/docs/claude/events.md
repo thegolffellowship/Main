@@ -3763,3 +3763,42 @@ even if one part cannot be worked out.
 - Guards: `test_evlb_rulings_b1_b7.py` (server), `test_evlb_rulings_b1_b7.js`
   (renderer); `test_scorer_nav.py` now counts six tabs and measures name
   cells on the visible board.
+
+
+## After-lock changes send themselves (v2.577.0, Kerry 10/20 #2139, #2168)
+
+Kerry: "A moved player should trigger a resend to affected players and should
+send only the affected sheets to the course for reprint with a CC to manager
+and me. A tee change and a games change is NOT a reason to send new print
+packs to course ... email notices going only to either the player (tee change)
+or to the affected players (games change) with CC's to the manager." Then:
+"No manager approval needed but cc the manager on all changes. Push
+notifications to manager when we have that capability."
+
+`email_parser/after_lock.py`:
+- **Baseline.** `send_event_day_emails` (the Event Info send) saves the sheet it
+  carried in app setting `after_lock_state:<event_id>`: per customer_id the
+  group, start, cart, tee band and games bought (`sheet_state`, read from
+  `get_event_print_pack` and `_games_context`; blinds left out). A Course Files
+  send records its sheets' hashes in `course_files_sent:<event_id>`.
+- **Job `after_lock_changes`** (app.py, every 15 min at :02/:17/:32/:47 Central,
+  dial `after_lock_auto`): for today's events with a baseline, until the first
+  tee (`database._evlb_first_tee`), `run_event` diffs the live sheet against
+  the baseline (`diff`):
+  - moved (group, start or cart) / added / removed: the mover gets the Event
+    Info with an UPDATED GROUP notice (added: "You're in!", and an
+    `event_day_email_sends` row so nothing else sends it), each other player in
+    the old and the new group gets it with "X joins / is no longer in your
+    group". The course gets only the COURSE_FILE_PARTS whose hash changed
+    (`send_course_files(only=..., updated=True)`: "UPDATED" subject, "these
+    replace the same sheets"), To the course, CC its contacts + the pack
+    recipients (manager, Kerry); only once Course Files have gone;
+  - tee change: UPDATED TEES notice to that player; games change: UPDATED GAMES
+    to that player. Never the course.
+- The chapter manager (`pairings_approval.manager_for`) is CC'd on every email.
+  One email per person per run. When every email went, the baseline moves to
+  the new sheet; a failure keeps it so the next run retries. The hand-run late
+  add / re-issue bridges move the baseline too, so the job never repeats them.
+- Read-only bridge `scoring-after-lock:<event_id>` shows what the job would send.
+- Not built: push notifications to the manager (waits for push in the app).
+- Guard `test_after_lock.py`.

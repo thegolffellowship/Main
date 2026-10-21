@@ -1849,6 +1849,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-handicap-ask[:preview|<event_id>[|<staff addr>][|reminder] | :state]  THE HANDICAP ASK (Kerry 10/16): bare = who would be asked / reminded now; preview to STAFF only; member sends only from the job (dial handicap_ask_auto=on + wording stamp handicap_ask_approved)
       scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
       scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]  the 7 PM TEE-TIMES EMAIL, three versions (player / course contact / manager, CMO #2101): dry build = per-recipient ready / held with reasons, wording hashes, stamps (teetimes_<version>_approved) and dials (teetimes_email_auto, teetimes_spots_audience); |preview mails ONE combined preview to STAFF only. No send bridge: only the 7 PM job sends
+      scoring-after-lock:<event_id>  AFTER-LOCK CHANGES, read only (Kerry #2139/#2168): moved / added / removed players, tee and games changes since the Event Info send, the emails the 15-min job would send (manager CC'd) and the changed course sheets
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13). |lateadd|<cid,cid>|<kerry-ok post id>[|confirm] sends the approved message to each late add and "UPDATED GROUP:" + a notice to their groupmates only, same gates (Kerry 10/20)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
@@ -7420,6 +7421,17 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if len(_p) > 1 and _p[1]:
                 return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview (there is no send bridge)"})
             return json.dumps(_tte.summarize(_tte.build(int(_p[0]))), indent=2, default=str)
+        if cmd == "scoring-after-lock":
+            # "<event_id>" — AFTER-LOCK CHANGES (Kerry #2139, #2168), READ
+            # ONLY: what changed since the Event Info send and every email
+            # (and course sheet) the job would send. The job sends itself.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>"})
+            from email_parser import after_lock as _al
+            from app import _print_pack_render, app as _flask
+            return json.dumps(_al.run_event(int(_p[0]), _print_pack_render, _flask.static_folder,
+                                            confirm=False), indent=2, default=str)
         if cmd == "scoring-event-day-email":
             # "<event_id>[|preview[|<staff addr>[|cids=1,2]]]" or
             # "<event_id>|test|<staff addr>|cid=<id>" — CA #829. The dry build

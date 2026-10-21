@@ -464,13 +464,33 @@ def course_contact_for_event(ev: dict | None, db_path=None) -> str | None:
     return r.get("to") if r.get("ok") else None
 
 
-def send_course_files(built: dict, db_path=None) -> dict:
+def send_course_files(built: dict, db_path=None, only=None, updated: bool = False) -> dict:
     """Course Files to the course's primary TGF contact; its other TGF
-    contacts and Kerry's pack recipients on CC."""
+    contacts and Kerry's pack recipients on CC. ``only`` sends just those
+    parts (an after-lock change, Kerry #2139: "only the affected sheets");
+    ``updated`` says so in the email. A successful send records the sheets
+    as sent (after_lock.record_course_files)."""
     ev = built.get("event") or {}
     held = _unprintable(built)
     if held:
         return {"sent": False, "why": held}
+    res = _send_course_files(built, db_path, only, updated)
+    if res.get("sent") and ev.get("id") is not None:
+        try:
+            from email_parser import after_lock
+            prev = (after_lock._get(after_lock.COURSE_KEY.format(int(ev["id"])), db_path) or {}).get("parts") or {}
+            now = dict(prev) if only else {}
+            now.update({k: v for k, v in (built.get("part_shas") or {}).items() if not only or k in only})
+            after_lock.record_course_files(int(ev["id"]), now, db_path)
+        except Exception:
+            logger.exception("course files: could not record the sheets sent")
+    return res
+
+
+def _send_course_files(built: dict, db_path=None, only=None, updated: bool = False) -> dict:
+    ev = built.get("event") or {}
+    # None lets send_print_pack_files cut the usual course set itself
+    files = lambda: split_print_pack(built, only=tuple(only)) if only else None
     rec = course_recipients_for_event(ev, db_path)
     if not rec.get("ok"):
         # Kerry 10/19: "If there is a course contact - send to course contact
@@ -480,8 +500,9 @@ def send_course_files(built: dict, db_path=None) -> dict:
         if not mgr:
             return {"sent": False, "no_contact": True, "course_id": rec.get("course_id"),
                     "course": ev.get("course"), "why": why}
-        res = send_print_pack_files(built, to_address=mgr[0], db_path=db_path,
-                                    cc_address=", ".join(mgr[1:]) or None, for_course=True)
+        res = send_print_pack_files(built, to_address=mgr[0], db_path=db_path, files=files(),
+                                    cc_address=", ".join(mgr[1:]) or None, for_course=True,
+                                    updated=updated)
         return {**res, "no_contact": True, "to_manager": True, "course_id": rec.get("course_id"),
                 "course": ev.get("course"), "why": why}
     cc = list(rec.get("cc") or [])
@@ -489,8 +510,9 @@ def send_course_files(built: dict, db_path=None) -> dict:
         a = a.strip()
         if a and a.lower() not in {x.lower() for x in cc} and a.lower() != rec["to"].lower():
             cc.append(a)
-    return send_print_pack_files(built, to_address=rec["to"], db_path=db_path,
-                                 cc_address=", ".join(cc) or None, for_course=True)
+    return send_print_pack_files(built, to_address=rec["to"], db_path=db_path, files=files(),
+                                 cc_address=", ".join(cc) or None, for_course=True,
+                                 updated=updated)
 
 
 def _esc(v) -> str:
@@ -641,7 +663,7 @@ def _unprintable(built: dict) -> str | None:
 
 def send_print_pack_files(built: dict, to_address: str | None = None, db_path=None,
                           files: list | None = None, cc_address: str | None = None,
-                          for_course: bool = False) -> dict:
+                          for_course: bool = False, updated: bool = False) -> dict:
     """Mail every report of a built pack as its OWN PDF attachment, one
     email. Does not touch the evening-before pack's sent hash. ``files``
     ([(name, bytes)]) sends those instead of splitting a bound pack."""
@@ -655,7 +677,16 @@ def send_print_pack_files(built: dict, to_address: str | None = None, db_path=No
         return {"sent": False, "why": "mail credentials or recipient not set", "files": listing}
     ev = built["event"]
     rows = "".join(f"<li>{_esc(f)}</li>" for f, _ in files)
-    if for_course:
+    if for_course and updated:
+        # an after-lock change (Kerry #2139): only the sheets that changed
+        html = (f'<p style="margin:0 0 1em;">Hello,</p>'
+                f'<p style="margin:0 0 1em;">Our pairings for The Golf Fellowship\'s event at '
+                f'{_esc(ev.get("course") or "your course")} on {_esc(ev.get("event_date"))} changed. '
+                f'Attached are the UPDATED sheets only; they replace the same sheets we sent earlier. '
+                f'Everything else stays as sent. Could you please reprint these for us?</p>'
+                f'<ul style="margin:0 0 1em;">{rows}</ul>'
+                f'<p style="margin:0 0 1em;">Thank you!<br>The Golf Fellowship</p>')
+    elif for_course:
         html = (f'<p style="margin:0 0 1em;">Hello,</p>'
                 f'<p style="margin:0 0 1em;">Attached are the print files for The Golf Fellowship\'s '
                 f'event at {_esc(ev.get("course") or "your course")} on {_esc(ev.get("event_date"))}, '
@@ -669,7 +700,8 @@ def send_print_pack_files(built: dict, to_address: str | None = None, db_path=No
     ok = send_mail_graph(tenant_id=creds["AZURE_TENANT_ID"], client_id=creds["AZURE_CLIENT_ID"],
                          client_secret=creds["AZURE_CLIENT_SECRET"],
                          from_address=creds["EMAIL_ADDRESS"], to_address=to_address,
-                         subject=(f"The Golf Fellowship print files — {ev.get('course') or ''} — {ev.get('event_date')}"
+                         subject=((("UPDATED " if updated else "") +
+                                   f"The Golf Fellowship print files — {ev.get('course') or ''} — {ev.get('event_date')}")
                                   if for_course else
                                   f"Print files — {ev.get('item_name')} — {ev.get('event_date')}"),
                          html_body=html, cc_address=cc_address or None,
