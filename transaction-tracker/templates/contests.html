@@ -4720,7 +4720,12 @@
     // First 600 + LAST 800 in Bitter (R6): the last word is the surname,
     // already in member caps from the server ("Michelle DelCARMEN").
     function evlbSplitName(nm) {
-        const parts = String(nm || "").trim().split(/\s+/);
+        // a Golf Genius-era name arrives "JONES, James": the part before the
+        // comma is the surname (Kerry 10/21, a GG event showed "James")
+        const s = String(nm || "").trim();
+        const c = s.indexOf(",");
+        if (c > 0) return { first: s.slice(c + 1).trim(), last: s.slice(0, c).trim() };
+        const parts = s.split(/\s+/);
         const last = parts.length > 1 ? parts.pop() : (parts.pop() || "");
         return { first: parts.join(" "), last };
     }
