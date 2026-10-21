@@ -258,6 +258,19 @@ SENT.clear()
 out = json.loads(mcp_server._scoring_dispatch("", f"scoring-teetimes-email:{EV}|send"))
 check("there is no send bridge", "error" in out and not SENT, out)
 
+print("6. The evening-before window (handoff 10/20 §4 risk 1)")
+# an approval on event morning used to send "comes at 7:00 AM tomorrow"
+check("event morning: refused", "evening before" in (tt.send_window_ok("2026-10-27", datetime(2026, 10, 27, 6, 30)) or ""))
+check("the day before at 4 PM: refused (the lock is 5 PM)", "5 PM" in (tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 16, 0)) or ""))
+check("the day before at 5:30 PM (a manager's approval): allowed", tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 17, 30)) is None)
+check("the day before at 11:45 PM: allowed", tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 23, 45)) is None)
+check("two days before: refused", tt.send_window_ok("2026-10-27", datetime(2026, 10, 25, 19, 0)) is not None)
+SENT.clear()
+r = tt._deliver(EV_WE, DB, now=datetime(2026, 10, 31, 7, 0))
+check("an approval on event morning sends nothing", "refused" in r and not SENT, r)
+_pa = open("email_parser/pairings_approval.py", encoding="utf-8").read()
+check("the approval path goes through the same _deliver", "from email_parser.teetimes_email import _deliver" in _pa)
+
 try:
     os.unlink(DB)
 except OSError:

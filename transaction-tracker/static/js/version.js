@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.577.0";
+window.TGF_VERSION = "2.577.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.577.1",
+    date: "2026-10-21",
+    title: "Tee-times email only goes the evening before",
+    changes: ["Duplicate-send fix 1 of the 10/20 send map: the tee-times email went out whenever a manager approved the pairings, at any hour, including on event morning, when its \"comes at 7:00 AM tomorrow\" line is wrong and the Event Info email follows within hours. teetimes_email._deliver, the one sender for the 7 PM job and the approval alike, now refuses unless it is the day before the event between the 5 PM lock and midnight Central (send_window_ok). Guard test_teetimes_email.py; events.md."]
+  },
   {
     version: "2.577.0",
     date: "2026-10-21",
