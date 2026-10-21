@@ -2528,6 +2528,25 @@ UPCOMING), and the board's money is blanked client-side by `evlbBlankMoney`
 message on the board; `evlbMoneyNotice` and the "not final yet" banner are
 gone. Scores stay live.
 
+## EVENTS list: UPCOMING group (v2.578.0, Kerry 10/21)
+
+Kerry: "Option A, but I want player list and REGISTER button on expanded view."
+`get_events_leaderboard` returns `upcoming` (from `_evlb_upcoming`): this
+season's dated events from today on that are not already listed as played or
+live, soonest first, filtered by chapter (joint events show under both) and the
+pilot codes. Past seasons get none. Each upcoming card shows:
+- `registered` and `players` [{customer_id, first, last}], from
+  `_event_roster_players` (the pairings roster), sorted by last name;
+- `pairings_set`, `first_tee` and `strip_text`;
+- `register_url`: the event's `registration_url`, or None when there is none
+  or its status is `expired`.
+
+No money is carried. `templates/contests.html` renders the cards with
+`evlbUpcomingCardHtml` above the month groups. The collapsed card has "—" for
+the pot and "N registered"; opened, it shows the strip, First LAST in 3 columns
+(2 on the phone) and REGISTER. An upcoming card (`data-up`) never fetches a
+board. Guard `test_evlb_batch1.py`.
+
 ## EVENTS leaderboard Batch 1 (v2.576.0, design-claude #2147-#2150, Kerry-approved 10/20)
 
 - **One state value (R2).** `database.evlb_state` is the only rule for

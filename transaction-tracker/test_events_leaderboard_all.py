@@ -71,7 +71,7 @@ check("the Cup's practice round board heads PRACTICE ROUND (Kerry 10/9)",
       '{% if SOLO_LSC and not SOLO_CUP %}PRACTICE ROUND{% else %}{{ SOLO_EVENT }}{% endif %}' in open("templates/contests.html").read())
 check("the scorer's board opens before any score is posted, players listed with tee times",
       'el.addEventListener("toggle", () => { if (el.open) evlbLoadEvent(el); });' in html
-      and "if (!(d.events || []).length && !window.SOLO_EVENT)" in html
+      and "if (!(d.events || []).length && !ups.length && !window.SOLO_EVENT)" in html
       and "&& !waiting)" in html)
 check("no games, no buyers filter: every player shows, no Show All box, no green/grey rows (Kerry 10/8)",
       "!evlbShowAll && EVLB_BUYIN_GAMES.includes(game) && !evlbNoGames(d)" in html

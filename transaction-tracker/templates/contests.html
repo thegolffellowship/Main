@@ -545,6 +545,24 @@
             .evlb-card .pot { padding-right: 10px; }
             .evlb-card .meta .crs { display: none; }
         }
+        details.evlb-ev .evlb-body.evlb-upbody { padding: 4px 16px 16px 50px; }
+        .evlb-uph { font: 700 10px/1 'Bitter', serif; letter-spacing: 1.8px; color: #9CA3AF; margin: 14px 0 8px; }
+        .evlb-uplist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 24px; border-top: 1px solid #E5E7EB; }
+        .evlb-uplist > div { font: 400 13.5px/1.3 'Bitter', serif; padding: 9px 2px; border-bottom: 1px solid #E5E7EB;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .evlb-uplist .f { font-weight: 600; } .evlb-uplist .l { font-weight: 800; }
+        .evlb-upnone { font-size: 12.5px; color: #6B7280; padding: 10px 2px; border-top: 1px solid #E5E7EB; border-bottom: 1px solid #E5E7EB; }
+        .evlb-upreg { display: flex; justify-content: flex-end; margin-top: 14px; }
+        .evlb-regbtn { background: #E87C3E; color: #fff !important; text-decoration: none; border-radius: 999px;
+            font: 800 12px/1 'Bitter', serif; letter-spacing: 1.6px; padding: 12px 26px; }
+        .evlb-regbtn:hover { background: #D06B2E; }
+        @media (max-width: 560px) {
+            details.evlb-ev .evlb-body.evlb-upbody { padding: 2px 10px 14px; }
+            .evlb-uplist { grid-template-columns: 1fr 1fr; column-gap: 14px; }
+            .evlb-uplist > div { font-size: 12.5px; }
+            .evlb-upreg { display: block; }
+            .evlb-regbtn { display: block; text-align: center; padding: 14px; }
+        }
         .evlb-pilot { font-size: 11px; color: #9CA3AF; flex-basis: 100%; }
         .evlb-official { font-size: 11px; color: #6B7280; margin: 0 0 8px; }
         .evlb-beta { font: 700 9px/1 'Helvetica Neue', Arial, sans-serif; letter-spacing: .06em;
@@ -4067,6 +4085,34 @@
             `<span class="evlb-chip-st s-${escapeHtml(st)}"><i></i>${word}</span>` + pot +
             `</summary><div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
     }
+    // ── AN UPCOMING CARD (Kerry 10/21, option A): "—" for the pot, "N
+    //    registered" in the meta line; opened, the UPCOMING strip, who is
+    //    registered (First LAST, by last name) and REGISTER while the
+    //    registration link is open. Built from the list payload: no fetch.
+    function evlbUpcomingCardHtml(ev) {
+        const ps = ev.players || [];
+        const list = ps.length
+            ? `<div class="evlb-uplist">${ps.map(p => `<div><span class="f">${escapeHtml(p.first || "")}</span> <span class="l">${escapeHtml((p.last || "").toUpperCase())}</span></div>`).join("")}</div>`
+            : `<div class="evlb-upnone">No one has registered yet.</div>`;
+        const reg = ev.register_url
+            ? `<div class="evlb-upreg"><a class="evlb-regbtn" href="${escapeHtml(ev.register_url)}">REGISTER</a></div>` : "";
+        return `<details class="evlb-ev evlb-card evlb-upcard" data-ev="${escapeHtml(ev.item_name)}" data-up="1">` +
+            `<summary><span class="bar" style="background:${escapeHtml(ev.chapter_color || "#374151")}"></span>` +
+            `<span class="chev tgf-exp">&#9654;&#xFE0E;</span>` +
+            `<div class="ttl"><div class="nm">${escapeHtml(ev.item_name)}</div>` +
+            `<div class="meta">${evlbDayDate(ev.event_date)}${ev.course ? `<span class="crs"> &middot; ${escapeHtml(ev.course)}</span>` : ""} &middot; ${ev.registered || 0} registered</div></div>` +
+            `<span class="evlb-chip-st s-upcoming"><i></i>${EVLB_STATE_WORD.upcoming || "UPCOMING"}</span>` +
+            `<div class="pot none">&mdash;<span class="s">POT</span></div>` +
+            `</summary><div class="evlb-body evlb-upbody">` +
+            `<div class="evlb-state s-upcoming" data-state="upcoming"><span class="w"><i></i>${EVLB_STATE_WORD.upcoming || "UPCOMING"}</span>` +
+            `<span class="t">${escapeHtml(ev.strip_text || "")}</span></div>` +
+            `<div class="evlb-uph">REGISTERED &middot; ${ps.length}</div>${list}${reg}</div></details>`;
+    }
+    function evlbUpcomingHtml(ups) {
+        if (!ups || !ups.length) return "";
+        return `<div class="evlb-month evlb-upcoming"><div class="evlb-mlabel">UPCOMING</div>` +
+            `<div class="evlb-mcards">${ups.map(evlbUpcomingCardHtml).join("")}</div></div>`;
+    }
     function evlbWireCards(root) {
         root.querySelectorAll("details.evlb-ev").forEach(el => {
             if (el._evlbWired) return;
@@ -4134,15 +4180,16 @@
                 ysel.innerHTML = ys.map(y => `<option value="${escapeHtml(y)}"${String(y) === String(d.year) ? " selected" : ""}>${escapeHtml(y)}</option>`).join("");
                 ysel.hidden = !ys.length;
             }
-            if (!(d.events || []).length && !window.SOLO_EVENT) {
+            const ups = window.SOLO_EVENT ? [] : (d.upcoming || []);
+            if (!(d.events || []).length && !ups.length && !window.SOLO_EVENT) {
                 box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No played events here yet.</p>';
                 return;
             }
             const months = d.months || [];
             const cur = months.find(m => m.ym === d.month) || { ym: d.month || "", label: "" };
-            box.innerHTML = months.length
+            box.innerHTML = evlbUpcomingHtml(ups) + (months.length
                 ? months.map(m => m.ym === cur.ym ? evlbMonthHtml(m, d.events) : evlbMoreHtml(m)).join("")
-                : evlbMonthHtml(cur, d.events || []);
+                : ((d.events || []).length ? evlbMonthHtml(cur, d.events || []) : ""));
             box.querySelectorAll("button.evlb-mmore").forEach(btn =>
                 btn.addEventListener("click", () => evlbLoadMonth(btn)));
             evlbWireCards(box);
@@ -4428,6 +4475,7 @@
     async function evlbLoadEvent(el) {
         const name = el.dataset.ev;
         const body = el.querySelector(".evlb-body");
+        if (el.dataset && el.dataset.up) return;   // an upcoming card has no board to load
         if (!body || body._evlbLoading || body._evlbD) return;
         body._evlbLoading = true;
         EVLB_LOADED_EVENTS[name] = true;

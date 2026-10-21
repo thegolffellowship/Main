@@ -6,6 +6,7 @@ Kerry-approved 2026-10-20).
 - §1: the list is paged by month and every card carries board_state.
 Run: python3 test_evlb_batch1.py"""
 import os, sys, tempfile, contextlib, io, logging, sqlite3
+from datetime import datetime, timedelta
 tmp = os.path.join(tempfile.mkdtemp(prefix="tgf-evlb-b1-"), "t.db")
 os.environ["DATABASE_PATH"] = tmp
 os.environ.setdefault("ADMIN_PIN", "1234"); os.environ.setdefault("SECRET_KEY", "x")
@@ -83,6 +84,41 @@ check("an event's own link opens on its month", d2["month"] == "2026-09"
       and [e["item_name"] for e in d2["events"]] == ["s9.24 Brackenridge"], d2["month"])
 d3 = db.get_events_leaderboard(year="2025", db_path=tmp)
 check("the season picker moves to that season's months", d3["year"] == "2025" and d3["month"] == "2025-08")
+
+print("== Upcoming events (Kerry 10/21, option A) ==")
+from email_parser.timezone_utils import today_central_str
+_t = today_central_str()
+_fut = (datetime.strptime(_t, "%Y-%m-%d") + timedelta(days=3)).strftime("%Y-%m-%d")
+_fut2 = (datetime.strptime(_t, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+c = sqlite3.connect(tmp)
+c.execute("INSERT INTO events (id, item_name, event_date, chapter, course, registration_url) VALUES "
+          "(9201, 's18.99 Later One', ?, 'TGF', 'Kissing Tree', 'https://shop.example/later')", (_fut,))
+c.execute("INSERT INTO events (id, item_name, event_date, chapter, course) VALUES "
+          "(9202, 'a9.99 Sooner One', ?, 'Austin', 'Teravista')", (_fut2,))
+c.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (9301, 'Zac', 'Hammond')")
+c.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (9302, 'Larry', 'Anthis')")
+for i, (cid, nm) in enumerate([(9301, "Zac Hammond"), (9302, "Larry Anthis")]):
+    c.execute("INSERT INTO items (email_uid, item_index, merchant, customer, customer_id, item_name, event_id, "
+              "transaction_status, order_date, total_amount, item_price) VALUES (?, 0, 'The Golf Fellowship', ?, ?, "
+              "'s18.99 Later One', 9201, 'active', '2026-10-14', '$200.00', '$200.00')",
+              (f"u-up-{i}", nm, cid))
+c.commit(); c.close()
+d = db.get_events_leaderboard(db_path=tmp)
+ups = d.get("upcoming") or []
+check("upcoming events come with the list, soonest first",
+      [u["item_name"] for u in ups][:2] == ["a9.99 Sooner One", "s18.99 Later One"], [u["item_name"] for u in ups])
+lat = next((u for u in ups if u["id"] == 9201), {})
+check("registered players First LAST, sorted by last name, keyed by customer_id",
+      [(p["first"], p["last"], p["customer_id"]) for p in lat.get("players", [])]
+      == [("Larry", "Anthis", 9302), ("Zac", "Hammond", 9301)], lat.get("players"))
+check("the count matches the list", lat.get("registered") == 2)
+check("REGISTER carries the event's registration link", lat.get("register_url") == "https://shop.example/later")
+check("no link, no REGISTER", next(u for u in ups if u["id"] == 9202)["register_url"] is None)
+check("pairings not saved: the strip says so", lat.get("strip_text") == "Pairings are not set yet." and lat["board_state"] == "upcoming")
+check("no money on an upcoming card", not any(k in lat for k in ("pot", "money_visible")))
+check("a chapter filter keeps joint events and drops the other chapter",
+      [u["id"] for u in db.get_events_leaderboard(chapter="San Antonio", db_path=tmp)["upcoming"]] == [9201])
+check("a past season has no upcoming group", db.get_events_leaderboard(year="2025", db_path=tmp)["upcoming"] == [])
 
 print("\n" + (f"{len(F)} FAILED: {F}" if F else "ALL PASS"))
 sys.exit(1 if F else 0)

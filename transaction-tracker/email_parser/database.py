@@ -14481,6 +14481,7 @@ def get_events_leaderboard(chapter: str | None = None,
                 conn.execute("DROP TABLE IF EXISTS temp.scoring_rounds")
                 conn.execute("DROP TABLE IF EXISTS temp.scoring_holes")
         rows.sort(key=lambda r: (str(r.get("event_date") or ""), r["id"]), reverse=True)
+        _listed_ids = {r["id"] for r in rows}
         if codes:
             low = [c.strip().lower() for c in codes if c and c.strip()]
             rows = [r for r in rows
@@ -14652,10 +14653,83 @@ def get_events_leaderboard(chapter: str | None = None,
         _through = (get_app_setting("gg_official_through", db_path=db_path) or "").strip()
     except Exception:
         _through = ""
+    # UPCOMING (Kerry 10/21, option A + "player list and REGISTER button on
+    # expanded view"): this season's events still to come, soonest first,
+    # above the played months. Only on the current season.
+    upcoming = []
+    try:
+        from email_parser.timezone_utils import today_central_str as _tcs
+        _today = _tcs()
+    except Exception:
+        _today = datetime.utcnow().strftime("%Y-%m-%d")
+    if not year or str(year) == _today[:4]:
+        try:
+            upcoming = _evlb_upcoming(_today, chapter, codes, _listed_ids, db_path)
+        except Exception:
+            logger.exception("events list: upcoming events failed")
+            upcoming = []
     return {"events": rows, "years": years, "year": year,
-            "months": months, "month": month,
+            "months": months, "month": month, "upcoming": upcoming,
             "pilot": bool(codes), "pilot_codes": codes,
             "gg_official_through": _through or None}
+
+
+def _evlb_upcoming(today: str, chapter, codes, listed_ids, db_path=None) -> list:
+    """The EVENTS list's UPCOMING cards (Kerry 10/21): every dated event from
+    today on that is not already on the list as played or live, soonest
+    first. Each carries who is registered (First LAST, by last name, keyed by
+    customer_id), whether pairings are saved, the first tee, and the
+    registration link while it can still be used. No money."""
+    out = []
+    with _connect(db_path) as conn:
+        evs = [dict(r) for r in conn.execute(
+            "SELECT id, item_name, event_date, course, chapter, start_type, start_time, "
+            "registration_url, registration_url_status FROM events "
+            "WHERE event_date IS NOT NULL AND substr(event_date, 1, 10) >= ? "
+            "AND substr(event_date, 1, 4) = ? "
+            "ORDER BY event_date, id", (today, today[:4])).fetchall()]
+        for ev in evs:
+            if ev["id"] in listed_ids:
+                continue
+            name = (ev["item_name"] or "").lower()
+            if codes and not any(name.startswith(c.strip().lower()) for c in codes if c and c.strip()):
+                continue
+            ch = (ev.get("chapter") or "").lower()
+            if chapter and ch != chapter.lower() and ch not in ("tgf", "national", ""):
+                continue
+            players = []
+            for p in _event_roster_players(conn, ev["id"]):
+                first = last = ""
+                if p.get("customer_id"):
+                    c = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                                     (p["customer_id"],)).fetchone()
+                    if c:
+                        first, last = (c["first_name"] or "").strip(), (c["last_name"] or "").strip()
+                if not (first or last):
+                    bits = (p.get("name") or "").strip().split()
+                    first, last = (" ".join(bits[:-1]), bits[-1]) if len(bits) > 1 else ("", " ".join(bits))
+                players.append({"customer_id": p.get("customer_id"), "first": first, "last": last})
+            players.sort(key=lambda x: (x["last"].lower(), x["first"].lower()))
+            try:
+                paired = bool(conn.execute("SELECT 1 FROM event_pairings WHERE event_id = ? LIMIT 1",
+                                           (ev["id"],)).fetchone())
+            except Exception:
+                paired = False
+            first_tee = _evlb_first_tee(ev, {}, db_path) if paired else None
+            if paired:
+                text = (EVLB_STRIP_TEXT["upcoming"].format(first_tee=first_tee) if first_tee
+                        else "Pairings are set.")
+            else:
+                text = "Pairings are not set yet."
+            url = (ev.get("registration_url") or "").strip()
+            open_ = bool(url) and (ev.get("registration_url_status") or "") != "expired"
+            out.append({"id": ev["id"], "item_name": ev["item_name"], "event_date": ev["event_date"],
+                        "course": ev.get("course"), "chapter": ev.get("chapter"),
+                        "chapter_color": EVLB_CHAPTER_COLORS.get(ch, EVLB_CHAPTER_COLOR_JOINT),
+                        "board_state": "upcoming", "registered": len(players), "players": players,
+                        "pairings_set": paired, "first_tee": first_tee, "strip_text": text,
+                        "register_url": url if open_ else None})
+    return out
 
 
 def _placed_flight_index(row: dict, bounds: list, index_ladder: bool,

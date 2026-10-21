@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.577.5";
+window.TGF_VERSION = "2.578.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.578.0",
+    date: "2026-10-21",
+    title: "Events list: UPCOMING events on top, with who's registered and REGISTER",
+    changes: [
+      "Kerry 10/21: \"Option A, but I want player list and REGISTER button on expanded view\", then \"Build the upcoming events mockup\". The EVENTS list now opens with an UPCOMING group: this season's events still to come, soonest first, each card with its chapter bar, the UPCOMING chip, \"—\" for the pot and \"N registered\" in the meta line. Opened, a card shows the UPCOMING strip (\"Pairings are not set yet.\" or \"Pairings are set. First tee 3:40 PM.\"), REGISTERED · N with every registered player as First LAST sorted by last name (three columns on desktop, two on the phone), and an orange REGISTER button to the event's registration page while the link is open (no link or an expired one, no button). No money and no board fetch for an upcoming card. The roster is the pairings roster (_event_roster_rows), keyed by customer_id. Chapter filters keep joint events; past seasons have no upcoming group; the scorer's own board is unchanged. Server: get_events_leaderboard returns `upcoming` (_evlb_upcoming). Guard test_evlb_batch1.py."
+    ]
+  },
   {
     version: "2.577.5",
     date: "2026-10-21",
