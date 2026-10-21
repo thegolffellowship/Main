@@ -613,12 +613,38 @@ def send_preview(event_id: int, to_address=None, db_path=None) -> dict:
 # The send (only the 7 PM job calls this)
 # ---------------------------------------------------------------------------
 
-def _deliver(event_id: int, db_path=None) -> dict:
+def send_window_ok(event_date, now: datetime | None = None) -> str | None:
+    """None when the tee-times email may go now, else why not. It is the
+    evening-before email ("comes at 7:00 AM tomorrow"): only from the 5 PM
+    lock to midnight Central on the day before the event (handoff 10/20 §4
+    risk 1: an approval on event morning sent it with that wording)."""
+    if now is None:
+        from email_parser.timezone_utils import now_central
+        now = now_central()
+    try:
+        ev_day = datetime.strptime(str(event_date)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return "event date unreadable"
+    if ev_day != now.date() + timedelta(days=1):
+        return "the tee-times email goes only the evening before the event (5 PM to midnight)"
+    if now.hour < OPEN_HOUR:
+        return "the tee-times email goes from the 5 PM lock, not before"
+    return None
+
+
+def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
     from email_parser import database as db
     from email_parser.event_day_email import _creds
     from email_parser import fetcher
     if dials(db_path)[AUTO_DIAL] != "on":
         return {"refused": f"{AUTO_DIAL} is not on"}
+    # every sender comes through here (the 7 PM job and a manager's approval),
+    # so the evening-before window is checked once, for all of them
+    with db._connect(db_path) as conn:
+        _r = conn.execute("SELECT event_date FROM events WHERE id = ?", (int(event_id),)).fetchone()
+    _why = send_window_ok(_r["event_date"] if _r else None, now)
+    if _why:
+        return {"refused": _why}
     built = build(event_id, db_path=db_path)
     if built.get("error"):
         return built
@@ -703,7 +729,7 @@ def auto_check(now: datetime | None = None, db_path=None) -> dict:
                 if event_state(eid, db_path).get("approved_fp") != fp:
                     out[eid] = {"skipped": "waiting for the manager's approval or 7 PM"}
                     continue
-            out[eid] = _deliver(eid, db_path)
+            out[eid] = _deliver(eid, db_path, now=now)
         except Exception as exc:
             logger.exception("teetimes auto failed for %s", eid)
             out[eid] = {"error": str(exc)}

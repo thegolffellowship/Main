@@ -2420,6 +2420,29 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # AFTER-LOCK CHANGES (Kerry 2026-10-20 #2139, #2168): from the Event Info
+    # send to the first tee, a moved / added / removed player, a tee change
+    # or a games change sends its notices (manager CC'd) and, for a seat
+    # change, only the changed sheets to the course. Dial `after_lock_auto`.
+    def after_lock_changes_job():
+        from email_parser.after_lock import check
+        try:
+            res = check(_print_pack_render, app.static_folder)
+            ran = {k: v for k, v in (res.get("events") or {}).items()
+                   if v.get("sent") or v.get("failed") or v.get("error")}
+            if ran:
+                logger.info("After-lock changes: %s", ran)
+        except Exception:
+            logger.exception("After-lock changes failed (non-fatal)")
+    scheduler.add_job(
+        after_lock_changes_job,
+        "cron", minute="2-59/15",
+        timezone="US/Central",
+        id="after_lock_changes",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # 7:00 PM TEE-TIMES EMAIL, three versions (CMO #2076/#2101): player,
     # course contact, manager, for tomorrow's events with saved pairings.
     # BESIDE the pairing auto-send above, not instead of it. Does nothing
@@ -12340,7 +12363,9 @@ def api_events_leaderboard():
         return jsonify({"error": "Manager access required."}), 403 if session.get("role") else 401
     d = get_events_leaderboard(
         chapter=request.args.get("chapter") or None,
-        year=request.args.get("year") or None)
+        year=request.args.get("year") or None,
+        month=request.args.get("month") or None,
+        event=request.args.get("event") or None)
     if only_ev:
         d["events"] = [e for e in d.get("events", []) if e.get("id") == only_ev]
     return jsonify(d)

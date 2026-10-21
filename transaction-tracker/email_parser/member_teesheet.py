@@ -10,6 +10,13 @@ start, its players, carts and tees, from the saved sheet
 carts and tee names only: no email, phone, handicap or money. Like the
 rest of /member it needs no PIN. Each group carries an anchor (#g<group
 number>) so the email's button lands on the player's own group.
+
+Kerry 10/20: "Blinds should also show on this tee sheet, along with raw TGF
+Handicap Indexes. If a player like Adam doesn't have a handicap, then it
+should say no handicap ... and then when the blind is shown it needs to show
+the explanation for why the blind is given." Each player shows his 18-hole
+TGF index (or "No handicap"); each drawn blind is a row of its own with the
+reason: the open seat, or the player it stands in for.
 """
 from __future__ import annotations
 
@@ -49,6 +56,37 @@ def _dot(color: str) -> str:
             f'border-color:{_e("#9CA3AF" if white else color)};"></span>')
 
 
+def _index_map(db, evrow, db_path=None) -> dict:
+    """The 18-HOLE index (Kerry 10/16: "They should show 18"), the same
+    number the roster shows (api_handicap_index_map's rule): double the
+    9-hole index, or the starting handicap as typed. Keys ("c", cid) and
+    the lower-cased name."""
+    idx_map = {}
+    try:
+        as_of = db._event_index_as_of(dict(evrow) if evrow else None)
+        for hp in db.get_all_handicap_players(db_path, as_of=as_of):
+            i9 = hp.get("handicap_index")
+            if i9 is None:
+                continue
+            i18 = (hp.get("starting_handicap_18")
+                   if (hp.get("handicap_source") == "starting"
+                       and hp.get("starting_handicap_18") is not None)
+                   else round(float(i9) * 2, 1))
+            if hp.get("customer_id") is not None:
+                idx_map.setdefault(("c", int(hp["customer_id"])), i18)
+            for nm in (hp.get("customer_name"), hp.get("player_name")):
+                if nm:
+                    idx_map.setdefault(nm.strip().lower(), i18)
+    except Exception:
+        idx_map = {}
+    return idx_map
+
+
+def _lookup(idx_map: dict, cid, name: str):
+    idx = idx_map.get(("c", int(cid))) if cid else None
+    return idx if idx is not None else idx_map.get((name or "").strip().lower())
+
+
 def build_teesheet(event_id: int, db_path=None) -> dict | None:
     """The page's data, PII-free. None for an unknown event."""
     from email_parser import database as db
@@ -59,17 +97,45 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
     tees = {str(t.get("band")): {"name": t.get("tee_name"), "color": t.get("color")}
             for t in pack.get("tee_legend") or [] if t.get("band") is not None}
     groups = []
+    idx_map, blinds = {}, {}
+    if pack.get("groups"):
+        conn = db.get_connection(db_path)
+        try:
+            evrow = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+            idx_map = _index_map(db, evrow, db_path)
+            blinds = db.get_event_blinds(int(event_id), conn=conn) or {}
+        except Exception:
+            blinds = blinds or {}
+        finally:
+            conn.close()
     for g in pack.get("groups") or []:
         players = []
         for p in sorted(g.get("players") or [], key=lambda x: x.get("cart_pos") or 0):
             if not (p.get("name") or "").strip():
                 continue
             t = tees.get(str(p.get("tee_choice"))) or {}
+            idx = _lookup(idx_map, p.get("customer_id"), p["name"])
             players.append({"name": p["name"].strip(), "cart": _cart(p),
+                            "cart_pos": p.get("cart_pos"),
+                            "index": _fmt_index(idx) if idx is not None else "",
                             "tee": t.get("name") or "", "color": t.get("color") or ""})
+        by_pos = {pl["cart_pos"]: pl for pl in players}
+        brows = []
+        for b in (blinds.get(str(g.get("holes"))) or blinds.get(g.get("holes")) or {}).get(g.get("group_num")) or []:
+            if not (b.get("name") or "").strip():
+                continue
+            if b.get("reason") == "nh":
+                who = (by_pos.get(b.get("cart_pos")) or {}).get("name")
+                why = (f"Blind for {who}, who has no TGF handicap yet" if who
+                       else "Blind for a player with no TGF handicap yet")
+            else:
+                why = "Blind for the open seat"
+            idx = _lookup(idx_map, b.get("customer_id"), b["name"])
+            brows.append({"name": b["name"].strip(), "why": why,
+                          "index": _fmt_index(idx) if idx is not None else ""})
         groups.append({"group_num": g.get("group_num"),
                        "start": (g.get("start_line") or g.get("slot_label") or "").replace(" | ", " · "),
-                       "players": players})
+                       "players": players, "blinds": brows})
     from email_parser.event_day_email import event_short_name, _weekday
     try:
         date = datetime.strptime((ev.get("event_date") or "")[:10], "%Y-%m-%d").strftime("%A, %B %-d")
@@ -87,27 +153,7 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
         conn = db.get_connection(db_path)
         try:
             evrow = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
-            # The 18-HOLE index (Kerry 10/16: "They should show 18"), the
-            # same number the roster shows (api_handicap_index_map's rule):
-            # double the 9-hole index, or the starting handicap as typed.
-            idx_map = {}
-            try:
-                as_of = db._event_index_as_of(dict(evrow) if evrow else None)
-                for hp in db.get_all_handicap_players(db_path, as_of=as_of):
-                    i9 = hp.get("handicap_index")
-                    if i9 is None:
-                        continue
-                    i18 = (hp.get("starting_handicap_18")
-                           if (hp.get("handicap_source") == "starting"
-                               and hp.get("starting_handicap_18") is not None)
-                           else round(float(i9) * 2, 1))
-                    if hp.get("customer_id") is not None:
-                        idx_map.setdefault(("c", int(hp["customer_id"])), i18)
-                    for nm in (hp.get("customer_name"), hp.get("player_name")):
-                        if nm:
-                            idx_map.setdefault(nm.strip().lower(), i18)
-            except Exception:
-                idx_map = {}
+            idx_map = _index_map(db, evrow, db_path)
             seen = set()
             for r in db._event_roster_rows(conn, int(event_id)):
                 name = (r.get("customer") or r.get("name") or "").strip()
@@ -169,8 +215,14 @@ def render_teesheet(data: dict) -> str:
                 dot = (f'<span class="dot" style="background:{_e("#fff" if white else sw)};'
                        f'border-color:{_e("#9CA3AF" if white else sw)};"></span>' if sw else "")
                 meta = " · ".join(x for x in (f"Cart {p['cart']}" if p["cart"] else "", p["tee"]) if x)
-                rows.append(f'<div class="p"><span class="n">{_e(p["name"])}</span>'
+                hcp = (f'<span class="h">HCP {_e(p["index"])}</span>' if p.get("index")
+                       else '<span class="h nh">No handicap</span>')
+                rows.append(f'<div class="p"><span class="n">{_e(p["name"])}{hcp}</span>'
                             f'<span class="m">{dot}{_e(meta)}</span></div>')
+            for b in g.get("blinds") or []:
+                bh = f' <span class="h">HCP {_e(b["index"])}</span>' if b.get("index") else ""
+                rows.append(f'<div class="p bl"><span class="n"><span class="bt">BLIND</span> '
+                            f'{_e(b["name"])}{bh}<span class="why">{_e(b["why"])}</span></span></div>')
             cards.append(f'<section class="g" id="g{_e(g["group_num"])}"><div class="s">{_e(g["start"])}</div>'
                          + "".join(rows) + "</section>")
         body = "".join(cards)
@@ -201,6 +253,12 @@ main {{ max-width:640px; margin:0 auto; padding:16px; display:grid; gap:12px; }}
 a.n {{ color:#2563eb; text-decoration:none; }}
 .tease {{ color:var(--muted); font-size:14px; margin:0; text-align:center; }}
 .m {{ color:var(--muted); font-size:14px; white-space:nowrap; display:flex; align-items:center; gap:6px; }}
+.h {{ display:block; font-weight:normal; font-size:13px; color:var(--muted); }}
+.h.nh {{ color:#B45309; }}
+.bl {{ background:#FFFBEB; }}
+.bl .n {{ font-style:italic; color:#92400E; }}
+.bt {{ font:bold 10px Arial,sans-serif; letter-spacing:1px; font-style:normal; color:#fff; background:#D97706; border-radius:4px; padding:2px 5px; vertical-align:middle; }}
+.why {{ display:block; font-weight:normal; font-size:13px; color:#92400E; }}
 .dot {{ width:11px; height:11px; border-radius:50%; border:2px solid; display:inline-block; }}
 footer {{ text-align:center; color:var(--muted); font-size:13px; padding:8px 16px 24px; }}
 </style></head><body>

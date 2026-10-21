@@ -476,12 +476,18 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                             "is not one of the event's designated tees.")
             ph = p.get("playing_handicap")
             net = p.get("team_handicap")
+            # Kerry 2026-10-20: "Send them now with Adam blank. And make this
+            # standard." A player with no TGF index yet prints BLANK and never
+            # holds the print; when a handicap arrives later the Tracker is
+            # updated and nothing is reprinted.
+            _nh = ph is None and p.get("handicap_index_display") is None and tee and not (
+                lsc and lsc["kind"] == "cup")
             if ph is None:
-                (flagged if allow_gaps else gaps).append(
+                (flagged if (allow_gaps or _nh) else gaps).append(
                     f"{p.get('name')} (group {g['group_num']}): no playing handicap — "
                     + ("not in the Cup's handicap lock (lsc_handicap_lock)."
                        if (lsc and lsc["kind"] == "cup") else
-                       "no TGF index yet; set a starting handicap on his profile and reprint."
+                       "no TGF index yet; prints blank (plays N/H). A handicap that comes in later is entered on the Tracker only, no reprint."
                        if p.get("handicap_index_display") is None and tee else
                        "his tee has no rating/slope for this event — fix the course card.")
                     + " The Starter Sheet shows the same gap.")

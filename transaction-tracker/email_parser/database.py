@@ -14396,12 +14396,29 @@ def _event_field_complete(conn, event_id: int, holes_n: int) -> dict:
             "holes_needed": len(rows) * want}
 
 
+# The chapter bar on the EVENTS list (design-claude #2147 \u00a71). The
+# chapters table carries no colour yet; these are the brand chapter colours
+# (dashboard.css --chapter-austin, and the SA slate the design names).
+EVLB_CHAPTER_COLORS = {"austin": "#BF5700", "san antonio": "#44596B"}
+EVLB_CHAPTER_COLOR_JOINT = "#374151"
+
+
 def get_events_leaderboard(chapter: str | None = None,
                            year: str | None = None,
+                           month: str | None = None,
+                           event: str | None = None,
                            db_path: str | Path = DB_PATH) -> dict:
     """The EVENTS tab's list: played events (have scorecards), newest
-    first. chapter filters exactly; year is the future year-selector
-    hook (matches event_date's year)."""
+    first. chapter filters exactly; year picks the season (default: the
+    newest with events).
+
+    PAGED BY MONTH (design-claude #2147 \u00a71, Kerry-approved 10/20): only
+    one month's cards are built (`events`); every other month of the
+    season is a row in `months` [{ym, label, count}] that loads on tap.
+    The month shown is `month` (YYYY-MM), else the month of `event` (an
+    event's own link), else the current month, else the newest one.
+    Each card carries `board_state`, from the same rule as the board
+    (`evlb_state`), and `chapter_color`."""
     codes = _events_leaderboard_codes(db_path)
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
@@ -14448,7 +14465,8 @@ def get_events_leaderboard(chapter: str | None = None,
                     except Exception:
                         _seat0 = set()
                     if _ev0 and _seat0:
-                        rows.append({**dict(_ev0), "field": len(_seat0), "live_entry": True})
+                        rows.append({**dict(_ev0), "field": len(_seat0), "live_entry": True,
+                                     "no_scores": True})
                     continue
                 if not _tees:
                     continue
@@ -14476,9 +14494,44 @@ def get_events_leaderboard(chapter: str | None = None,
                     or (r["chapter"] or "").lower() in ("tgf", "national", "")]
         years = sorted({str(r["event_date"] or "")[:4]
                         for r in rows if r["event_date"]}, reverse=True)
+        if not year and years:
+            year = years[0]
+            if event:
+                _hit = next((r for r in rows if (r["item_name"] or "").strip().lower()
+                             == str(event).strip().lower()), None)
+                if _hit and _hit.get("event_date"):
+                    year = str(_hit["event_date"])[:4]
         if year:
             rows = [r for r in rows
                     if str(r["event_date"] or "").startswith(str(year))]
+        # one month's cards at a time (design-claude #2147 §1)
+        _mcount: dict = {}
+        for r in rows:
+            _ym = str(r.get("event_date") or "")[:7]
+            if len(_ym) == 7:
+                _mcount[_ym] = _mcount.get(_ym, 0) + 1
+        months = [{"ym": ym, "count": n,
+                   "label": datetime.strptime(ym, "%Y-%m").strftime("%B %Y").upper()}
+                  for ym, n in sorted(_mcount.items(), reverse=True)]
+        if not month and event:
+            _hit = next((r for r in rows if (r["item_name"] or "").strip().lower()
+                         == str(event).strip().lower()), None)
+            if _hit:
+                month = str(_hit.get("event_date") or "")[:7]
+        if not month or month not in _mcount:
+            try:
+                from email_parser.timezone_utils import today_central_str
+                _now_ym = today_central_str()[:7]
+            except Exception:
+                _now_ym = datetime.utcnow().strftime("%Y-%m")
+            month = _now_ym if _now_ym in _mcount else (months[0]["ym"] if months else None)
+        if month:
+            rows = [r for r in rows if str(r.get("event_date") or "").startswith(month)]
+        try:
+            from email_parser import auto_payouts as _apx_l
+            _holds_l, _fps_l = _apx_l.holds(db_path), _apx_l._fps(db_path)
+        except Exception:
+            _holds_l, _fps_l = {}, {}
         for r in rows:
             pot = conn.execute(
                 """SELECT ROUND(COALESCE(SUM(p.amount), 0), 2) AS t
@@ -14486,6 +14539,11 @@ def get_events_leaderboard(chapter: str | None = None,
                    WHERE LOWER(TRIM(te.code)) = ?""",
                 ((r["item_name"] or "").strip().lower(),)).fetchone()
             r["pot"] = pot["t"] if pot else 0
+            _nrec = conn.execute(
+                """SELECT COUNT(*) FROM tgf_payouts p JOIN tgf_events te ON te.id = p.event_id
+                   WHERE LOWER(TRIM(te.code)) = ?""",
+                ((r["item_name"] or "").strip().lower(),)).fetchone()
+            r["money_recorded"] = bool(_nrec and _nrec[0])
             # NOTHING RECORDED YET: the pot is the GAMES money the board shows
             # (Kerry 2026-10-13: "Why aren't total pots being shown"), until
             # the payouts are recorded.
@@ -14565,6 +14623,28 @@ def get_events_leaderboard(chapter: str | None = None,
                     pass
             if not r["money_visible"]:
                 r["pot"] = 0
+            # THE STATE, by the board's own rule (R2): the chip on this card
+            # is the strip word the opened board shows.
+            try:
+                _evg = conn.execute(
+                    "SELECT side_game_fee, side_game_fee_9, side_game_fee_18 FROM events WHERE id = ?",
+                    (r["id"],)).fetchone()
+                _nog = event_games_off(dict(_evg) if _evg else None)
+            except Exception:
+                _nog = False
+            _fp = _fps_l.get(str(r["id"])) or {}
+            _held = bool(_fc["complete"]) and (bool(_holds_l.get(str(r["id"])))
+                                                or bool(_fp.get("held")) or bool(_fp.get("refused")))
+            _closed = bool(_nog or r["money_recorded"]
+                           or (_fp.get("final") and not _fp.get("display_only")
+                               and not _fp.get("held") and not _fp.get("refused")))
+            r["board_state"] = evlb_state(
+                field_complete=_fc["complete"],
+                holes_posted=0 if r.get("no_scores") else 1, held=_held,
+                money_visible=r.get("money_visible"), money_final=r.get("money_final"),
+                closed=_closed)
+            r["chapter_color"] = EVLB_CHAPTER_COLORS.get(
+                (r.get("chapter") or "").strip().lower(), EVLB_CHAPTER_COLOR_JOINT)
     # While Golf Genius is the official scorer every board says so (Kerry
     # 2026-10-02, CoS #1146-1). `gg_official_through` (e.g. "Oct 6") adds
     # the date to the line; empty drops the date, never the line.
@@ -14572,7 +14652,8 @@ def get_events_leaderboard(chapter: str | None = None,
         _through = (get_app_setting("gg_official_through", db_path=db_path) or "").strip()
     except Exception:
         _through = ""
-    return {"events": rows, "years": years,
+    return {"events": rows, "years": years, "year": year,
+            "months": months, "month": month,
             "pilot": bool(codes), "pilot_codes": codes,
             "gg_official_through": _through or None}
 
@@ -15690,6 +15771,7 @@ def get_event_leaderboard(event_name: str,
     # blind's card counts on the listed holes only.
     _nh_seats: set = set()
     _blind_slots: list = []
+    _blind_pending: dict = {}
     try:
         _bl_all = get_event_blinds(ev["id"], db_path=db_path) or {}
         _bl = (_bl_all.get(str(ev["holes"] or 18))
@@ -15701,7 +15783,18 @@ def get_event_leaderboard(event_name: str,
                       or by_norm.get(_normalize_player_name(
                           _b.get("name") or "").lower()))
                 if not _p:
-                    continue          # the blind has no card yet
+                    # the blind has no card yet (before the round): the
+                    # board still NAMES him on his team, display only —
+                    # he plays no hole until his card exists (Kerry 10/20:
+                    # "show their blinds ... so they understand easily
+                    # that player is a blind")
+                    if _b.get("name") or _bcid is not None:
+                        _blind_pending.setdefault(
+                            _team_key(_gnum, _b.get("cart_pos")), []).append({
+                                "customer_id": (int(_bcid) if _bcid is not None else None),
+                                "name": _b.get("name") or "",
+                                "reason": _b.get("reason") or "open_seat"})
+                    continue
                 _reason = _b.get("reason") or "open_seat"
                 if _reason == "nh":
                     _nh_seats.add((_gnum, _b.get("cart_pos")))
@@ -15850,12 +15943,44 @@ def get_event_leaderboard(event_name: str,
     # fallback.
     _start_by_cid: dict = {}
     _start_by_group: dict = {}
+    # START ORDER (Kerry 10/20: "These should show in Tee time order"):
+    # the TEAM board lists unranked / tied teams in the order they go
+    # off — tee time, then start hole, then A before B on a shotgun.
+    _skey_by_cid: dict = {}
+    _skey_by_group: dict = {}
+
+    def _start_key(label, idx, hole=None):
+        s_ = str(label or "").strip()
+        tm = re.search(r"(\d{1,2}):(\d{2})\s*([AaPp])?", s_)
+        tmin = -1
+        if tm:
+            hh, mm, ap = int(tm.group(1)), int(tm.group(2)), (tm.group(3) or "").lower()
+            if ap:
+                hh = hh % 12 + (12 if ap == "p" else 0)
+            elif hh < 6:
+                hh += 12               # "1:10" on a golf day is the afternoon
+            tmin = hh * 60 + mm
+            s_ = s_[:tm.start()] + " " + s_[tm.end():]
+        hm = re.search(r"(\d{1,2})\s*([A-Za-z])?(?![A-Za-z])", s_)
+        hnum = int(hm.group(1)) if hm else 0
+        letter = (hm.group(2) or "").upper() if hm else ""
+        if hole not in (None, ""):
+            try:
+                hnum = int(hole)
+            except (TypeError, ValueError):
+                pass
+        return (tmin, hnum, letter, idx)
     try:
         _want_holes = str(ev["holes"] or 18)
         _pgroups = (_pack or {}).get("groups") or []
         if any(str(_g.get("holes")) == _want_holes for _g in _pgroups):
             _pgroups = [_g for _g in _pgroups if str(_g.get("holes")) == _want_holes]
-        for _g in _pgroups:
+        for _gi, _g in enumerate(_pgroups):
+            _sk = _start_key(_g.get("slot_label") or _g.get("start_line"), _gi)
+            _skey_by_group.setdefault(_g.get("group_num"), _sk)
+            for _p in _g.get("players") or []:
+                if _p.get("customer_id") is not None:
+                    _skey_by_cid.setdefault(int(_p["customer_id"]), _sk)
             _sl = _g.get("start_line")
             if not _sl:
                 continue
@@ -15871,6 +15996,9 @@ def get_event_leaderboard(event_name: str,
             continue
         _wc = int(_w["customer_id"])
         _waiting_cids.add(_wc)
+        if _wc not in _skey_by_cid and _w.get("tee_time"):
+            _skey_by_cid[_wc] = _start_key(_w.get("tee_time"), 10 ** 6,
+                                           _w.get("start_hole"))
         if _wc not in _start_by_cid and _w.get("tee_time"):
             _sh = _w.get("start_hole")
             _start_by_cid[_wc] = str(_w["tee_time"]) + (
@@ -15983,7 +16111,20 @@ def get_event_leaderboard(event_name: str,
                 break
         if _start is None:
             _start = _start_by_group.get(tn[0] if isinstance(tn, tuple) else tn)
+        _skey = None
+        for _n, c, _b in names:
+            if c is not None and not _b and int(c) in _skey_by_cid:
+                _skey = _skey_by_cid[int(c)]
+                break
+        if _skey is None:
+            _skey = _skey_by_group.get(tn[0] if isinstance(tn, tuple) else tn)
+        if _skey is not None and isinstance(tn, tuple):
+            _skey = _skey + (str(tn[1]),)        # cart A before cart B
         teams.append({
+            "_skey": _skey,
+            # drawn blinds with no card yet — named on the board, marked
+            # BLIND, never scored (display only; scoring reads `players`)
+            "blinds_pending": _blind_pending.get(tn, []),
             "team_num": (f"{tn[0]}{tn[1]}" if isinstance(tn, tuple)
                          else tn),
             "players": members,
@@ -15996,6 +16137,14 @@ def get_event_leaderboard(event_name: str,
             "start_line": _start,
             "upcoming": _upcoming,
             "purse": None, "gg_position": None, "gg_total": None})
+
+    # every team carries its place in the start order (0 = first off);
+    # a team with no known start sorts after, by team number
+    for _i, _t in enumerate(sorted(
+            teams, key=lambda t: (t["_skey"] is None, t["_skey"] or (), str(t["team_num"])))):
+        _t["start_order"] = _i
+    for _t in teams:
+        _t.pop("_skey", None)
 
     def _member_hits(members, gs):
         # Count MEMBERS found in GG's team string — full "LAST, First"
@@ -16358,17 +16507,19 @@ def _evlb_truthy(v) -> bool:
 
 
 def evlb_state_guide(lock_minutes: int, hold_minutes: int) -> list:
-    """The four state words with one plain line each, for the strip and
-    HOW IT WORKS. The minutes come from the dials (card lock
-    `se_card_lock_minutes`, money hold `leaderboard_money_hold_minutes`);
-    they are never typed into the copy."""
+    """The four state words with one plain line each, for HOW IT WORKS.
+    The minutes come from the dials (card lock `se_card_lock_minutes`);
+    they are never typed into the copy. The strip itself says one short
+    line per state (EVLB_STRIP_TEXT, design-claude #2147 \u00a72): it is the
+    only money message on the board (R1)."""
     return [
         {"state": "upcoming", "word": "UPCOMING",
          "text": "Pairings are set; nobody has teed off yet. THRU shows each "
-                 "player's tee time and starting hole."},
+                 "player's tee time and starting hole, and no money shows."},
         {"state": "live", "word": "LIVE",
          "text": "Scores are coming in hole by hole and standings move as groups "
-                 "post. THRU is the holes played; no money shows yet."},
+                 "post. THRU is the holes played. Won shows PROJ., what each "
+                 "player would win if play ended now, until every card is in."},
         {"state": "in_review", "word": "IN REVIEW",
          "text": f"Every score is in. The money shows, but it is not settled: a "
                  f"score can still be corrected. Cards lock {lock_minutes} minutes "
@@ -16376,6 +16527,52 @@ def evlb_state_guide(lock_minutes: int, hold_minutes: int) -> list:
         {"state": "final", "word": "FINAL",
          "text": "Results are closed and prizes are set."},
     ]
+
+
+# The strip's one line per state (design-claude #2147 \u00a72, Kerry-approved
+# 10/20). {first_tee} and {lock_at} come from the event, never a literal.
+EVLB_STRIP_TEXT = {
+    "upcoming": "Pairings are set. First tee {first_tee}.",
+    "live": "Money is projected until every card is in.",
+    "in_review": "Every score is in. Cards lock at {lock_at}.",
+    "held": "Results are being checked.",
+    "final": "Results are closed and prizes are set.",
+}
+
+
+def evlb_state(*, field_complete, holes_posted, held: bool,
+               money_visible=None, money_final=None, closed: bool) -> str:
+    """THE board state (R2, design-claude #2147): one value drives the
+    strip word and colour, the list chip and the tab landing. Every caller
+    (the opened board and the events list) goes through here, so the list
+    chip can never disagree with the board it opens.
+    UPCOMING before any hole is posted; LIVE until every hole of the field
+    is in; IN REVIEW once it is, until results close (a hold keeps it
+    here); FINAL when they have."""
+    if not field_complete:
+        return "live" if (holes_posted or 0) > 0 else "upcoming"
+    if held or money_visible is False or money_final is False:
+        return "in_review"
+    return "final" if closed else "in_review"
+
+
+def _evlb_clock(utc_iso) -> str | None:
+    """'2026-10-21T00:34:00Z' -> '7:34 PM' (Central). None when unreadable."""
+    try:
+        from email_parser.timezone_utils import CENTRAL
+    except Exception:
+        CENTRAL = None
+    try:
+        t = datetime.strptime(str(utc_iso)[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return None
+    try:
+        import pytz
+        tz = CENTRAL or pytz.timezone("America/Chicago")
+        t = pytz.utc.localize(t).astimezone(tz)
+    except Exception:
+        return None
+    return t.strftime("%I:%M %p").lstrip("0")
 
 
 def _evlb_tee_starts(conn, ev: dict) -> dict:
@@ -16410,25 +16607,46 @@ def _evlb_tee_starts(conn, ev: dict) -> dict:
     return out
 
 
+def _evlb_first_tee(ev: dict, out: dict, db_path=None) -> str | None:
+    """The first tee time of the event ('3:40 PM'): the earliest tee start
+    on the saved pairings, else the event's own start time."""
+    best = None
+    with _connect(db_path) as conn:
+        starts = _evlb_tee_starts(conn, ev)
+    for st in starts.values():
+        tt = (st or {}).get("tee_time")
+        try:
+            k = datetime.strptime(str(tt).strip().upper(), "%I:%M %p")
+        except (TypeError, ValueError):
+            continue
+        if best is None or k < best[0]:
+            best = (k, str(tt).strip().upper())
+    if best:
+        return best[1].lstrip("0")
+    try:
+        return datetime.strptime(str(ev.get("start_time")), "%H:%M").strftime("%I:%M %p").lstrip("0")
+    except (TypeError, ValueError):
+        return None
+
+
 def _evlb_board_state(out: dict, *, no_games: bool, recorded: bool,
                       fp: dict | None, hold: dict | None) -> tuple[str, bool]:
-    """(state, held) from fields the board already has (handoff 12.1):
-    UPCOMING before any hole is posted; LIVE until every hole of the field is
-    in; IN REVIEW once it is, until results close; FINAL when they have
-    (payouts recorded, or nothing to pay, or an event with no games). A hold
-    — the verifier's or Kerry's, a refused record, or a closest-to-the-pin
-    takeover nobody has confirmed — keeps it IN REVIEW."""
-    if not out.get("field_complete"):
-        return ("live" if (out.get("holes_posted") or 0) > 0 else "upcoming"), False
+    """(state, held) from fields the board already has (handoff 12.1), via
+    the one rule `evlb_state`. A hold (the verifier's or Kerry's, a refused
+    record, or a closest-to-the-pin takeover nobody has confirmed) keeps it
+    IN REVIEW."""
     fp = fp if isinstance(fp, dict) else {}
-    held = bool(hold) or bool(fp.get("held")) or bool(fp.get("refused")) \
-        or any(p.get("pending") for p in out.get("proxies") or [])
-    if held or out.get("money_visible") is False or out.get("money_final") is False:
-        return "in_review", held
-    closed = (no_games or recorded
-              or (fp.get("final") and not fp.get("display_only")
-                  and not fp.get("held") and not fp.get("refused")))
-    return ("final" if closed else "in_review"), False
+    held = bool(out.get("field_complete")) and (
+        bool(hold) or bool(fp.get("held")) or bool(fp.get("refused"))
+        or any(p.get("pending") for p in out.get("proxies") or []))
+    closed = bool(no_games or recorded
+                  or (fp.get("final") and not fp.get("display_only")
+                      and not fp.get("held") and not fp.get("refused")))
+    state = evlb_state(field_complete=out.get("field_complete"),
+                       holes_posted=out.get("holes_posted"), held=held,
+                       money_visible=out.get("money_visible"),
+                       money_final=out.get("money_final"), closed=closed)
+    return state, held and state == "in_review"
 
 
 def _evlb_board_extras(out: dict, ev: dict, *, no_games: bool, recorded: bool,
@@ -16499,13 +16717,25 @@ def _evlb_board_extras(out: dict, ev: dict, *, no_games: bool, recorded: bool,
     state, held = _evlb_board_state(out, no_games=no_games, recorded=recorded,
                                     fp=fp, hold=hold)
     guide = evlb_state_guide(lock, int(out.get("money_hold_minutes") or 10))
-    line = next(g["text"] for g in guide if g["state"] == state)
+    first_tee = None
+    if state == "upcoming":
+        try:
+            first_tee = _evlb_first_tee(ev, out, db_path)
+        except Exception:
+            logger.exception("Non-fatal: first tee unavailable for %s", eid)
+    lock_at = _evlb_clock(out.get("money_final_at")) if state == "in_review" else None
     if held:
-        line = "Results are being checked."
-    elif state == "in_review" and out.get("money_visible") is False:
-        line = (f"Every score is in. The money posts "
-                f"{int(out.get('money_hold_minutes') or 10)} minutes after the "
-                f"last score; a score can still be corrected.")
+        line = EVLB_STRIP_TEXT["held"]
+    elif state == "upcoming":
+        line = EVLB_STRIP_TEXT["upcoming"].format(first_tee=first_tee) if first_tee \
+            else "Pairings are set."
+    elif state == "in_review":
+        line = EVLB_STRIP_TEXT["in_review"].format(lock_at=lock_at) if lock_at \
+            else "Every score is in."
+    else:
+        line = EVLB_STRIP_TEXT[state]
+    out["board_first_tee"] = first_tee
+    out["board_lock_at"] = lock_at
     out["board_state"] = state
     out["board_state_word"] = EVLB_STATE_WORDS[state]
     out["board_state_text"] = line
@@ -42348,7 +42578,14 @@ def set_starting_handicap(customer_id: int, index_18: float | None,
             (index_18, index_18, set_by if index_18 is not None else None,
              note if index_18 is not None else None, customer_id))
         conn.commit()
+    dropped = []
+    if index_18 is not None:
+        try:
+            dropped = drop_stale_nh_blinds(db_path=db_path)
+        except Exception:
+            logger.exception("starting handicap: N/H blind sweep failed for cid %s", customer_id)
     return {"customer_id": customer_id, "customer_name": row["customer_name"],
+            "nh_blinds_dropped": dropped,
             "starting_handicap_18": index_18,
             "starting_handicap_9": round(index_18 / 2, 1)
             if index_18 is not None else None,
@@ -63627,6 +63864,34 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
             "excluded": pool["excluded"],
             "already_drawn": [b for hs in existing.values()
                               for seats in hs.values() for b in seats]}
+
+
+def drop_stale_nh_blinds(event_ids=None, db_path=None) -> list:
+    """Kerry 2026-10-20: "If and when we get a handicap for Adam, that blind
+    would go away immediately." An 'nh' blind whose seat's player now has a
+    handicap is cleared on every event from today on (or the ones given),
+    instead of only being reported in the draw's `stale_nh`. An open-seat
+    blind is never touched."""
+    if event_ids is None:
+        from zoneinfo import ZoneInfo as _ZI
+        today = datetime.now(_ZI("America/Chicago")).date().isoformat()
+        with _connect(db_path) as conn:
+            try:
+                event_ids = [r[0] for r in conn.execute(
+                    """SELECT DISTINCT b.event_id FROM blind_draws b
+                         JOIN events e ON e.id = b.event_id
+                        WHERE b.reason = 'nh' AND COALESCE(e.event_date, '') >= ?""",
+                    (today,)).fetchall()]
+            except sqlite3.OperationalError:
+                return []
+    out = []
+    for eid in event_ids:
+        res = draw_event_blinds(int(eid), dry_run=True, db_path=db_path)
+        for st in (res or {}).get("stale_nh") or []:
+            set_event_blind(int(eid), st["holes"], st["group_num"], st["cart_pos"], None,
+                            db_path=db_path)
+            out.append({"event_id": int(eid), **st})
+    return out
 
 
 def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,

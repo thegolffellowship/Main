@@ -394,11 +394,12 @@ def build_message(person: dict, kind: str = "ask", preview: bool = False) -> dic
 def _sender(sender):
     if sender is not None:
         return sender
-    from email_parser.event_day_email import _creds, _graph_send
+    from email_parser.event_day_email import _creds, _graph_send, asks_cc
     creds = _creds()
     if not creds:
         return None
-    return lambda to, s, h: _graph_send(creds, to, s, h)   # noqa: E731
+    _cc = asks_cc()
+    return lambda to, s, h: _graph_send(creds, to, s, h, cc=_cc)   # noqa: E731
 
 
 def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:

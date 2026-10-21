@@ -262,6 +262,21 @@ with db._connect(DB) as conn:
 check("restore puts them back on, clears the no and the reason", done_.get("applied")
       and 770002 not in inv._opted_out(DB) and left == 0
       and all(x["customer_id"] != 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), done_)
+print("6f2. Kerry 10/20: restore with keep_answers leaves the real answers")
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps([770002]), db_path=DB)
+cl.post(f"/rsvp/{inv.make_token(770002, EV, 'out', date(2026, 12, 15))}", headers={"X-Requested-With": "fetch"})
+inv.record_reason(inv.make_token(770002, EV, 'out', date(2026, 12, 15)), "Schedule", db_path=DB)
+kept = inv.restore_answers([770002], kpost, confirm=True, keep_answers=True, db_path=DB)
+with db._connect(DB) as conn:
+    left = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
+                        (f"tracker:{EV}:770002",)).fetchone()[0]
+check("keep_answers: back on invitations, the no and the reason stay", kept.get("applied")
+      and 770002 not in inv._opted_out(DB) and left == 1 and kept["not_playing_rows_removed"] == []
+      and any(x["customer_id"] == 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), kept)
+with db._connect(DB) as conn:   # leave the state 6f left for the later sections
+    conn.execute("DELETE FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",))
+    conn.execute("DELETE FROM event_decline_reasons WHERE event_id = ? AND customer_id = 770002", (EV,))
+    conn.commit()
 print("6g. Kerry 10/14: the scanner filter (2-minute grace, burst rule)")
 inv.BURST_S = 30   # the earlier sections tap buttons back to back on purpose
 import time as _time

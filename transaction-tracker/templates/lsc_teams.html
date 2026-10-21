@@ -330,7 +330,7 @@
                            `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}` +
                            lodgeIc(seat.customer_id) +
                            (secured ? `<span class="lsc-lock">${LSC_LOCK_SVG}</span>` : "") +
-                           (hasEarn ? `<span class="lsc-chev tgf-exp">&#9654;</span>` : "") +
+                           (hasEarn ? `<span class="lsc-chev tgf-exp">&#9654;&#xFE0E;</span>` : "") +
                            `</div>`;
                 }).join("");
                 // Green check = pre-confirmed available if a seat falls

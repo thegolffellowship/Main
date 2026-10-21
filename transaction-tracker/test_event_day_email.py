@@ -188,6 +188,19 @@ page = mts.render_teesheet(td)
 check("the member tee sheet lists every group with its anchor and players",
       'id="g1"' in page and 'id="g2"' in page and "Ann Able" in page and "Gus Gray" in page
       and "Hole 1A \u00b7 8:00 AM" in page, page[:300])
+check("each seated player shows his TGF index or No handicap (Kerry 10/20)",
+      all(("HCP " in r or "No handicap" in r) for r in page.split('<div class="p"')[1:]), page[:600])
+with db._connect(DB) as conn:
+    db._ensure_pairing_tables(conn)
+    _g1 = td["groups"][0]
+    conn.execute("INSERT INTO blind_draws (event_id, holes, group_num, cart_pos, player_name, slot_key, reason) "
+                 "VALUES (?, ?, ?, 4, 'Bob Blind', 'k', 'open_seat')",
+                 (EV, str(next(g for g in db.get_event_print_pack(EV, db_path=DB)["groups"]
+                               if g["group_num"] == _g1["group_num"])["holes"]), _g1["group_num"]))
+    conn.commit()
+_pb = mts.render_teesheet(mts.build_teesheet(EV, db_path=DB))
+check("a drawn blind shows with the reason", "BLIND</span> Bob Blind" in _pb and "Blind for the open seat" in _pb,
+      _pb[_pb.find('id="g1"'):][:900])
 check("…and carries no email, phone or money",
       "@" not in page.replace("@media", "") and "$" not in page, page)
 _pre = mts.render_teesheet(mts.build_teesheet(EV2, db_path=DB))
@@ -335,6 +348,47 @@ check("the same sheet state is never re-issued twice",
 with db._connect(DB) as conn:
     n = conn.execute("SELECT COUNT(*) FROM event_day_email_sends WHERE event_id = ?", (EV,)).fetchone()[0]
 check("…and event_day_email_sends is untouched", n == 5, n)
+
+print("4d. Late add: the new player plus their group only (Kerry 10/20)")
+SENT.clear()
+_b = ede.build_event_day_emails(EV, db_path=DB)
+_late = _b["messages"][0]
+_grp = [m for m in _b["messages"] if m.get("group") == _late.get("group")]
+r = ede.send_event_day_late_adds(EV, [_late["customer_id"]], lane_post, confirm=True, db_path=DB)
+check("a late-add send without Kerry's word is refused", "refused" in r and not SENT, r)
+r = ede.send_event_day_late_adds(EV, [_late["customer_id"]], ok_post, db_path=DB)
+check("dry run plans the late add and their group only",
+      r.get("dry_run") and r["counts"]["to_send"] == len(_grp) and not SENT, r.get("counts"))
+r = ede.send_event_day_late_adds(EV, [_late["customer_id"]], ok_post, confirm=True, db_path=DB)
+_mine = [x for x in SENT if x["to_address"] == _late["email"]]
+_mates = [x for x in SENT if x["to_address"] != _late["email"]]
+check("the late add gets the plain approved message",
+      len(_mine) == 1 and _mine[0]["subject"] == _late["subject"]
+      and "UPDATED GROUP" not in _mine[0]["html_body"], [x["subject"] for x in _mine])
+check("…groupmates get UPDATED GROUP naming who joined",
+      len(_mates) == len(_grp) - 1
+      and all(x["subject"].startswith("UPDATED GROUP: ") and _late["name"] in x["html_body"] for x in _mates))
+n = len(SENT)
+r = ede.send_event_day_late_adds(EV, [_late["customer_id"]], ok_post, confirm=True, db_path=DB)
+check("the same group state is never sent twice", len(SENT) == n and r["counts"]["sent"] == 0, r.get("counts"))
+r = ede.send_event_day_late_adds(EV, [99999999], ok_post, db_path=DB)
+check("a cid with no sendable message is refused", "refused" in r, r)
+
+print("4e. Newcomers (Kerry 10/20): welcome line, Rules of Play, card totals")
+check("first timer gets Kerry's line, pronoun from gender",
+      ede.welcome_line("Adam", "first", "M") == "This is Adam's first time playing with us! Welcome him in and help him understand our rules.")
+check("…they/them when gender is unknown", "Welcome them in and help them" in ede.welcome_line("Adam", "first", None))
+check("guest and new member wording", "as a guest" in ede.welcome_line("Al", "guest") and "new members" in ede.welcome_line("Al", "new"))
+check("no line for a regular", ede.welcome_line("Al", None) == "")
+check("kinds", ede.newcomer_kind({"is_first_timer": True}) == "first"
+      and ede.newcomer_kind({"current_player_status": "active_guest"}) == "guest"
+      and ede.newcomer_kind({"is_new": True}) == "new" and ede.newcomer_kind({}) is None)
+_bn = ede.late_add_banner(["Adam Wilson"], [ede.welcome_line("Adam", "first", "M")])
+check("the welcome line rides in the UPDATED GROUP notice", "first time playing with us" in _bn)
+check("rules note links the Rules of Play PDF", ede.RULES_OF_PLAY_URL in ede.rules_note())
+_cs = ede.card_strip({"si_by_hole": {1: 1}, "ph_dots": {1: 1, 2: 1}, "net_dots": {1: 1}},
+                     {"holes": [1, 2], "par": {1: 4, 2: 5}}, {}, None, None)
+check("YOUR CARD has a TOT column with par and pop totals", ">TOT<" in _cs and ">9<" in _cs, _cs[:200])
 
 print("5. The bridge")
 os.environ["DATABASE_PATH"] = DB

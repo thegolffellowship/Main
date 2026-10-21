@@ -142,6 +142,22 @@
         /* NOT BOUGHT IN: soft grey row, muted text, BUY IN pill (Kerry 2026-10-12, option A) */
         #pr-table-container tbody tr.pr-nobuy > td { color: #6B7280; }
         #pr-table-container tr.pr-nobuy .cell-link, #pr-table-container tr.pr-nobuy .pr-nm-l { color: #6B7280; }
+        /* CHAPTER COLOUR BAR on the row's left edge (Kerry 2026-10-20: "No reason for two lines on these. Let's do
+           color bars for the chapter on the left of each entry like we've done elsewhere, rather than the chapter
+           badges"). The Events table's own pattern, same classes, width and tokens (events.html .events-table
+           tr.ev-ch-*): 8px, Austin burnt orange, SA slate (the -alt), joint TGF black, a row with no chapter the
+           neutral edge so every name still lines up. Rows on cross-chapter boards carry it (prChapterBarClass). */
+        #pr-table-container tbody tr[class*="ev-ch-"] > td:first-child { border-left: 8px solid #E5E7EB; }
+        #pr-table-container tbody tr.ev-ch-austin > td:first-child { border-left-color: var(--chapter-austin, #BF5700); }
+        #pr-table-container tbody tr.ev-ch-sa > td:first-child { border-left-color: var(--chapter-sa-alt, #8FA8B8); }
+        #pr-table-container tbody tr.ev-ch-tgf > td:first-child { border-left-color: #1B1B1B; }
+        #pr-table-container tbody tr.ev-ch-other > td:first-child { border-left-color: var(--chapter-national, #374151); }
+        /* the bar takes 8px out of the rank cell, so give the rank its room back and a gap before the name
+           ("T10MARROQUIN", Kerry 2026-10-20: "Needs a little more space between rank and player") */
+        #pr-table-container tbody tr[class*="ev-ch-"] > td.pr-rk { padding-left: 6px; padding-right: 10px; min-width: 46px; }
+        /* the phone table is table-layout:fixed, so the column width comes from the header cell's inline width
+           (28px), not the row: widen the RK header itself on any board whose rows carry the bar */
+        #pr-table-container table:has(tbody tr[class*="ev-ch-"]) > thead > tr:first-child > th:first-child { width: 50px !important; }
         .pr-buyin { display: inline-block; flex: none; background: var(--primary, #E87C3E); color: #fff !important; border-radius: 9999px;
             padding: 3px 11px; font: 700 10px/1.3 'Bitter', Georgia, serif; letter-spacing: .6px; text-decoration: none; white-space: nowrap; margin-left: 8px; }
         .pr-buyin:hover { background: var(--primary-hover, #D06B2E); }
@@ -490,8 +506,45 @@
         .evlb-seg button:first-child { border-left: 0; }
         .evlb-seg button.active { background: #1B1B1B; color: #fff; }
         .evlb-seg-sub button.active { background: var(--primary, #E87C3E); }
-        .evlb-year { margin-left: auto; font: 700 11px/1 'Bitter', serif; color: #9CA3AF;
-            letter-spacing: 1px; border: 1px dashed var(--border, #E5E7EB); border-radius: 99px; padding: 6px 12px; }
+        /* ═══ EVENTS LEADERBOARD BATCH 1 (design-claude #2147-#2150, Kerry-approved
+           10/20): list, state strip, tabs, TEAM. ═══ */
+        #evlb-chips.evlb-seg { border-radius: 7px; }
+        #evlb-chips.evlb-seg button { padding: 8px 14px; letter-spacing: 1.2px; white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px; color: #1B1B1B; }
+        #evlb-chips.evlb-seg button.active { color: #fff; }
+        .evlb-cdot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+        .evlb-year { font: 700 11px/1 'Bitter', serif; color: #1B1B1B; letter-spacing: 1.2px;
+            background: #fff; border: 1px solid var(--border, #E5E7EB); border-radius: 7px;
+            padding: 7px 10px; cursor: pointer; }
+        .evlb-year[hidden] { display: none; }
+        .evlb-month { margin-top: 14px; }
+        .evlb-mlabel { font: 700 10px/1 'Bitter', serif; letter-spacing: 1.8px; color: #9CA3AF; margin: 0 0 8px; }
+        .evlb-mmore { display: block; width: 100%; text-align: left; margin-top: 10px; cursor: pointer;
+            background: transparent; border: 1px dashed #E8B48F; border-radius: 8px; padding: 12px 16px;
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 1.2px; color: #BF5700; }
+        .evlb-mmore:disabled { opacity: .6; cursor: wait; }
+        details.evlb-ev.evlb-card { border-radius: 8px; margin-top: 6px; }
+        details.evlb-ev.evlb-card > summary { display: grid; grid-template-columns: 4px 30px minmax(0, 1fr) 106px 110px;
+            gap: 0; padding: 0; min-height: 54px; align-items: center; }
+        .evlb-card .bar { align-self: stretch; }
+        .evlb-card .chev { justify-self: center; font-size: 11px; }
+        .evlb-card > summary .nm, .evlb-card > summary .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .evlb-card .ttl { min-width: 0; padding: 8px 10px 8px 0; }
+        .evlb-chip-st { justify-self: start; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+            font: 700 9.5px/1 'Bitter', serif; letter-spacing: 1.3px; border-radius: 4px; padding: 5px 7px; }
+        .evlb-chip-st i, .evlb-state .w i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
+        .evlb-chip-st.s-upcoming { color: #6B7280; background: #F3F4F6; }
+        .evlb-chip-st.s-live { color: #DC2626; background: #FEF2F2; }
+        .evlb-chip-st.s-in_review { color: #B45309; background: #FFFBEB; }
+        .evlb-chip-st.s-final { color: #15803D; background: #ECFDF3; }
+        .evlb-card .pot { margin: 0; padding-right: 14px; color: #047857; }
+        .evlb-card .pot .s { font: 700 8.5px/1.8 'Bitter', serif; letter-spacing: 1.2px; color: #9CA3AF; }
+        .evlb-card .pot.none { color: #9CA3AF; }
+        @media (max-width: 560px) {
+            details.evlb-ev.evlb-card > summary { grid-template-columns: 4px 24px minmax(0, 1fr) auto auto; column-gap: 6px; }
+            .evlb-card .pot { padding-right: 10px; }
+            .evlb-card .meta .crs { display: none; }
+        }
         .evlb-pilot { font-size: 11px; color: #9CA3AF; flex-basis: 100%; }
         .evlb-official { font-size: 11px; color: #6B7280; margin: 0 0 8px; }
         .evlb-beta { font: 700 9px/1 'Helvetica Neue', Arial, sans-serif; letter-spacing: .06em;
@@ -535,12 +588,6 @@
            OVERALL | TEAM | NET etc fit on the mobile screen". On a
            phone the seven game tabs wrap into two rows of equal-width cells
            instead of running off the right edge. */
-        @media (max-width: 560px) {
-            .evlb-seg-sub { display: flex; flex-wrap: wrap; border-radius: 12px; }
-            .evlb-seg-sub button { flex: 1 1 25%; padding: 9px 4px; font-size: 10.5px; letter-spacing: .3px; border-top: 1px solid var(--border, #E5E7EB); margin-top: -1px; }
-            .evlb-seg-sub button:nth-child(5) { border-left: 0; }
-            .evlb-hiw-row { width: 100%; }
-        }
         .evlb-scroll { overflow-x: auto; }
         /* tables compress LEFT instead of filling the width (Kerry) */
         table.evlb-tbl { width: auto; border-collapse: collapse; }
@@ -737,15 +784,51 @@
         .evlb-ovr td.thru .f { font-weight: 700; margin-right: 3px; }
         .evlb-ovr td.thru.pre { color: #6B7280; font-size: 11px; }
         /* the state strip (handoff 12.1): one word, one plain line */
-        .evlb-state { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-            margin: 0 0 10px; padding: 6px 10px; border: 1px solid #E5E7EB;
-            border-radius: 6px; background: #F8FAFC; color: #374151; font-size: 12px; }
-        .evlb-state .w { font: 700 11px/1 'Bitter', serif; letter-spacing: .5px;
-            padding: 4px 9px; border-radius: 99px; background: #1B1B1B; color: #fff; }
-        .evlb-state.s-upcoming .w { background: #6B7280; }
-        .evlb-state.s-live .w { background: #DC2626; }
-        .evlb-state.s-in_review .w { background: #B45309; }
-        .evlb-state.s-final .w { background: #15803D; }
+        /* THE STATE STRIP (design-claude #2147 §2): the one money message */
+        .evlb-state { display: flex; gap: 12px; align-items: center; margin: 0 0 4px; padding: 9px 12px;
+            border: 1px solid; border-radius: 7px; white-space: normal; }
+        .evlb-state .w { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+            font: 800 10.5px/1 'Bitter', serif; letter-spacing: 1.5px; }
+        .evlb-state .w i { width: 7px; height: 7px; }
+        .evlb-state .t { flex: 1; font-size: 12.5px; color: #44403B; min-width: 0; }
+        .evlb-state .r { font: 700 9.5px/1 'Bitter', serif; letter-spacing: 1.2px; color: #9CA3AF; white-space: nowrap; }
+        .evlb-state.s-upcoming { color: #6B7280; background: #F7F7F5; border-color: #E5E7EB; }
+        .evlb-state.s-live { color: #DC2626; background: #FEF2F2; border-color: #FBD5D5; }
+        .evlb-state.s-in_review { color: #B45309; background: #FFFBEB; border-color: #FDE68A; }
+        .evlb-state.s-final { color: #15803D; background: #ECFDF3; border-color: #BBF7D0; }
+        @media (max-width: 560px) {
+            .evlb-state .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .evlb-state .r[data-evlb-upd] { display: none; }
+        }
+        /* THE TABS ROW (design-claude #2147 §3): underline tabs, one style for
+           every tab (SUMMARY included), HOW IT WORKS an outlined pill */
+        .evlb-subtabs { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap;
+            border-bottom: 1px solid #E5E7EB; margin: 10px 0 0; }
+        .evlb-subtabs .evlb-seg.evlb-seg-sub { display: flex; gap: 24px; border: 0; border-radius: 0;
+            background: transparent; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1 1 auto; }
+        .evlb-subtabs .evlb-seg-sub::-webkit-scrollbar { display: none; }
+        .evlb-subtabs .evlb-seg-sub button, .evlb-subtabs .evlb-seg-sub button:first-child {
+            border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent;
+            padding: 13px 0 11px; margin: 0 0 -1px; flex: none; white-space: nowrap;
+            font: 700 11.5px/1 'Bitter', serif; letter-spacing: 1.4px; color: #6B7280; }
+        .evlb-subtabs .evlb-seg-sub button.active { color: #E87C3E; border-bottom-color: #E87C3E; background: transparent; }
+        .evlb-hiw { flex: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+            background: #fff; border: 1.5px solid #E87C3E; color: #BF5700; border-radius: 999px;
+            padding: 5px 11px; font: 700 10.5px/1 'Bitter', serif; letter-spacing: 1px; white-space: nowrap; }
+        .evlb-hiw .i { width: 13px; height: 13px; border-radius: 50%; background: #E87C3E; color: #fff;
+            display: inline-flex; align-items: center; justify-content: center; font: 800 9px/1 'Bitter', serif; }
+        body.lsc-solo .evlb-hiw { border-color: var(--lsc-navy, #002855); color: var(--lsc-navy, #002855); }
+        body.lsc-solo .evlb-hiw .i { background: var(--lsc-navy, #002855); }
+        @media (max-width: 560px) {
+            .evlb-subtabs { gap: 8px; }
+            .evlb-subtabs .evlb-seg-sub { gap: 20px;
+                -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+                mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); padding-right: 30px; }
+            .evlb-hiw { width: 28px; height: 28px; padding: 0; justify-content: center; border: 0; background: #E87C3E; }
+            .evlb-hiw .l { display: none; }
+            .evlb-hiw .i { width: auto; height: auto; background: transparent; font-size: 14px; }
+            body.lsc-solo .evlb-hiw { background: var(--lsc-navy, #002855); }
+        }
         /* "CTPs" keeps its small s inside the uppercase tab row (Kerry 10/19) */
         .evlb-seg button .evlb-keepcase { text-transform: none; }
         /* a BAND row — a flight on Net/Gross/Skins, a team on Team */
@@ -755,42 +838,119 @@
             font: 700 14px/1.6 'Bitter', serif; letter-spacing: 1px; padding: 7px 12px;
             white-space: normal; }
         .evlb-holes tr.evlb-band[data-team] td { cursor: pointer; }
-        /* TEAM tab collapsed (Kerry 10/19, B8): one row a team — # | TEAM |
-           THRU | NET | ± | WON; tap a row for today's full team board. */
-        .evlb-tdial { display: flex; align-items: center; justify-content: space-between;
-            gap: 8px; margin: 4px 0 6px; }
-        .evlb-tdial-l { font: 700 13px/1.3 'Bitter', serif; letter-spacing: .3px; color: #1B1B1B; }
-        .evlb-tall { font: 700 12px/1 'Bitter', serif; padding: 5px 12px; border-radius: 999px;
-            border: 1.5px solid #1B1B1B; background: #fff; color: #1B1B1B; cursor: pointer; white-space: nowrap; }
-        /* fixed layout: an opened team's wide hole grid scrolls inside its
-           own cell instead of widening the collapsed table */
+        /* TEAM tab, collapsed (design-claude #2147 §4, Kerry-approved 10/20):
+           # | TEAM | ± | THRU | WON/PROJ., names on one line, ± the big number */
+        .evlb-tdial { display: flex; align-items: center; gap: 16px; padding: 12px 20px 8px 4px; white-space: normal; }
+        .evlb-tdial-l { font: 700 13px/1.3 'Bitter', serif; color: #1B1B1B; white-space: nowrap; }
+        .evlb-tpot { font-size: 12px; color: #6B7280; white-space: nowrap; }
+        .evlb-tpot b { font: 700 12px/1 'Bitter', serif; color: #047857; }
+        .evlb-tall { margin-left: auto; font: 700 10.5px/1 'Bitter', serif; letter-spacing: 1px; padding: 6px 12px;
+            border-radius: 999px; border: 1px solid #D1D5DB; background: #fff; color: #1B1B1B; cursor: pointer; white-space: nowrap; }
         table.evlb-tsum { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        table.evlb-tsum th.pos { width: 34px; }
-        table.evlb-tsum th.thru { width: 78px; }
-        table.evlb-tsum th.sc { width: 46px; }
-        table.evlb-tsum th.tp { width: 42px; }
-        table.evlb-tsum th.won { width: 68px; }
-        table.evlb-tsum th { background: #1B1B1B; color: #fff; font: 700 11px/1.4 'Bitter', serif;
-            letter-spacing: .5px; text-transform: uppercase; padding: 5px 8px; text-align: center; }
+        table.evlb-tsum col.c-pos { width: 50px; } table.evlb-tsum col.c-tp { width: 64px; }
+        table.evlb-tsum col.c-thru { width: 76px; } table.evlb-tsum col.c-won { width: 96px; }
+        table.evlb-tsum th { background: #1B1B1B; color: #fff; font: 700 10px/1 'Bitter', serif;
+            letter-spacing: 1.2px; height: 32px; padding: 0 10px; text-align: center; border: 0; }
         table.evlb-tsum th.nm, table.evlb-tsum td.nm { text-align: left; }
-        table.evlb-tsum tr.evlb-tsum-row td { padding: 7px 8px; border-bottom: 1px solid #E5E7EB;
-            text-align: center; font-variant-numeric: tabular-nums; cursor: pointer; }
-        table.evlb-tsum tr.evlb-tsum-row td.nm { white-space: normal; line-height: 1.35; }
-        table.evlb-tsum tr.evlb-tsum-row:hover td { background: #FAFAF8; }
-        table.evlb-tsum tr.evlb-tsum-row.open td { background: #F3F1EC; border-bottom-color: #1B1B1B; }
-        table.evlb-tsum tr.evlb-tsum-row .tchev { margin-right: 4px; }
+        /* .evlb-ev .nm (the card title) must not reach the table's name cells */
+        .evlb-ev table.evlb-tsum th.nm { font: 700 10px/1 'Bitter', serif; color: #fff; }
+        .evlb-ev table.evlb-tsum td.nm { font: 400 13.5px/1 'Bitter', serif; color: #1B1B1B; }
+        table.evlb-tsum td, table.evlb-tsum th { vertical-align: middle; }
+        table.evlb-tgx td { vertical-align: middle; }
+        table.evlb-tsum th.won { text-align: right; padding-right: 14px; }
+        table.evlb-tsum tr.evlb-tsum-row td { height: 42px; padding: 0 10px; border: 0; border-bottom: 1px solid #E5E7EB;
+            background: #fff; text-align: center; font-variant-numeric: tabular-nums; cursor: pointer; }
+        table.evlb-tsum tr.evlb-tsum-row td.pos { font: 700 14px/1 'Bitter', serif; text-align: left; padding-left: 12px; }
+        /* the names cell: one line, never wraps (#2147 §4) */
+        table.evlb-tsum tr.evlb-tsum-row td.nm { white-space: nowrap; overflow: hidden; text-align: left; }
+        table.evlb-tsum td.nm .tnm { display: flex; align-items: center; overflow: hidden; }
+        .evlb-tnames { display: inline-flex; align-items: center; gap: 13px; }
+        .evlb-tmem { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+            font: 13.5px/1 'Bitter', serif; color: #1B1B1B; }
+        .evlb-tmem .f { font-weight: 600; } .evlb-tmem .l { font-weight: 800; }
+        .evlb-tmem .evlb-tee-dot, .evlb-tg .evlb-tee-dot { width: 7px; height: 7px; margin: 0; }
+        /* a BLIND: the chip leads (the only thing ever before a name, #2150),
+           the name italic brown */
+        .evlb-tmem.blind { font-style: italic; color: #92400E; }
+        .evlb-tmem.blind .evlb-blind { margin: 0 2px 0 0; padding: 2px 4px; font: 700 8px/1 'Bitter', serif;
+            letter-spacing: 1px; font-style: normal; border-radius: 3px; }
+        .evlb-tgrid { display: none; }
+        table.evlb-tsum tr.evlb-tsum-row .tchev { display: inline-block; width: 10px; margin-right: 10px; font-size: 11px; vertical-align: middle; }
         table.evlb-tsum tr.evlb-tsum-row.open .tchev { transform: rotate(90deg); }
-        table.evlb-tsum tr.evlb-tsum-row td.pos { font-weight: 700; width: 34px; }
-        table.evlb-tsum tr.evlb-tsum-row td.thru { white-space: nowrap; }
-        table.evlb-tsum tr.evlb-tsum-row td.tp { color: #6B7280; }
-        table.evlb-tsum td.won, table.evlb-tsum th.won { min-width: 58px; }
-        table.evlb-tsum td.won { color: var(--money-green, #15803D); font-weight: 700; }
-        table.evlb-tsum.no-won td.won, table.evlb-tsum.no-won th.won { display: none; }
-        .evlb-tstart { color: #6B7280; font-size: 12px; }
-        .evlb-tmem { white-space: nowrap; }
-        table.evlb-tsum tr.evlb-tsum-exp > td { padding: 0 0 10px; background: #fff; }
-        /* the toggles sit once above the collapsed table, not in each team */
-        table.evlb-tsum tr.evlb-tsum-exp .evlb-togrow { display: none; }
+        table.evlb-tsum tr.evlb-tsum-row:hover td { background: #FAFAF8; }
+        table.evlb-tsum tr.evlb-tsum-row td.tp { font: 800 16px/1 'Bitter', serif; color: #1B1B1B; }
+        table.evlb-tsum tr.evlb-tsum-row td.tp.red { color: #B91C1C; }
+        table.evlb-tsum tr.evlb-tsum-row td.thru { font: 700 13px/1 'Bitter', serif; white-space: nowrap; }
+        .evlb-tstart { font: 400 12px/1 'Bitter', serif; color: #6B7280; }
+        .evlb-tstart .sf { display: none; }
+        /* WON follows the one state (#2147 §2) */
+        table.evlb-tsum td.won { font: 700 13px/1 'Bitter', serif; text-align: right; padding-right: 14px; color: #047857; }
+        table.evlb-tsum td.won.proj { font-style: italic; font-weight: 600; color: #9CA3AF; }
+        table.evlb-tsum td.won.rev { font-style: italic; color: #B45309; }
+        /* TEAM tab, the opened team (#2147 §5, #2148-#2149) */
+        table.evlb-tsum tr.evlb-tsum-exp > td { padding: 0; border: 0; border-bottom: 1px solid #E5E7EB; }
+        .evlb-texp { background: #FAF9F7; padding: 10px 12px 12px 62px; }
+        table.evlb-tgx { border-collapse: collapse; table-layout: fixed; font: 12.5px/1 'Bitter', serif; color: #1B1B1B; }
+        table.evlb-tgx col.cn { width: 200px; } table.evlb-tgx col.ch { width: 34px; }
+        table.evlb-tgx col.cs { width: 40px; } table.evlb-tgx col.ct { width: 44px; }
+        table.evlb-tgx td { height: 30px; padding: 0; text-align: center; border: 0; border-bottom: 1px solid #E5E7EB;
+            position: relative; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        table.evlb-tgx td.lab { text-align: left; padding-left: 8px; overflow: hidden; text-overflow: ellipsis; }
+        table.evlb-tgx tr.hd td { background: #1B1B1B; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 1px; border-bottom: 0; }
+        table.evlb-tgx tr.par td { background: #F3F1EC; }
+        table.evlb-tgx tr.pl td.lab .f { font-weight: 600; } table.evlb-tgx tr.pl td.lab .l { font-weight: 800; }
+        table.evlb-tgx tr.pl.blind td.lab { font-style: italic; color: #92400E; }
+        table.evlb-tgx td.cnt { background: #DCFCE7; font-weight: 700; }
+        table.evlb-tgx tr.tn td { background: #F3F1EC; border-top: 2px solid #1B1B1B; font-weight: 700; }
+        table.evlb-tgx td.rule { border-left: 2px solid #1B1B1B; }
+        table.evlb-tgx td.sub { font-weight: 700; }
+        table.evlb-tgx td.red { color: #B91C1C; }
+        table.evlb-tgx .evlb-pops { top: 3px; right: 3px; font-size: 6px; letter-spacing: 1px; color: #334155; }
+        /* the phone's full-screen sheet for an opened team (#2147 §6) */
+        .evlb-sheet { position: fixed; inset: 0; z-index: 1200; background: #F8F8F8; overflow-y: auto; padding: 12px 8px 24px; }
+        .evlb-sheet[hidden] { display: none; }
+        html.evlb-sheet-on, html.evlb-sheet-on body { overflow: hidden; }
+        .evlb-sheet-hd { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 10px; }
+        .evlb-sheet-hd .t { font: 800 14px/1.2 'Bitter', serif; color: #1B1B1B; }
+        .evlb-sheet-hd .red { color: #B91C1C; }
+        .evlb-sheet-x { font: 700 11px/1 'Bitter', serif; letter-spacing: 1px; border: 1px solid #D1D5DB; border-radius: 999px;
+            background: #fff; padding: 6px 10px; cursor: pointer; color: #1B1B1B; }
+        .evlb-sheet-names { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 0 4px 10px; }
+        .evlb-sheet-body { background: #FAF9F7; }
+        .evlb-sheet table.evlb-tgx { width: 100%; font-size: 11px; margin-bottom: 10px; }
+        .evlb-sheet table.evlb-tgx col.cn { width: 58px; } .evlb-sheet table.evlb-tgx col.ch { width: auto; }
+        .evlb-sheet table.evlb-tgx col.cs { width: 30px; } .evlb-sheet table.evlb-tgx col.ct { width: 28px; }
+        .evlb-sheet table.evlb-tgx td { height: 28px; }
+        .evlb-sheet table.evlb-tgx td.lab { padding-left: 4px; }
+        .evlb-sheet table.evlb-tgx tr.hd td { font-size: 9px; letter-spacing: .3px; }
+        .evlb-sheet table.evlb-tgx tr.tn td.lab { font-size: 9px; }
+        @media (max-width: 560px) {
+            .evlb-tdial { padding: 10px 2px 8px; gap: 10px; }
+            .evlb-tdial-l { font-size: 12px; }
+            .evlb-tpot { margin-left: auto; } .evlb-tpot .pl { display: none; }
+            .evlb-tall { display: none; }
+            table.evlb-tsum col.c-pos { width: 34px; } table.evlb-tsum col.c-tp { width: 42px; }
+            table.evlb-tsum col.c-thru { width: 50px; } table.evlb-tsum col.c-won { width: 62px; }
+            table.evlb-tsum th { height: 28px; font-size: 9.5px; letter-spacing: 1px; padding: 0 4px; }
+            table.evlb-tsum th.won { padding-right: 6px; }
+            table.evlb-tsum tr.evlb-tsum-row td { height: 46px; padding: 4px; }
+            table.evlb-tsum tr.evlb-tsum-row td.pos { font-size: 13px; padding-left: 8px; }
+            table.evlb-tsum tr.evlb-tsum-row td.tp { font-size: 15px; }
+            table.evlb-tsum td.won { font-size: 12.5px; padding-right: 6px; }
+            table.evlb-tsum tr.evlb-tsum-row td.nm .tnm { display: flex; align-items: center; min-width: 0; }
+            table.evlb-tsum tr.evlb-tsum-row .tchev { margin-right: 6px; flex: none; }
+            .evlb-tnames { display: none; }
+            .evlb-tgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8px; row-gap: 2px; min-width: 0; flex: 1; }
+            .evlb-tg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden;
+                font: 800 11.5px/1.15 'Bitter', serif; color: #1B1B1B; }
+            .evlb-tg .n { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+            .evlb-tg.blind { font-style: italic; color: #92400E; }
+            .evlb-tg .evlb-tee-dot { width: 6px; height: 6px; flex: none; }
+            .evlb-tstart .lf { display: none; } .evlb-tstart .sf { display: inline; }
+            table.evlb-tsum tr.evlb-tsum-row td.thru { font-size: 13px; }
+            table.evlb-tsum tr.evlb-tsum-row.upcoming td.thru { font-size: 11px; }
+            table.evlb-tsum tr.evlb-tsum-exp { display: none; }
+        }
         .evlb-circ.evlb-ghost { border-color: #9CA3AF !important; color: #6B7280 !important; }
         .evlb-ghostkey { font-size: 12px; color: #6B7280; margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
         .evlb-ghostkey .evlb-circ { position: static; }
@@ -827,8 +987,6 @@
         .evlb-winline .amt { font-weight: 700; color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; white-space: nowrap; }
         /* ── B10 SUMMARY tab: its own colour, left of the orange game tabs
            (Kerry 10/19: "at the left of the tabs, its own color") ── */
-        .evlb-seg-sub button.evlb-sum-tab { background: #0F3D2E; color: #fff; }
-        .evlb-seg-sub button.evlb-sum-tab.active { background: #14532D; color: #fff; box-shadow: inset 0 -3px 0 #FACC15; }
         .evlb-sum-tabbadge { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 4px;
             font-size: 8.5px; letter-spacing: .5px; background: #FACC15; color: #1B1B1B; vertical-align: 1px; }
         .evlb-sum { display: grid; gap: 8px; white-space: normal; }
@@ -1458,6 +1616,10 @@
         .mpv2 .mp-pool-toggle:active { background: #333330; }
         .mpv2 .mp-pool-toggle:focus-visible { outline: 2px solid var(--mp-accent); outline-offset: -2px; }
         .mpv2 .mp-pool-toggle.open .mp-matches-chip { background: var(--mp-accent); color: #fff; border-color: var(--mp-accent); }
+        /* The house arrow (Kerry 2026-10-20, was a "›"): turns 90° with the pool; on the open chip's
+           orange fill it reads white, the one colour exception, so it does not vanish. */
+        .mpv2 .mp-mc-chev { margin-left: 2px; vertical-align: -1px; }
+        .mpv2 .mp-pool-toggle.open .mp-mc-chev { transform: rotate(90deg); color: #fff; }
         .mpv2 .mp-pool-name { font: 700 0.82rem/1.25 'Bitter', Georgia, serif; letter-spacing: 0.05em; text-transform: uppercase; color: #F3F1EC; }
         .mpv2 .mp-pool-meta { font-size: 0.72rem; color: rgba(243,241,236,0.65); }
         .mpv2 .mp-matches-chip {
@@ -2404,6 +2566,12 @@
         /* PAST CHAMPIONS strip under the plaque (Kerry 2026-10-12): collapsed, year + name, photo when we have one. */
         .past-champs { margin: 0 0 0.7rem; border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; }
         .past-champs > summary { cursor: pointer; padding: 0.55rem 0.8rem; font: 700 0.82rem/1.2 'Bitter', Georgia, serif; color: #7A5C0B; }
+        /* the house arrow, not the browser's own black disclosure triangle (Kerry 2026-10-20: the chevrons "don't match
+           our standard"); it turns 90° open, as on the Events board. */
+        .past-champs > summary { list-style: none; }
+        .past-champs > summary::-webkit-details-marker { display: none; }
+        .past-champs > summary .pc-chev { margin-right: 6px; }
+        .past-champs[open] > summary .pc-chev { transform: rotate(90deg); }
         .past-champs-list { display: flex; flex-wrap: wrap; gap: 14px; padding: 0.2rem 0.8rem 0.8rem; }
         .past-champ { display: flex; flex-direction: column; align-items: center; width: 100px; text-align: center; }
         .past-champ img, .past-champ .pc-ph { width: 92px; height: 92px; border-radius: 8px; object-fit: cover; border: 2px solid #D4A017; cursor: zoom-in; display: block; background: #F7F1DC; }
@@ -2708,10 +2876,11 @@
             <div class="evlb-chips"{% if SOLO_EVENT %} hidden{% endif %}>
                 <div class="evlb-seg" id="evlb-chips">
                     <button class="evlb-chip active" data-ch="">All</button>
-                    <button class="evlb-chip" data-ch="Austin">Austin</button>
-                    <button class="evlb-chip" data-ch="San Antonio">San Antonio</button>
+                    <button class="evlb-chip" data-ch="Austin"><span class="evlb-cdot" style="background:#BF5700"></span>Austin</button>
+                    <button class="evlb-chip" data-ch="San Antonio"><span class="evlb-cdot" style="background:#44596B"></span>San Antonio</button>
                 </div>
-                <span class="evlb-year" id="evlb-year" title="Year selector arrives with historical records">2026</span>
+                {# the season picker (design-claude #2147 §1): the seasons that have events #}
+                <select class="evlb-year" id="evlb-year" aria-label="Season"></select>
                 <span class="evlb-pilot" id="evlb-pilot"></span>
             </div>
             {# The Tracker is the official scorer now (Kerry 2026-10-13: "it needs to be official now. Not Golf Genius is
@@ -2781,7 +2950,7 @@
                          championship morning — the board should be one thumb
                          away). Desktop is unchanged; the LIVE banner never
                          folds. -->
-                    <button id="pr-preamble-toggle" type="button" aria-expanded="false">Pot &amp; details <span class="pr-pre-chev tgf-exp">&#9654;</span></button>
+                    <button id="pr-preamble-toggle" type="button" aria-expanded="false">Pot &amp; details <span class="pr-pre-chev tgf-exp">&#9654;&#xFE0E;</span></button>
                     <div id="pr-preamble">
                         <div id="pr-summary" style="margin:0.5rem 0;color:var(--text-muted);font-size:0.85rem;"></div>
                         <div id="pr-payouts"></div>
@@ -3867,11 +4036,80 @@
     // carries to every event opened in this session — hole columns are
     // hidden by CSS class, never removed, so sorting and the scorecard
     // expansion keep working untouched.
-    function evlbFmt(c) { return "$" + (c / 100).toFixed(2).replace(/\.00$/, ""); }
+    // ONE MONEY FORMAT (R5, design-claude #2147): always two decimals.
+    function evlbFmt(c) { return "$" + (c / 100).toFixed(2); }
     function evlbDate(s) {
         if (!s) return "";
         const d = new Date(s + "T12:00:00");
         return isNaN(d) ? s : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+    // "Tue, Oct 20" (the list card's meta line, design-claude #2147 §1)
+    function evlbDayDate(s) {
+        if (!s) return "";
+        const d = new Date(s + "T12:00:00");
+        return isNaN(d) ? s : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    }
+    let evlbYear = "";
+    // ── ONE EVENT CARD on the list (design-claude #2147 §1): chapter bar,
+    //    chevron, name + meta, the state chip (the board's own state, R2),
+    //    and the pot, always in money green with two decimals.
+    function evlbCardHtml(ev) {
+        const st = ev.board_state || "upcoming";
+        const word = EVLB_STATE_WORD[st] || "";
+        const pot = ev.money_visible === false
+            ? `<div class="pot none" title="The pot shows once every card is in">&mdash;<span class="s">POT</span></div>`
+            : `<div class="pot">$${Number(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>`;
+        return `<details class="evlb-ev evlb-card" data-ev="${escapeHtml(ev.item_name)}">` +
+            `<summary><span class="bar" style="background:${escapeHtml(ev.chapter_color || "#374151")}"></span>` +
+            `<span class="chev tgf-exp">&#9654;&#xFE0E;</span>` +
+            `<div class="ttl"><div class="nm">${escapeHtml(ev.item_name)}</div>` +
+            `<div class="meta">${evlbDayDate(ev.event_date)}${ev.course ? `<span class="crs"> &middot; ${escapeHtml(ev.course)}</span>` : ""} &middot; ${ev.field} players</div></div>` +
+            `<span class="evlb-chip-st s-${escapeHtml(st)}"><i></i>${word}</span>` + pot +
+            `</summary><div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
+    }
+    function evlbWireCards(root) {
+        root.querySelectorAll("details.evlb-ev").forEach(el => {
+            if (el._evlbWired) return;
+            el._evlbWired = true;
+            el.addEventListener("toggle", () => {
+                if (!el.open) return;
+                evlbLoadEvent(el);
+                evlbPinToTop(el);
+            });
+        });
+    }
+    // One month's group: its label and its cards. Older months are a dashed
+    // row that loads that month on tap (paging by month, #2147 §1).
+    function evlbMonthHtml(m, events) {
+        return `<div class="evlb-month" data-ym="${escapeHtml(m.ym)}"><div class="evlb-mlabel">${escapeHtml(m.label)}</div>` +
+            `<div class="evlb-mcards">${events.map(evlbCardHtml).join("")}</div></div>`;
+    }
+    function evlbMoreHtml(m) {
+        return `<button type="button" class="evlb-mmore" data-ym="${escapeHtml(m.ym)}">${escapeHtml(m.label)} &middot; ${m.count} EVENT${m.count === 1 ? "" : "S"} &#9662;&#xFE0E;</button>`;
+    }
+    function evlbListUrl(extra) {
+        return "/api/events-leaderboard?" +
+            (evlbChapter ? "chapter=" + encodeURIComponent(evlbChapter) + "&" : "") +
+            (evlbYear ? "year=" + encodeURIComponent(evlbYear) + "&" : "") +
+            (extra || "") +
+            (window.SOLO_T ? "t=" + encodeURIComponent(window.SOLO_T) : "");
+    }
+    async function evlbLoadMonth(btn) {
+        btn.disabled = true;
+        try {
+            const res = await fetch(evlbListUrl("month=" + encodeURIComponent(btn.dataset.ym) + "&"));
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            const m = (d.months || []).find(x => x.ym === btn.dataset.ym) || { ym: btn.dataset.ym, label: btn.textContent };
+            const wrap = document.createElement("div");
+            wrap.innerHTML = evlbMonthHtml(m, d.events || []);
+            const grp = wrap.firstElementChild;
+            btn.replaceWith(grp);
+            evlbWireCards(grp);
+        } catch (err) {
+            btn.disabled = false;
+            btn.title = "Couldn't load (" + (err.message || err) + ")";
+        }
     }
     async function evlbLoad(force) {
         const box = $("evlb-list");
@@ -3880,41 +4118,34 @@
         box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p>';
         try {
             // The scorer's board page reads with his group link (SOLO_T),
-            // which the API accepts for his own event only.
-            const res = await fetch("/api/events-leaderboard?" +
-                (evlbChapter ? "chapter=" + encodeURIComponent(evlbChapter) + "&" : "") +
-                (window.SOLO_T ? "t=" + encodeURIComponent(window.SOLO_T) : ""));
+            // which the API accepts for his own event only. An event's own
+            // link (EVLB_OPEN) or the scorer's event opens on ITS month.
+            const want = window.SOLO_EVENT || window.EVLB_OPEN;
+            const res = await fetch(evlbListUrl(want && !force ? "event=" + encodeURIComponent(want) + "&" : ""));
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             const thr = $("evlb-official-through");
             if (thr) thr.textContent = d.gg_official_through ? " through " + d.gg_official_through : "";
             $("evlb-pilot").textContent = (d.pilot && !window.MEMBER_MODE)
                 ? "Narrowed to " + (d.pilot_codes || []).join(", ") + " (events_leaderboard_only dial — clear it to show every event)" : "";
+            const ysel = $("evlb-year");
+            if (ysel) {
+                const ys = d.years || [];
+                ysel.innerHTML = ys.map(y => `<option value="${escapeHtml(y)}"${String(y) === String(d.year) ? " selected" : ""}>${escapeHtml(y)}</option>`).join("");
+                ysel.hidden = !ys.length;
+            }
             if (!(d.events || []).length && !window.SOLO_EVENT) {
                 box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No played events here yet.</p>';
                 return;
             }
-            box.innerHTML = d.events.map(ev => {
-                const ch = ev.chapter === "Austin"
-                    ? '<span class="chip-austin" style="background:var(--chapter-austin,#BF5700);color:#fff;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700;">AUSTIN</span>'
-                    : ev.chapter === "San Antonio"
-                    ? '<span style="background:var(--chapter-sa,#D3DDE4);color:#1B1B1B;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700;">SAN ANTONIO</span>' : "";
-                return `<details class="evlb-ev" data-ev="${escapeHtml(ev.item_name)}">` +
-                    `<summary><span class="chev tgf-exp">&#9654;</span>` +
-                    `<div><div class="nm">${escapeHtml(ev.item_name)}</div>` +
-                    `<div class="meta">${evlbDate(ev.event_date)}${ev.course ? " &middot; " + escapeHtml(ev.course) : ""} &middot; ${ev.field} players ${ch}</div></div>` +
-                    (ev.money_visible === false
-                        ? `<div class="pot" style="color:var(--text-muted);font-size:11px;font-weight:600;" title="${ev.money_reason === "scores" ? (ev.players_pending || 0) + " player(s) still have holes to post" : "Settling — money posts 10 minutes after the last score"}">IN PLAY<span class="s">${ev.money_reason === "scores" ? "SCORES OUT" : "POT PENDING"}</span></div>`
-                        : `<div class="pot">$${(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>`) +
-                    `</summary><div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
-            }).join("");
-            box.querySelectorAll("details.evlb-ev").forEach(el => {
-                el.addEventListener("toggle", () => {
-                    if (!el.open) return;
-                    evlbLoadEvent(el);
-                    evlbPinToTop(el);
-                });
-            });
+            const months = d.months || [];
+            const cur = months.find(m => m.ym === d.month) || { ym: d.month || "", label: "" };
+            box.innerHTML = months.length
+                ? months.map(m => m.ym === cur.ym ? evlbMonthHtml(m, d.events) : evlbMoreHtml(m)).join("")
+                : evlbMonthHtml(cur, d.events || []);
+            box.querySelectorAll("button.evlb-mmore").forEach(btn =>
+                btn.addEventListener("click", () => evlbLoadMonth(btn)));
+            evlbWireCards(box);
             // ONE EVENT'S LINK (/member/results/<id>, Kerry 2026-10-13: "Links
             // need to go to specific locations"): open that event, which loads
             // its board and pins it to the top through the toggle above.
@@ -3950,7 +4181,7 @@
                     // leaderboard to show"): his event's board opens anyway,
                     // every player listed with a tee time until they post.
                     box.innerHTML = `<details class="evlb-ev" data-ev="${escapeHtml(window.SOLO_EVENT)}">` +
-                        `<summary><span class="chev tgf-exp">&#9654;</span><div><div class="nm">${escapeHtml(window.SOLO_EVENT)}</div></div></summary>` +
+                        `<summary><span class="chev tgf-exp">&#9654;&#xFE0E;</span><div><div class="nm">${escapeHtml(window.SOLO_EVENT)}</div></div></summary>` +
                         `<div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
                     const el = box.querySelector("details.evlb-ev");
                     el.addEventListener("toggle", () => { if (el.open) evlbLoadEvent(el); });
@@ -4060,7 +4291,7 @@
                 ? `Tonight is <b>Skins \u00bd Net</b> (fewer buyers, so the side-games matrix runs the net form): each buyer gets half his playing handicap, off the lowest among the players who bought in, and the dots on a hole score are those strokes. The low NET score on a hole, alone, wins the skin. `
                 : "") + `A circled hole score is a skin won in that flight. <b>Won</b> = Skins money only; OVERALL shows everything collected at this event.`,
             points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole. <b>Won</b> = MVP money only.`,
-            team: `<b>${escapeHtml(evlbTeamDialLabel(d))}</b>. Each hole the team scores the ${evlbTeamBalls(d) === 1 ? "lowest net ball" : `sum of its ${evlbTeamBalls(d)} lowest net balls`}, and a hole counts only once every player on the team has posted it (a blind never holds a hole). <b>Thru</b> is those holes, <b>Net</b> their total, and <b>&plusmn;</b> is against par for each ball counted. Teams rank on &plusmn;, then holes played. Before a team tees off, Thru shows its start; F means every hole is in. Tap a team to open its board: hole scores are each player's GROSS with their pops marked, gross less pops is the net the team played, and every green cell is a ball that counted (ties count all the tied balls). The TEAM NET row closes the band with the team's holes, total and whole purse; a player row's <b>Won</b> is that player's share.`,
+            team: `<b>${escapeHtml(evlbTeamDialLabel(d))}</b>. Each hole the team scores the ${evlbTeamBalls(d) === 1 ? "lowest net ball" : `sum of its ${evlbTeamBalls(d)} lowest net balls`}, and a hole counts only once every player on the team has posted it (a blind never holds a hole). <b>Thru</b> is those holes, <b>Net</b> their total, and <b>&plusmn;</b> is against par for each ball counted. Teams rank on &plusmn;, then holes played; teams not started yet are last, in tee-time order. Before a team tees off, Thru shows its start; once every hole is in, Thru shows the team net score. Tap a team to open its board: hole scores are each player's GROSS with their pops marked, gross less pops is the net the team played, and every green cell is a ball that counted (ties count all the tied balls). The TEAM NET row closes the band with the team's holes, total and whole purse; a player row's <b>Won</b> is that player's share.`,
             prox: d.proxy_tab_label === "PROXIES"
                 ? `The proximity contests, hole by hole: Closest to the Pin on the par 3s and a Longest Putt where there are fewer par 3s than contests.`
                 : `Closest to the Pin winners, hole by hole.`,
@@ -4086,11 +4317,11 @@
         if (words.length) out.push(sec("State words", words.map(w =>
             `<b>${escapeHtml(w.word)}</b>${w.state === d.board_state ? " (now)" : ""}: ${escapeHtml(w.text)}`).join("<br>")
             + "<br>A hold keeps the board IN REVIEW with the line \u201cResults are being checked.\u201d"));
-        out.push(sec("Thru", "With Hole by hole off, Thru is the holes a player has played. F means finished, beside that tab's total: gross on Gross, net on Net, points on MVP, the team net on a team's row. Before the first tee it shows the tee time and starting hole. While scores are coming in, the boards rank on to-par first, then on holes played."));
+        out.push(sec("Thru", "With Hole by hole off, Thru is the holes a player has played. Once the round is finished it shows that tab's total instead: gross on Gross, net on Net, points on MVP, the team net on a team's row. Before the first tee it shows the tee time and starting hole. While scores are coming in, the boards rank on to-par first, then on holes played."));
         const ev = d.event || {};
         out.push(sec("Where the scores come from", ev.score_source === "entry"
             ? "Straight from the players' live scoring on their phones, hole by hole as each group posts."
-            : "From the event's scorecards on record." + (noGames ? "" : " Money is shown as computed, not as paid, and only once every hole is in for every player (then 10 minutes after the last score).")));
+            : "From the event's scorecards on record." + (noGames ? "" : " Money is shown as computed, not as paid, and only once every hole is in for every player.")));
         return out.join("");
     }
     function evlbOpenGuide(btn) {
@@ -4115,57 +4346,94 @@
         if (e.target.closest && e.target.closest("#evlb-hiw-close, #evlb-hiw-gotit, #evlb-hiw-scrim")) evlbCloseGuide();
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") evlbCloseGuide(); });
-    function evlbFinalNotice(d) {
-        // NOT FINAL YET (Kerry 2026-10-13: "amounts should show but
-        // non-final until 15 minutes have passed"). The field is in, the
-        // money shows; it locks 15 minutes after the last group's last score.
-        // the state strip says this now (IN REVIEW, with the lock time)
-        if (d && d.board_state) return "";
-        if (d && !d._moneyHeld && d.money_final === false && !evlbNoGames(d)) {
-            const t = d.money_final_at ? new Date(d.money_final_at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : "";
-            return `<div style="margin:0 0 8px;padding:7px 10px;border:1px solid #FCD34D;background:#FFFBEB;border-radius:6px;font-size:12px;color:#92400E;">
-                <strong>Winnings are not final yet.</strong> Every score is in. The money below is final${t ? " at " + escapeHtml(t) : " soon"}, 15 minutes after the last score, unless a score changes.</div>`;
+    // ── LIVE REFRESHES ITSELF (design-claude #2147 §2, pain point 16): an
+    //    open board that is LIVE (or about to be) re-reads every 30 s and the
+    //    strip's UPDATED clock restarts. The tab on screen, the teams that
+    //    are open and an open phone sheet survive the repaint.
+    const EVLB_POLL_MS = 30000;
+    async function evlbRefreshEvent(el) {
+        const old = el.querySelector(".evlb-body");
+        if (!old || !old._evlbD || old._evlbBusy) return;
+        old._evlbBusy = true;
+        try {
+            const { res, d } = await evlbFetchJson("/api/events-leaderboard/event?name=" + encodeURIComponent(el.dataset.ev)
+                + (window.SOLO_T ? "&t=" + encodeURIComponent(window.SOLO_T) : ""));
+            if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            if (d.money_visible === false) evlbBlankMoneyProj(d);
+            const act = old.querySelector(".evlb-subtab.active");
+            const tab = act && act.dataset.sub;
+            const openKeys = new Set([...old.querySelectorAll("tr.evlb-tsum-row.open")].map(r => r.dataset.tk));
+            const fresh = document.createElement("div");
+            fresh.className = old.className;
+            fresh.innerHTML = evlbEventHtml(d);
+            fresh._evlbD = d;
+            fresh._evlbAt = Date.now();
+            old.replaceWith(fresh);
+            evlbWireEvent(fresh, d);
+            // the tab only if it is still there (SUMMARY lands once IN REVIEW)
+            const keep = tab && d.board_state === (old._evlbD.board_state) && fresh.querySelector(`.evlb-subtab[data-sub="${tab}"]`);
+            if (keep) keep.click();
+            fresh.querySelectorAll("tr.evlb-tsum-row").forEach(r => { if (openKeys.has(r.dataset.tk)) evlbTeamSetOpen(r, true); });
+            fresh.querySelectorAll(".evlb-tpanel").forEach(evlbTeamSyncAll);
+            const sh = document.getElementById("evlb-sheet");
+            if (sh && !sh.hidden && sh.dataset.tk) {
+                const row = fresh.querySelector(`tr.evlb-tsum-row[data-tk="${CSS.escape(sh.dataset.tk)}"]`);
+                const t = row && (d.teams || [])[+row.dataset.ti];
+                if (t) evlbSheetOpen(d, t, row.dataset.pos, row.dataset.tk);
+            }
+            // boards no longer on the page let go of their payloads
+            Object.keys(EVLB_BOARDS).forEach(id => {
+                if (!document.querySelector(`[data-board="${id}"]`)) delete EVLB_BOARDS[id];
+            });
+        } catch (err) {
+            old._evlbBusy = false;
         }
-        return "";
     }
-    function evlbMoneyNotice(d) {
-        if (!d || !d._moneyHeld || evlbNoGames(d)) return "";   // no games, no money to wait for
-        const mins = d.money_hold_minutes || 10;
-        // TWO reasons the money is held, and the manager needs to know
-        // which (Kerry 2026-09-15: "Not all scores are in. Every hole
-        // must be accounted for every player"). Cards still out is a
-        // "go find them"; the ten-minute settle is a "wait".
-        let why, who = "";
-        if (d.money_reason === "scores" || d.field_complete === false) {
-            const n = d.scores_pending_total || 0;
-            why = `Every hole must be posted for every player first &mdash; `
-                + `${n} player${n === 1 ? " is" : "s are"} still short`
-                + (d.holes_needed ? ` (${d.holes_posted} of ${d.holes_needed} holes in)` : "")
-                + `. Then money shows ${mins} minutes after the last score.`;
-            const list = (d.scores_pending || []).map(p =>
-                `${escapeHtml(p.player || "")} ${p.holes}/${p.of}`).join(" &middot; ");
-            if (list) who = `<div style="margin-top:5px;font-size:11.5px;opacity:0.9;">${list}`
-                + ((d.scores_pending_total > (d.scores_pending || []).length)
-                    ? ` &middot; +${d.scores_pending_total - d.scores_pending.length} more` : "")
-                + `</div>`;
-        } else {
-            why = `Money shows ${mins} minutes after the last score is posted, so a `
-                + `half-posted field can never name the wrong winner.`;
-        }
-        return `<div style="margin:0 0 8px;padding:7px 10px;border:1px solid #FCD34D;background:#FFFBEB;border-radius:6px;font-size:12px;color:#92400E;">
-            <strong>Round in play &mdash; winnings are not posted yet.</strong>
-            ${why} Scores below are live.${who}</div>`;
-    }
+    if (typeof document !== "undefined" && document.querySelectorAll) setInterval(() => {
+        if (document.hidden) return;
+        document.querySelectorAll("details.evlb-ev[open]").forEach(el => {
+            const b = el.querySelector(".evlb-body");
+            const st = b && b._evlbD && b._evlbD.board_state;
+            if ((st === "live" || st === "upcoming") && Date.now() - (b._evlbAt || 0) >= EVLB_POLL_MS - 500)
+                evlbRefreshEvent(el);
+        });
+    }, 5000);
+    // the strip's "UPDATED m:ss AGO"
+    if (typeof document !== "undefined" && document.querySelectorAll) setInterval(() => {
+        document.querySelectorAll("[data-evlb-upd]").forEach(x => {
+            const b = x.closest(".evlb-body");
+            if (!b || !b._evlbAt) return;
+            const sec = Math.max(0, Math.floor((Date.now() - b._evlbAt) / 1000));
+            x.textContent = `UPDATED ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")} AGO`;
+        });
+    }, 1000);
+    // (Batch 1, R1: evlbFinalNotice and evlbMoneyNotice are gone. The
+    //  state strip is the only money message; HOW IT WORKS explains.)
 
+    // STUCK ON "Loading…" (Kerry 10/21: "Seems to load fine when it's a fresh
+    // browser but then closed and come back it got stuck"). The loaded flag
+    // lives on the card's OWN body now, not on the event name: a re-drawn list
+    // (chapter, season, a month opened) made new cards whose name was already
+    // flagged, so they never fetched. A fetch the phone froze mid-way (app
+    // switch, bfcache) times out after 15 s and clears the flag, and coming
+    // back to the page re-reads any open card that never drew.
+    const EVLB_FETCH_MS = 15000;
+    function evlbFetchJson(url) {
+        const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const t = ac ? setTimeout(() => ac.abort(), EVLB_FETCH_MS) : null;
+        return fetch(url, ac ? { signal: ac.signal } : undefined)
+            .then(async res => ({ res, d: await res.json() }))
+            .finally(() => { if (t) clearTimeout(t); });
+    }
     async function evlbLoadEvent(el) {
         const name = el.dataset.ev;
         const body = el.querySelector(".evlb-body");
-        if (EVLB_LOADED_EVENTS[name]) return;
+        if (!body || body._evlbLoading || body._evlbD) return;
+        body._evlbLoading = true;
         EVLB_LOADED_EVENTS[name] = true;
         try {
-            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name)
+            const { res, d } = await evlbFetchJson("/api/events-leaderboard/event?name=" + encodeURIComponent(name)
                 + (window.SOLO_T ? "&t=" + encodeURIComponent(window.SOLO_T) : ""));
-            const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             // MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings
             // should not show until 10 minutes after last score is
@@ -4177,11 +4445,32 @@
             if (d.money_visible === false) evlbBlankMoneyProj(d);   // projected WON (B11)
             body.innerHTML = evlbEventHtml(d);
             body._evlbD = d;
+            body._evlbAt = Date.now();
+            body._evlbLoading = false;
             evlbWireEvent(body, d);
         } catch (err) {
             EVLB_LOADED_EVENTS[name] = false;
-            body.innerHTML = `<p style="color:var(--text-muted);">Couldn't load this event (${escapeHtml(err.message || String(err))}).</p>`;
+            body._evlbLoading = false;
+            const why = err && err.name === "AbortError" ? "it took too long; close and reopen it to try again"
+                : (err.message || String(err));
+            body.innerHTML = `<p style="color:var(--text-muted);">Couldn't load this event (${escapeHtml(why)}).</p>`;
         }
+    }
+    // Coming back to the page (app switch, bfcache restore): any open card
+    // that never drew loads again; a LIVE one re-reads now rather than
+    // waiting out a poll the phone froze.
+    function evlbOnReturn() {
+        document.querySelectorAll("details.evlb-ev[open]").forEach(el => {
+            const b = el.querySelector(".evlb-body");
+            if (!b) return;
+            if (!b._evlbD) { b._evlbLoading = false; evlbLoadEvent(el); return; }
+            const st = b._evlbD.board_state;
+            if (st === "live" || st === "upcoming") evlbRefreshEvent(el);
+        });
+    }
+    if (typeof document !== "undefined" && document.addEventListener && typeof window !== "undefined") {
+        document.addEventListener("visibilitychange", () => { if (!document.hidden) evlbOnReturn(); });
+        window.addEventListener("pageshow", e => { if (e.persisted) evlbOnReturn(); });
     }
     // (v2.389.0 removed evlbWonChips / evlbScoreRows / evlbBand /
     //  evlbSectioned / evlbHoleCells — every tab renders through
@@ -4314,16 +4603,13 @@
     //    "Results are being checked." and stays IN REVIEW.
     function evlbStateStrip(d) {
         if (!d || !d.board_state) return "";
-        let line = d.board_state_text || "";
-        if (d.board_state === "in_review" && !d.board_state_held
-                && d.money_final === false && d.money_final_at) {
-            const t = new Date(d.money_final_at);
-            if (!isNaN(t)) line += " Cards lock at "
-                + t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ".";
-        }
-        return `<div class="evlb-state s-${escapeHtml(d.board_state)}" data-state="${escapeHtml(d.board_state)}">`
-            + `<span class="w">${escapeHtml(d.board_state_word || "")}</span>`
-            + `<span class="t">${escapeHtml(line)}</span></div>`;
+        const st = d.board_state;
+        // right side: the refresh clock while LIVE, HELD on a held board
+        const right = d.board_state_held ? `<span class="r">HELD</span>`
+            : st === "live" ? `<span class="r" data-evlb-upd>UPDATED 0:00 AGO</span>` : "";
+        return `<div class="evlb-state s-${escapeHtml(st)}" data-state="${escapeHtml(st)}">`
+            + `<span class="w"><i></i>${escapeHtml(d.board_state_word || "")}</span>`
+            + `<span class="t">${escapeHtml(d.board_state_text || "")}</span>${right}</div>`;
     }
     // ── LIVE = the field is not all in yet. While it is, a total says
     //    nothing (three holes beat nine), so boards rank on to-par and then
@@ -4354,9 +4640,10 @@
     }
     function evlbThruCell(d, r, game) {
         if (!r || r.thru == null) return `<td class="thru"></td>`;
+        // finished: the score only, no "F" (Kerry 10/20, #2147)
         if (r.finished) {
             const t = evlbThruTotal(r, game);
-            return `<td class="thru" title="finished"><span class="f">F</span>${t ?? ""}</td>`;
+            return `<td class="thru" title="finished">${t ?? ""}</td>`;
         }
         if (r.thru > 0) return `<td class="thru" title="holes played">${r.thru}</td>`;
         const st = evlbTeeStartText(r.tee_start);
@@ -4388,6 +4675,12 @@
     // While LIVE the teams rank on to-par, then holes done, then their
     // order as given; the position label follows ("T1"). Once every score
     // is in the server's order (and Golf Genius's, on an old event) stands.
+    // The start order the server stamps on each team (tee time, then
+    // hole, A before B — Kerry 10/20 "Tee time order"); unknown sorts last.
+    function evlbTeamStartOrder(t) {
+        const v = t && t.start_order;
+        return v == null || isNaN(Number(v)) ? Infinity : Number(v);
+    }
     function evlbTeamsLiveOrder(d, teams) {
         const st = new Map((teams || []).map(t => [t, evlbTeamStanding(d, t)]));
         const out = (teams || []).map((t, i) => [t, i]).sort((a, b) => {
@@ -4395,6 +4688,8 @@
             if ((sa.toPar == null) !== (sb.toPar == null)) return sa.toPar == null ? 1 : -1;
             if (sa.toPar !== sb.toPar) return sa.toPar - sb.toPar;
             if (sa.thru !== sb.thru) return sb.thru - sa.thru;
+            const oa = evlbTeamStartOrder(a[0]), ob = evlbTeamStartOrder(b[0]);
+            if (oa !== ob) return oa < ob ? -1 : 1;
             return a[1] - b[1];
         }).map(x => x[0]);
         out.forEach((t, i) => {
@@ -4437,6 +4732,61 @@
     function evlbTeamMemberName(x) {
         const nm = String((x && x.player_name) || "").replace(/^Bl\[(.*)\]$/, "$1");
         return evlbIsBlind(x) ? nm + " (blind)" : nm;
+    }
+    // A drawn blind with no card yet (before the round) rides on the team
+    // as `blinds_pending` — named and marked, never scored.
+    function evlbBlindBare(x) {
+        return String((x && x.player_name) || "").replace(/^Bl\[(.*)\]$/, "$1");
+    }
+    function evlbTeamPendingBlinds(t) {
+        const have = new Set(((t && t.players) || []).filter(evlbIsBlind)
+            .map(p => evlbBlindBare(p).trim().toLowerCase()));
+        return ((t && t.blinds_pending) || []).filter(b => b && b.name
+            && !have.has(String(b.name).trim().toLowerCase()));
+    }
+    function evlbTeamNames(t) {
+        return ((t && t.players) || []).map(evlbTeamMemberName)
+            .concat(evlbTeamPendingBlinds(t).map(b => b.name + " (blind)"));
+    }
+    // The collapsed TEAM row's names: members, then any blind tagged
+    // BLIND in its own colour (Kerry 10/20: "show their blinds in a
+    // different font color or somehow denote it").
+    // First 600 + LAST 800 in Bitter (R6): the last word is the surname,
+    // already in member caps from the server ("Michelle DelCARMEN").
+    function evlbSplitName(nm) {
+        // a Golf Genius-era name arrives "JONES, James": the part before the
+        // comma is the surname (Kerry 10/21, a GG event showed "James")
+        const s = String(nm || "").trim();
+        const c = s.indexOf(",");
+        if (c > 0) return { first: s.slice(c + 1).trim(), last: s.slice(0, c).trim() };
+        const parts = s.split(/\s+/);
+        const last = parts.length > 1 ? parts.pop() : (parts.pop() || "");
+        return { first: parts.join(" "), last };
+    }
+    function evlbNameFL(nm) {
+        const n = evlbSplitName(nm);
+        return (n.first ? `<span class="f">${escapeHtml(n.first)}</span> ` : "") + `<span class="l">${escapeHtml(n.last)}</span>`;
+    }
+    // The collapsed TEAM row's names (#2147 §4, #2150): one line, each name
+    // followed by its tee dot; a blind leads with the amber BLIND chip (the
+    // only thing that ever goes before a name) and reads italic brown.
+    function evlbTeamNamesHtml(d, t) {
+        const blind = (nm, dot) => `<span class="evlb-tmem blind" title="Blind draw: this player's card fills an open seat on this team">` +
+            `<span class="evlb-blind">BLIND</span>${evlbNameFL(nm)}${dot || ""}</span>`;
+        return ((t && t.players) || []).map(p => evlbIsBlind(p)
+            ? blind(evlbBlindBare(p), evlbTeeDot(d, p))
+            : `<span class="evlb-tmem">${evlbNameFL(evlbTeamMemberName(p))}${evlbTeeDot(d, p)}</span>`)
+            .concat(evlbTeamPendingBlinds(t).map(b => blind(b.name)))
+            .join("");
+    }
+    // Phone (#2147 §6): last names only in a 2 x 2 grid, tee dot after each
+    // name (#2150); a blind is italic brown, no chip.
+    function evlbTeamGridNamesHtml(d, t) {
+        const one = (nm, dot, bl) => `<span class="evlb-tg${bl ? " blind" : ""}"><span class="n">${escapeHtml(evlbSplitName(nm).last)}</span>${dot || ""}</span>`;
+        return `<span class="evlb-tgrid">` + ((t && t.players) || []).map(p => evlbIsBlind(p)
+            ? one(evlbBlindBare(p), evlbTeeDot(d, p), true)
+            : one(evlbTeamMemberName(p), evlbTeeDot(d, p), false))
+            .concat(evlbTeamPendingBlinds(t).map(b => one(b.name, "", true))).join("") + `</span>`;
     }
     function evlbOvOf(ovIx, x, note) {
         const base = x && ovIx[String(x.scoring_round_id)];
@@ -4524,9 +4874,9 @@
     function evlbProjMark(d) {
         return evlbProjOn(d) ? ` <span class="evlb-proj" title="${EVLB_PROJ_TITLE}">PROJ.</span>` : "";
     }
+    // one money format, always two decimals (R5, design-claude #2147)
     function evlbUsd(v) {
-        const n = Number(v || 0);
-        return "$" + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+        return "$" + Number(v || 0).toFixed(2);
     }
     function evlbOrd(n) {
         return n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
@@ -4776,9 +5126,17 @@
     // The THRU cell (Kerry 10/19, PGA style): the start before the team
     // tees off, holes the whole team has posted while it plays, "F" and
     // the team net once every hole is in.
+    // Batch 1 (Kerry 10/20, #2147 §4): a finished team shows ONLY its team
+    // net score, no "F". Before the tee: the start, with a short form
+    // ("4:30 · 1") the phone shows.
     function evlbTeamThru(t, s) {
-        if (s.complete) return `F <b>${s.net ?? ""}</b>`;
-        if (s.upcoming) return `<span class="evlb-tstart">${escapeHtml((t && t.start_line) || "\u2014")}</span>`;
+        if (s.complete) return `<b>${s.net ?? ""}</b>`;
+        if (s.upcoming) {
+            // "4:30 PM | Hole 1" (the pack's slot) reads "4:30 PM · 1"
+            const full = String((t && t.start_line) || "\u2014").replace(/\s*\|\s*(?:Hole\s*)?/i, " \u00b7 ");
+            const short = full.replace(/\s*[AP]M\b/i, "");
+            return `<span class="evlb-tstart"><span class="lf">${escapeHtml(full)}</span><span class="sf">${escapeHtml(short)}</span></span>`;
+        }
         return String(s.thru);
     }
     // "Team Net · best 2 of 4 · 85% allowance" — read off the same dial the
@@ -4790,7 +5148,7 @@
             ((t && t.players) || []).filter(p => p && !p.nh).length));
         const pct = d && d.team_allowance != null ? Math.round(Number(d.team_allowance) * 100) : null;
         return `${cart ? "Cart" : "Team"} Net \u00b7 best ${N} of ${cart ? 2 : size}`
-            + (pct != null && !isNaN(pct) ? ` \u00b7 ${pct}% allowance` : "");
+            + (pct != null && !isNaN(pct) ? ` \u00b7 ${pct}%` : "");
     }
     // ONE team's band on the TEAM board — the rows of today's expanded
     // view, shared by the collapsed panel and its expansion so the two
@@ -4799,7 +5157,7 @@
     function evlbTeamSection(ovIx, t) {
         return {
             label: `${t.position ? t.position + " \u00b7 " : ""}` +
-                `${(t.players || []).map(evlbTeamMemberName).join(" \u00b7 ")}`,
+                `${evlbTeamNames(t).join(" \u00b7 ")}`,
             rows: (t.players || []).map(x => {
                 const base = evlbOvOf(ovIx, x);
                 if (!base) return base;
@@ -4822,7 +5180,7 @@
         const teams = (d.teams || []).map((t, i) => {
             const mins = evlbTeamMins(d, t);
             return { t, i, mins, s: evlbTeamSummary(d, t, mins),
-                     name: (t.players || []).map(evlbTeamMemberName).join(", ") };
+                     name: evlbTeamNames(t).join(", ") };
         });
         if (teams.some(x => x.t.gg_position)) {
             teams.forEach(x => { x.pos = x.t.position || ""; });
@@ -4833,6 +5191,9 @@
             if ((pa == null) !== (pb == null)) return pa == null ? 1 : -1;
             if (pa != null && pa !== pb) return pa - pb;
             if (a.s.thru !== b.s.thru) return b.s.thru - a.s.thru;
+            // unranked / tied: the order they go off, not the alphabet
+            const oa = evlbTeamStartOrder(a.t), ob = evlbTeamStartOrder(b.t);
+            if (oa !== ob) return oa < ob ? -1 : 1;
             return a.name.toLowerCase() < b.name.toLowerCase() ? -1
                 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0;
         });
@@ -4846,39 +5207,170 @@
         });
         return teams;
     }
-    function evlbTeamPanel(d, teamBoard, note) {
-        const ovIx = {};
-        (d.overall_board || []).forEach(r => {
-            if (r.scoring_round_id != null) ovIx[String(r.scoring_round_id)] = r;
+    // ±, PGA style: "−7" (a true minus) / "E" / "+2"
+    function evlbPgaToPar(v) {
+        if (v == null || isNaN(v)) return "";
+        return v === 0 ? "E" : (v > 0 ? "+" + v : "\u2212" + Math.abs(v));
+    }
+    // The WON column's look follows the one state (#2147 §2): LIVE grey
+    // italic PROJ., IN REVIEW italic amber, FINAL green; UPCOMING none.
+    function evlbWonClass(d) {
+        return { live: "proj", in_review: "rev", final: "fin" }[(d && d.board_state) || ""] || "";
+    }
+    function evlbTeamPotHtml(d) {
+        const pg = (d && d.pots || {}).team;
+        if (!pg || !(pg.total > 0) || evlbNoGames(d)) return "";
+        const pl = (pg.places || []).length > 1
+            ? `<span class="pl">` + pg.places.map((a, i) => ` &middot; ${evlbOrd(i + 1)} ${evlbUsd(a)}`).join("") + `</span>` : "";
+        return `<span class="evlb-tpot">Pot <b>${evlbUsd(pg.total)}</b>${pl}</span>`;
+    }
+    // A stable key for a team across refreshes (the live order moves them)
+    function evlbTeamKey(t) {
+        return ((t && t.players) || []).map(p => p.customer_id != null ? "c" + p.customer_id : "n" + (p.player_name || ""))
+            .sort().join("|");
+    }
+    // ── THE OPENED TEAM (#2147 §5, #2148-#2149): the team's card, no band.
+    //    HOLE row black, PAR row, one row per player (GROSS with the Team
+    //    Net pops, every counted ball green and bold), N / ± / USED, and the
+    //    TEAM NET row. Fills run edge to edge; USED is blank on TEAM NET.
+    //    `cols` picks the holes (a phone shows one nine per grid); `sub`
+    //    adds that nine's OUT/IN column; `tail` adds N, ± and USED.
+    function evlbTeamGrid(d, t, mins, o) {
+        o = o || {};
+        const all = d.hole_cols || [];
+        const cols = o.cols || all;
+        const hp = d.hole_par || {};
+        const full = o.full !== false;
+        const tail = o.tail !== false;
+        // desktop 18: 1-9, OUT, 10-18, IN
+        const segs = [];
+        if (o.cols) segs.push({ cols, sub: o.sub || null });
+        else if (all.length > 9) {
+            segs.push({ cols: all.filter(n => n <= 9), sub: "OUT" }, { cols: all.filter(n => n > 9), sub: "IN" });
+        } else segs.push({ cols: all, sub: null });
+        const holes = [].concat(...segs.map(g => g.cols));
+        const card = rid => (d.cards || {})[String(rid)] || [];
+        const hole = (rid, n) => card(rid).find(x => x[0] === n);
+        const pops = (rid, n) => {
+            const tp = evlbTeamPopsOf(t, rid, n);
+            if (tp != null) return tp;
+            const h = hole(rid, n);
+            return h ? (h[2] || 0) : 0;
+        };
+        const cell = (cls, v) => `<td${cls ? ` class="${cls}"` : ""}>${v == null ? "" : v}</td>`;
+        let h = `<table class="evlb-tgx${full ? "" : " ph"}"><colgroup><col class="cn">` +
+            segs.map(g => g.cols.map(() => `<col class="ch">`).join("") + (g.sub ? `<col class="cs">` : "")).join("") +
+            (tail ? `<col class="ct"><col class="ct"><col class="ct">` : "") + `</colgroup>`;
+        // HOLE
+        h += `<tr class="hd"><td class="lab">HOLE</td>` + segs.map(g => g.cols.map(n => cell("", n)).join("") + (g.sub ? cell("sub", g.sub) : "")).join("") +
+            (tail ? cell("rule", "N") + cell("", "&plusmn;") + cell("", "USED") : "") + `</tr>`;
+        // PAR
+        const parOf = ns => ns.reduce((a, n) => a + (hp[String(n)] || 0), 0);
+        h += `<tr class="par"><td class="lab">PAR</td>` + segs.map(g => g.cols.map(n => cell("", hp[String(n)] ?? "")).join("") + (g.sub ? cell("sub", parOf(g.cols)) : "")).join("") +
+            (tail ? cell("rule", parOf(all)) + cell("", "") + cell("", "") : "") + `</tr>`;
+        // players
+        const members = (t.players || []);
+        members.forEach(p => {
+            const rid = p.scoring_round_id;
+            const bl = evlbIsBlind(p);
+            const nm = bl ? evlbBlindBare(p) : evlbTeamMemberName(p);
+            const label = full ? evlbNameFL(nm) : `<span class="l">${escapeHtml(evlbSplitName(nm).last)}</span>`;
+            let net = 0, par = 0, used = 0, any = false;
+            all.forEach(n => {
+                const v = evlbNetOf(d, rid, n, t);
+                if (v == null) return;
+                any = true; net += v; par += (hp[String(n)] || 0);
+                if (evlbTeamCounted(mins, rid, n)) used++;
+            });
+            const g9 = ns => { let g = 0, k = false; ns.forEach(n => { const x = hole(rid, n); if (x && x[1] != null) { g += x[1]; k = true; } }); return k ? g : ""; };
+            h += `<tr class="pl${bl ? " blind" : ""}"><td class="lab">${label}</td>` + segs.map(g => g.cols.map(n => {
+                const x = hole(rid, n);
+                if (!x || x[1] == null) return cell("", "");
+                return cell(evlbTeamCounted(mins, rid, n) ? "cnt" : "", x[1] + evlbPops(pops(rid, n)));
+            }).join("") + (g.sub ? cell("sub", g9(g.cols)) : "")).join("") +
+                (tail ? cell("rule", any ? net : "") + cell(any && net - par < 0 ? "red" : "", any ? evlbPgaToPar(net - par) : "") + cell("", any ? used : "") : "") + `</tr>`;
         });
-        const noWon = d._moneyHeld || evlbNoGames(d);
+        evlbTeamPendingBlinds(t).forEach(b => {
+            h += `<tr class="pl blind"><td class="lab">${full ? evlbNameFL(b.name) : `<span class="l">${escapeHtml(evlbSplitName(b.name).last)}</span>`}</td>` +
+                segs.map(g => g.cols.map(() => cell("", "")).join("") + (g.sub ? cell("sub", "") : "")).join("") +
+                (tail ? cell("rule", "") + cell("", "") + cell("", "") : "") + `</tr>`;
+        });
+        // TEAM NET
+        const s = evlbTeamSummary(d, t, mins);
+        const tn9 = ns => { let a = 0, k = false; ns.forEach(n => { if (mins[n] != null) { a += mins[n]; k = true; } }); return k ? a : ""; };
+        const under = n => mins[n] != null && hp[String(n)] != null && mins[n] < (mins._balls[n] || 1) * hp[String(n)];
+        h += `<tr class="tn"><td class="lab">${(d && d.team_unit) === "cart" ? "CART NET" : "TEAM NET"}</td>` + segs.map(g => g.cols.map(n => cell(under(n) ? "red" : "", mins[n] ?? "")).join("") + (g.sub ? cell("sub", tn9(g.cols)) : "")).join("") +
+            (tail ? cell("rule", s.net ?? "") + cell(s.toPar != null && s.toPar < 0 ? "red" : "", (s.thru || t.gg_total != null) ? evlbPgaToPar(s.toPar) : "") + cell("", "") : "") + `</tr>`;
+        return h + `</table>`;
+    }
+    // The phone's opened team (#2147 §6): a full-screen sheet, holes fitted
+    // to 390px; an 18 is an OUT grid and an IN grid.
+    function evlbTeamSheetHtml(d, t, pos) {
+        const mins = evlbTeamMins(d, t);
+        const s = evlbTeamSummary(d, t, mins);
+        const all = d.hole_cols || [];
+        const grids = all.length > 9
+            ? evlbTeamGrid(d, t, mins, { full: false, cols: all.filter(n => n <= 9), sub: "OUT", tail: false })
+              + evlbTeamGrid(d, t, mins, { full: false, cols: all.filter(n => n > 9), sub: "IN" })
+            : evlbTeamGrid(d, t, mins, { full: false });
+        const head = [pos || "", s.thru || t.gg_total != null ? `<span class="${s.toPar < 0 ? "red" : ""}">${evlbPgaToPar(s.toPar)}</span>` : "",
+                      s.thru ? "THRU " + s.thru : ""].filter(Boolean).join(" &middot; ");
+        return `<div class="evlb-sheet-hd"><div class="t">${head || escapeHtml(evlbTeamNames(t).join(", "))}</div>` +
+            `<button type="button" class="evlb-sheet-x" data-evlb-sheet-close>CLOSE &#10005;</button></div>` +
+            `<div class="evlb-sheet-names">${evlbTeamNamesHtml(d, t)}</div>` +
+            `<div class="evlb-sheet-body">${grids}</div>`;
+    }
+    function evlbSheetOpen(d, t, pos, key) {
+        let sh = document.getElementById("evlb-sheet");
+        if (!sh) {
+            sh = document.createElement("div");
+            sh.id = "evlb-sheet";
+            sh.className = "evlb-sheet";
+            sh.setAttribute("role", "dialog");
+            sh.addEventListener("click", e => { if (e.target.closest("[data-evlb-sheet-close]")) evlbSheetClose(); });
+            document.body.appendChild(sh);
+        }
+        sh.innerHTML = evlbTeamSheetHtml(d, t, pos);
+        sh.dataset.tk = key || "";
+        sh.hidden = false;
+        document.documentElement.classList.add("evlb-sheet-on");
+    }
+    function evlbSheetClose() {
+        const sh = document.getElementById("evlb-sheet");
+        if (sh) { sh.hidden = true; sh.dataset.tk = ""; }
+        document.documentElement.classList.remove("evlb-sheet-on");
+    }
+    if (typeof document !== "undefined" && document.addEventListener)
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape") evlbSheetClose(); });
+    // ── TEAM tab, COLLAPSED (#2147 §4): the dial line with the team pot
+    //    (shown once, here), then # | TEAM | ± | THRU | WON/PROJ. ± is the
+    //    big number (Net and ± merged, PGA style). Tap a row to open the
+    //    team's card under it (desktop) or as a sheet (phone).
+    function evlbTeamPanel(d, teamBoard, note) {
+        const st = d.board_state || "";
+        const noWon = evlbNoGames(d) || st === "upcoming" || !st;
+        const wc = evlbWonClass(d);
         const rows = evlbTeamRows(d);
         const body = rows.map(x => {
             const t = x.t, s = x.s;
-            const names = (t.players || []).map(p =>
-                `<span class="evlb-tmem">${escapeHtml(evlbTeamMemberName(p))}${evlbTeeDot(d, p)}</span>`).join(", ");
             const money = t.purse != null && Number(t.purse) > 0 ? "$" + Number(t.purse).toFixed(2) : "";
-            const one = Object.assign({}, teamBoard, {
-                teamBands: true, teams: [t], sections: [evlbTeamSection(ovIx, t)] });
-            return `<tr class="evlb-tsum-row${s.upcoming ? " upcoming" : ""}" data-ti="${x.i}" tabindex="0" role="button" aria-expanded="false">` +
+            const tp = s.thru || t.gg_total != null ? s.toPar : null;
+            return `<tr class="evlb-tsum-row${s.upcoming ? " upcoming" : ""}" data-ti="${x.i}" data-tk="${escapeHtml(evlbTeamKey(t))}" data-pos="${escapeHtml(x.pos || "")}" tabindex="0" role="button" aria-expanded="false">` +
                 `<td class="pos">${escapeHtml(x.pos || "")}</td>` +
-                `<td class="nm"><span class="tchev tgf-exp">&#9654;</span> ${names}</td>` +
+                `<td class="nm"><div class="tnm"><span class="tchev tgf-exp">&#9654;&#xFE0E;</span><span class="evlb-tnames">${evlbTeamNamesHtml(d, t)}</span>${evlbTeamGridNamesHtml(d, t)}</div></td>` +
+                `<td class="tp${tp != null && tp < 0 ? " red" : ""}">${evlbPgaToPar(tp)}</td>` +
                 `<td class="thru">${evlbTeamThru(t, s)}</td>` +
-                `<td class="sc"><b>${s.net ?? ""}</b></td>` +
-                `<td class="tp">${s.thru || t.gg_total != null ? evlbToPar(s.toPar) : ""}</td>` +
-                `<td class="won">${money}</td></tr>` +
-                `<tr class="evlb-tsum-exp" data-ti="${x.i}" hidden><td colspan="6">${evlbStdBoard(d, one)}</td></tr>`;
+                (noWon ? "" : `<td class="won ${wc}">${money}</td>`) + `</tr>` +
+                `<tr class="evlb-tsum-exp" data-ti="${x.i}" hidden><td colspan="${noWon ? 4 : 5}"><div class="evlb-texp"><div class="evlb-scroll">${evlbTeamGrid(d, t, x.mins)}</div></div></td></tr>`;
         }).join("");
-        const showHoles = evlbHolesFor(teamBoard, d);
         return (note || "") +
             `<div class="evlb-tpanel">` +
-            `<div class="evlb-togrow"><div class="evlb-togs">${evlbTogs(teamBoard, d, showHoles)}</div>${evlbTeeLegend(d)}</div>` +
-            `<div class="evlb-tdial"><span class="evlb-tdial-l">${escapeHtml(evlbTeamDialLabel(d))}</span>` +
-            `<button type="button" class="evlb-tall" data-evlb-team-all aria-expanded="false">Expand all</button></div>` +
-            `<div class="evlb-scroll"><table class="evlb-tsum${noWon ? " no-won" : ""}"><thead><tr>` +
-            `<th class="pos">#</th><th class="nm">Team</th><th class="thru">Thru</th>` +
-            `<th class="sc">Net</th><th class="tp">&plusmn;</th><th class="won">Won</th></tr></thead>` +
-            `<tbody>${body || `<tr><td colspan="6" style="color:var(--text-muted);">No teams yet.</td></tr>`}</tbody></table></div>` +
+            `<div class="evlb-tdial"><span class="evlb-tdial-l">${escapeHtml(evlbTeamDialLabel(d))}</span>${evlbTeamPotHtml(d)}` +
+            `<button type="button" class="evlb-tall" data-evlb-team-all aria-expanded="false">EXPAND ALL</button></div>` +
+            `<table class="evlb-tsum${noWon ? " no-won" : ""}"><colgroup><col class="c-pos"><col><col class="c-tp"><col class="c-thru">${noWon ? "" : `<col class="c-won">`}</colgroup><thead><tr>` +
+            `<th class="pos">#</th><th class="nm">TEAM</th><th class="tp">&plusmn;</th><th class="thru">THRU</th>` +
+            (noWon ? "" : `<th class="won">${st === "live" ? "PROJ." : "WON"}</th>`) + `</tr></thead>` +
+            `<tbody>${body || `<tr><td colspan="${noWon ? 4 : 5}" style="color:var(--text-muted);">No teams yet.</td></tr>`}</tbody></table>` +
             `</div>`;
     }
     // Open / close ONE team (each team opens and closes on its own), and
@@ -4898,7 +5390,7 @@
         const btn = panel && panel.querySelector("[data-evlb-team-all]");
         if (!btn) return;
         const all = evlbTeamAllOpen(panel);
-        btn.textContent = all ? "Collapse all" : "Expand all";
+        btn.textContent = all ? "COLLAPSE ALL" : "EXPAND ALL";
         btn.setAttribute("aria-expanded", all ? "true" : "false");
     }
     function evlbTeamToggleAll(panel, open) {
@@ -5404,7 +5896,10 @@
         // Status (money held / not final) stays on the board; explanations
         // such as "Individual Gross activates at 16 ..." live in HOW IT WORKS
         // (Kerry 10/19: "HOW IT WORKS is our standard for any explanations").
-        const offNotes = noGames ? "" : evlbMoneyNotice(d) + evlbFinalNotice(d);
+        // R1 (design-claude #2147): the state strip is the only money
+        // message. The amber "Round in play" notice, its who's-short list and
+        // the "not final yet" banner are gone; HOW IT WORKS explains.
+        const offNotes = "";
         // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
         // hole-by-hole gross plus totals. Wins highlight by the ratified
         // category colors (Net total green, Gross total amber, MVP on
@@ -5594,7 +6089,7 @@
                     ? `<span class="tnet">${t.gg_total}</span>`
                     : `<span class="tnet"${anyGGTotal ? ' style="color:#9CA3AF;font-style:italic;" title="our reconstruction — GG posted no total for this team"' : ""}>${t.total_net ?? ""}</span>`;
                 return `<details class="evlb-team${win ? " win" : ""}" data-ti="${ti}">` +
-                    `<summary><span class="tchev tgf-exp">&#9654;</span>` +
+                    `<summary><span class="tchev tgf-exp">&#9654;&#xFE0E;</span>` +
                     `<span style="min-width:26px;font-weight:700;">${escapeHtml(t.position || "")}</span>` +
                     `<span class="tm">${names}</span>` +
                     tot +
@@ -5669,14 +6164,14 @@
             mp: evlbMatchPlayHtml(d),
         };
         // one board, no tab bar to choose from (the no-games Overall)
-        return evlbStateStrip(d) + `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? ' style="display:none"' : ""}>` +
+        // SUMMARY is a tab like every other (#2147 §3): no colour, no badge.
+        // No "Tap a player" footer (R4): the chevron says what opens.
+        return evlbStateStrip(d) + `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? ' style="visibility:hidden"' : ""}>` +
             tabs.map(([k, l]) =>
-                `<button class="evlb-subtab${k === landing ? " active" : ""}${k === "summary" ? " evlb-sum-tab" : ""}" data-sub="${k}">${k === "prox" ? `<span class="evlb-keepcase">${escapeHtml(l)}</span>` : l}${
-                    k === "summary" ? ` <span class="evlb-sum-tabbadge">${d.board_state === "final" ? "FINAL" : "IN REVIEW"}</span>` : ""}</button>`).join("") +
-            `</div><div class="evlb-hiw-row"><button type="button" class="pr-hiw-link evlb-hiw-btn" data-evlb-hiw>How it works</button></div></div>` +
+                `<button class="evlb-subtab${k === landing ? " active" : ""}" data-sub="${k}">${k === "prox" ? `<span class="evlb-keepcase">${escapeHtml(l)}</span>` : l}</button>`).join("") +
+            `</div><button type="button" class="evlb-hiw" data-evlb-hiw aria-label="How it works"><span class="i">i</span><span class="l">HOW IT WORKS</span></button></div>` +
             tabs.map(([k]) =>
-                `<div class="evlb-panel" data-panel="${k}"${k === landing ? "" : " hidden"}>${panels[k]}</div>`).join("") +
-            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard.</p>`;
+                `<div class="evlb-panel" data-panel="${k}"${k === landing ? "" : " hidden"}>${panels[k]}</div>`).join("");
     }
     // Team net card in THE card standard's family: each member's NET
     // per hole, the ball(s) that COUNTED for the team score highlighted
@@ -5917,6 +6412,12 @@
             }
             const row = e.target.closest("tr.evlb-tsum-row");
             if (!row || !body.contains(row)) return;
+            // a phone opens the team as a full-screen sheet (#2147 §6)
+            if (window.matchMedia && window.matchMedia("(max-width: 560px)").matches) {
+                const dd = body._evlbD, t = dd && (dd.teams || [])[+row.dataset.ti];
+                if (t) evlbSheetOpen(dd, t, row.dataset.pos, row.dataset.tk);
+                return;
+            }
             evlbTeamSetOpen(row, !row.classList.contains("open"));
             evlbTeamSyncAll(row.closest(".evlb-tpanel"));
             if (body._evlbFitKeys) requestAnimationFrame(body._evlbFitKeys);
@@ -5987,6 +6488,11 @@
             evlbChapter = btn.dataset.ch;
             evlbLoad(true);
         }));
+    // the season picker: a real dropdown of the seasons with events
+    if ($("evlb-year")) $("evlb-year").addEventListener("change", (e) => {
+        evlbYear = e.target.value || "";
+        evlbLoad(true);
+    });
 
     $$(".top-tab").forEach(btn => {
         btn.addEventListener("click", (e) => {
@@ -6887,7 +7393,7 @@
                  aria-expanded="false" aria-label="Show matches for ${escapeHtml(pool.pool_name)}">
                 <span class="mp-pool-name">${escapeHtml(pool.pool_name)}</span>
                 <span class="mp-pool-meta">${n} player${n===1?'':'s'} &middot; ${statusTxt}</span>
-                <span class="mp-matches-chip" aria-hidden="true">Matches &rsaquo;</span>
+                <span class="mp-matches-chip" aria-hidden="true">Matches <span class="mp-mc-chev tgf-exp">&#9654;&#xFE0E;</span></span>
             </div>
             <div class="mp-col-head"><span></span><span>Player</span><span class="mp-ch-wlt">W-L-T</span><span class="mp-ch-pts">Pts</span><span></span></div>
             <div class="mp-standings">${listRows}</div>
@@ -6920,7 +7426,7 @@
             <span class="mp-name-cell"><span class="mp-name">${escapeHtml(r.player_name)}</span>${chip}</span>
             ${dots}
             <span class="mp-pts">${r.stableford_pts != null ? r.stableford_pts : '&mdash;'}</span>
-            <span class="mp-chev tgf-exp" aria-hidden="true">&#9654;</span>
+            <span class="mp-chev tgf-exp" aria-hidden="true">&#9654;&#xFE0E;</span>
         </div>
         <div class="mp-expand" style="display:none;"></div>`;
     }
@@ -7391,8 +7897,8 @@
     // word (Kerry 2026-10-13: "On mobile you can reduce OPEN CARD to OPEN").
     function mpToggleHintHtml(open) {
         return open
-            ? '&#9652; <span class="mp-hint-long">collapse card</span><span class="mp-hint-short">close</span>'
-            : '&rsaquo; open<span class="mp-hint-long"> card</span>';
+            ? '<span class="tgf-exp is-open">&#9654;&#xFE0E;</span> <span class="mp-hint-long">collapse card</span><span class="mp-hint-short">close</span>'
+            : '<span class="tgf-exp">&#9654;&#xFE0E;</span> open<span class="mp-hint-long"> card</span>';
     }
 
     function mpMatchCard(o, opts) {
@@ -9986,33 +10492,28 @@
         return cid ? `/customers?cid=${cid}` : `/customers?name=${encodeURIComponent(name || "")}`;
     }
 
-    // "San Antonio" -> SA, "Austin" -> AUS: initials for multi-word chapter
-    // names, first three letters otherwise (full name stays in the title)
-    function prAbbrevChapter(v) {
-        const words = String(v || "").trim().split(/\s+/).filter(Boolean);
-        if (!words.length) return "";
-        return (words.length > 1 ? words.map(w => w[0]).join("") : words[0].slice(0, 3)).toUpperCase();
+    // The standings rows carry the chapter as a COLOUR BAR on the row's
+    // left edge, not the badge above (Kerry 2026-10-20: "No reason for two
+    // lines on these. Let's do color bars for the chapter on the left of
+    // each entry like we've done elsewhere, rather than the chapter
+    // badges"). It replaces prChapterBadge (the "A" / "SA" chip of
+    // 2026-08-02, which sat on the second line). Same classes as the
+    // Events table (ev-ch-*), styled at the
+    // top of this page with that table's width and tokens. Every chapter,
+    // rule 3d; one we do not know yet gets the national grey.
+    function prChapterBarClass(chapter) {
+        const low = String(chapter || "").trim().toLowerCase();
+        if (!low) return "ev-ch-none";
+        if (low.includes("austin")) return "ev-ch-austin";
+        if (low.includes("san antonio") || low === "sa") return "ev-ch-sa";
+        if (low === "tgf") return "ev-ch-tgf";
+        return "ev-ch-other";
     }
-
-    // Chapter identity as a small colored badge beside the name — replaces
-    // the Chapter COLUMN on cross-chapter boards (Kerry 2026-08-02:
-    // "Rather than a chapter column can we do a chapter badge with the
-    // chapter color. Simple SA or A"). Brand chapter colors from the
-    // dashboard.css semantic layer; unknown future chapters fall back to
-    // initials on the national gray.
-    function prChapterBadge(chapter) {
+    // The bar names the chapter only by colour, so the row says it in words
+    // for a screen reader and on a long press.
+    function prChapterBarAttr(chapter) {
         const ch = String(chapter || "").trim();
-        if (!ch) return "";
-        const low = ch.toLowerCase();
-        let label, bg, fg;
-        if (low.includes("austin")) {
-            label = "A"; bg = "var(--chapter-austin, #BF5700)"; fg = "#fff";
-        } else if (low.includes("san antonio") || low === "sa") {
-            label = "SA"; bg = "var(--chapter-sa, #D3DDE4)"; fg = "#1B1B1B";
-        } else {
-            label = prAbbrevChapter(ch); bg = "var(--chapter-national, #374151)"; fg = "#fff";
-        }
-        return ` <span title="${escapeHtml(ch)}" style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:0.6rem;font-weight:700;letter-spacing:0.04em;background:${bg};color:${fg};vertical-align:1px;">${label}</span>`;
+        return ch ? ` title="${escapeHtml(ch)}"` : "";
     }
 
 
@@ -10369,7 +10870,6 @@
         // RANK and PROJECTED money on the cup boards (Kerry 2026-08-13:
         // "hide … in mobile view or put it in expanded view") — they
         // all live here instead.
-        if (tr.dataset.chapter) bits.push(prChapterBadge(tr.dataset.chapter).trim());
         if (tr.dataset.hcp) bits.push(`HCP <b>${escapeHtml(tr.dataset.hcp)}</b>`);
         if (tr.dataset.cityRank) bits.push(`City rank <b>${escapeHtml(tr.dataset.cityRank)}</b>`);
         if (tr.dataset.proj) bits.push(`<span title="${escapeHtml(tr.dataset.projTitle || "")}">${prRaceFinal ? "Won" : "Projected"} <b style="color:#15803d;">${prFmtMoney(+tr.dataset.proj)}</b></span>`);
@@ -10521,9 +11021,10 @@
             ? `2026 THE PLAYERS CUP ${coChamp ? "Co-" : ""}Champion`
             : capSeparate ? `2026 City ${coChamp ? "Co-" : ""}Champion`
             : `2026 City ${coChamp ? "Co-" : ""}Champion — Lone Star Cup ${coChamp ? "Co-" : ""}Captain`;
-        // Chapter renders as a colored badge beside the name, not a column
-        // (Kerry 2026-08-02) — showChapter only decides whether the badge
-        // renders, so the column count no longer varies by race scope.
+        // Chapter renders as a colour bar on the row's left edge, not a
+        // column (Kerry 2026-08-02; a bar, not a badge, since 2026-10-20) —
+        // showChapter only decides whether the bar renders, so the column
+        // count does not vary by race scope.
         // CUP MODE (Kerry 2026-08-13): post-reset races with live TGF
         // Championship boards resolve reset + Rd 1 + Rd 2 — grouped
         // TGF CHAMP header over per-round columns plus a CUP TOTAL.
@@ -10602,7 +11103,7 @@
                 : escapeHtml(r.display_name || r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
-                ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;&#xFE0E;</span>'
                 : '';
             const hcp = r.handicap_index != null
                 ? ` <span class="pr-hcp" style="color:var(--text-muted);font-size:0.82em;" title="Current 18-hole handicap index">(${r.handicap_index.toFixed(1)})</span>`
@@ -10651,7 +11152,6 @@
                 + (cupMode ? ` data-cup="1" data-cc-race="${String(r.player_chapter || r.chapter || "").toLowerCase().includes("austin") ? "austin_net" : "san_antonio_net"}"` : "")
                 // Slim cup rows hide the chapter badge + handicap — the
                 // expansion stat line re-serves them off these attrs.
-                + (cupSlim && showChapter && r.player_chapter ? ` data-chapter="${escapeHtml(r.player_chapter)}"` : "")
                 + (cupSlim && r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : "");
             // Live: MOVE gets its own column (PGA-style); the season view
             // keeps its inline last-event arrow in the rank cell.
@@ -10688,10 +11188,10 @@
                 ? `<div style="line-height:1.1;">${prDayMove(r.move) || ""}</div>` : "";
             const thruSub = (cupSlim && r.champ_thru && !prRaceFinal)
                 ? `<div style="font-size:0.64rem;font-weight:600;line-height:1.4;${/\d:\d\d/.test(String(r.champ_thru)) ? "color:var(--text-muted);" : "color:#15803d;"}">${/\d:\d\d/.test(String(r.champ_thru)) ? "" : "THRU "}${escapeHtml(String(r.champ_thru).replace(/\s*([AaPp])\.?M\.?/, (_, g) => g.toLowerCase()))}</div>` : "";
-            return `<tr class="${nobuy ? "pr-nobuy" : ""}${prRowShimmer(buyHtml) ? " pr-buyin-row" : ""}" style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
+            return `<tr class="${nobuy ? "pr-nobuy" : ""}${prRowShimmer(buyHtml) ? " pr-buyin-row" : ""}${showChapter ? " " + prChapterBarClass(r.player_chapter) : ""}"${showChapter ? prChapterBarAttr(r.player_chapter) : ""} style="${bg}${expandable ? 'cursor:pointer;' : ''}"${r.member_card_id ? ` data-card="${r.member_card_id}"` : ''}${r.customer_id ? ` data-cid="${r.customer_id}"` : ''}${champAttrs} data-pname="${escapeHtml(r.player_name || "")}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""}>
                 <td class="pr-rk" style="${rankStyle}white-space:nowrap;">${escapeHtml(r._flightRank ?? r.rank)}${liveMode ? "" : prRankMove(r.rank, r.prev_rank)}${rankMoveSub}</td>
                 ${moveCell}
-                <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${showChapter && !cupSlim ? `<span class="pr-opt">${prChapterBadge(r.player_chapter)}</span>` : ""}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
+                <td class="pr-name-td"${cupSlim ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${cupSlim ? "" : hcp}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${statusPill}${r.customer_id && champIds.has(r.customer_id)
                     ? (compact
                         ? ` <span title="${escapeHtml(champTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(champTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${coChamp ? "CO-CHAMPION" : "CHAMPION"}${(cupChampRace || capSeparate) ? "" : ` &middot; LSC ${coChamp ? "CO-" : ""}CAPTAIN`}</span>`)
@@ -10833,7 +11333,7 @@
             const open = pre.classList.toggle("open");
             tog.setAttribute("aria-expanded", String(open));
             const ch = tog.querySelector(".pr-pre-chev");
-            if (ch) ch.innerHTML = open ? "&#9660;" : "&#9654;";
+            if (ch) ch.classList.toggle("is-open", open);
         });
     })();
 
@@ -10862,7 +11362,7 @@
         const potC = d && d.projected_payouts && d.projected_payouts.pot_cents;
         tog.innerHTML = (potC ? `Pot ${prFmtMoney(potC)} &middot; ` : "")
             + (d && d.n_players ? `${d.n_enrolled}/${d.n_players} in &middot; ` : "")
-            + `details <span class="pr-pre-chev tgf-exp">${open ? "&#9660;" : "&#9654;"}</span>`;
+            + `details <span class="pr-pre-chev tgf-exp${open ? " is-open" : ""}">&#9654;&#xFE0E;</span>`;
     }
 
     // DAY movement while a championship is live: start-of-day season rank
@@ -11013,7 +11513,7 @@
     function prSyncHidden() {
         document.querySelectorAll("#pr-table-container tbody tr[data-cid]").forEach(tr => {
             const chev = tr.querySelector(".pr-chevron");
-            const open = !!chev && chev.textContent.indexOf("\u25BC") > -1;
+            const open = !!chev && chev.classList.contains("is-open");
             const detail = tr.nextElementSibling;
             if (!open || !detail || !detail.matches(".pr-detail-row, .pr-mo-detail")) return;
             const td = detail.firstElementChild;
@@ -11099,7 +11599,7 @@
                     : `<div class="pc-ph"></div>`;
                 return `<div class="past-champ">${ph}<div class="pc-y">${r.year}</div><div class="pc-n">${nm}</div></div>`;
             }).join("");
-            box.innerHTML = `<summary>Past Champions &middot; ${rows.length}</summary><div class="past-champs-list">${cards}</div>`;
+            box.innerHTML = `<summary><span class="pc-chev tgf-exp">&#9654;&#xFE0E;</span>Past Champions &middot; ${rows.length}</summary><div class="past-champs-list">${cards}</div>`;
             box.hidden = false;
             box.dataset.done = "1";
             box.querySelectorAll("img[data-cap]").forEach(img => {
@@ -11236,19 +11736,19 @@
             // Slim cup rows hide the chapter badge, handicap and the
             // PROJECTED money — the expansion stat line re-serves them.
             const slimAttrs = cupSlimF
-                ? `${r.chapter ? ` data-chapter="${escapeHtml(r.chapter)}"` : ""}${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-proj="${r._pay}" data-proj-title="${escapeHtml(r._payTitle || "")}"` : ""}`
+                ? `${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-proj="${r._pay}" data-proj-title="${escapeHtml(r._payTitle || "")}"` : ""}`
                 : "";
             const expandableF = cupChamp && r.customer_id && (r.champ_points != null || r.champ_thru);
             const chevF = expandableF
-                ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="Round scorecards">&#9654;&#xFE0E;</span>'
                 : '';
-            return `<tr class="${nobuyF ? "pr-nobuy" : ""}"${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
+            return `<tr class="${nobuyF ? "pr-nobuy" : ""} ${prChapterBarClass(r.chapter)}"${prChapterBarAttr(r.chapter)}${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.customer_id && fcChampIds.has(r.customer_id) ? ` data-champion="${fcCo ? "co" : "1"}" data-champion-title="${escapeHtml(fcChampTitle)}"` : ""}${expAttrs}${slimAttrs}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}"` : ""}${r.hist_race ? ` data-hist-race="${escapeHtml(r.hist_race)}"` : ""} data-city-rank="${escapeHtml(String(r.net_rank ?? ""))}"${r.handicap_index != null ? ` data-hcp="${r.handicap_index.toFixed(1)}"` : ""}${r._pay ? ` data-pay="${escapeHtml(prFmtMoney(r._pay))}" data-payl="${prRaceFinal ? "WON" : "PROJECTED"}"` : ""} style="${bg}${expandableF ? "cursor:pointer;" : ""}">
                 <td class="pr-rk" style="${rankTh}">${escapeHtml(r.rank)}${prRankMove(r.rank, r.prev_rank)}</td>
-                <td class="pr-name-td"${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}</span><span class="pr-nm-chev">${chevF}</span></span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
+                <td class="pr-name-td"${cupSlimF ? ' style="white-space:normal;"' : ''}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${nameCell}${cupSlimF ? "" : hcp}</span><span class="pr-nm-chev">${chevF}</span></span><span class="pr-nm-b">${r.customer_id && fcChampIds.has(r.customer_id)
                     ? (cupSlimF
                         ? ` <span title="${escapeHtml(fcChampTitle)}" class="tgf-troph" style="vertical-align:-1px;"></span>`
                         : ` <span title="${escapeHtml(fcChampTitle)}" style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;vertical-align:1px;"><span class="tgf-troph"></span> ${fcCo ? "CO-CHAMPION" : "CHAMPION"}</span>`)
-                    : ""}${cupSlimF ? "" : prChapterBadge(r.chapter)}${cupSlimF ? "" : hcp}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${prBuyBtn(r)}</div>${thruSubF}</td>
+                    : ""}</span></span></div>${cupSlimF && !prRaceFinal ? "" : prPayBadge(r)}${prBuyBtn(r)}</div>${thruSubF}</td>
                 ${cupSlimF ? "" : `<td style="${netTh}">${cityCell}</td>`}
                 <td style="${cupChamp ? resetThOv : resetTh}">${prFmtReset(r.points_reset)}</td>${champCells}
             </tr>`;
@@ -11418,16 +11918,16 @@
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
                 : escapeHtml(r.display_name || r.player_name);
             const chevron = r.customer_id
-                ? ' <span class="pr-chevron tgf-exp" title="This month&#39;s rounds & scorecards">&#9654;</span>'
+                ? ' <span class="pr-chevron tgf-exp" title="This month&#39;s rounds & scorecards">&#9654;&#xFE0E;</span>'
                 : '';
             let purse = "";
             if (win && sel.complete) purse = `<strong>$${sel.winners[0].share}</strong>`;
             else if (win) purse = `<span title="Paid when the month closes">$${sel.purse}</span>`;
             else if (!sel.complete && r.rank === 1)
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
+            return `<tr class="${prChapterBarClass(r.chapter)}"${prChapterBarAttr(r.chapter)}${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td class="pr-rk" style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
-                <td class="pr-wrap pr-name-td"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact, win)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${name}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b">${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</span></span></div></div></td>
+                <td class="pr-wrap pr-name-td"${win ? ' style="font-weight:700;"' : ""}><div class="pr-nm"><div class="pr-nm-l">${prAvatarSlot(r, compact, win)}<span class="pr-nm-t"><span class="pr-nm-1"><span class="pr-nm-n">${name}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}</span><span class="pr-nm-chev">${chevron}</span></span><span class="pr-nm-b"></span></span></div></div></td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
                 <td class="pr-pts" style="${ptsStyle}">${r.points}</td>
                 <td style="${purseStyle}">${purse}</td>
@@ -11483,17 +11983,17 @@
         const next = tr.nextElementSibling;
         if (next && next.classList.contains("pr-mo-detail")) {
             next.remove();
-            if (chev) chev.innerHTML = "&#9654;";
+            if (chev) chev.classList.remove("is-open");
             return;
         }
         const cont = $("pr-table-container");
         cont.querySelectorAll("tr.pr-mo-detail").forEach(x => x.remove());
-        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9654;");
+        cont.querySelectorAll(".pr-chevron").forEach(c => c.classList.remove("is-open"));
         const detail = document.createElement("tr");
         detail.className = "pr-mo-detail";
         detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 0"};color:var(--text-muted);">Loading rounds…</td>`;
         tr.after(detail);
-        if (chev) chev.innerHTML = "&#9660;";
+        if (chev) chev.classList.add("is-open");
         const cell = detail.firstElementChild;
         try {
             // GG points detail (the chapter's season page AND its fall page
@@ -11547,18 +12047,18 @@
         const next = tr.nextElementSibling;
         if (next && next.classList.contains("pr-detail-row")) {
             next.remove();
-            if (chev) chev.innerHTML = "&#9654;";
+            if (chev) chev.classList.remove("is-open");
             return;
         }
         const cont = $("pr-table-container");
         cont.querySelectorAll("tr.pr-detail-row").forEach(x => x.remove());
-        cont.querySelectorAll(".pr-chevron").forEach(c => c.innerHTML = "&#9654;");
+        cont.querySelectorAll(".pr-chevron").forEach(c => c.classList.remove("is-open"));
 
         const detail = document.createElement("tr");
         detail.className = "pr-detail-row";
         detail.innerHTML = `<td colspan="${tr.children.length}" class="pr-wrap" style="background:#f8fafc;padding:${prIsCompact() ? "0.5rem 0" : "0.6rem 0"};color:var(--text-muted);">Loading player detail…</td>`;
         tr.after(detail);
-        if (chev) chev.innerHTML = "&#9660;";
+        if (chev) chev.classList.add("is-open");
         const cell = detail.firstElementChild;
 
         // LIVE championship expansion (Kerry 2026-08-01, PGA-style): while
@@ -11603,7 +12103,7 @@
                 cell.innerHTML = _togglesHtml
                     + `<div class="pr-champ-card-box">${prRenderChampCard(data)}</div>`
                     + `<div style="margin-top:0.55rem;">
-                         <button type="button" class="pr-hist-toggle" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:#F3F2EF;color:#4B5563;border:1px solid var(--border);border-radius:9999px;font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Season history <span class="tgf-exp">&#9654;</span></button>
+                         <button type="button" class="pr-hist-toggle" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;background:#F3F2EF;color:#4B5563;border:1px solid var(--border);border-radius:9999px;font:700 10.5px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Season history <span class="tgf-exp">&#9654;&#xFE0E;</span></button>
                          <a class="pr-spt-pill" href="${window.MEMBER_MODE ? "/member/spotlight" : "/spotlight"}?player=${tr.dataset.cid}" style="margin-left:6px;">Full Spotlight &rarr;</a>
                        </div>
                        <div class="pr-hist-body" style="display:none;margin-top:0.5rem;"></div>`;
@@ -11612,11 +12112,11 @@
                 hTog.addEventListener("click", async () => {
                     if (hBody.style.display !== "none") {
                         hBody.style.display = "none";
-                        hTog.querySelector("span").innerHTML = "&#9654;";
+                        hTog.querySelector(".tgf-exp").classList.remove("is-open");
                         return;
                     }
                     hBody.style.display = "block";
-                    hTog.querySelector("span").innerHTML = "&#9660;";
+                    hTog.querySelector(".tgf-exp").classList.add("is-open");
                     if (hBody.dataset.loaded) return;
                     hBody.innerHTML = '<span style="color:var(--text-muted);">Loading season history…</span>';
                     try {

@@ -120,8 +120,21 @@ check("SEND PACK on demand: POST /api/events/<id>/print-pack/send mails it now",
 check("…and the routine then leaves that sheet alone",
       pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)[0].get("why") == "unchanged since last send")
 check("the pairings toolbar offers the button", 'onclick="sendPrintPack(${ev.id}, this)"' in open("templates/events.html").read())
+_orig_cc = pp.course_contact_for_event
+pp.course_contact_for_event = lambda ev, db_path=None: "justin@course.test"
+_n = len(sent)
+db.save_event_pairings(9001, {"18": [{"group_num": 1, "slot_label": "8:30 AM", "players": [
+    {"name": "Jeff Rideout", "cart_pos": 1, "customer_id": 777001, "tee_choice": "50-64", "handicap_index": None}]}]})
+r_cc = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)
+check("a course with a contact gets no morning pack, even after a change (Kerry 10/20)",
+      len(sent) == _n and "course contact on file" in (r_cc[0].get("why") or ""), r_cc)
+pp.course_contact_for_event = _orig_cc
 fetcher.send_mail_graph = orig
 
+check("a clock stamp in any pack part sits inside a pstamp span, so the once-per-change hash ignores it (Kerry 10/20)",
+      '<span class="pstamp">printed {{ sc.printed_at }}</span>' in open("templates/scorecards.html").read()
+      and pp._hash_view('a <span class="pstamp">printed 2026-10-20 12:05 UTC</span> b')
+      == pp._hash_view('a <span class="pstamp">printed 2026-10-20 13:07 UTC</span> b'))
 print("4. Graph attachments")
 src = open("email_parser/fetcher.py", encoding="utf-8").read()
 check("send_mail_graph takes attachments as fileAttachment", "#microsoft.graph.fileAttachment" in src and "attachments: list | None = None" in src)

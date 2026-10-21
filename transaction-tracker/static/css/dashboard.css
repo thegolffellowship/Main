@@ -3063,9 +3063,10 @@ div.mobile-card.row-rsvp-only {
    then sized down the same day: "Let's go to 75% of that size as a
    standard across the board. Perhaps .9rem", then settled at 0.75rem:
    "Still a hair big for my liking"). Apply .tgf-exp to the glyph
-   element; each page's existing open-state hook (rotate or glyph swap)
-   rides on top. Do NOT restyle arrows per-page — change the look
-   HERE. */
+   element; each page's existing open-state hook rides on top — a 90°
+   ROTATE, like the Events board (the LEADERBOARD dropped its ▼ glyph
+   swaps 2026-10-20; new code toggles .is-open). Do NOT restyle arrows
+   per-page — change the look HERE. */
 /* TGF standard trophy mark (Kerry 2026-09-01) — the PLAIN outline
    trophy (no star), inline at text size, currentColor fill so it reads
    as a black outline on light surfaces and matches badge text in the
@@ -3097,4 +3098,17 @@ div.mobile-card.row-rsvp-only {
     font-style: normal;
     font-weight: 400;
     transition: transform 0.15s;
+    /* The arrow never takes its parent's font (Kerry 2026-10-20: "the
+       chevrons don't match our standard"). Inside a Bitter name cell the
+       ▶ has no glyph in Bitter or Georgia, and iPhone fell back to the
+       colour-emoji font: a boxed blue play button. The system font (what
+       the Events board's arrow already inherits) draws the plain
+       triangle; font-variant-emoji and the U+FE0E the leaderboard writes
+       after the glyph ask for text, not emoji. */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-variant-emoji: text;
 }
+/* Open state, for an arrow whose own markup carries the state: the same
+   90° turn as the Events board (details[open] > summary .chev). Toggle
+   the class; never swap the glyph for ▼. */
+.tgf-exp.is-open { transform: rotate(90deg); }

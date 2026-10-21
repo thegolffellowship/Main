@@ -1,12 +1,142 @@
-window.TGF_VERSION = "2.575.1";
+window.TGF_VERSION = "2.577.3";
 window.TGF_CHANGELOG = [
   {
-    version: "2.575.1",
-    date: "2026-10-19",
+    version: "2.577.3",
+    date: "2026-10-21",
     title: "Health: approve-pairings slow lines and laps, one retry on a cut-off Graph reply",
     changes: [
       "Digest #2083 (10/20). (1) approve_pairings_page took 10.4 s and 11.6 s and the Approve press (approve_pairings_api) 97.6 s on 10/19 at host load 80-90. The page builds every player's Event Info email to show the counts and a sample, and Approve sends the tee-times emails inline, one Graph call each. Neither is a fault; the slow lines were set for pages that read one table (2 s). They are now 15 s for the page and 180 s for the Approve press. The page's sample now carries laps (print_pack, audit, build_emails) so the next digest names the slow section before anything is changed. (2) The staff bridges scoring-pairings-run (|resend and |prompt send mail; 15-20 s) and scoring-health (the report with its fresh replica read, 33.6 s) get 60 s and 90 s lines. (3) inbox_check failed twice in two days (10/18 and 10/19 12:04 UTC) with a JSONDecodeError: Microsoft's reply arrived cut off at 110 KB and 243 KB, each time with the host at load 80-90 and a mail send running. A Graph read whose body will not parse is now asked for once more (reads only; a repeat is safe); if it fails twice the job fails as before. No email, audience, wording, send behaviour or money changes."
     ]
+  },
+  {
+    version: "2.577.2",
+    date: "2026-10-21",
+    title: "Events: an opened event no longer sticks on Loading",
+    changes: ["Kerry 10/21, iPhone: \"Event stuck loading ... Seems to load fine when it's a fresh browser but then closed and come back it got stuck.\" Two causes, both reproduced: the board's loaded flag was kept per event NAME, so after the list re-drew (a chapter, a season, a month opened) the new card for the same event never fetched; and a fetch the phone froze when the app went to the background never finished, so the flag never cleared. The flag now lives on the card itself, a board read times out after 15 seconds (with a plain 'close and reopen it' line), and coming back to the page (app switch or bfcache) re-reads any open card that never drew and refreshes a LIVE one. Guard test_events_board.js."]
+  },
+  {
+    version: "2.577.1",
+    date: "2026-10-21",
+    title: "Tee-times email only goes the evening before",
+    changes: ["Duplicate-send fix 1 of the 10/20 send map: the tee-times email went out whenever a manager approved the pairings, at any hour, including on event morning, when its \"comes at 7:00 AM tomorrow\" line is wrong and the Event Info email follows within hours. teetimes_email._deliver, the one sender for the 7 PM job and the approval alike, now refuses unless it is the day before the event between the 5 PM lock and midnight Central (send_window_ok). Guard test_teetimes_email.py; events.md."]
+  },
+  {
+    version: "2.577.0",
+    date: "2026-10-21",
+    title: "After-lock changes send themselves: moved players, tee and games changes",
+    changes: ["Kerry 10/20 (#2139): \"A moved player should trigger a resend to affected players and should send only the affected sheets to the course for reprint with a CC to manager and me. A tee change and a games change is NOT a reason to send new print packs to course.\" and (#2168) \"No manager approval needed but cc the manager on all changes.\" New email_parser/after_lock.py: the Event Info send saves the sheet it carried (group, start, cart, tee and games per player), and job after_lock_changes (every 15 min, until the first tee) compares the live sheet against it.", "A moved, added or removed player: the player gets the Event Info again under UPDATED GROUP (an added player is welcomed in and recorded as sent), and everyone in the group they left or joined gets it with a notice naming who joined or left. The course gets only the sheets whose contents changed, marked UPDATED, To the course with the manager and Kerry on CC, once the Course Files have gone.", "A tee change or a games change: a short UPDATED TEES / UPDATED GAMES notice to that player only; nothing goes to the course. The chapter manager is CC'd on every email. Each change sends once, then the saved sheet moves on; a hand-run late add or re-issue moves it too, so nothing is mailed twice. Dial after_lock_auto (on unless it reads off). Read-only bridge scoring-after-lock:<event_id>. Push notifications to the manager wait for push. Guard test_after_lock.py; events.md."]
+  },
+  {
+    version: "2.576.1",
+    date: "2026-10-21",
+    title: "TEAM board: a Golf Genius name reads First LAST",
+    changes: ["Kerry 10/21, an opened team on a Golf Genius-era event showed \"JONES, James\" in the names and \"James\" as the surname on the card. Names stored LAST, First now split on the comma, so the board reads James JONES and the phone card JONES. Guard test_team_board_collapsed.js."]
+  },
+  {
+    version: "2.576.0",
+    date: "2026-10-21",
+    title: "Events leaderboard, batch 1: one state, month list, state strip, tabs, TEAM",
+    changes: ["Design-claude's batch 1 (#2147 with #2148-#2150), Kerry-approved 10/20: \"2a - 2d is perfect\". One board state, computed once on the server (database.evlb_state), drives the strip word and colour, the list chip and the landing tab. board_summary.attach no longer recomputes it, which is how a LIVE-coloured strip could read UPCOMING or a held board turn FINAL.", "The state strip is the only money message: UPCOMING \"Pairings are set. First tee 3:40 PM.\", LIVE \"Money is projected until every card is in.\" with UPDATED m:ss AGO, IN REVIEW \"Every score is in. Cards lock at 7:34 PM.\" (the lock time from the event), held \"Results are being checked.\", FINAL \"Results are closed and prizes are set.\" The amber Round in play notice, its list of who is short, the not-final banner and every typed 10 minutes are gone. A LIVE board re-reads itself every 30 seconds.", "The events list is paged by month (older months are a dashed row that loads on tap) with a real season dropdown. Each card has its chapter colour bar, a state chip and the pot in one green with two decimals.", "Tabs are underline tabs; SUMMARY looks like the others; HOW IT WORKS is an outlined pill, a round i on a phone, where the tabs scroll sideways instead of wrapping. The Tap a player footer is gone.", "TEAM: the dial line carries the team pot once, then # | TEAM | +/- | THRU | WON (PROJ. while live). +/- is the big number; a finished team shows only its team net in THRU, no F (Kerry 10/20), and THRU drops the F on every tab. Names are First LAST in Bitter on one line with the tee dot after each name; a blind leads with the BLIND chip in italic brown. An opened team is its card: HOLE, PAR, each player's gross with Team Net pops and counted balls green, TEAM NET, then N, +/- and USED. On a phone the team cell is a 2 x 2 grid of last names and an opened team is a full-screen sheet that fits 390px.", "Money everywhere on the board now prints two decimals ($46.00). Guards test_evlb_batch1.py, test_team_board_collapsed.js (with the #2147 sample: 47 vs 54 = -7), test_team_board_order_blinds.js, test_evlb_rulings_b1_b7.js, test_lb_summary.js; docs events.md."]
+  },
+  {
+    version: "2.575.17",
+    date: "2026-10-20",
+    title: "Put someone back on invitations without erasing their real answers",
+    changes: ["Kerry 10/20, Lou Schneider: he tapped Can't make it for the Fall Championship and then Remove me, meaning only that one event. The restore bridge also deleted every NOT PLAYING row and decline reason on upcoming events, which is right for a mail scanner's taps but would have erased Lou's real no and started Fall Championship reminders. restore_answers(..., keep_answers=True), bridge flag |keep-answers, puts the person back on the invitation list and leaves their answers and reasons as they are. Guard test_invitations.py 6f2.", "Also fixed: the 2.575.16 entry carried an unescaped quote pair, so version.js failed to parse in the browser (the version chip and the changelog page had no data). Escaped."]
+  },
+  {
+    version: "2.575.16",
+    date: "2026-10-20",
+    title: "Live scoring drops a player taken off the pairings",
+    changes: ["Kerry 10/20, a9.28 Avery Ranch: \"I removed Paul Reed from the pairings and credited him ... the live scoring link still shows him.\" Re-seeding a live-scoring round from the pairings only ever added or moved players, never removed one. seed_round_from_pairings now drops a player who is no longer on the sheet from an OPEN round, scores and marks included (Kerry: \"It presets on par, so it will look like he shot par\" — anything entered for a removed player is not a real round); what was removed is kept in one se_audit row ('off_sheet_drop'). Guard test_score_entry.py."]
+  },
+  {
+    version: "2.575.15",
+    date: "2026-10-20",
+    title: "Handicap ask: resend to one player on Kerry's word",
+    changes: ["Kerry 10/20: \"Have another email sent to Adam requesting his handicap & venmo. He said he didn't receive the one this morning.\" handicap_ask.resend(customer_id, post) sends the same ask and link again to one player (CC asks_cc), refused without a mailbox post carrying Kerry's word, dry run without confirm, never to someone who has answered. Bridge scoring-handicap-ask:resend|<cid>|<post>[|confirm]."]
+  },
+  {
+    version: "2.575.14",
+    date: "2026-10-20",
+    title: "No handicap prints blank and never holds or reprints the course files",
+    changes: ["Kerry 10/20, after TPC's Scorecards.pdf arrived as the \"These cards can't print yet\" page: \"This is NOT good!!!\" Course Files now refuse to send (send_course_files -> _unprintable) whenever the scorecards carry a gap or failed to render; the gap page is for a manager's screen, never a course attachment. Guard test_nh_no_reprint.py.", "Kerry 10/20: \"Send them now with Adam blank. And make this standard. If a handicap comes in later, just update it on the tracker and remove the blind. That's not reason to resend the print pack or even just his affected printouts.\" A player with no TGF index yet is a print-log note on the scorecards (his card prints PH and net blank), never a gap that holds the print.", "The morning print-pack routine records who sat where on which tee (blinds left out) with each send. When the seats are unchanged and only the Starter Sheet, Scorecards or Cart Signs changed, it does not send again: that is a handicap or its blind. A moved player, a tee change or a games change still resends. Guard test_nh_no_reprint.py."]
+  },
+  {
+    version: "2.575.13",
+    date: "2026-10-20",
+    title: "Tee sheet shows TGF indexes and blinds with the reason; ADD HANDICAP in the email; gender from men's tees",
+    changes: ["Kerry 10/20: \"Blinds should also show on this tee sheet, along with raw TGF Handicap Indexes. If a player like Adam doesn't have a handicap, then it should say no handicap ... and then when the blind is shown it needs to show the explanation.\" The member tee sheet (/member/teesheet/<id>) shows each player's 18-hole TGF index (or No handicap) under his name, and each drawn blind as its own amber row: BLIND, the name, and why (the open seat, or the player with no TGF handicap it stands in for).", "An event-day email to a player with no handicap opens with NO HANDICAP ON FILE and an ADD HANDICAP button to his handicap ask page.", "Gender from tees: \"65+, 50-64, <50 are all men's tees. Forward tees are for women generally.\" A registration on a men's band with no rated rounds now infers M (Forward still F; both is a conflict for a manager). Still only while app setting gender_infer is on."]
+  },
+  {
+    version: "2.575.12",
+    date: "2026-10-20",
+    title: "Newcomer welcome + Rules of Play link; YOUR CARD totals and colours; N/H blind drops when a handicap arrives",
+    changes: ["Kerry 10/20: a late add who is a 1st timer, guest or new member gets a line in their group's UPDATED GROUP notice (\"This is Adam's first time playing with us! Welcome him in and help him understand our rules.\"; him/her from the profile's gender, them when unknown).", "Every event-day email to a 1st timer, guest or new member opens with a NEW TO TGF? box linking the TGF Rules of Play PDF.", "YOUR CARD: a TOT column (par total and the pops each game gives), more room left of PAR / NET / TEAM, a gap after the tee colour dot, and NET pops black / TEAM (CART) pops orange to match the scorecards, online scoring and the Tracker.", "Kerry: \"If and when we get a handicap for Adam, that blind would go away immediately.\" set_starting_handicap now clears any N/H blind whose seat's player has a handicap, on events from today on (drop_stale_nh_blinds); before, the draw only reported it as stale. Open-seat blinds are never touched.", "Bridge scoring-blinds:<event>|set|<holes>|<group>|<pos>|<cid|clear> chooses one seat's blind (the CHOOSE the pairings screen already has)."]
+  },
+  {
+    version: "2.575.11",
+    date: "2026-10-20",
+    title: "Late adds: event info to the new player, UPDATED GROUP to their group",
+    changes: ["Kerry 10/20, s9.28 TPC Canyons: \"send each new player and their groups the event info per our standards.\" event_day_email.send_event_day_late_adds sends the approved event-day message to each late add unchanged, and to their groupmates with \"UPDATED GROUP: \" before the subject and an orange notice naming who joined. Nobody else is mailed. Same gates as the re-issue: approved template hash, a mailbox post carrying Kerry's word, dry run without confirm, once per player per group state. Bridge: scoring-event-day-email:<id>|lateadd|<cid,cid>|<post>[|confirm]. Guard test_event_day_email.py 4d."]
+  },
+  {
+    version: "2.575.10",
+    date: "2026-10-20",
+    title: "TEAM board: tee-time order, names left-aligned, blinds marked",
+    changes: ["Kerry 10/20, s9.28 TPC Canyons before the round: \"These should show in Tee time order and be left aligned.\" The collapsed TEAM rows sorted unscored teams by NAME. get_event_leaderboard now stamps each team's start_order (tee time, then start hole, A before B on a shotgun or in cart mode, from the print pack's slots); the TEAM board lists unranked teams in that order and breaks to-par ties on it (the live order too). Scored teams still rank on to-par.", "The names cell was centred because the row rule (td, text-align:center) outweighed the column's left rule; the row-level name cell now restates text-align:left, desktop and phone, with the chevron first.", "Kerry: \"Should also show their blinds in a different font color or somehow denote it.\" A drawn blind shows as the team's 4th name with the amber BLIND tag, italic and brown. Before the round the blind has no card, so the board used to drop him; the team now carries blinds_pending ({customer_id, name}) from the saved blind draws, display only, never scored. A blind playing his card (Bl[...]) is marked the same way. Guards test_team_board_order_blinds.js and test_events_board_blinds.py."]
+  },
+  {
+    version: "2.575.9",
+    date: "2026-10-20",
+    title: "Kerry CC'd on handicap and Venmo asks; member nav LEADERBOARD | PLAYERS | HANDICAPS",
+    changes: ["Kerry 10/20: \"CC me on any emails that go out for handicap/venmo for now.\" Every handicap-ask and payout-ask email copies app setting asks_cc (default kerry@thegolffellowship.com; set it to off to stop).", "Kerry 10/20: \"Make nav: LEADERBOARD | PLAYERS | HANDICAPS.\" The member shell's tabs now read in that order."]
+  },
+  {
+    version: "2.575.8",
+    date: "2026-10-20",
+    title: "Handicap ask reaches same-day sign-ups; set-sheet seats late adds",
+    changes: ["Kerry 10/20, Adam Wilson signed up at 9:02 AM for that evening's s9.28 TPC and got no handicap/Venmo email: \"there should be no limitations on an email being sent to someone that we don't have a handicap for...or Venmo.\" The handicap ask's event window now includes TODAY (it read only events after today). Guard test_handicap_ask.py.", "scoring-pairings-set-sheet may now place a roster player who is not yet seated (a late add), so Kerry's placements can be saved; everyone already seated must still appear exactly once."]
+  },
+  {
+    version: "2.575.7",
+    date: "2026-10-20",
+    title: "Leaderboard: the rank gap, for real on phones",
+    changes: ["Kerry 10/20: \"I don't see the spacing fix.\" The phone standings table is table-layout:fixed, so the RK column takes its width from the header cell's inline 28px and ignored v2.575.6's row padding. A board whose rows carry the chapter bar now widens the RK header to 50px (CSS :has on the table), which gives the rank and name their gap on the Monthly and cross-chapter boards."]
+  },
+  {
+    version: "2.575.6",
+    date: "2026-10-20",
+    title: "Leaderboard: room between rank and name",
+    changes: ["Kerry 10/20 on the Monthly board: \"Needs a little more space between rank and player\" (T10MARROQUIN ran together once the 8px chapter bar took space from the rank cell). Rows with a chapter bar give the rank cell 46px minimum and 10px before the name."]
+  },
+  {
+    version: "2.575.5",
+    date: "2026-10-20",
+    title: "Leaderboard: chapter colour bars, one line, and the house chevron everywhere",
+    changes: [
+      "Kerry 10/20, on the Monthly board on his phone: \"No reason for two lines on these. Let's do color bars for the chapter on the left of each entry like we've done elsewhere, rather than the chapter badges.\" The A / SA chapter badge is gone from every Season Contests standings board. Each row now carries the chapter as an 8px colour bar on its left edge, using the Events table's own classes and tokens (ev-ch-*: Austin burnt orange, SA slate, joint TGF black, any other chapter the national grey). The bar shows on Monthly, THE FELLOWSHIP CUP and every cross-chapter Points Race board (the cups). Monthly rows are one line (the month-won trophy sits beside the name), and the Fellowship Cup handicap moved up onto the name line. Champion, captain and guest badges keep their own line, as ruled 10/12.",
+      "\"Also, the chevrons don't match our standard. Review all chevrons across the leaderboard and match standard.\" The boxed blue play button was the house arrow itself: inside a Bitter name cell the iPhone found no ▶ in Bitter or Georgia and drew the colour emoji. The house arrow (.tgf-exp) now uses the system font and asks for text presentation, and every leaderboard arrow is written with U+FE0E, so it is the plain orange triangle the Events board shows. Every open state is now a 90° turn like the Events board, instead of a swap to ▼: standings, Monthly, Pot & details, Season history, and the scorecard / city-championship / Not Counted lines. Match Play's › and ▴ markers and the browser's own triangle on Past Champions are now the house arrow too.",
+      "New guard test_lb_chapter_bars_chevrons.js; lone-star-cup-board.md."
+    ]
+  },
+  {
+    version: "2.575.4",
+    date: "2026-10-20",
+    title: "Print pack re-sent for nothing: the scorecards' printed-at time",
+    changes: ["Kerry 10/20: \"what changed between 6 and 7\" / \"Do it now.\" Nothing had: the scorecards' footer prints 'printed <minute>' outside the pstamp span the once-per-change hash strips, so the pack's fingerprint moved every minute and the 6–9 AM routine re-sent an unchanged pack each hour. Found with the new diffself bridge (only the scorecards part's fingerprint moved between builds minutes apart). The stamp now sits inside the pstamp span. Guard test_print_pack.py."]
+  },
+  {
+    version: "2.575.3",
+    date: "2026-10-20",
+    title: "Print pack: per-part fingerprints and a self-diff check",
+    changes: ["Kerry 10/20: \"what changed between 6 and 7\" (a print pack re-sent with nothing changed) / \"Do it now.\" The pack build now returns one fingerprint per part (part_shas), and the read-only bridge scoring-print-pack-pdf:<id>|diffself builds the pack twice and names every part whose content differs between the two builds, with the first differing lines. It sends nothing; it finds the part that makes the once-per-change send fire for no reason."]
+  },
+  {
+    version: "2.575.2",
+    date: "2026-10-20",
+    title: "No morning print pack when the course has a contact",
+    changes: ["Kerry 10/20, after two morning print packs per event (6:05 and 7:05 AM): \"Neither should have come because there are course contacts at both courses, so the only print packs that should have gone were theirs at noon with managers CCd.\" The 6–9 AM day-of print pack routine now skips any event whose course has a TGF course contact; those files go only through Course Files at noon (To the course, CC the managers). Events at a course with no contact keep the morning pack. Guard test_print_pack.py; events.md."]
   },
   {
     version: "2.575.0",

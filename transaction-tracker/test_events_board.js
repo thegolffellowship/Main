@@ -346,10 +346,13 @@ console.log('== ONE green for BOUGHT IN, app-wide ==');
   // in the page is .lsc-dep:hover — a hover shade on a deposit badge,
   // not a buy-in signal — so it is named here rather than silently
   // allowed by a loose regex.
+  // The FINAL state strip's border (design-claude #2147 §2) is the other:
+  // a state colour, not a buy-in signal.
   const bare = (src.match(/^.*#bbf7d0.*$/gim)||[])
     .filter(l => !l.includes('var(--buyin-green'));
-  ck('every buy-in use goes through the token (only .lsc-dep:hover is bare)',
-     bare.length === 1 && /\.lsc-dep:hover/.test(bare[0]),
+  ck('every buy-in use goes through the token (only .lsc-dep:hover and the FINAL strip are bare)',
+     bare.length === 2 && bare.some(l => /\.lsc-dep:hover/.test(l))
+       && bare.some(l => /\.evlb-state\.s-final/.test(l)),
      bare.join(' || '));
 }
 
@@ -656,7 +659,16 @@ ck('blank Won rows sink (rank blank)', /<td><\/td>/.test(sorted));
 
 // Kerry 10/9: "Won column shouldn't show at all if there aren't any side games"
 ck('no WON column on a no-games event', /d\._moneyHeld \|\| evlbNoGames\(d\) \? " no-won"/.test(src));
-ck('no money notice on a no-games event', /function evlbMoneyNotice\(d\) \{\s*if \(!d \|\| !d\._moneyHeld \|\| evlbNoGames\(d\)\) return ""/.test(src));
+// Kerry 10/21: "closed and come back it got stuck" on Loading…. The loaded
+// flag lives on the card's own body (a re-drawn list made new cards whose
+// NAME was flagged), a frozen fetch times out, and coming back re-reads.
+ck('the loaded flag is per card body, not per event name', /if \(!body \|\| body\._evlbLoading \|\| body\._evlbD\) return;/.test(src) && !/if \(EVLB_LOADED_EVENTS\[name\]\) return;/.test(src));
+ck('a board read times out (AbortController)', /function evlbFetchJson\(url\)[\s\S]{0,300}AbortController/.test(src));
+ck('coming back to the page re-reads an open card that never drew',
+   /addEventListener\("visibilitychange", \(\) => \{ if \(!document\.hidden\) evlbOnReturn\(\); \}\)/.test(src) && /e\.persisted\) evlbOnReturn\(\)/.test(src));
+// Batch 1 R1 (design-claude #2147): the state strip is the ONLY money
+// message, so there is no money notice at all, games or not
+ck('no money notice on any board (R1)', !/function evlbMoneyNotice\(/.test(src) && !/Round in play &mdash; winnings/.test(src));
 ck('team purses are blanked while a round is in play', /\(d\.teams \|\| \[\]\)\.forEach\(t => \{ if \(t && typeof t === "object"\) t\.purse = null; \}\)/.test(src));
 ck('no Purse column on the team board until every score is in', /\$\{d\._moneyHeld \? "" : '<th style="text-align:right;">Purse<\/th>'\}/.test(src));
 ck('no team winner tint mid-round', /const win = !d\._moneyHeld && /.test(src));
