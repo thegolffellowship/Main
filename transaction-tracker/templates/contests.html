@@ -4468,7 +4468,7 @@
             if (st === "live" || st === "upcoming") evlbRefreshEvent(el);
         });
     }
-    if (typeof document !== "undefined" && document.addEventListener) {
+    if (typeof document !== "undefined" && document.addEventListener && typeof window !== "undefined") {
         document.addEventListener("visibilitychange", () => { if (!document.hidden) evlbOnReturn(); });
         window.addEventListener("pageshow", e => { if (e.persisted) evlbOnReturn(); });
     }
