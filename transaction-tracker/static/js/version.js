@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.575.15";
+window.TGF_VERSION = "2.575.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.575.16",
+    date: "2026-10-20",
+    title: "Live scoring drops a player taken off the pairings",
+    changes: ["Kerry 10/20, a9.28 Avery Ranch: \"I removed Paul Reed from the pairings and credited him ... the live scoring link still shows him.\" Re-seeding a live-scoring round from the pairings only ever added or moved players, never removed one. seed_round_from_pairings now drops a player who is no longer on the sheet from an OPEN round, scores and marks included (Kerry: "It presets on par, so it will look like he shot par" — anything entered for a removed player is not a real round); what was removed is kept in one se_audit row ('off_sheet_drop'). Guard test_score_entry.py."]
+  },
   {
     version: "2.575.15",
     date: "2026-10-20",
