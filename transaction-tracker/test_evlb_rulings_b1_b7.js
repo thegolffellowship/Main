@@ -14,7 +14,7 @@ globalThis.$ = () => null;
 const code = 'const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;");\n'
   + lines.slice(a, b).join('\n')
   + '\nObject.assign(globalThis, { evlbEventHtml, evlbStdBoard, evlbBoardBody, evlbColCount, EVLB_BOARDS,'
-  + ' evlbThruCell, evlbTeamStanding, evlbTeamsLiveOrder, evlbStateStrip, evlbFinalNotice, evlbReadGuide, evlbPtsPace });';
+  + ' evlbThruCell, evlbTeamStanding, evlbTeamsLiveOrder, evlbStateStrip, evlbReadGuide, evlbPtsPace });';
 eval(code);
 
 let fails = 0;
@@ -89,18 +89,20 @@ const st = { board_state: 'live', board_state_word: 'LIVE', board_state_text: 'S
                { state: 'in_review', word: 'IN REVIEW', text: 'Every score is in. Cards lock 15 minutes after.' },
                { state: 'final', word: 'FINAL', text: 'Results are closed and prizes are set.' }] };
 h = evlbEventHtml(payload(st));
-check('one strip, first thing on the board, word + line',
-  h.startsWith('<div class="evlb-state s-live" data-state="live"><span class="w">LIVE</span><span class="t">Scores are coming in hole by hole.</span></div>'),
-  h.slice(0, 160));
+check('one strip, first thing on the board: dot + word, the line, the UPDATED clock while LIVE (#2147 §2)',
+  h.startsWith('<div class="evlb-state s-live" data-state="live"><span class="w"><i></i>LIVE</span><span class="t">Scores are coming in hole by hole.</span><span class="r" data-evlb-upd>UPDATED 0:00 AGO</span></div>'),
+  h.slice(0, 220));
 const ir = payload(Object.assign({}, st, { board_state: 'in_review', board_state_word: 'IN REVIEW',
-  board_state_text: 'Every score is in.', money_visible: true, field_complete: true,
+  board_state_text: 'Every score is in. Cards lock at 7:42 PM.', money_visible: true, field_complete: true,
   money_final: false, money_final_at: '2026-10-20T01:42:00Z' }));
-check('IN REVIEW adds the card-lock time', evlbStateStrip(ir).includes('Cards lock at'), evlbStateStrip(ir));
-check('the old "not final yet" banner yields to the strip', evlbFinalNotice(ir) === '');
+check('IN REVIEW reads the server line (lock time from the event, never a literal)',
+  evlbStateStrip(ir).includes('Cards lock at 7:42 PM.') && !evlbStateStrip(ir).includes('data-evlb-upd'), evlbStateStrip(ir));
+check('no amber money notice, no "not final yet" banner (R1)', !/Round in play|Winnings are not final yet/.test(evlbEventHtml(ir)));
 const held = Object.assign({}, ir, { board_state_held: true, board_state_text: 'Results are being checked.' });
-check('a hold reads "Results are being checked." with no lock time',
+check('a hold reads "Results are being checked." with HELD on the right',
   evlbStateStrip(held).includes('IN REVIEW') && evlbStateStrip(held).includes('Results are being checked.')
-  && !evlbStateStrip(held).includes('Cards lock'));
+  && evlbStateStrip(held).includes('<span class="r">HELD</span>') && !evlbStateStrip(held).includes('Cards lock'));
+check('no "Tap a player" footer (R4)', !evlbEventHtml(ir).includes('Tap a player for their scorecard.</p>'));
 const g = evlbReadGuide(payload(st), 'net');
 check('HOW IT WORKS explains all four state words',
   g.includes('State words') && ['UPCOMING', 'LIVE', 'IN REVIEW', 'FINAL'].every(w => g.includes('<b>' + w + '</b>'))
@@ -110,9 +112,10 @@ check('no strip without a server state (older payloads)', evlbStateStrip({}) ===
 
 console.log('== B7: THRU, PGA style ==');
 const P = payload().overall_board;
-check('finished on GROSS: F and the gross total', evlbThruCell({}, P[0], 'gross').includes('<span class="f">F</span>36'));
-check('finished on NET: F and the net total', evlbThruCell({}, P[0], 'net').includes('<span class="f">F</span>31'));
-check('finished on MVP: F and the points', evlbThruCell({}, P[0], 'points').includes('<span class="f">F</span>20'));
+// Kerry 10/20 (#2147): "no 'F' in THRU once a score is final. Show only the score"
+check('finished on GROSS: the gross total only', />36<\/td>$/.test(evlbThruCell({}, P[0], 'gross')) && !/F/.test(evlbThruCell({}, P[0], 'gross').replace(/<[^>]+>/g, '')));
+check('finished on NET: the net total only', />31<\/td>$/.test(evlbThruCell({}, P[0], 'net')));
+check('finished on MVP: the points only', />20<\/td>$/.test(evlbThruCell({}, P[0], 'points')));
 check('in play: holes completed', />5<\/td>$/.test(evlbThruCell({}, P[1], 'net')), evlbThruCell({}, P[1], 'net'));
 check('before the tee: tee time and start hole', evlbThruCell({}, P[3], 'net').includes('3:40 PM · 10'));
 check('before the tee with no pairing: a dash', evlbThruCell({}, Object.assign({}, P[3], { tee_start: null }), 'net').includes('–'));

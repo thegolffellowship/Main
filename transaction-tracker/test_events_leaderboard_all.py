@@ -52,11 +52,11 @@ check("the EVENTS tab: manager-only on the staff page, a plain tab on /member (v
 check("no board says Golf Genius is the official scorer; the Tracker is official now (Kerry 10/13)",
       'Golf Genius is the official scorer' not in html and 'Money shown as computed, not as paid.' not in html)
 check("legends are chips, not prose (Kerry 10/8: \"Nobody is going to read all that\")",
-      'Money winners color-code by FLIGHT: ${' not in html and 'Tap a player for their scorecard.</p>' in html)
+      'Money winners color-code by FLIGHT: ${' not in html and 'Tap a player for their scorecard.</p>' not in html)  # R4: no footer
 check("the solo board drops the GG line on an event GG never scores (or with no posted score yet)",
       "off.hidden = !ev || !!ev.live_entry" in html)
 check("the long explanation lives behind a HOW IT WORKS button (Kerry 10/8; renamed 10/19: \"HOW IT WORKS is our standard\")",
-      'data-evlb-hiw>How it works</button>' in html and 'id="evlb-hiw-modal"' in html
+      'data-evlb-hiw aria-label="How it works"><span class="i">i</span><span class="l">HOW IT WORKS</span></button>' in html and 'id="evlb-hiw-modal"' in html
       and 'function evlbReadGuide(d, game)' in html and 'non-buyers are placed in the flight their handicap' in html
       and html.index('id="evlb-hiw-modal"') > html.index('id="section-lone-star-cup"'))
 # Kerry 10/9 reversed 10/8 for the practice round: "I only want to show an
@@ -104,8 +104,8 @@ check("OVERALL is retired behind evlb_overall_tab (last when on) and the board l
       and '.concat(d.overall_tab ? [["overall", "Overall"]] : [])' in html
       and '[["team", "Team"], ["points", "MVP"], ["net", "Net"]' in html
       and '((d.teams || []).length ? "team" : "net")' in html)
-check("the game notes moved into HOW IT WORKS; status notices stay on the board",
-      "Tonight's games" in html and "evlbMoneyNotice(d) + evlbFinalNotice(d);" in html)
+check("the game notes moved into HOW IT WORKS; the state strip is the only status line (R1)",
+      "Tonight's games" in html and "evlbMoneyNotice(d)" not in html and "evlbStateStrip(d) +" in html)
 check("the 'not in' chip and the would-have-won key show only with Show All Players",
       'class="lg evlb-only-all"' in html and 'evlb-ghostkey evlb-only-all' in html
       and 'classList.toggle("evlb-showall", evlbShowAll)' in html)

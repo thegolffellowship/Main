@@ -18,7 +18,6 @@ const at = (pfx) => {
 const slice = (a, b) => lines.slice(at(a), at(b)).join('\n');
 const code = 'const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;");\n'
   + slice('    function evlbBlankMoney(d) {', '    // TEE COLOUR AS A DOT') + '\n'
-  + slice('    function evlbFinalNotice(d) {', '    async function evlbLoadEvent(el) {') + '\n'
   + slice('    const EVLB_FLIGHT_COLORS', '    function evlbAlignCard(') + '\n'
   + 'globalThis.R = { evlbEventHtml, evlbSummaryHtml, evlbSummaryShown, evlbBlankMoneyProj, '
   + 'evlbProjOn, evlbPotBandText, evlbPotLine, evlbGameMoney, evlbMatchPlayHtml, EVLB_GAME_CATS, evlbBlankMoney };';
@@ -94,9 +93,9 @@ for (const st of ['upcoming', 'live']) {
   const h = R.evlbEventHtml(d);
   const btns = [...h.matchAll(/data-sub="([a-z]+)"/g)].map(m => m[1]);
   ck('in review: SUMMARY is the FIRST tab', btns[0] === 'summary', btns.join(','));
-  ck('in review: SUMMARY is the landing tab', /evlb-subtab active evlb-sum-tab" data-sub="summary"/.test(h));
-  ck('in review: SUMMARY has its own colour class', /evlb-sum-tab/.test(h));
-  ck('in review: tab badge says IN REVIEW', /evlb-sum-tabbadge">IN REVIEW</.test(h));
+  ck('in review: SUMMARY is the landing tab', /evlb-subtab active" data-sub="summary"/.test(h));
+  // Batch 1 (#2147 §3): SUMMARY uses the same style as every other tab
+  ck('in review: SUMMARY has no colour of its own and no tab badge', !/evlb-sum-tab/.test(h));
   ck('in review: panel badge says IN REVIEW', /evlb-sum-badge in_review">IN REVIEW</.test(h));
   ck('in review: TEAM panel is hidden at landing', /data-panel="team" hidden/.test(h));
   const s = R.evlbSummaryHtml(d);
@@ -116,7 +115,6 @@ for (const st of ['upcoming', 'live']) {
 {
   const d = payload('final');
   const h = R.evlbEventHtml(d);
-  ck('final: tab badge says FINAL', /evlb-sum-tabbadge">FINAL</.test(h));
   ck('final: panel badge says FINAL', /evlb-sum-badge final">FINAL</.test(h));
   ck('final: no in-review class', !/evlb-sum in-review/.test(R.evlbSummaryHtml(d)));
 }
@@ -148,7 +146,8 @@ console.log('== projected WON (LIVE) ==');
   ck('SKINS tab: no net money', !/\$60\.00/.test(sk));
   const team = (h.split('data-panel="team"')[1] || '').split('data-panel=')[0];
   ck('TEAM tab: team purse projected $80', /\$80\.00/.test(team));
-  ck('TEAM tab: slot share $20', /\$20\.00/.test(team));
+  // Batch 1 §5: the opened team card is N / ± / USED; per-player shares left it
+  ck('TEAM tab: the opened card carries no per-player share', !/\$20\.00/.test(team));
   ck('TEAM tab: no net money', !/\$60\.00/.test(team));
   const px = (h.split('data-panel="prox"')[1] || '').split('data-panel=')[0];
   ck('CTPs tab: holder amount kept while LIVE', /\$15\.00/.test(px) && /evlb-projwon/.test(px));
@@ -178,15 +177,16 @@ console.log('== money only on its own tab ==');
 console.log('== pot headers ==');
 {
   const d = payload('live');
-  ck('LOW flight band text', R.evlbPotBandText(d, 'net', 1) === ' · 10 players · pot $90 (1st $60 · 2nd $30)',
+  ck('LOW flight band text', R.evlbPotBandText(d, 'net', 1) === ' · 10 players · pot $90.00 (1st $60.00 · 2nd $30.00)',
      R.evlbPotBandText(d, 'net', 1));
-  ck('one-place flight has no ladder', R.evlbPotBandText(d, 'net', 2) === ' · 6 players · pot $45');
+  ck('one-place flight has no ladder', R.evlbPotBandText(d, 'net', 2) === ' · 6 players · pot $45.00');
   ck('skins says per skin', /split per skin/.test(R.evlbPotBandText(d, 'skins', 1)));
   ck('no pot, no text', R.evlbPotBandText(d, 'gross', 1) === '');
   const h = R.evlbEventHtml(d);
   ck('the band row carries the pot', /LOW FLIGHT<span class="evlb-bandpot"> · 10 players · pot \$90/.test(h));
-  ck('TEAM pot line', /Team pot \$120 \(1st \$80 · 2nd \$40\)/.test(h));
-  ck('CTP pot line', /CTP pot \$30 \(\$15 · \$15\)/.test(h));
+  // Batch 1 §4: the team pot shows once, on the dial line
+  ck('TEAM pot line', /Pot <b>\$120\.00<\/b><span class="pl"> &middot; 1st \$80\.00 &middot; 2nd \$40\.00/.test(h));
+  ck('CTP pot line', /CTP pot \$30\.00 \(\$15\.00 · \$15\.00\)/.test(h));
 }
 
 console.log('== Match Play tab ==');
