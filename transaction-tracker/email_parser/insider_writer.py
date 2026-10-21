@@ -170,6 +170,8 @@ PUBLIC_RULES = """PUBLIC INSIDER RULES (these override the member-recap style be
 - Consistency across options: when you write the Celebrate line and a fellowship beat, they must agree with each other and with the fact sheet.
 - FAITH STAYS IMPLICIT (Kerry, 2026-09-17, the founding stance): The Golf Fellowship is "preparing a field for people of any background to come into connecting with other human beings"; its theme is HUMAN CONNECTION in an isolating world — "we were built for community". Kerry's own faith is the reason he is kind, curious and encouraging, and it must never become "a barrier of religiosity" between a reader and TGF. So in the public Insider: no scripture, no God/Christ/Jesus/Lord, no church, no prayer, no "blessed", no sermon. Encouragement is welcome and wanted — in plain human words about belonging, showing up, being known, looking someone in the eye. Take people where they are.
 - WHAT ENTRY INCLUDES (Kerry, 2026-09-17, from the Tracker's event pricing — a fact, print it when the angle is belonging or first-timer): entering a Tuesday puts EVERY player in the team game, closest-to-the-pin and the hole-in-one pot; the individual Net and Gross games are an add-on a member can skip any week. Nobody has to buy a game to belong. Say it plainly, no dollar figures, never as a dig at the players who do buy in. Members do not get a free drink (the drink is the first-timer offer only).
+- NAME THE DATE, NEVER "THIS SATURDAY" (2026-10-21): readers open this email days after it is sent, and on 10/21 the writer called October 31 "this Saturday" (it was ten days out). Never write "this/next Saturday", "this/next Tuesday", "this weekend", "next week" or "tomorrow"; write the date: "Saturday, October 31".
+- THE CELEBRATE LINE ENDS BEFORE THE TAGLINE: the template already prints "It's the best part, and it's yours if you want it." after your celebrate text. Never write that sentence yourself.
 - THE JOIN OFFER (Kerry-ratified 2026-09-17): when the fact sheet carries "join_offer", print it ONCE, verbatim, as its own short beat or as the last sentence of the last beat, linked to the membership URL. Its dollar figures are the only prices allowed besides the pot. Never paraphrase the price, never invent a deadline.
 """
 
@@ -709,6 +711,10 @@ def validate(draft: dict, facts: dict) -> tuple:
     if all((e.get("holes") or 9) == 9 for e in facts.get("events") or []) and facts.get("events") \
             and re.search(r"\b(18th|eighteenth)\b", text, re.I):
         problems.append("this week's events were nines — there is no 18th hole/green; say the 9th")
+    if re.search(r"\b(this|next)\s+(sat|satur|sun|mon|tues?|wed|wednes|thur?s?|fri)\w*day\b|\bthis weekend\b|\bnext week\b|\btomorrow\b",
+                 text, re.I):
+        problems.append("relative day ('this Saturday', 'next week'): readers open this days later — name the date, "
+                        "e.g. 'Saturday, October 31'")
     if re.search(r"on the books|no record|not recorded|we don'?t have|wasn'?t recorded", text, re.I):
         problems.append("never expose missing data to the reader — write around it")
     if re.search(r"\b(God|Jesus|Christ|Lord|scripture|bible|gospel|church|pray|prayer|blessed|blessing|amen|faith)\b"

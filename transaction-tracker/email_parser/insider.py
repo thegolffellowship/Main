@@ -745,7 +745,9 @@ def compose_from_writer(data: dict, draft: dict) -> tuple:
     slots = compose(data)
     slots["HEADLINE"] = draft["headline"]
     slots["LEDE_WITH_RESULTS_LINKS"] = draft["lede"]
-    slots["CELEBRATE_PROOF"] = _esc(draft["celebrate"])
+    # The template prints the tagline after this slot; a writer that also
+    # wrote it printed it twice (10/21). Strip it here, the one boundary.
+    slots["CELEBRATE_PROOF"] = _esc(strip_celebrate_tagline(draft["celebrate"]))
     slots["CLOSE_LEAD"] = _esc(draft["close_lead"])
     band = (ANGLE_BY_KEY.get(draft.get("angle") or "") or {}).get("band")
     if band:
@@ -1136,3 +1138,14 @@ def weekly_insider_draft() -> None:
             default=str))
     except Exception:
         logger.exception("Insider auto-draft failed")
+
+
+CELEBRATE_TAGLINE = "It's the best part, and it's yours if you want it."
+
+
+def strip_celebrate_tagline(text: str) -> str:
+    """Drop the tagline the template already prints after CELEBRATE_PROOF
+    (any curly/straight apostrophes, any number of repeats)."""
+    pat = r"\s*It[’']s the best part,? and it[’']s yours if you want it\.?"
+    out = re.sub(pat, "", str(text or ""), flags=re.I).strip()
+    return out or "Most of the field stayed for a drink after."

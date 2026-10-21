@@ -239,6 +239,16 @@ check("a scripture reference is refused", any("religious" in x for x in probs), 
 check("the rule and the built-for-this angle exist", "FAITH STAYS IMPLICIT" in iw.PUBLIC_RULES and "built-for-this" in iw.ANGLE_BY_KEY
       and iw.angle_available("built-for-this", data))
 
+print("\n== 2e. name the date; tagline printed once (2026-10-21) ==")
+_, probs = iw.validate(dict(GOOD, story=[{"lead": "Saturdays.", "body": "This Saturday, October 31, we're at Kissing Tree."}]), facts)
+check("'this Saturday' refused", any("relative day" in x for x in probs), str(probs))
+_, probs = iw.validate(dict(GOOD, story=[{"lead": "Saturdays.", "body": "Saturday, October 31, we're at Kissing Tree."}]), facts)
+check("a named date passes", not any("relative day" in x for x in probs), str(probs))
+check("tagline stripped from celebrate",
+      insider.strip_celebrate_tagline("Grab a drink. It\u2019s the best part, and it's yours if you want it.") == "Grab a drink.")
+check("tagline-only celebrate falls back", insider.strip_celebrate_tagline("It's the best part, and it's yours if you want it.") != "")
+check("rule text present", "NAME THE DATE" in iw.PUBLIC_RULES and "ENDS BEFORE THE TAGLINE" in iw.PUBLIC_RULES)
+
 print("\n== 4. write_insider: clean draft, fences tolerated ==")
 fake_client.responses = ["```json\n" + json.dumps(GOOD) + "\n```"]
 d = iw.write_insider(facts, "first-timer", db_path=p)
