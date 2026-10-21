@@ -158,9 +158,12 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   preview mark (`make_token(..., preview=True)`): they open the same pages and
   record nothing (no RSVP, opt-out, reason or click). Can't make it still saves
   from the page's script, as Kerry ruled, so a scanner can still mark a NOT
-  PLAYING. `restore_answers` (bridge `0|restore|<kerry-ok post>|<cids>[|confirm]`)
+  PLAYING. `restore_answers` (bridge `0|restore|<kerry-ok post>|<cids>[|keep-answers][|confirm]`)
   undoes answers a person did not give: back on invitations, their Tracker
-  NOT PLAYING rows and decline reasons on upcoming events removed.
+  NOT PLAYING rows and decline reasons on upcoming events removed. With
+  `|keep-answers` (Kerry 10/20, Lou Schneider: his Can't make it was real,
+  only the Remove me was a mistake) it only puts them back on invitations
+  and leaves every answer and reason as it is.
 - **Scanner filter (Kerry 10/14: "yes on the scanner filter", CoS #1793/#1794).**
   Each sent link carries its send time (`s` in the token). A tap is ignored
   (the page looks normal, nothing is recorded, `agent_action_log`
