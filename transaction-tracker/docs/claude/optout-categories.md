@@ -116,3 +116,59 @@ later is off for them.
 4. Is the list of registered-event emails that cannot be turned off right?
    (Event Info, tee times, after-lock updates, the handicap ask, the payout
    ask, membership renewal.)
+
+## HOLD (Kerry 10/21, Front Desk #2202)
+
+Kerry, verbatim: "Who is handling the Opt-Out schema work? I want to see mockups
+for the user flow for it first. Do these meet industry standards + requirements?"
+Nothing is built, filed or migrated for this flow until Kerry has seen
+design-claude's mockups (variants A and B in #2202) and ruled. The results-email
+rule (v2.577.4) is separate and not held.
+
+## Compliance notes (not legal advice; Kerry may want counsel)
+
+**CAN-SPAM's single-page rule: Variant A is at risk.** The recipient may not be
+required to do more than reply by email or visit ONE web page. Variant A asks
+for choose (page 1), then confirm (page 2), and sometimes "Stop everything?"
+(a third press). That makes two or three steps before the opt-out takes effect,
+which reads as more than one page. Variant B meets the rule:
+- one page with the category pre-ticked;
+- "Unsubscribe from all" works in one press;
+- the "catch yourself" step comes AFTER the press, as a done state with a
+  prominent Undo.
+
+Recommendation: B. Kerry's second step becomes the Undo, not a gate in front
+of the opt-out. A scanner still cannot opt anyone out, because GETs never
+write and only the button press (a POST) does.
+
+**One-click headers (RFC 8058), added to the plan.**
+- Every invitation, reminder and results email carries:
+  - `List-Unsubscribe: <https://.../unsubscribe/<signed token>>, <mailto:...>`
+  - `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+- The Tracker answers a POST to that URL with body `List-Unsubscribe=One-Click`
+  by writing the opt-out for that email's category at once, with
+  source='one_click'. That source value needs adding to 0018's CHECK.
+  - Mail providers send this POST when the person presses Gmail's or Apple
+    Mail's Unsubscribe.
+  - Scanners use GET. The GET shows the page and writes nothing.
+- Gmail and Yahoo require one-click for bulk senders (5,000+ a day). We are
+  far below that, so this is best practice rather than a requirement. It also
+  keeps our mail out of spam.
+- **To verify before building:** Microsoft Graph sendMail may accept only
+  custom headers that begin with `x-` (internetMessageHeaders). If so, the
+  Tracker's Graph sends cannot carry List-Unsubscribe. We would then need
+  another send path for these emails, such as Brevo transactional SMTP or
+  SMTP AUTH. That is a decision for Kerry.
+
+**Brevo side (Insider).** Brevo adds its own unsubscribe link and the one-click
+List-Unsubscribe headers to campaign mail. Confirm it from the raw headers of
+the next Insider in a staff inbox before relying on it. A Brevo unsubscribe
+must come back into the Tracker as source='brevo', and ours must go out to
+Brevo. That sync writes to an outside system, so it needs Kerry's OK.
+
+**Also required in every marketing email:**
+- a physical postal address (app setting `tgf_mailing_address`, still empty
+  for the tee-times email);
+- an accurate From and subject;
+- the link keeps working for at least 30 days after the send;
+- an unsubscribed address is never sold or shared.
