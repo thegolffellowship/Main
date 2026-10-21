@@ -902,3 +902,5 @@ that's its own representation, not something to paste as raw HTML.
     week. In both cities."); member/GG recaps stay `TGF Results |
     <WINNER-SURNAME CAPS> <verb phrase>`. Keep the hook inside ~45
     characters after the prefix so it survives mobile truncation.
+
+**Insider lesson (2026-10-21): name the date, print the tagline once.** The writer called October 31 "this Saturday" ten days early, and the Celebrate line printed its tagline twice because the template already prints "It's the best part, and it's yours if you want it." Both are now refused or stripped in code (`insider_writer.validate`, `insider.strip_celebrate_tagline`). Public copy names the date ("Saturday, October 31"), never "this/next Saturday".

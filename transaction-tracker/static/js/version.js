@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.577.4";
+window.TGF_VERSION = "2.577.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.577.5",
+    date: "2026-10-21",
+    title: "Insider writer: name the date, print the tagline once",
+    changes: [
+      "The 10/21 Insider draft called the Fall Championship on October 31 \"this Saturday\" when it was ten days out. The writer's public rules now say to name the date, and validate() refuses \"this/next <weekday>\", \"this weekend\", \"next week\" and \"tomorrow\", so the retry fixes it before Kerry sees it.",
+      "The same draft printed \"It's the best part, and it's yours if you want it.\" twice, because the template adds that line after the writer's Celebrate text and the writer had written it too. insider.strip_celebrate_tagline removes it from the writer's text where the slot is filled, and the rules tell the writer not to write it. Guard: test_insider_writer.py section 2e.",
+    ],
+  },
   {
     version: "2.577.4",
     date: "2026-10-21",
