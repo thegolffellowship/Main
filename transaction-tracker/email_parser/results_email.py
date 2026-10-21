@@ -561,7 +561,9 @@ def lint(html: str) -> list:
 
 def audience(event_id: int, db_path=None) -> dict:
     """Players of the event + the chapter's members + played the chapter in
-    12 months, minus the invitation exclusions. Read-only."""
+    12 months, minus the invitation exclusions. An invitation opt-out is
+    dropped only when he did not play this event (Kerry 2026-10-21).
+    Read-only."""
     from email_parser import database as db
     from email_parser import invitations as inv
     conn = db.get_connection(db_path)
@@ -611,7 +613,9 @@ def audience(event_id: int, db_path=None) -> dict:
         people = []
         for cid in sorted(why):
             played = "played" in why[cid]
-            if cid in optout:
+            # An invitation opt-out still gets the results of an event he
+            # PLAYED (Kerry 2026-10-21); one who did not play gets none.
+            if cid in optout and not played:
                 excluded["opted_out"] += 1; continue
             if cid in removed and not played:
                 excluded["membership_remove"] += 1; continue

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.577.3";
+window.TGF_VERSION = "2.577.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.577.4",
+    date: "2026-10-21",
+    title: "Results email: an invitation opt-out who played still gets the results",
+    changes: [
+      "Kerry 10/21 (rule 3b, via the Front Desk): \"Players who opted out of invitations should only get results emails if they played in the event.\" The results-email audience dropped every invitation opt-out, so a player who opted out of invitations got no results for a night he played (Lou Schneider, Event Ops #2164/#2166). Now an opt-out is dropped only when he did not play that event; one who did not play still gets nothing. No other audience rule, wording or schedule changes. Guard test_results_email.py."
+    ]
+  },
   {
     version: "2.577.3",
     date: "2026-10-21",
