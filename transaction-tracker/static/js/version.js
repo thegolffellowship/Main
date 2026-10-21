@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.576.1";
+window.TGF_VERSION = "2.577.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.577.0",
+    date: "2026-10-21",
+    title: "After-lock changes send themselves: moved players, tee and games changes",
+    changes: ["Kerry 10/20 (#2139): \"A moved player should trigger a resend to affected players and should send only the affected sheets to the course for reprint with a CC to manager and me. A tee change and a games change is NOT a reason to send new print packs to course.\" and (#2168) \"No manager approval needed but cc the manager on all changes.\" New email_parser/after_lock.py: the Event Info send saves the sheet it carried (group, start, cart, tee and games per player), and job after_lock_changes (every 15 min, until the first tee) compares the live sheet against it.", "A moved, added or removed player: the player gets the Event Info again under UPDATED GROUP (an added player is welcomed in and recorded as sent), and everyone in the group they left or joined gets it with a notice naming who joined or left. The course gets only the sheets whose contents changed, marked UPDATED, To the course with the manager and Kerry on CC, once the Course Files have gone.", "A tee change or a games change: a short UPDATED TEES / UPDATED GAMES notice to that player only; nothing goes to the course. The chapter manager is CC'd on every email. Each change sends once, then the saved sheet moves on; a hand-run late add or re-issue moves it too, so nothing is mailed twice. Dial after_lock_auto (on unless it reads off). Read-only bridge scoring-after-lock:<event_id>. Push notifications to the manager wait for push. Guard test_after_lock.py; events.md."]
+  },
   {
     version: "2.576.1",
     date: "2026-10-21",

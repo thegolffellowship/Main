@@ -1142,6 +1142,12 @@ def send_event_day_emails(event_id: int, confirm: bool = False, db_path=None) ->
                 pass
     finally:
         conn.close()
+    # the sheet these emails carried is the baseline for after-lock changes
+    # (Kerry #2139); the first send sets it, a later re-run leaves it alone
+    if sent:
+        from email_parser import after_lock
+        if not after_lock._get(after_lock.STATE_KEY.format(int(event_id)), db_path):
+            after_lock.record_sent(event_id, db_path)
     return {"event": built["event"], "sent": sent, "skipped": skipped,
             "failed": failed, "held": built["held"],
             "counts": {**built["counts"], "sent": len(sent), "skipped": len(skipped),
@@ -1354,6 +1360,12 @@ def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: b
                             "sent_by": "event_day_email_late_add"}, db_path=db_path)
         except Exception:
             pass
+    if sent and not failed:
+        # a hand-run late add moves the after-lock baseline, so the job never
+        # mails the same change again
+        from email_parser import after_lock
+        if after_lock._get(after_lock.STATE_KEY.format(int(event_id)), db_path):
+            after_lock.record_sent(event_id, db_path)
     return {**out, "sent": sent, "failed": failed,
             "counts": {**out["counts"], "sent": len(sent), "failed": len(failed)}}
 
@@ -1433,5 +1445,9 @@ def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
                             "sent_by": "event_day_email_reissue"}, db_path=db_path)
         except Exception:
             pass
+    if sent and not failed:
+        from email_parser import after_lock
+        if after_lock._get(after_lock.STATE_KEY.format(int(event_id)), db_path):
+            after_lock.record_sent(event_id, db_path)
     return {**out, "sent": sent, "failed": failed,
             "counts": {**out["counts"], "sent": len(sent), "failed": len(failed)}}
