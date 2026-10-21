@@ -552,3 +552,14 @@ color or somehow denote it, so they understand easily that player is a blind."
   card row keeps its BLIND chip. Guards `test_team_board_order_blinds.js`,
   `test_events_board_blinds.py`.
 
+
+## 15. Batch 1 built (v2.576.0, design-claude #2147-#2150, Kerry 10/20)
+
+Kerry on the mockups: "2a – 2d is perfect", with "no 'F' in THRU once a score
+is final. Show only the score". Built: one state value (R2), the month-paged
+list with chapter bars and state chips, the state strip as the only money
+message (R1), underline tabs, the TEAM tab collapsed and opened, the phone
+layout. Details and guards: events.md "EVENTS leaderboard Batch 1". The F in
+THRU is gone on every tab, which supersedes §12.2's "F 39" suggestion.
+Batch 2 (MVP, NET, GROSS, SKINS, PROXIES, SUMMARY, IN REVIEW / FINAL boards)
+waits on design-claude.

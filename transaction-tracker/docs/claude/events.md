@@ -2521,10 +2521,49 @@ figure is what a member remembers, not the caveat beside it.
 `money_visible` from `MAX(scoring_rounds.imported_at)` for the event plus
 `leaderboard_money_hold_minutes` (default 10). `imported_at` is stamped
 every time a round is written, so it IS "when scores were last posted".
-While held: the list row reads IN PLAY / POT PENDING instead of a pot,
-and the board's money is blanked client-side by `evlbBlankMoney` — ONE
-place, not in each of the seven boards that read money — with
-`evlbMoneyNotice` above the tabs saying when it posts. Scores stay live.
+While held: the list card's pot reads a dash (its state chip says LIVE or
+UPCOMING), and the board's money is blanked client-side by `evlbBlankMoney`
+— ONE place, not in each of the seven boards that read money. Since Batch 1
+(v2.576.0, design-claude #2147 R1) the state strip is the only money
+message on the board; `evlbMoneyNotice` and the "not final yet" banner are
+gone. Scores stay live.
+
+## EVENTS leaderboard Batch 1 (v2.576.0, design-claude #2147-#2150, Kerry-approved 10/20)
+
+- **One state value (R2).** `database.evlb_state` is the only rule for
+  UPCOMING / LIVE / IN REVIEW / FINAL. `_evlb_board_state` (the opened board)
+  and `get_events_leaderboard` (each list card's `board_state`) both call it,
+  and `board_summary.attach()` keeps the payload's value instead of
+  recomputing it (the two calculators were pain point 1).
+- **The strip** says one line per state (`EVLB_STRIP_TEXT`): "Pairings are
+  set. First tee {first_tee}." / "Money is projected until every card is in."
+  / "Every score is in. Cards lock at {lock_at}." / "Results are being
+  checked." (held, HELD on the right) / "Results are closed and prizes are
+  set." `first_tee` is the earliest saved tee start (`_evlb_first_tee`);
+  `lock_at` is `money_final_at` in Central (`_evlb_clock`). No minute is ever
+  typed into a line. LIVE shows "UPDATED m:ss AGO" and the open board re-reads
+  itself every 30 s (`evlbRefreshEvent`; the open tab, open teams and an open
+  phone sheet survive the repaint).
+- **The list** is paged by month: `/api/events-leaderboard?year=&month=YYYY-MM&event=`
+  returns one month's cards (`events`) plus `months` [{ym, label, count}];
+  `event` opens that event's month (an event's own link, the scorer's board).
+  Cards: chapter bar (`chapter_color`, AUS #BF5700 / SA #44596B), state
+  chip, pot in #047857 with two decimals. The year is a real dropdown of the
+  seasons with events.
+- **Tabs** are underline tabs, SUMMARY styled like the rest; HOW IT WORKS is
+  an outlined pill (a 28px "i" circle on a phone, tabs scroll sideways there).
+  No "Tap a player for their scorecard." footer.
+- **TEAM** collapsed: dial line with the team pot shown once, then
+  `# | TEAM | ± | THRU | WON/PROJ.`. ± is the big number; a finished team's
+  THRU is its team net score only (no F, Kerry 10/20, also on every tab's
+  THRU); names First 600 + LAST 800 Bitter on one line, tee dot after each
+  name, a blind leads with the BLIND chip and reads italic brown. Opened
+  (`evlbTeamGrid`): HOLE / PAR / players (gross with Team Net pops, counted
+  balls green) / TEAM NET, then N · ± · USED; USED blank on TEAM NET. A phone
+  shows last names in a 2 x 2 grid and opens a team as a full-screen sheet.
+- Guards: `test_evlb_batch1.py`, `test_team_board_collapsed.js` (incl. the
+  #2147 §5 sample: 7·5·8·7·7·8·5 = 47 vs 54 = −7), `test_team_board_order_blinds.js`,
+  `test_evlb_rulings_b1_b7.js`, `test_lb_summary.js`.
 
 NB the clock runs off the IMPORT, and the Golf Genius scorecard import is
 manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
