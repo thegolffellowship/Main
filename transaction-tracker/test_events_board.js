@@ -659,6 +659,13 @@ ck('blank Won rows sink (rank blank)', /<td><\/td>/.test(sorted));
 
 // Kerry 10/9: "Won column shouldn't show at all if there aren't any side games"
 ck('no WON column on a no-games event', /d\._moneyHeld \|\| evlbNoGames\(d\) \? " no-won"/.test(src));
+// Kerry 10/21: "closed and come back it got stuck" on Loading…. The loaded
+// flag lives on the card's own body (a re-drawn list made new cards whose
+// NAME was flagged), a frozen fetch times out, and coming back re-reads.
+ck('the loaded flag is per card body, not per event name', /if \(!body \|\| body\._evlbLoading \|\| body\._evlbD\) return;/.test(src) && !/if \(EVLB_LOADED_EVENTS\[name\]\) return;/.test(src));
+ck('a board read times out (AbortController)', /function evlbFetchJson\(url\)[\s\S]{0,300}AbortController/.test(src));
+ck('coming back to the page re-reads an open card that never drew',
+   /addEventListener\("visibilitychange", \(\) => \{ if \(!document\.hidden\) evlbOnReturn\(\); \}\)/.test(src) && /e\.persisted\) evlbOnReturn\(\)/.test(src));
 // Batch 1 R1 (design-claude #2147): the state strip is the ONLY money
 // message, so there is no money notice at all, games or not
 ck('no money notice on any board (R1)', !/function evlbMoneyNotice\(/.test(src) && !/Round in play &mdash; winnings/.test(src));

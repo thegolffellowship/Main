@@ -4356,9 +4356,8 @@
         if (!old || !old._evlbD || old._evlbBusy) return;
         old._evlbBusy = true;
         try {
-            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(el.dataset.ev)
+            const { res, d } = await evlbFetchJson("/api/events-leaderboard/event?name=" + encodeURIComponent(el.dataset.ev)
                 + (window.SOLO_T ? "&t=" + encodeURIComponent(window.SOLO_T) : ""));
-            const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             if (d.money_visible === false) evlbBlankMoneyProj(d);
             const act = old.querySelector(".evlb-subtab.active");
@@ -4411,15 +4410,30 @@
     // (Batch 1, R1: evlbFinalNotice and evlbMoneyNotice are gone. The
     //  state strip is the only money message; HOW IT WORKS explains.)
 
+    // STUCK ON "Loading…" (Kerry 10/21: "Seems to load fine when it's a fresh
+    // browser but then closed and come back it got stuck"). The loaded flag
+    // lives on the card's OWN body now, not on the event name: a re-drawn list
+    // (chapter, season, a month opened) made new cards whose name was already
+    // flagged, so they never fetched. A fetch the phone froze mid-way (app
+    // switch, bfcache) times out after 15 s and clears the flag, and coming
+    // back to the page re-reads any open card that never drew.
+    const EVLB_FETCH_MS = 15000;
+    function evlbFetchJson(url) {
+        const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const t = ac ? setTimeout(() => ac.abort(), EVLB_FETCH_MS) : null;
+        return fetch(url, ac ? { signal: ac.signal } : undefined)
+            .then(async res => ({ res, d: await res.json() }))
+            .finally(() => { if (t) clearTimeout(t); });
+    }
     async function evlbLoadEvent(el) {
         const name = el.dataset.ev;
         const body = el.querySelector(".evlb-body");
-        if (EVLB_LOADED_EVENTS[name]) return;
+        if (!body || body._evlbLoading || body._evlbD) return;
+        body._evlbLoading = true;
         EVLB_LOADED_EVENTS[name] = true;
         try {
-            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name)
+            const { res, d } = await evlbFetchJson("/api/events-leaderboard/event?name=" + encodeURIComponent(name)
                 + (window.SOLO_T ? "&t=" + encodeURIComponent(window.SOLO_T) : ""));
-            const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             // MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings
             // should not show until 10 minutes after last score is
@@ -4432,11 +4446,31 @@
             body.innerHTML = evlbEventHtml(d);
             body._evlbD = d;
             body._evlbAt = Date.now();
+            body._evlbLoading = false;
             evlbWireEvent(body, d);
         } catch (err) {
             EVLB_LOADED_EVENTS[name] = false;
-            body.innerHTML = `<p style="color:var(--text-muted);">Couldn't load this event (${escapeHtml(err.message || String(err))}).</p>`;
+            body._evlbLoading = false;
+            const why = err && err.name === "AbortError" ? "it took too long; close and reopen it to try again"
+                : (err.message || String(err));
+            body.innerHTML = `<p style="color:var(--text-muted);">Couldn't load this event (${escapeHtml(why)}).</p>`;
         }
+    }
+    // Coming back to the page (app switch, bfcache restore): any open card
+    // that never drew loads again; a LIVE one re-reads now rather than
+    // waiting out a poll the phone froze.
+    function evlbOnReturn() {
+        document.querySelectorAll("details.evlb-ev[open]").forEach(el => {
+            const b = el.querySelector(".evlb-body");
+            if (!b) return;
+            if (!b._evlbD) { b._evlbLoading = false; evlbLoadEvent(el); return; }
+            const st = b._evlbD.board_state;
+            if (st === "live" || st === "upcoming") evlbRefreshEvent(el);
+        });
+    }
+    if (typeof document !== "undefined" && document.addEventListener && typeof window !== "undefined") {
+        document.addEventListener("visibilitychange", () => { if (!document.hidden) evlbOnReturn(); });
+        window.addEventListener("pageshow", e => { if (e.persisted) evlbOnReturn(); });
     }
     // (v2.389.0 removed evlbWonChips / evlbScoreRows / evlbBand /
     //  evlbSectioned / evlbHoleCells — every tab renders through

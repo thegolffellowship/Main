@@ -3626,6 +3626,11 @@ place of it.
   `teetimes_email_sent:<event_id>`, keys `player:<cid>` / `course:<cid>` /
   `manager:<cid>`); preview to staff only; every send logged to `message_log`
   with `event_id` and `customer_id` (`log_message` now writes both when given).
+- **The evening-before window (v2.577.1)**: `_deliver` (the one sender, for the
+  7 PM job and a manager's approval alike) refuses unless it is the day before
+  the event, 5 PM to midnight Central (`send_window_ok`). An approval on event
+  morning used to send the "comes at 7:00 AM tomorrow" email (handoff
+  2026-10-20 §4 risk 1).
 - **The gate**: each version sends only when `teetimes_<version>_approved`
   equals its CURRENT wording hash (the DB template plus the fixed lines in the
   module, so editing either voids the stamp) AND dial `teetimes_email_auto` =
