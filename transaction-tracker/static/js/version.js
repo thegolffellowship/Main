@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.579.0";
+window.TGF_VERSION = "2.579.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.579.1",
+    date: "2026-10-23",
+    title: "Security: a new Claude connector must be approved with the ADMIN PIN",
+    changes: [
+      "Found during the Railway round-2 review (Kerry 10/23). The MCP OAuth flow (mcp_auth.py) handed the connector's client id to anyone through /oauth/register, the authorize step auto-approved any request carrying it, and the PKCE code exchange needs no secret. So anyone who knew the Tracker's URL could have added it as their own Claude connector with the same read/write tools as our lanes; rotating MCP_CLIENT_SECRET alone would not have closed it. Now GET /oauth/authorize shows an Approve page naming the app that asks, and only a POST with the right ADMIN_PIN issues a code; wrong PINs are throttled (8 per 15 minutes), and with no ADMIN_PIN set nobody is approved. Connectors already signed in keep working until MCP_CLIENT_SECRET is rotated, after which Kerry re-authorizes once and types the PIN. Guard test_mcp_auth_pin.py."
+    ]
+  },
   {
     version: "2.579.0",
     date: "2026-10-23",

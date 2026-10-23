@@ -235,6 +235,8 @@ The MCP endpoint is built into the Railway app at `/mcp/mcp`. Add this to your `
 
 No Python or local install needed — Claude Desktop connects directly to Railway.
 
+**Connector approval (v2.579.1, Kerry 10/23):** adding the connector anywhere opens the Tracker's Approve page (`/oauth/authorize`), which needs the ADMIN PIN before a code is issued (`mcp_auth.py`; before this it auto-approved anyone who had the URL). Guard `test_mcp_auth_pin.py`.
+
 ### Available tools (70)
 
 **Read:** `get_transactions`, `get_transaction_by_id`, `get_statistics`, `get_data_quality_report`, `get_recent_snapshot`, `list_events`, `get_event_registrations`, `list_customers`, `get_customer_details`, `get_customer_profile` (full identity snapshot: canonical row, emails, aliases, statuses, memberships, handicap links, contest enrollments/removals — flags nameless shell profiles), `search_transactions`, `get_season_contest_enrollments`, `get_season_contest_removals`, `get_customer_data_audit` (all-customer identity health sweep: shells, splits, missing/shared emails, dangling ids, unlinked rows, shadowing aliases), `list_customer_contacts` (bulk name/chapter/status/email/venmo/phone export for cross-referencing external rosters)
