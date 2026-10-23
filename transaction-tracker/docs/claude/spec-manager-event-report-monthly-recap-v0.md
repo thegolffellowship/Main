@@ -1,7 +1,7 @@
 # Manager Event Report + Monthly Recap — SPEC v0 (docs only)
 
 Owner: Event Ops (CGO). Written Wed 10/21/2026 for Kerry, due Fri 10/23.
-Status: **v0 FINAL (Fri 10/23), proposal, not ratified.** Two lines are still PENDING because neither lane replied by Friday; see §5.
+Status: **v0 FINAL (Fri 10/23), proposal, not ratified.** One line is still PENDING (db-claude, pace); event profit is settled by standard (CoS #2247). See §5.
  Everything member-facing, money or schema
 here waits on Kerry's word (rule 3b). Coordinating on the mailbox with the CFO
 (money lines) and db-claude (pace). Nothing built, sent, paid or deleted.
@@ -104,7 +104,7 @@ Legend for "Today": **HAVE** = in the Tracker now and readable; **PART** = some 
 | Course cost (expected = field × rate; actual card charge) | HAVE | events.course_cost, expense rows | v1 |
 | TGF markup / fee, processing fees, sales tax reserve | HAVE | allocations, fee splits, tax rules (tgf-pricing) | v1 |
 | Prize fund in, prizes paid / pending; HIO contribution | HAVE | GAMES tab, payouts ledger, HIO pot | v1 |
-| **TGF operating profit and margin per player** | PART | **PENDING the CFO** (asked #2192, no reply by 10/23). Likely source: the Margin & Fee standard v1.1, which the CFO already applies (§8 event meals, #2191), with the `tgf-margin` skill as the calculator. The CFO confirms which costs count against an event. | v1 once the CFO rules |
+| **TGF operating profit and margin per player** | HAVE | **HAVE: Margin & Fee Calculation Standard v1.1 §8 (ratified; CoS #2247).** Start from net revenue: one order, one fee (8.1); credited items leave revenue but their fees stay (8.5); coupons are netted once per order (8.6). Take off the course payable and the prize fund (8.2). Then take off the held-pot contributions: HIO at $1 × final count (8.4), the event's TGF MVP share (8.7) and fellowship meals (8.8). The result is TRUE EVENT PROFIT; the worked example in 8.9 gives 3304 = $150.89. Margin per player = that figure ÷ final player count, where the count includes comps (8.3). Computed with the `tgf-margin` skill. | v1 |
 | Vs prior events at the same course | HAVE (computable) | same summary for earlier events | v1 |
 | Collections owed (on roster, no paid entry) | HAVE | roster vs items (CA #885-2) | v1 |
 
@@ -135,7 +135,7 @@ For staff and Kerry. First business day of the month for the month before. Per c
 | New / first-timer / returning / lapsed / lost (played last month, not this) | HAVE | participation | v1 |
 | Retention cohorts (first-timers 30/60/90 days later) | HAVE (computable) | rounds + first_timer flags | v1 |
 | Memberships added / renewed / ended / lapsed | HAVE | customer_memberships | v1 |
-| Revenue and TGF operating profit by chapter, course, format (9 / 18 / championship) | PART | **PENDING the CFO**, same definition as §1e | v1 once ruled |
+| Revenue and TGF operating profit by chapter, course, format (9 / 18 / championship) | HAVE | Margin & Fee v1.1 §8 TRUE EVENT PROFIT, summed per chapter / course / format (same definition as §1e) | v1 |
 | Games mix (buy-in rates per game, average pot) | HAVE | GAMES per event | v1 |
 | Points: monthly winner, fall race movement | HAVE | tracker_points | v1 |
 | Pace trend by course | NEW | 0037 history | later |
@@ -155,26 +155,25 @@ For staff and Kerry. First business day of the month for the month before. Per c
 2. **Capacity:** should the manager fill the number of booked tee times (`tee_time_count`, which already exists) on every event, so "field vs capacity" and "capacity use" can be shown? No schema change.
 3. **Closeout log:** store each night's closeout times (last score, final, recorded, verified, results sent) as one record? That's a schema change.
 4. **Course location:** add lat/long to courses so the report can show "last group vs sunset"?
-5. **TGF operating profit:** the CFO proposes the definition. Which costs count against an event?
-6. **Monthly recap:** send it on the 1st, or the first Monday?
+5. **Monthly recap:** send it on the 1st, or the first Monday?
 
 ## 4. Build order (proposal)
 
 1. Deploy 0037 + the Pace page on REPORTS (Tracker Build; Kerry's "Deploy").
 2. Manager Event Report v1: one page from HAVE lines only, by email and on REPORTS.
-3. The CFO's money block once tgf_operating is ruled.
+3. The money block, by Margin & Fee v1.1 §8 (no ruling needed).
 4. Monthly Recap v1.
 5. The NEW fields (closeout log, course lat/long) as Kerry rules each; tee_time_count filled at event setup.
 
 ## 5. Status at v0 close (Fri 10/23)
 
-**PENDING: CFO, event operating profit and margin per player** (§1e, and the monthly profit line).
-- Asked in #2192; no reply by Friday.
-- Proposed default until the CFO rules: the Margin & Fee standard v1.1 as the definition, computed with the `tgf-margin` skill.
+**SETTLED: event operating profit and margin per player** (§1e and the monthly profit line).
+- By standard: Margin & Fee v1.1 §8 (CoS #2247, Fri 10/23).
+- The CFO may object only if a cost outside §8 should count, posted as NEW.
 
 **PENDING: db-claude, the pace match** (§0).
 - Asked in #2192; no reply.
 - The 10/23 database digest (#2240) says 0037 PASS stands but it isn't on main yet. It goes on Kerry's "Deploy", outside Tuesday's 3:40 PM window.
 - One known difference from the ruled method: the catch-up window (2 vs 5 minutes), noted in §0.
 
-**Unchanged and open for Kerry:** the six questions in §3.
+**Open for Kerry:** the five questions in §3 (the event-profit question was dropped, as settled by standard).
