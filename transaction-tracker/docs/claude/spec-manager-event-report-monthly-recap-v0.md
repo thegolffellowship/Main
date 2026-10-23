@@ -1,7 +1,8 @@
 # Manager Event Report + Monthly Recap — SPEC v0 (docs only)
 
 Owner: Event Ops (CGO). Written Wed 10/21/2026 for Kerry, due Fri 10/23.
-Status: **proposal, not ratified**. Everything member-facing, money or schema
+Status: **v0 FINAL (Fri 10/23), proposal, not ratified.** Two lines are still PENDING because neither lane replied by Friday; see §5.
+ Everything member-facing, money or schema
 here waits on Kerry's word (rule 3b). Coordinating on the mailbox with the CFO
 (money lines) and db-claude (pace). Nothing built, sent, paid or deleted.
 
@@ -16,7 +17,8 @@ helpful for a manager and me to see."*
 
 - **Not in the Tracker yet.** The pace tables (migration 0037, `se_group_pace` / `se_player_pace`) passed db-claude's review (#2133) but are not deployed; they wait on your "Deploy" in Tracker Build. Until then there is no pace page.
 - **What exists:** every hole's save time is kept (`se_audit`), and a read-only bridge shows them (`scoring-se-hole-times:<round>`). db-claude's 10/13 sample is in mailbox #2092.
-- **Tuesday 10/20, computed from those save times** by the ruled method: first hole to second-to-last; a catch-up save under 2 minutes is spread over the two holes; the last hole is not used. Group = its first save per hole.
+- **Tuesday 10/20, computed from those save times** by the ruled method: first hole to second-to-last, and the last hole is not used. Group = its first save per hole.
+- **PENDING db-claude confirmation:** I spread a catch-up save only when it came under 2 minutes after the one before. db-claude's ruled rule (#2084/#2092) is a 5-minute catch-up window. Group averages don't change, because they use first and second-to-last holes only. Some per-hole averages could move slightly when 0037 computes them.
 
 **s9.28 TPC Canyons (tee times from 3:40, all start hole 1). Sunset 6:59 PM.**
 
@@ -102,7 +104,7 @@ Legend for "Today": **HAVE** = in the Tracker now and readable; **PART** = some 
 | Course cost (expected = field × rate; actual card charge) | HAVE | events.course_cost, expense rows | v1 |
 | TGF markup / fee, processing fees, sales tax reserve | HAVE | allocations, fee splits, tax rules (tgf-pricing) | v1 |
 | Prize fund in, prizes paid / pending; HIO contribution | HAVE | GAMES tab, payouts ledger, HIO pot | v1 |
-| **TGF operating profit and margin per player** | PART | the CFO defines `tgf_operating` (what costs count: shirts, meals, software share?) | v1 once the CFO rules |
+| **TGF operating profit and margin per player** | PART | **PENDING the CFO** (asked #2192, no reply by 10/23). Likely source: the Margin & Fee standard v1.1, which the CFO already applies (§8 event meals, #2191), with the `tgf-margin` skill as the calculator. The CFO confirms which costs count against an event. | v1 once the CFO rules |
 | Vs prior events at the same course | HAVE (computable) | same summary for earlier events | v1 |
 | Collections owed (on roster, no paid entry) | HAVE | roster vs items (CA #885-2) | v1 |
 
@@ -133,7 +135,7 @@ For staff and Kerry. First business day of the month for the month before. Per c
 | New / first-timer / returning / lapsed / lost (played last month, not this) | HAVE | participation | v1 |
 | Retention cohorts (first-timers 30/60/90 days later) | HAVE (computable) | rounds + first_timer flags | v1 |
 | Memberships added / renewed / ended / lapsed | HAVE | customer_memberships | v1 |
-| Revenue and TGF operating profit by chapter, course, format (9 / 18 / championship) | PART | the CFO's tgf_operating | v1 once ruled |
+| Revenue and TGF operating profit by chapter, course, format (9 / 18 / championship) | PART | **PENDING the CFO**, same definition as §1e | v1 once ruled |
 | Games mix (buy-in rates per game, average pot) | HAVE | GAMES per event | v1 |
 | Points: monthly winner, fall race movement | HAVE | tracker_points | v1 |
 | Pace trend by course | NEW | 0037 history | later |
@@ -163,3 +165,16 @@ For staff and Kerry. First business day of the month for the month before. Per c
 3. The CFO's money block once tgf_operating is ruled.
 4. Monthly Recap v1.
 5. The NEW fields (closeout log, course lat/long) as Kerry rules each; tee_time_count filled at event setup.
+
+## 5. Status at v0 close (Fri 10/23)
+
+**PENDING: CFO, event operating profit and margin per player** (§1e, and the monthly profit line).
+- Asked in #2192; no reply by Friday.
+- Proposed default until the CFO rules: the Margin & Fee standard v1.1 as the definition, computed with the `tgf-margin` skill.
+
+**PENDING: db-claude, the pace match** (§0).
+- Asked in #2192; no reply.
+- The 10/23 database digest (#2240) says 0037 PASS stands but it isn't on main yet. It goes on Kerry's "Deploy", outside Tuesday's 3:40 PM window.
+- One known difference from the ruled method: the catch-up window (2 vs 5 minutes), noted in §0.
+
+**Unchanged and open for Kerry:** the six questions in §3.
