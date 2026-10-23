@@ -1779,6 +1779,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-unsubscribes[:<hours>][|refresh]  who unsubscribed (Tracker invitations + Brevo Insider) in the last <hours>, default 24 (read-only toward Brevo)
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
       scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
       scoring-role-flags  the live AMB / CAPT / BACK chips with home chapter, vs the 9/15 seed (read-only)
@@ -4108,6 +4109,17 @@ def _scoring_dispatch_inner(url: str, extract: str):
             db.set_app_setting(_k.strip(), _v.strip())
             return json.dumps({"key": _k.strip(), "value": _v.strip(),
                                "saved": True})
+        if cmd == "scoring-unsubscribes":
+            # "[<hours>][|refresh]" (Kerry 10/23): who unsubscribed from Tracker
+            # invitations or the Brevo Insider list in the last <hours>
+            # (default 24). |refresh first compares Brevo with yesterday's
+            # snapshot (read-only toward Brevo). For the Front Desk brief.
+            from email_parser import unsubscribes as _us
+            _a = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            _h = int(_a[0]) if _a and _a[0].isdigit() else 24
+            _r = _us.refresh() if "refresh" in [x.lower() for x in _a] else None
+            return json.dumps({"hours": _h, "refresh": _r, "rows": _us.recent(hours=_h)},
+                              indent=2, default=str)
         if cmd == "scoring-setting-get":
             # "<key>" — read an app_settings dial (null when unset, i.e.
             # the code default applies).

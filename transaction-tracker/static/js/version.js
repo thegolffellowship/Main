@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.578.0";
+window.TGF_VERSION = "2.579.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.579.0",
+    date: "2026-10-23",
+    title: "Daily digest: who unsubscribed in the last 24 hours",
+    changes: [
+      "Kerry 10/23: \"let's add any daily unsubscribed to my Daily TGF Briefings/Digest\". New email_parser/unsubscribes.py reads two sources, read-only toward both. (1) Tracker event invitations: every confirmed Stop invitations tap is already logged (agent_action_log event_invite_unsubscribe), so the window is read from the log, with the person's name. (2) The Brevo Insider list: Brevo has no 'unsubscribed since' query, so once a day the Tracker compares Brevo's unsubscribed (emailBlacklisted) contacts with yesterday's stored set (app setting brevo_blacklist_snapshot) and logs each new unsubscribe, and anyone who came back, in app setting unsubscribe_log (90 days), matched to the customer by email. The first run only stores the baseline. The daily digest email gets an Unsubscribes (Last 24 Hours) section and a count in its subject line; a failed Brevo read never stops the digest. New read-only bridge scoring-unsubscribes[:<hours>][|refresh] for the Front Desk's 7:15 brief. Nothing is written to Brevo and nobody's preferences change. Guard test_unsubscribes.py."
+    ]
+  },
   {
     version: "2.578.0",
     date: "2026-10-21",
