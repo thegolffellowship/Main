@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.579.1";
+window.TGF_VERSION = "2.579.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.579.2",
+    date: "2026-10-24",
+    title: "Health: cut-off Graph reply retried twice with diagnostics, 180 s invite-send line",
+    changes: [
+      "Digest #2254 (10/24). (1) inbox_check hit a cut-off Microsoft reply a third time (10/23 7:10 AM CDT, about 259 KB; also 110 KB on 10/18 and 243 KB on 10/19), after the one-retry fix of v2.577.3 was live, so the second try failed too or the cut is not random. A Graph read whose body will not parse is now asked for up to twice more, after 2 s and 4 s, and if every try fails the error names how many bytes came back against how many the server announced, so the next occurrence tells us whether the reply is being cut by the network or by Microsoft. Reads only; a repeat is safe; a mail that is not read is picked up by the next 5-minute run, as before. (2) The invite-send bridge slow line goes from 90 s to 180 s: Wednesday 10/21's 7 AM Fall Championship reminder (221 recipients through Microsoft) took 99 s. No email, audience, wording, send behaviour or money changes."
+    ]
+  },
   {
     version: "2.579.1",
     date: "2026-10-23",

@@ -37,6 +37,7 @@ def fake_request(method, url, **kw):
 
 
 fetcher.requests.request = fake_request
+fetcher.time.sleep = lambda *_: None
 
 good = Resp('{"value": [3]}')
 check("a clean body is returned without a second request",
@@ -59,9 +60,10 @@ def bad_request(method, url, **kw):
 fetcher.requests.request = bad_request
 try:
     fetcher._json_or_retry(Resp('{'), headers={}, timeout=30)
-    check("a body that is bad twice still raises (the job's own error path)", False)
-except ValueError:
-    check("a body that is bad twice still raises (the job's own error path)", True)
+    check("a body that is bad every time still raises (the job's own error path)", False)
+except ValueError as e:
+    check("the error says how many tries and how many bytes came back", "3 tries" in str(e) and "bytes of" in str(e))
+    check("a body that is bad every time still raises (the job's own error path)", True)
 
 print("\nALL PASS" if not fails else f"\n{len(fails)} FAILED")
 sys.exit(1 if fails else 0)
