@@ -1,7 +1,7 @@
 # Manager Event Report + Monthly Recap — SPEC v0 (docs only)
 
 Owner: Event Ops (CGO). Written Wed 10/21/2026 for Kerry, due Fri 10/23.
-Status: **v0 FINAL (Fri 10/23), proposal, not ratified.** One line is still PENDING (db-claude, pace); event profit is settled by standard (CoS #2247). See §5.
+Status: **v0 FINAL (Fri 10/23), proposal, not ratified.** Nothing pending: pace confirmed by db-claude (#2261); event profit settled by standard (CoS #2247). See §5.
  Everything member-facing, money or schema
 here waits on Kerry's word (rule 3b). Coordinating on the mailbox with the CFO
 (money lines) and db-claude (pace). Nothing built, sent, paid or deleted.
@@ -18,7 +18,7 @@ helpful for a manager and me to see."*
 - **Not in the Tracker yet.** The pace tables (migration 0037, `se_group_pace` / `se_player_pace`) passed db-claude's review (#2133) but are not deployed; they wait on your "Deploy" in Tracker Build. Until then there is no pace page.
 - **What exists:** every hole's save time is kept (`se_audit`), and a read-only bridge shows them (`scoring-se-hole-times:<round>`). db-claude's 10/13 sample is in mailbox #2092.
 - **Tuesday 10/20, computed from those save times** by the ruled method: first hole to second-to-last, and the last hole is not used. Group = its first save per hole.
-- **PENDING db-claude confirmation:** I spread a catch-up save only when it came under 2 minutes after the one before. db-claude's ruled rule (#2084/#2092) is a 5-minute catch-up window. Group averages don't change, because they use first and second-to-last holes only. Some per-hole averages could move slightly when 0037 computes them.
+- **HAVE, confirmed by db-claude (#2261, Sat 10/24):** these numbers match 0037's method. Its statuses: 4:00 group adjusted (holes 7 and 8 saved 11 s apart, spread by the 5-minute window, same total); every other group clean. My 2-minute window vs the ruled 5 minutes changed nothing on 10/20, because no gap fell between 2 and 5 minutes. One code fix is due in 0037 before Deploy: the 4:20 group's stray early hole-9 saves made 0037 read 16.9 over 6 holes instead of 16.6 over 7. The fix drops a save that comes before the same player's previous hole.
 
 **s9.28 TPC Canyons (tee times from 3:40, all start hole 1). Sunset 6:59 PM.**
 
@@ -171,9 +171,6 @@ For staff and Kerry. First business day of the month for the month before. Per c
 - By standard: Margin & Fee v1.1 §8 (CoS #2247, Fri 10/23).
 - The CFO may object only if a cost outside §8 should count, posted as NEW.
 
-**PENDING: db-claude, the pace match** (§0).
-- Asked in #2192; no reply.
-- The 10/23 database digest (#2240) says 0037 PASS stands but it isn't on main yet. It goes on Kerry's "Deploy", outside Tuesday's 3:40 PM window.
-- One known difference from the ruled method: the catch-up window (2 vs 5 minutes), noted in §0.
+**CONFIRMED: the pace match** (§0). db-claude #2261: my numbers match 0037; the 0037 stray-save fix is with Tracker Build 4 before Deploy.
 
 **Open for Kerry:** the five questions in §3 (the event-profit question was dropped, as settled by standard).
