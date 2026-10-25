@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.579.1";
+window.TGF_VERSION = "2.579.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.579.3",
+    date: "2026-10-25",
+    title: "Can't make it page: Remove me is a small link, not a button",
+    changes: [
+      "Kerry 10/25: \"Move the Remove me button to a small link\". On the Can't make it thank-you page, Remove me from invitations sat as a pill button beside Changed my mind, I'm in, and it was mis-tapped twice in a week (Lou Schneider 10/20, Michele McCormick 10/24; both restored). It is now a small grey underlined text link at the bottom of the page, below the optional reasons. The confirm step (Yes, remove me) is unchanged. Guard test_invitations.py."
+    ]
+  },
   {
     version: "2.579.1",
     date: "2026-10-23",

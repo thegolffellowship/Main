@@ -209,6 +209,10 @@ pg = cl.get(f"/rsvp/{tok_out}").get_data(as_text=True)
 check("Can't make it lands on Thanks, with I'm in, Remove me and the optional reasons",
       "Thanks for letting us know" in pg and "Changed my mind" in pg and "Remove me from invitations" in pg
       and "Mind sharing why" in pg, pg[:200])
+_rm = pg.split("Remove me from invitations")[0].rsplit("<a ", 1)[-1]
+check("Remove me is a small grey text link below the reasons, not a button (Kerry 10/25)",
+      "border-radius" not in _rm and "#6B7280" in _rm
+      and pg.index("Remove me from invitations") > pg.index("Mind sharing why"), _rm)
 cl.post(f"/rsvp/{tok_out}", headers={"X-Requested-With": "fetch"})
 with db._connect(DB) as conn:
     r = conn.execute("SELECT response FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()

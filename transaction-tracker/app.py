@@ -5297,10 +5297,14 @@ def public_event_rsvp(token):
             f"on {_h.escape(info['date_long'])}.</p>"
             f'<a href="{_h.escape(links.get("in", ""))}" style="{btn}background:#15803D;color:#fff;">'
             "Changed my mind, I'm in</a>"
-            f'<a href="{_h.escape(links.get("unsub", ""))}" style="{btn}background:#E5E7EB;color:#1B1B1B;">'
-            "Remove me from invitations</a>"
             "<p style='margin-top:22px;color:#6B7280;font-size:14px'>Mind sharing why? (optional)</p>"
-            + reasons + record)
+            + reasons +
+            # Kerry 10/25 ("Move the Remove me button to a small link"): a
+            # button beside "Changed my mind" was mis-tapped twice in a week
+            # (Lou Schneider 10/20, Michele McCormick 10/24).
+            f'<p style="margin-top:28px;font-size:13px"><a href="{_h.escape(links.get("unsub", ""))}" '
+            'style="color:#6B7280;text-decoration:underline">Remove me from invitations</a></p>'
+            + record)
     return _public_page("RSVP", body)
 
 
