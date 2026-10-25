@@ -143,7 +143,7 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   unclear person's next email carries `CLARIFY_NOTE` (why we are asking again;
   list `event_invite_unclear:<id>`, cleared by a clear answer; v2.571.3). **Can't make it** lands straight on "Thanks for
   letting us know" with **Changed my mind, I'm in** (-> registration),
-  **Remove me from invitations** (since v2.579.3 a small grey text link at the bottom, below the reasons, never a button: Kerry 10/25 after two mis-taps; it opens the confirm step) and an optional one-tap
+  **Remove me from ALL event invitations** (since v2.579.3 a small grey text link at the bottom, below the reasons, never a button, worded ALL: Kerry 10/25 after two mis-taps; it opens the confirm step) and an optional one-tap
   reason (`REASONS`, table `event_decline_reasons` from migration 0016, one
   row per event + customer_id, a later tap updates it; `decline_reasons(id)`
   reads the counts; route `/rsvp/<token>/reason`) (Kerry 10/13: "The sequence for Can't make it is too

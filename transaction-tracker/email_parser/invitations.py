@@ -79,7 +79,7 @@ CLARIFY_NOTE = ("<b>A quick check:</b> your invitation link recorded \"I'm in\" 
                 "every button by itself, so we want to be sure we have you right.{extra} "
                 "Please tap the one you meant below.")
 CLARIFY_SECOND = {"out": ("Can't make it", ""),
-                  "unsub": ("Remove me from invitations",
+                  "unsub": ("Remove me from ALL event invitations",
                             " You're still on our invitation list.")}
 UNCLEAR_KEY = "event_invite_unclear:{event_id}"
 

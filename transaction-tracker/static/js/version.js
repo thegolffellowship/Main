@@ -5,7 +5,7 @@ window.TGF_CHANGELOG = [
     date: "2026-10-25",
     title: "Can't make it page: Remove me is a small link, not a button",
     changes: [
-      "Kerry 10/25: \"Move the Remove me button to a small link\". On the Can't make it thank-you page, Remove me from invitations sat as a pill button beside Changed my mind, I'm in, and it was mis-tapped twice in a week (Lou Schneider 10/20, Michele McCormick 10/24; both restored). It is now a small grey underlined text link at the bottom of the page, below the optional reasons. The confirm step (Yes, remove me) is unchanged. Guard test_invitations.py."
+      "Kerry 10/25: \"Move the Remove me button to a small link\". On the Can't make it thank-you page, Remove me from invitations sat as a pill button beside Changed my mind, I'm in, and it was mis-tapped twice in a week (Lou Schneider 10/20, Michele McCormick 10/24; both restored). It is now a small grey underlined text link at the bottom of the page, below the optional reasons, and it reads Remove me from ALL event invitations (Kerry 10/25: \"I think it's in the wording\"). The confirm page says Remove you from ALL event invitations? and that it stops every TGF event, not just this one; the clarify note quotes the same words. The invitation email's own footer link (Stop event invitations) is unchanged, so Kerry's approved wording stamp stands. Guard test_invitations.py."
     ]
   },
   {

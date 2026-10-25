@@ -5270,7 +5270,7 @@ def public_event_rsvp(token):
         if done and res.get("ignored"):
             # Tapped within the scanner grace (Kerry 10/14): never claim it
             # was done; ask again so a real person can confirm.
-            body = ("<h2>Remove you from event invitations?</h2>"
+            body = ("<h2>Remove you from ALL event invitations?</h2>"
                     "<p>Please tap the button once more to confirm.</p>"
                     f"<form method='post'><button type='submit' style='{btn}border:0;"
                     "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
@@ -5279,8 +5279,8 @@ def public_event_rsvp(token):
             body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
                     "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>")
             return _public_page("Invitations", body)
-        body = ("<h2>Remove you from event invitations?</h2>"
-                "<p>You'll stop getting our event invitations and reminders.</p>"
+        body = ("<h2>Remove you from ALL event invitations?</h2>"
+                "<p>You'll stop getting invitations and reminders for every TGF event, not just this one.</p>"
                 f"<form method='post'><button type='submit' style='{btn}border:0;"
                 "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
         return _public_page("Invitations", body)
@@ -5303,7 +5303,7 @@ def public_event_rsvp(token):
             # button beside "Changed my mind" was mis-tapped twice in a week
             # (Lou Schneider 10/20, Michele McCormick 10/24).
             f'<p style="margin-top:28px;font-size:13px"><a href="{_h.escape(links.get("unsub", ""))}" '
-            'style="color:#6B7280;text-decoration:underline">Remove me from invitations</a></p>'
+            'style="color:#6B7280;text-decoration:underline">Remove me from ALL event invitations</a></p>'
             + record)
     return _public_page("RSVP", body)
 
