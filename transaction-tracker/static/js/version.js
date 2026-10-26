@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.582.1";
+window.TGF_VERSION = "2.582.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.582.2",
+    date: "2026-10-26",
+    title: "Can't make it page: the reason chips show they can be tapped",
+    changes: [
+      "Kerry 10/26: \"Hover states for the Mind sharing why? section needs to highlight somehow so they can see that those are active options\". The Schedule / Weather / Course or price / Injury / Other chips now show a pointer and turn orange on hover and keyboard focus, then fill solid orange while pressed so a phone tap shows too. At rest they look the same as before."
+    ]
+  },
   {
     version: "2.582.1",
     date: "2026-10-26",

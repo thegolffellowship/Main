@@ -5301,8 +5301,7 @@ def public_event_rsvp(token):
         return _public_page("RSVP", body)
     reasons = "".join(
         f"<form method='post' action='/rsvp/{_h.escape(token)}/reason' style='display:inline'>"
-        f"<button name='r' value='{_h.escape(r)}' style='border:1px solid #D1D5DB;background:#fff;"
-        f"border-radius:999px;padding:6px 12px;margin:4px 4px 0 0;font-size:14px'>{_h.escape(r)}"
+        f"<button class='rsn' name='r' value='{_h.escape(r)}'>{_h.escape(r)}"
         "</button></form>" for r in _inv.REASONS)
     body = (f"<h2>Thanks for letting us know.</h2><p>We'll miss you at {_h.escape(info['course'])} "
             f"on {_h.escape(info['date_long'])}.</p>"
@@ -5391,6 +5390,15 @@ def _public_page(title: str, body_html: str) -> str:
           border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.06); }}
   h1 {{ font-size:1.05rem; color:#6b7280; margin:0 0 1.25rem; font-weight:600;
         text-transform:uppercase; letter-spacing:0.05em; }}
+  /* Reason chips on the Can't make it page (Kerry 10/26: "Hover states ...
+     need to highlight somehow so they can see that those are active
+     options"): pointer + orange on hover and keyboard focus, filled orange
+     while pressed so a phone tap shows too. */
+  .rsn {{ border:1px solid #D1D5DB; background:#fff; color:#111827; border-radius:999px;
+          padding:6px 12px; margin:4px 4px 0 0; font-size:14px; cursor:pointer;
+          transition:background .12s, border-color .12s, color .12s; }}
+  .rsn:hover, .rsn:focus-visible {{ border-color:#E87C3E; background:#FFF4EC; color:#C2410C; outline:none; }}
+  .rsn:active {{ background:#E87C3E; border-color:#E87C3E; color:#fff; }}
 </style>
 </head><body><div class="card">
 <h1>The Golf Fellowship</h1>
