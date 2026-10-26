@@ -1240,10 +1240,12 @@ def remove_playing(customer_ids, kerry_ok_post, confirm: bool = False, db_path=N
     playing RSVPs"; a mail scanner tapping I'm in a few minutes after the
     send). Deletes each person's Tracker PLAYING rows (`tracker:<event>:<cid>`)
     and their noted I'm in clicks. A registration, a Golf Genius RSVP and any
-    Can't make it are never touched. Kerry's word on the mailbox; dry run
-    unless confirm."""
+    Can't make it are never touched; upcoming events only, and an event the
+    person is registered for is left alone and reported. Kerry's word on the
+    mailbox; dry run unless confirm."""
     from email_parser import database as db
     from email_parser.customer_query import _kerry_ok
+    from email_parser.timezone_utils import today_central_str as today_iso
     cids = sorted({int(c) for c in customer_ids})
     if not cids:
         return {"error": "no customer ids"}
@@ -1253,12 +1255,23 @@ def remove_playing(customer_ids, kerry_ok_post, confirm: bool = False, db_path=N
         if not ok:
             return {"refused": f"rule 3b: {why}"}
         marks = ",".join("?" * len(cids))
-        rows = [dict(r) for r in conn.execute(
+        found = [dict(r) for r in conn.execute(
             f"SELECT email_uid, customer_id, matched_event, event_date, received_at FROM rsvps "
             f"WHERE customer_id IN ({marks}) AND response = 'PLAYING' "
-            f"AND substr(email_uid, 1, 8) = 'tracker:' ORDER BY event_date",
-            tuple(cids)).fetchall()]
-        out = {"authority": why, "customer_ids": cids, "playing_rows_removed": rows}
+            f"AND substr(email_uid, 1, 8) = 'tracker:' AND event_date >= ? ORDER BY event_date",
+            (*cids, today_iso())).fetchall()]
+        # Upcoming events only (past rows stay as history), and never an
+        # event the person is registered for (Front Desk #2300: that is
+        # Kerry's call, money rows are never touched here).
+        rows, skipped = [], []
+        for r in found:
+            ev = _event(conn, int(r["email_uid"].split(":")[1]))
+            if ev and int(r["customer_id"]) in _registered_ids(conn, ev):
+                skipped.append({**r, "why": "registered for this event"})
+            else:
+                rows.append(r)
+        out = {"authority": why, "customer_ids": cids, "playing_rows_removed": rows,
+               "left_registered": skipped}
         if confirm is not True:
             return {**out, "dry_run": True}
         for r in rows:

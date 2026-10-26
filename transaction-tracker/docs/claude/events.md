@@ -164,7 +164,7 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   `|keep-answers` (Kerry 10/20, Lou Schneider: his Can't make it was real,
   only the Remove me was a mistake) it only puts them back on invitations
   and leaves every answer and reason as it is.
-  `0|unplay|<post>|<cids>[|confirm]` (Kerry 10/26, Logan Billeaud) takes back Tracker PLAYING rows and noted I'm in clicks that a mail scanner gave past the 2-minute grace; nothing else is touched.
+  `0|unplay|<post>|<cids>[|confirm]` (Kerry 10/26, Logan Billeaud) takes back Tracker PLAYING rows on upcoming events and noted I'm in clicks that a mail scanner gave past the 2-minute grace; an event the person is registered for is left and reported; nothing else is touched.
 - **Scanner filter (Kerry 10/14: "yes on the scanner filter", CoS #1793/#1794).**
   Each sent link carries its send time (`s` in the token). A tap is ignored
   (the page looks normal, nothing is recorded, `agent_action_log`

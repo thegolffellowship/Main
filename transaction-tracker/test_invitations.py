@@ -272,11 +272,17 @@ check("restore puts them back on, clears the no and the reason", done_.get("appl
 print("6f1. Kerry 10/26: take back an I'm in a mail scanner gave (Logan Billeaud)")
 with db._connect(DB) as conn:
     conn.execute("DELETE FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770001",))
-    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, customer_id) "
-                 "VALUES (?, 'Ann Test', 'PLAYING', '2026-10-26T12:06:00Z', 's9.98 INVITE LINKS', 770001)",
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, event_date, customer_id) "
+                 "VALUES (?, 'Ann Test', 'PLAYING', '2026-10-26T12:06:00Z', 's9.98 INVITE LINKS', '2026-12-15', 770001)",
                  (f"tracker:{EV}:770001",))
-    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, customer_id) "
-                 "VALUES ('gg-keep-1', 'Ann Test', 'PLAYING', '2026-10-01T12:00:00Z', 's9.98 INVITE LINKS', 770001)")
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, event_date, customer_id) "
+                 "VALUES (?, 'Ann Test', 'PLAYING', '2025-01-01T12:00:00Z', 's9.01 OLD LINKS', '2025-01-01', 770001)",
+                 (f"tracker:{OLD}:770001",))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, event_date, customer_id) "
+                 "VALUES (?, 'Fay Test', 'PLAYING', '2026-10-26T12:06:00Z', 's9.98 INVITE LINKS', '2026-12-15', 770006)",
+                 (f"tracker:{EV}:770006",))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, event_date, customer_id) "
+                 "VALUES ('gg-keep-1', 'Ann Test', 'PLAYING', '2026-10-01T12:00:00Z', 's9.98 INVITE LINKS', '2026-12-15', 770001)")
     conn.commit()
 db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), json.dumps({"770001": "2026-10-26T12:06:00Z"}), db_path=DB)
 check("unplay refuses without Kerry's word", "refused" in inv.remove_playing([770001], 999999, True, db_path=DB))
@@ -286,11 +292,15 @@ check("unplay dry run lists the Tracker row only", _d.get("dry_run")
 _a = inv.remove_playing([770001], kpost, confirm=True, db_path=DB)
 with db._connect(DB) as conn:
     _left = [r[0] for r in conn.execute("SELECT email_uid FROM rsvps WHERE customer_id = 770001 AND response = 'PLAYING'")]
-check("unplay removes the Tracker PLAYING row and the click, keeps a Golf Genius RSVP",
-      _a.get("applied") and _left == ["gg-keep-1"]
+check("unplay removes the upcoming Tracker PLAYING row and the click; a past row and a Golf Genius RSVP stay",
+      _a.get("applied") and sorted(_left) == ["gg-keep-1", f"tracker:{OLD}:770001"]
       and "770001" not in json.loads(db.get_app_setting(inv.CLICKS_KEY.format(event_id=EV), db_path=DB) or "{}"), (_a, _left))
+_reg = inv.remove_playing([770006], kpost, db_path=DB)
+check("an event the person is registered for is left alone and reported",
+      not _reg["playing_rows_removed"] and len(_reg["left_registered"]) == 1, _reg)
 with db._connect(DB) as conn:
-    conn.execute("DELETE FROM rsvps WHERE email_uid = 'gg-keep-1'"); conn.commit()
+    conn.execute("DELETE FROM rsvps WHERE email_uid IN ('gg-keep-1', ?, ?)",
+                 (f"tracker:{OLD}:770001", f"tracker:{EV}:770006")); conn.commit()
 print("6f2. Kerry 10/20: restore with keep_answers leaves the real answers")
 db.set_app_setting(inv.OPTOUT_KEY, json.dumps([770002]), db_path=DB)
 cl.post(f"/rsvp/{inv.make_token(770002, EV, 'out', date(2026, 12, 15))}", headers={"X-Requested-With": "fetch"})
