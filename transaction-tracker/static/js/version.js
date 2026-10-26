@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.602.0";
+window.TGF_VERSION = "2.602.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.602.1",
+    date: "2026-10-26",
+    title: "Course update leaves known mail scanners out of RSVP Only",
+    changes: [
+      "CoS #2372: the course update's RSVP Only list leaves out anyone already caught as a mail scanner (invitations.known_scanner), as the RSVP deadline emails do; unconfirmed scanner taps were already dropped when they happened. The wording and its stamp are unchanged."
+    ]
+  },
   {
     version: "2.602.0",
     date: "2026-10-26",
