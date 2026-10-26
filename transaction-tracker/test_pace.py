@@ -193,13 +193,20 @@ check("G6 second-to-last with the last: end moves to hole 7",
       == ("adjusted", 1, 6, 7), G[g6])
 check("G7 a phone clock far off flags clock", "clock" in G[g7]["flags"], G[g7])
 check("G8 manager-keyed card flags manager_entry", "manager_entry" in G[g8]["flags"], G[g8])
-med = int(round((840 + 849) / 2))
-check("field median over counting groups only", rp["field_median_seconds"] == med, rp["field_median_seconds"])
+med = 849   # G2 (840) is a threesome: timed, not in the field median (Kerry 10/26)
+check("field median over counting foursomes only", rp["field_median_seconds"] == med, rp["field_median_seconds"])
 P = {p["customer_id"]: p for p in rp["players"]}
 check("every player carries the group's pace and customer_id",
       P[101]["group_seconds_per_hole"] == 849 and P[101]["rel_seconds_per_hole"] == 849 - med
       and P[101]["counts"] == 1 and P[101]["group_size"] == 4, P[101])
-check("adjusted counts (#2093)", P[105]["status"] == "adjusted" and P[105]["counts"] == 1, P[105])
+check("a threesome is timed and shown but never counts (Kerry 10/26)",
+      P[105]["status"] == "adjusted" and P[105]["standard"] == 0 and P[105]["counts"] == 0
+      and G[g2]["seconds_per_hole"] == 720, P[105])
+db.set_app_setting("pace_standard_group_size", "3")
+_P3 = {p["customer_id"]: p for p in se.compute_round_pace(rid)["players"]}
+db.set_app_setting("pace_standard_group_size", "")
+check("adjusted counts (#2093) when the standard size dial allows the group",
+      _P3[105]["status"] == "adjusted" and _P3[105]["counts"] == 1, _P3[105])
 check("flagged is shown, not counted", P[111]["status"] == "flagged" and P[111]["counts"] == 0, P[111])
 check("a player with too few span saves is partial", P[104]["flag_partial"] == 1 and P[104]["counts"] == 0, P[104])
 check("a player saved in two groups is regrouped, kept in the larger",

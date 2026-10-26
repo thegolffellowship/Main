@@ -768,11 +768,12 @@ entry_split #2103, names not group numbers #2096, suggest only #2100.
   per player `partial` (too few span saves) and `regrouped` (saves in two
   groups; kept in the one with most). Otherwise `adjusted` if any catch-up
   or anchor moved, else `clean`. Clean and adjusted count.
+- THREESOMES (method v3, Kerry 10/26: "threesomes are outliers that skew data so don't get configured into standard results"): a group smaller than `pace_standard_group_size` (4) is timed and shown but never in the field median or a player's counted rounds (`standard` 0, `counts` 0).
 - Not timed: preview/test rounds, Lone Star Cup / match-play rounds.
 - Dials (one app_settings key each, plain integers): `pace_batch_seconds`
   300, `pace_stop_minutes` 35, `pace_clock_seconds` 120, `pace_min_holes_9`
   6, `pace_min_holes_18` 12, `pace_rounds_to_count` 10, `pace_split_seconds`
-  120, `pace_split_holes` 3.
+  120, `pace_split_holes` 3, `pace_standard_group_size` 4.
 
 **Storage**: `se_group_pace` / `se_player_pace` (schema.md), rebuilt by
 `rebuild_pace` (dry run default).

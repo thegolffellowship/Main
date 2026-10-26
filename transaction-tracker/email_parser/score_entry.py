@@ -3707,9 +3707,9 @@ def hole_save_times(round_id: int, db_path=None) -> dict:
 # and rebuilt by rebuild_pace (the only writer). Staff only: nothing here
 # reaches a member payload, and nothing here writes customers.pace_rating.
 # ---------------------------------------------------------------------------
-PACE_METHOD_VERSION = 2  # 2: stray saves dropped (Database #2261, 10/26)
+PACE_METHOD_VERSION = 3  # 2: stray saves dropped (#2261); 3: only foursomes count (Kerry 10/26)
 PACE_METHOD_NOTE = ("Method: first hole to second-to-last; catch-ups spread; "
-                    "last hole not used. Flagged groups are shown, not counted.")
+                    "last hole not used. Flagged groups and threesomes are shown, not counted.")
 # Code defaults; each is overridable by ONE app_settings key of the same name
 # (plain integer, no JSON). The first six are #2084's; the entry_split pair is
 # #2103's "3 or more span holes ... more than 2 minutes".
@@ -3722,6 +3722,10 @@ PACE_DIAL_DEFAULTS = {
     "pace_rounds_to_count": 10,
     "pace_split_seconds": 120,
     "pace_split_holes": 3,
+    # Kerry 10/26: "threesomes are outliers that skew data so don't get
+    # configured into standard results". Smaller groups are timed and shown,
+    # never in the field median or a player's counted rounds.
+    "pace_standard_group_size": 4,
 }
 _MANAGER_DEVICE_PREFIXES = ("manager", "admin", "lsc-preview")
 
@@ -3990,14 +3994,17 @@ def compute_round_pace(round_id: int, db_path=None) -> dict:
         return out
     groups = [_group_pace(g, holes, dials, int(r["holes"])) for g in raw["groups"]
               if g["subjects"]]
+    std = dials["pace_standard_group_size"]
+    for g in groups:
+        g["group_size"] = sizes.get(g["group_id"]) or len(g["customer_ids"]) or 1
+        g["standard"] = 1 if g["group_size"] >= std else 0
     counting = [g["seconds_per_hole"] for g in groups
-                if g["status"] != "flagged" and g["seconds_per_hole"] is not None]
+                if g["status"] != "flagged" and g["seconds_per_hole"] is not None and g["standard"]]
     med = _median(counting)
     med = int(round(med)) if med is not None else None
     out["field_median_seconds"] = med
     for g in groups:
         g["field_median_seconds"] = med
-        g["group_size"] = sizes.get(g["group_id"]) or len(g["customer_ids"]) or 1
         g["rel_seconds_per_hole"] = (g["seconds_per_hole"] - med
                                      if med is not None and g["seconds_per_hole"] is not None else None)
     out["groups"] = groups
@@ -4031,7 +4038,9 @@ def compute_round_pace(round_id: int, db_path=None) -> dict:
             "group_seconds_per_hole": g["seconds_per_hole"],
             "rel_seconds_per_hole": g["rel_seconds_per_hole"], "holes_saved": saved,
             "status": status, "flag_partial": partial, "flag_regrouped": regrouped,
-            "counts": 0 if status == "flagged" or g["seconds_per_hole"] is None else 1})
+            "standard": g["standard"],
+            "counts": 0 if (status == "flagged" or g["seconds_per_hole"] is None
+                            or not g["standard"]) else 1})
     return out
 
 
