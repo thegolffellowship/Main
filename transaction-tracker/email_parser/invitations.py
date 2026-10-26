@@ -427,9 +427,16 @@ def _context(ev: dict, db_path=None) -> dict:
 
 
 def _button(url: str, label: str, bg: str, ink: str) -> str:
-    return (f'<td style="padding:4px 6px;"><a href="{_e(url)}" style="display:inline-block;'
+    # The colour lives on the CELL too (bgcolor + style), not only on the
+    # link (Kerry 10/26, a quoted reply in Outlook): Outlook drops a link's
+    # background when quoting and in some desktop versions, which left the
+    # white "I'm in" text invisible on white. Structure only, no words.
+    return (f'<td style="padding:4px 6px;"><table role="presentation" cellpadding="0" '
+            f'cellspacing="0" border="0"><tr><td bgcolor="{bg}" style="background:{bg};'
+            f'border-radius:999px;"><a href="{_e(url)}" style="display:inline-block;'
             f'background:{bg};color:{ink};font:bold 16px Georgia,serif;text-decoration:none;'
-            f'padding:12px 22px;border-radius:999px;">{_e(label)}</a></td>')
+            f'padding:12px 22px;border-radius:999px;"><span style="color:{ink};">{_e(label)}'
+            f'</span></a></td></tr></table></td>')
 
 
 def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,

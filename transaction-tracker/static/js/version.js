@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.580.1";
+window.TGF_VERSION = "2.580.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.580.2",
+    date: "2026-10-26",
+    title: "Email buttons keep their colour in Outlook",
+    changes: [
+      "Kerry 10/26, a member's reply in Outlook: the invitation's I'm in button vanished. Its white text was left on white because Outlook drops a link's background when it quotes an email (and in some desktop versions). The colour now sits on the cell around the link too (bgcolor + style), the standard bulletproof-button pattern. Same fix, as a class, for every email button built the old way: invitations (I'm in, Can't make it), membership renewal and roster keep/remove, the event-day Add Handicap box, the event-link button and the manager's Approve pairings. Layout only; no words changed, so every wording stamp stands. New guard test_email_buttons.py fails if a coloured email link has no bgcolor cell around it."
+    ]
+  },
   {
     version: "2.580.1",
     date: "2026-10-26",
