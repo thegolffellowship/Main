@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.602.1";
+window.TGF_VERSION = "2.603.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.603.0",
+    date: "2026-10-26",
+    title: "No-shows, late arrivals and WDs: the course gets the count, blinds draw themselves, short rounds play what they paid for",
+    changes: [
+      "Course notice (Kerry 10/26: \"No-show sequence with email to course should show original count vs updated count and the what happened and who dropped with a request to have them removed from our final payment count.\"): a TGF-branded email to the course contact, CC its other contacts, the chapter manager and admin (setting no_show_notice_admin_cc), with Original count vs Updated count, what happened to each person (no-show, left after hole N, arrived late, added) and a request to remove the dropped players from TGF's final payment count. An UPDATED version goes whenever that set changes, never twice for the same set.",
+      "Blinds draw themselves (Kerry: \"Blinds would happen automatically if a player is removed, correct?\"): database.sync_no_show_blinds draws one Rule 15 blind per missing seat (Cart Net from the other cart, Team Net from the field outside the group, fewest blinds this year first, one per person per event), covering only the holes that seat missed, and undoes it when he plays or makes them up.",
+      "Late arrival, WD, make-up and + Player on the scorer's phone: Here now from hole H (earlier holes NOT PLAYED, never par, never holding the card); Left the course (WD) from this hole; once the rest of the group has finished, Will he make up the missed holes? (Kerry: \"which is always allowed if there's light\"); + Player on a short card adds a last-second player or switches one from another card, carrying his scores. New table se_partial_rounds (migration 0041).",
+      "What a short round plays (Kerry 10/26): out of Individual Net and Gross; in Skins, MVP and CTPs (\"could still compete in Skins, MVP, and CTPs\"); counts toward points races, not toward a handicap; only in games he paid into or that come with his entry. Team Net: \"His ball on holes played, blind on the rest\" and \"Split by holes is good - So that player's share is prorated between two players.\" Guard test_no_show.py (117 checks); screens sequence no-show retaken (11 steps).",
+      "Also in this release (v2.602.1): the course update's RSVP Only list leaves out known mail scanners."
+    ]
+  },
   {
     version: "2.602.1",
     date: "2026-10-26",
