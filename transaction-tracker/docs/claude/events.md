@@ -132,6 +132,20 @@ Kerry: "I want the last 'warning' email to go out ... at 1:00p to let him know w
 - **Guard:** `test_rsvp_deadline.py`.
 - **Still open:** text messages (Twilio), and auto-seating someone who pays after lock (seat-fill, #2310).
 
+## Same-night admin payout report (Kerry 2026-10-26, CoS #2329 item 6)
+
+Kerry: "I like to pay same night as a standard. ... Needs an automated Admin report once all events are completed that would carry a link to PAYMENTS."
+
+`email_parser/admin_payout_report.py`, job `admin_payout_report` (every 15 minutes, 5:00 PM to 11:45 PM Central), dial `admin_payout_report` (on unless `off`).
+
+- **When:** once EVERY active event dated today is closed. "Closed" is the closeout's own test, `closeout_checks.closeout_final_check(event)["final"]` (cards final, parity, payouts recorded); nothing new is invented. An event with nobody on its roster (`_event_roster_rows`) is skipped so a cancelled date never holds the report. While one is open, the job reports which and why and waits.
+- **What:** one email: each event's name, players, payouts recorded (count and total) and unpaid total, with an "Open PAYMENTS" button to `/tgf?view=unpaid` (Payouts opened on the Unpaid queue; `tgf.html` reads `?view=unpaid|refunds`).
+- **Who:** app setting `admin_payout_report_to`, default kerry@thegolffellowship.com; any address outside @thegolffellowship.com is refused. Never a member.
+- **Once a day:** `admin_payout_report_sent:<YYYY-MM-DD>`; logged in message_log (`sent_by` admin-payout-report) and agent_action_log (`admin_payout_report`).
+- **Read-only bridge:** `scoring-admin-payout-report[:<YYYY-MM-DD>]`.
+- **Guard:** `test_admin_payout_report.py`.
+- **Not built:** PayPal one-tap batch payouts (CFO plan, Board timing, #2338).
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)
