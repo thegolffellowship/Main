@@ -261,6 +261,13 @@ def closeout_final_check(event: str | int, db_path=None, _read: dict | None = No
                 for p in rnd.get("players") or []:
                     if not any(v is not None for v in (p.get("scores") or {}).values()):
                         continue  # a no-show seeded from PAIRINGS; nothing to finish
+                    if p.get("incomplete_round") and not se._publish_incomplete():
+                        # A SHORT ROUND (late arrival, WD; Kerry 10/26) is never
+                        # published: not a blocker, said by name.
+                        warnings.append(f"{p.get('name') or p.get('customer_id')}: short round "
+                                        f"(holes not played {p.get('not_played')}); not in the "
+                                        "scoring record (no Individual Net / Gross, no handicap round)")
+                        continue
                     ok, reason = ep.publish_eligibility(rnd, p)
                     (eligible if ok else held).append((p, reason))
                 for h in rnd.get("hio") or []:
