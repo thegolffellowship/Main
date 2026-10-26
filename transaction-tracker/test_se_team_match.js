@@ -21,6 +21,7 @@ const scores = {"c:13": 5, "c:438": 3, "c:18": 4, "c:703": 4};
 var draft = {}, draftX = {};
 const value = (key, n) => ({v: n === 10 ? scores[key] : null});
 const isX = () => false;
+const isAbsent = () => false;      // subjects() skips no-shows (v2.600.0)
 const byId = (cid) => card.players.find((p) => p.customer_id === cid) || {};
 const esc = (x) => String(x);
 const first = (x) => String(x || "").split(" ")[0];

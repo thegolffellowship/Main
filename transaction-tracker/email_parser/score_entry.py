@@ -858,6 +858,25 @@ _PACE_DDL = """
         updated_at        TEXT NOT NULL,
         UNIQUE (round_id, customer_id));
     CREATE INDEX IF NOT EXISTS idx_se_no_shows_group ON se_no_shows (group_id);
+
+    -- PARTIAL ROUNDS (Kerry 10/26: late arrival, "+ Player" add / switch,
+    -- WD, make-up holes). Also declared in migrations/0041_se_partial_rounds.sql
+    -- (CREATE IF NOT EXISTS both places). RULE 3b schema change.
+    CREATE TABLE IF NOT EXISTS se_partial_rounds (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id       INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id       INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        customer_id    INTEGER NOT NULL REFERENCES customers(customer_id),
+        kind           TEXT NOT NULL CHECK (kind IN ('joined', 'added', 'left')),
+        hole           INTEGER NOT NULL CHECK (hole BETWEEN 1 AND 18),
+        makeup         TEXT CHECK (makeup IN ('yes', 'no', 'unfinished')),
+        from_group_id  INTEGER REFERENCES se_groups(id) ON DELETE SET NULL,
+        marked_by      INTEGER REFERENCES customers(customer_id),
+        device_id      TEXT,
+        created_at     TEXT NOT NULL,
+        updated_at     TEXT NOT NULL,
+        UNIQUE (round_id, customer_id, kind));
+    CREATE INDEX IF NOT EXISTS idx_se_partial_rounds_group ON se_partial_rounds (group_id);
 """
 
 
@@ -1897,14 +1916,94 @@ def card_is_final(final_at: str | None, now: str | None = None) -> bool:
 # An ABSENT player is off the card: his blank holes never hold the card going
 # final, and he is left out of the entered-scores feed (so no individual
 # net/gross, MVP, points or handicap round is made from an incomplete card).
-# Not built (Event Ops items 4-5): the per-hole blind for Team / Cart Net and
-# the manager's / scorer's "Move to...". A player marked absent after he has
-# played holes keeps those holes in the audit but they leave the feed too.
+# A player marked absent after he has played holes keeps those holes in the
+# audit but they leave the feed too (a player who LEAVES mid-round is a WD,
+# below, and keeps his holes). The "+ Player" switch below is the scorer's
+# side of Event Ops item 5 ("Move to..."); the manager's side is not built.
+#
+# BLINDS (Kerry 10/26: "Also need to account for providing a blind, or
+# potentially more blinds for any missing players, based on our blind
+# rules"): every absent player's seat gets a missed-hole blind through the
+# Rule 15 machinery (database.sync_no_show_blinds, run after every answer and
+# by the notice job). One per absent player.
+#
+# LATE ARRIVAL, ADD / SWITCH, WD, MAKE-UP HOLES (Kerry 10/26, verbatim: "what
+# happens when player shows up on hole 4???"; "Interesting call on the
+# +Player. Could also be there for a threesome as a standard, for someone we
+# add last second or switches from another group last second"; "someone
+# could WD due to whatever reason too, having to leave after any number of
+# holes"; "Player late arrival needs to ask if that player will make up
+# missed holes at end of regular scoring, which is always allowed if there's
+# light"). Table se_partial_rounds (migration 0041, RULE 3b):
+#   joined  "+ Player" / "Here now" on hole H after his group started: he
+#           plays from H; the holes before H are NOT PLAYED unless he makes
+#           them up (makeup yes: they stay open after the last regular hole
+#           and hold the card until entered or "couldn't finish").
+#   added   someone put on this card ("+ Player": a roster player on no
+#           card, or a switch from another card of the round): plays from H.
+#   left    "Left the course (WD)" on hole H: H and after are NOT PLAYED.
+# NOT PLAYED holes are never par and never hold the card. A Rule 15
+# missed-hole blind covers them (and holes still to be made up) for Team /
+# Cart Net, drawn and undone automatically (database.sync_no_show_blinds).
+# Which games an INCOMPLETE round plays is the per-game setting below
+# (INCOMPLETE_ROUND_GAMES, Kerry 10/26), Team Net its own one setting.
 # ---------------------------------------------------------------------------
 
 NO_SHOW_HOLES_SETTING = "no_show_absent_after_holes"
 NO_SHOW_HOLES_DEFAULT = 3          # Kerry 10/26: "Both should be at 3p" (was 4 on 9/30)
 NO_SHOW_ANSWERS = ("late", "unknown", "absent", "present")
+# Answers beyond the no-show statuses (se_partial_rounds): WD and make-up.
+PARTIAL_ANSWERS = ("wd", "makeup_yes", "makeup_no", "makeup_unfinished")
+
+# THE INCOMPLETE-ROUND SETTINGS. A card with NOT PLAYED holes (a late
+# arrival who did not make them up, a WD) is an INCOMPLETE ROUND. Kerry
+# 10/26, verbatim: "For a lack of holes played, a player cannot compete in
+# Individual Net or Individual Gross, but could still compete in Skins, MVP,
+# and CTPs. Team Net is probably the biggest question." One entry per game;
+# change them here and only here (test_no_show.py tests each).
+INCOMPLETE_ROUND_GAMES = {
+    "individual_net": False,    # RULED 10/26: out
+    "individual_gross": False,  # RULED 10/26: out
+    "skins": True,              # RULED 10/26: in, on the holes he played
+    "mvp": True,                # RULED 10/26: in, net Stableford on the holes he played
+    "ctp": True,                # RULED 10/26: in
+    "points": True,             # RULED 10/26 ("A short round should still count toward
+                                # points races"): net Stableford on the holes he played
+    "handicap_round": False,    # RULED 10/26 ("but not towards a handicap"): out
+}
+# Team Net / Cart Net for an incomplete round. RULED 10/26 ("His ball on
+# holes played, blind on the rest"): the default. The other option is kept
+# so the rule stays one named setting:
+#   "own_ball_and_blind"  his ball counts on the holes he played; the Rule 15
+#                         blind plays the holes he did not
+#   "blind_whole_round"   his ball never counts for the team; the blind plays
+#                         every hole in his seat
+TEAM_NET_INCOMPLETE_ROUND = "own_ball_and_blind"
+TEAM_NET_INCOMPLETE_OPTIONS = ("own_ball_and_blind", "blind_whole_round")
+# Who is PAID a winning team's slot that a partial round and his blind
+# shared (Kerry 10/26: "But the question is how you pay it out if the team
+# wins?"). RULED 10/26, verbatim: "Split by holes is good - So that player's
+# share is prorated between two players." The one setting:
+#   "pro_rata"  (RULED, the default) the slot's equal share is split by holes
+#               covered (late player 6/9, blind 3/9), to the cent, the cents
+#               adding up exactly to the share
+#   "player"    the late / WD player takes the whole share
+#   "blind"     the blind takes the whole share
+TEAM_SLOT_PAYOUT = "pro_rata"
+TEAM_SLOT_PAYOUT_OPTIONS = ("pro_rata", "player", "blind")
+
+
+def incomplete_round_plays(game: str) -> bool:
+    """Does an incomplete round play `game`? (INCOMPLETE_ROUND_GAMES)"""
+    return bool(INCOMPLETE_ROUND_GAMES.get(game, False))
+
+
+def _publish_incomplete() -> bool:
+    """An incomplete round goes into the scoring record only when every
+    record reader may use it: the record feeds points and the handicap
+    round as well as the individual games."""
+    return all(incomplete_round_plays(g) for g in
+               ("individual_net", "individual_gross", "points", "handicap_round"))
 
 
 def no_show_after_holes(db_path=None, conn=None) -> int:
@@ -1960,16 +2059,240 @@ def absent_ids(conn, group_id: int = None, round_id: int = None, db_path=None) -
     return {cid for cid, r in st.items() if r["effective"] == "absent"}
 
 
+def _group_play_order(conn, round_id: int, start_hole) -> list:
+    """The round's holes in the order this group plays them (a shotgun
+    group starts on its own hole and wraps)."""
+    nums = [int(r[0]) for r in conn.execute(
+        "SELECT hole_number FROM se_round_holes WHERE round_id = ? ORDER BY hole_number",
+        (round_id,))]
+    if not nums:
+        n = conn.execute("SELECT holes FROM se_rounds WHERE id = ?", (round_id,)).fetchone()
+        nums = list(range(1, int((n[0] if n else 9) or 9) + 1))
+    try:
+        i = nums.index(int(start_hole))
+    except (TypeError, ValueError):
+        i = 0
+    return nums[i:] + nums[:i]
+
+
+def partial_rounds(conn, group_id: int = None, round_id: int = None) -> dict:
+    """{customer_id: state} for every player with a se_partial_rounds row on
+    this group (or round). state: group_id, joined_hole, joined_kind
+    (joined | added), from_group_id, left_hole, makeup, not_played (NOT
+    PLAYED holes: never par, never hold the card), makeup_open (holes he
+    said he will make up and has not yet: they hold the card), blind_holes
+    (not_played + makeup_open: what a Rule 15 blind covers), incomplete
+    (any NOT PLAYED hole)."""
+    q, a = ("group_id = ?", (group_id,)) if group_id is not None else ("round_id = ?", (round_id,))
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT * FROM se_partial_rounds WHERE {q} ORDER BY id", a)]
+    out: dict = {}
+    orders: dict = {}
+    done_by_group: dict = {}
+    for r in rows:
+        cid = int(r["customer_id"])
+        s = out.setdefault(cid, {"group_id": r["group_id"], "joined_hole": None, "joined_kind": None,
+                                 "from_group_id": None, "left_hole": None, "makeup": None})
+        if r["kind"] == "left":
+            s["left_hole"] = int(r["hole"])
+        else:
+            s.update(joined_hole=int(r["hole"]), joined_kind=r["kind"], makeup=r["makeup"],
+                     from_group_id=r["from_group_id"])
+    for cid, s in out.items():
+        gid = s["group_id"]
+        if gid not in orders:
+            g = conn.execute("SELECT round_id, start_hole FROM se_groups WHERE id = ?", (gid,)).fetchone()
+            orders[gid] = _group_play_order(conn, g["round_id"], g["start_hole"]) if g else []
+        order = orders[gid]
+        mine = {int(x[0]) for x in conn.execute(
+            "SELECT hole_number FROM se_hole_scores WHERE group_id = ? AND subject_key = ? "
+            "AND gross IS NOT NULL", (gid, f"c:{cid}"))}
+        pre = (order[:order.index(s["joined_hole"])]
+               if s["joined_hole"] in order else [])
+        post = (order[order.index(s["left_hole"]):]
+                if s["left_hole"] in order else [])
+        pre_open = [h for h in pre if h not in mine]
+        post_np = [h for h in post if h not in mine]
+        # THE MAKE-UP QUESTION waits until the rest of his group has finished
+        # the regular holes (Kerry 10/26: "The late arrival should only ask
+        # that about missed holes after the original 9 are finished for
+        # other players, not right when he arrives"). Until then the missed
+        # holes just show as missed; once asked and unanswered they hold the
+        # card (the money waits for the answer); yes opens them, no (or
+        # "couldn't finish") makes the unplayed ones final.
+        if gid not in done_by_group:
+            done_by_group[gid] = _regular_done(conn, gid, order, set(out))
+        s["ask_makeup"] = bool(pre_open) and s["makeup"] is None and done_by_group[gid]
+        if s["makeup"] == "yes" or s["ask_makeup"]:
+            s["makeup_open"], np_pre = pre_open, []
+        else:
+            s["makeup_open"], np_pre = [], pre_open
+        s["not_played"] = [h for h in order if h in set(np_pre) | set(post_np)]
+        s["blind_holes"] = [h for h in order if h in set(s["not_played"]) | set(s["makeup_open"])]
+        s["makeup_holes"] = pre
+        s["incomplete"] = bool(s["not_played"])
+    return out
+
+
+def _regular_done(conn, group_id: int, order: list, partial_cids: set) -> bool:
+    """Has the rest of the group finished the regular holes? Every player
+    on the card who is not absent and not himself a partial round has a
+    gross on every hole of the round."""
+    if not order:
+        return False
+    absent = absent_ids(conn, group_id=group_id)
+    others = [int(x[0]) for x in conn.execute("SELECT customer_id FROM se_players WHERE group_id = ?",
+                                              (group_id,))
+              if int(x[0]) not in absent and int(x[0]) not in partial_cids]
+    if not others:
+        return False
+    for c in others:
+        n = conn.execute("SELECT COUNT(DISTINCT hole_number) FROM se_hole_scores WHERE group_id = ? "
+                         "AND subject_key = ? AND gross IS NOT NULL", (group_id, f"c:{c}")).fetchone()[0]
+        if (n or 0) < len(order):
+            return False
+    return True
+
+
+def late_arrivals(conn, group_id: int = None, round_id: int = None) -> dict:
+    """The partial rounds that JOINED late (joined / added after the
+    group's first hole): {customer_id: state + not_played}."""
+    return {cid: s for cid, s in partial_rounds(conn, group_id=group_id, round_id=round_id).items()
+            if s["joined_hole"] is not None and s["makeup_holes"]}
+
+
+def _real_rounds(conn, event_id: int) -> list:
+    return [r for r in conn.execute("SELECT id, label, holes FROM se_rounds WHERE event_id = ?",
+                                    (int(event_id),)).fetchall()
+            if not (r["label"] or "").startswith(PREVIEW_LABEL)]
+
+
+def event_partial_rounds(event_id: int, db_path=None) -> dict:
+    """{customer_id: state} (see partial_rounds) across the event's real
+    (non-preview) rounds. Read only: the board, the engine, the field check
+    and the publisher ask it, so NOT PLAYED holes never hold them."""
+    out = {}
+    try:
+        with _closing(_conn(db_path)) as conn:
+            for r in _real_rounds(conn, event_id):
+                out.update(partial_rounds(conn, round_id=r["id"]))
+    except sqlite3.Error:
+        return {}
+    return out
+
+
+def event_missing_players(event_id: int, db_path=None) -> list:
+    """Whose seat needs a missed-hole blind (Rule 15, Kerry 10/26: "Blinds
+    would happen automatically if a player is removed, correct?"). Real
+    rounds only. Read only; database.sync_no_show_blinds turns it into
+    blind_draws rows.
+      absent  every effectively ABSENT player: every hole of the round (none
+              of an absent player's holes count) -- unless someone was ADDED
+              to his card, who then fills his seat: only the holes before the
+              newcomer joined (`filled_by`).
+      partial every joined / added / WD player with blind_holes, on his own
+              seat (an added player filling an absent seat is not listed)."""
+    out = []
+    with _closing(_conn(db_path)) as conn:
+        for r in _real_rounds(conn, event_id):
+            holes = [int(x[0]) for x in conn.execute(
+                "SELECT hole_number FROM se_round_holes WHERE round_id = ? ORDER BY hole_number",
+                (r["id"],))]
+            holes = holes or list(range(1, int(r["holes"] or 9) + 1))
+            st = _no_show_state(conn, _no_show_rows(conn, round_id=r["id"]), db_path)
+            pr = partial_rounds(conn, round_id=r["id"])
+            names = {int(p["customer_id"]): p["display_name"] for p in conn.execute(
+                "SELECT customer_id, display_name FROM se_players WHERE round_id = ?", (r["id"],))}
+            # newcomers added to a card with an absent player fill his seat,
+            # first come first served, in add order
+            adds_by_group: dict = {}
+            for cid, s in pr.items():
+                if s["joined_kind"] == "added":
+                    adds_by_group.setdefault(s["group_id"], []).append(cid)
+            fillers: dict = {}
+            for cid, row in sorted(st.items(), key=lambda kv: kv[1]["id"]):
+                if row["effective"] != "absent":
+                    continue
+                q = adds_by_group.get(row["group_id"]) or []
+                filler = q.pop(0) if q else None
+                if filler is not None:
+                    fillers[filler] = cid
+                miss = list(holes) if filler is None else pr[filler]["blind_holes"]
+                out.append({"customer_id": cid, "name": names.get(cid), "state": "absent",
+                            "round_id": r["id"], "group_id": row["group_id"],
+                            "missed_holes": miss, "filled_by": filler})
+            for cid, s in pr.items():
+                if cid in fillers or (cid in st and st[cid]["effective"] == "absent"):
+                    continue
+                # TEAM_NET_INCOMPLETE_ROUND "blind_whole_round": the blind
+                # plays every hole of an incomplete round's seat
+                miss = (list(holes) if s["incomplete"] and
+                        TEAM_NET_INCOMPLETE_ROUND == "blind_whole_round" else s["blind_holes"])
+                out.append({"customer_id": cid, "name": names.get(cid),
+                            "state": "left" if s["left_hole"] is not None else s["joined_kind"],
+                            "round_id": r["id"], "group_id": s["group_id"],
+                            "missed_holes": miss, "joined_hole": s["joined_hole"],
+                            "left_hole": s["left_hole"]})
+    return out
+
+
+def _sync_blinds_quietly(event_id, db_path=None):
+    """Rule 15 blinds for the event's missing players; never fails the
+    scorer's answer (database.py owns blind_draws)."""
+    try:
+        from email_parser.database import sync_no_show_blinds
+        return sync_no_show_blinds(int(event_id), db_path=db_path)
+    except Exception:
+        logger.exception("no-show blind sync failed for event %s", event_id)
+        return None
+
+
+def _upsert_partial(conn, g, group_id, cid, kind, hole, makeup=None, from_group_id=None,
+                    entered_by=None, device_id=None, now=None):
+    cur = conn.execute("SELECT id FROM se_partial_rounds WHERE round_id = ? AND customer_id = ? "
+                       "AND kind = ?", (g["round_id"], cid, kind)).fetchone()
+    if cur:
+        conn.execute("UPDATE se_partial_rounds SET group_id = ?, hole = ?, makeup = ?, "
+                     "from_group_id = COALESCE(?, from_group_id), marked_by = ?, device_id = ?, "
+                     "updated_at = ? WHERE id = ?",
+                     (group_id, hole, makeup, from_group_id, entered_by, device_id, now, cur["id"]))
+    else:
+        conn.execute("INSERT INTO se_partial_rounds (round_id, group_id, customer_id, kind, hole, "
+                     "makeup, from_group_id, marked_by, device_id, created_at, updated_at) "
+                     "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                     (g["round_id"], group_id, cid, kind, hole, makeup, from_group_id,
+                      entered_by, device_id, now, now))
+
+
+def _group_started(conn, group_id: int, before_hole=None) -> bool:
+    """Has this group scored a hole (before `before_hole` in play order)?"""
+    g = conn.execute("SELECT round_id, start_hole FROM se_groups WHERE id = ?", (group_id,)).fetchone()
+    played = {int(x[0]) for x in conn.execute(
+        "SELECT DISTINCT hole_number FROM se_hole_scores WHERE group_id = ? AND gross IS NOT NULL",
+        (group_id,))}
+    if before_hole is None or not g:
+        return bool(played)
+    order = _group_play_order(conn, g["round_id"], g["start_hole"])
+    if before_hole not in order:
+        return bool(played)
+    return any(h in played for h in order[:order.index(before_hole)])
+
+
 def mark_player_missing(group_id: int, device_id: str, customer_id: int, answer: str,
                         hole=None, entered_by=None, db_path=None) -> dict:
-    """The scorer's answer to "Is <Name> coming?" for a player on HIS card.
-    late / unknown / absent; present puts him back ("+ Player"). Only the
-    phone keeping score for this group may answer, only for its own players
-    (the scorer can't take an active player off another card)."""
-    if answer not in NO_SHOW_ANSWERS:
-        return {"error": "answer must be late, unknown, absent or present"}
+    """The scorer's answer for a player on HIS card. late / unknown /
+    absent ("Is <Name> coming?"); present puts him back ("+ Player", "Here
+    now") and, after his group has started, records the hole he JOINED on;
+    wd = "Left the course (WD)" on this hole; makeup_yes / makeup_no /
+    makeup_unfinished answer "Will he make up holes 1-3 at the end?". Only
+    the phone keeping score for this group may answer, only for its own
+    players (the scorer can't take an active player off another card).
+    Every answer re-syncs the Rule 15 blinds (no manager tap)."""
+    if answer not in NO_SHOW_ANSWERS + PARTIAL_ANSWERS:
+        return {"error": "answer must be late, unknown, absent, present, wd or makeup_yes/no/unfinished"}
     if not device_id:
         return {"error": "device_id required"}
+    h = int(hole) if hole not in (None, "") else None
     with _closing(_conn(db_path)) as conn:
         g = _group_ctx(conn, group_id)
         if not g:
@@ -1982,37 +2305,82 @@ def mark_player_missing(group_id: int, device_id: str, customer_id: int, answer:
                          (group_id, int(customer_id))).fetchone()
         if not p:
             return {"error": "That player isn't on this card."}
+        if card_is_final(_group_final_at(conn, group_id, db_path)):
+            return {"error": "This card is final; the manager must Unlock it first."}
+        cid = int(customer_id)
         now = _now()
-        cur = conn.execute("SELECT * FROM se_no_shows WHERE round_id = ? AND customer_id = ?",
-                           (g["round_id"], int(customer_id))).fetchone()
-        h = int(hole) if hole not in (None, "") else None
-        if cur:
-            asked = int(cur["holes_asked"] or 0)
-            if answer == "unknown" and h is not None and h != cur["last_asked_hole"]:
-                asked += 1
-            conn.execute(
-                "UPDATE se_no_shows SET status = ?, last_asked_hole = ?, holes_asked = ?, "
-                "marked_by = ?, device_id = ?, updated_at = ? WHERE id = ?",
-                (answer, h if h is not None else cur["last_asked_hole"], asked, entered_by,
-                 device_id, now, cur["id"]))
+        if answer == "wd":
+            if h is None:
+                return {"error": "Left the course needs the hole he left on"}
+            _upsert_partial(conn, g, group_id, cid, "left", h, entered_by=entered_by,
+                            device_id=device_id, now=now)
+            conn.execute("UPDATE se_no_shows SET status = 'present', updated_at = ? "
+                         "WHERE round_id = ? AND customer_id = ?", (now, g["round_id"], cid))
+        elif answer.startswith("makeup_"):
+            row = conn.execute("SELECT id FROM se_partial_rounds WHERE round_id = ? AND customer_id = ? "
+                               "AND kind IN ('joined', 'added')", (g["round_id"], cid)).fetchone()
+            if not row:
+                return {"error": "He didn't join late, so there are no holes to make up."}
+            conn.execute("UPDATE se_partial_rounds SET makeup = ?, marked_by = ?, device_id = ?, "
+                         "updated_at = ? WHERE id = ?",
+                         (answer[len("makeup_"):], entered_by, device_id, now, row["id"]))
         else:
-            conn.execute(
-                "INSERT INTO se_no_shows (round_id, group_id, customer_id, status, first_asked_hole, "
-                "last_asked_hole, holes_asked, marked_by, device_id, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (g["round_id"], group_id, int(customer_id), answer, h, h,
-                 1 if answer == "unknown" else 0, entered_by, device_id, now, now))
+            cur = conn.execute("SELECT * FROM se_no_shows WHERE round_id = ? AND customer_id = ?",
+                               (g["round_id"], cid)).fetchone()
+            if cur:
+                asked = int(cur["holes_asked"] or 0)
+                if answer == "unknown" and h is not None and h != cur["last_asked_hole"]:
+                    asked += 1
+                conn.execute(
+                    "UPDATE se_no_shows SET status = ?, last_asked_hole = ?, holes_asked = ?, "
+                    "marked_by = ?, device_id = ?, updated_at = ? WHERE id = ?",
+                    (answer, h if h is not None else cur["last_asked_hole"], asked, entered_by,
+                     device_id, now, cur["id"]))
+            elif answer != "present":
+                conn.execute(
+                    "INSERT INTO se_no_shows (round_id, group_id, customer_id, status, first_asked_hole, "
+                    "last_asked_hole, holes_asked, marked_by, device_id, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (g["round_id"], group_id, cid, answer, h, h,
+                     1 if answer == "unknown" else 0, entered_by, device_id, now, now))
+            if answer == "present":
+                # Back for good: a WD who came back plays on.
+                conn.execute("DELETE FROM se_partial_rounds WHERE round_id = ? AND customer_id = ? "
+                             "AND kind = 'left'", (g["round_id"], cid))
+                have = conn.execute("SELECT 1 FROM se_partial_rounds WHERE round_id = ? AND "
+                                    "customer_id = ? AND kind IN ('joined', 'added')",
+                                    (g["round_id"], cid)).fetchone()
+                if h is not None and not have and _group_started(conn, group_id, h):
+                    # Late arrival (Kerry 10/26): he plays from hole h.
+                    _upsert_partial(conn, g, group_id, cid, "joined", h, entered_by=entered_by,
+                                    device_id=device_id, now=now)
+            elif answer in ("absent", "unknown", "late"):
+                # Off again / not here: a joined record no longer describes him.
+                conn.execute("DELETE FROM se_partial_rounds WHERE round_id = ? AND customer_id = ? "
+                             "AND kind = 'joined'", (g["round_id"], cid))
         conn.execute(
             "INSERT INTO se_audit (round_id, group_id, kind, customer_id, device_id, result, detail, at) "
             "VALUES (?, ?, 'no_show', ?, ?, ?, ?, ?)",
-            (g["round_id"], group_id, int(customer_id), device_id, answer,
+            (g["round_id"], group_id, cid, device_id, answer,
              f"hole {h}" if h is not None else None, now))
         _bump(conn, g["event_id"])
         conn.commit()
         st = _no_show_state(conn, _no_show_rows(conn, group_id=group_id), db_path)
-    r = st.get(int(customer_id)) or {}
-    return {"ok": True, "customer_id": int(customer_id), "name": p["display_name"],
-            "status": answer, "effective": r.get("effective", answer)}
+        pr = partial_rounds(conn, group_id=group_id).get(cid)
+    r = st.get(cid) or {}
+    eff = r.get("effective", answer if answer in NO_SHOW_ANSWERS else "present")
+    if pr and pr["left_hole"] is not None:
+        eff = "wd"
+    out = {"ok": True, "customer_id": cid, "name": p["display_name"],
+           "status": answer, "effective": eff}
+    if pr:
+        out.update(joined_hole=pr["joined_hole"], left_hole=pr["left_hole"], makeup=pr["makeup"],
+                   not_played=pr["not_played"], makeup_open=pr["makeup_open"],
+                   ask_makeup=pr["ask_makeup"])
+    bl = _sync_blinds_quietly(g["event_id"], db_path)
+    if bl is not None:
+        out["blinds"] = {k: bl.get(k) for k in ("drawn", "updated", "removed", "unfilled")}
+    return out
 
 
 def _card_no_shows(conn, group_id: int, names: dict, db_path=None) -> list:
@@ -2023,26 +2391,227 @@ def _card_no_shows(conn, group_id: int, names: dict, db_path=None) -> list:
             for cid, r in st.items() if r["status"] != "present"]
 
 
+def _card_partials(conn, group_id: int, names: dict) -> list:
+    """The card's partial rounds for the phone ("Joined on hole 4", "Left
+    the course on hole 6", "Make up 1-3 at the end")."""
+    return [{"customer_id": cid, "name": names.get(cid), "joined_hole": s["joined_hole"],
+             "joined_kind": s["joined_kind"], "left_hole": s["left_hole"], "makeup": s["makeup"],
+             "makeup_holes": s["makeup_holes"], "not_played": s["not_played"],
+             "makeup_open": s["makeup_open"], "ask_makeup": s["ask_makeup"]}
+            for cid, s in partial_rounds(conn, group_id=group_id).items()]
+
+
 def event_no_shows(event_id: int, db_path=None) -> dict:
     """For the course notice (no_show_notice.py): every round of the event,
     its players marked absent or still "don't know yet", with how many holes
-    their group has scored. Read only."""
-    out = []
+    their group has scored; the reported players who arrived (`arrived`:
+    joined late), the players who LEFT the course (`left`, WD) and the
+    newcomers added by "+ Player" (`added`); and the field on the cards
+    (`registered`, `groups`) so the notice can state the player-count totals
+    (Kerry 10/26: "Message to course needs to update player count totals").
+    Preview rounds are left out. Read only."""
+    out, arrived, left, added, groups, registered = [], [], [], [], [], set()
     with _closing(_conn(db_path)) as conn:
-        for r in conn.execute("SELECT id FROM se_rounds WHERE event_id = ?", (int(event_id),)).fetchall():
+        for r in _real_rounds(conn, event_id):
+            for g in conn.execute(
+                    "SELECT g.id, g.group_num, g.label, g.tee_time, g.start_hole, "
+                    "(SELECT COUNT(*) FROM se_players p WHERE p.group_id = g.id) AS n "
+                    "FROM se_groups g WHERE g.round_id = ? ORDER BY g.group_num", (r["id"],)):
+                groups.append(dict(g))
+            names = {int(x[0]): x[1] for x in conn.execute(
+                "SELECT customer_id, display_name FROM se_players WHERE round_id = ?", (r["id"],))}
+            registered |= set(names)
+            for cid, s in partial_rounds(conn, round_id=r["id"]).items():
+                row = {"customer_id": cid, "name": names.get(cid), "group_id": s["group_id"]}
+                if s["left_hole"] is not None:
+                    # "left after hole N": the last hole of his played before
+                    # the one he left on, in his group's play order
+                    _g = conn.execute("SELECT round_id, start_hole FROM se_groups WHERE id = ?",
+                                      (s["group_id"],)).fetchone()
+                    _o = _group_play_order(conn, _g["round_id"], _g["start_hole"]) if _g else []
+                    _i = _o.index(s["left_hole"]) if s["left_hole"] in _o else 0
+                    left.append({**row, "left_hole": s["left_hole"],
+                                 "after_hole": _o[_i - 1] if _i > 0 else None})
+                if s["joined_kind"] == "added" and not s["from_group_id"]:
+                    added.append({**row, "joined_hole": s["joined_hole"]})
+                elif s["joined_kind"] == "joined":
+                    arrived.append({**row, "joined_hole": s["joined_hole"]})
             st = _no_show_state(conn, _no_show_rows(conn, round_id=r["id"]), db_path)
             for cid, row in st.items():
                 if row["effective"] not in ("absent", "unknown"):
                     continue
-                nm = conn.execute("SELECT display_name FROM se_players WHERE round_id = ? AND customer_id = ?",
-                                  (r["id"], cid)).fetchone()
                 played = conn.execute(
                     "SELECT COUNT(DISTINCT hole_number) FROM se_hole_scores WHERE group_id = ? "
                     "AND gross IS NOT NULL", (row["group_id"],)).fetchone()[0] or 0
-                out.append({"customer_id": cid, "name": nm["display_name"] if nm else None,
+                out.append({"customer_id": cid, "name": names.get(cid),
                             "status": row["effective"], "group_id": row["group_id"],
                             "group_holes_played": played})
-    return {"event_id": int(event_id), "no_shows": out}
+    return {"event_id": int(event_id), "no_shows": out, "arrived": arrived, "left": left,
+            "added": added, "registered": len(registered), "groups": groups}
+
+
+def add_choices(group_id: int, db_path=None) -> dict:
+    """Who "+ Player" may put on this card (Kerry 10/26): a roster player on
+    no card of the round (a last-second add) or a player on another card of
+    the same round (a switch). Offered on a card with fewer than 4 players or
+    with a no-show. Read only."""
+    from email_parser import database as db
+    with _closing(_conn(db_path)) as conn:
+        g = _group_ctx(conn, group_id)
+        if not g:
+            return {"error": "no such group"}
+        here = [int(x[0]) for x in conn.execute("SELECT customer_id FROM se_players WHERE group_id = ?",
+                                                (group_id,))]
+        absent = absent_ids(conn, group_id=group_id, db_path=db_path)
+        on_cards = {int(x[0]): (x[1], x[2], x[3]) for x in conn.execute(
+            "SELECT p.customer_id, p.display_name, g.group_num, g.id FROM se_players p "
+            "JOIN se_groups g ON g.id = p.group_id WHERE p.round_id = ?", (g["round_id"],))}
+        in_teams = {int(c) for t in conn.execute(
+            "SELECT customer_id_a, customer_id_b FROM se_teams WHERE round_id = ?", (g["round_id"],))
+            for c in t}
+    open_card = len(here) < 4 or bool(absent)
+    roster = []
+    try:
+        with db._connect(db_path) as c2:
+            roster = db._event_roster_rows(c2, int(g["event_id"]))
+    except Exception:
+        logger.exception("add_choices: roster unavailable for event %s", g["event_id"])
+    adds, seen = [], set()
+    for r in roster:
+        cid = r.get("customer_id")
+        if not cid or int(cid) in on_cards or int(cid) in seen:
+            continue
+        seen.add(int(cid))
+        adds.append({"customer_id": int(cid), "name": (r.get("name") or r.get("customer") or "").strip()})
+    switches = [{"customer_id": cid, "name": nm, "group_num": gn}
+                for cid, (nm, gn, gid) in on_cards.items()
+                if gid != group_id and cid not in in_teams]
+    adds.sort(key=lambda x: x["name"].lower())
+    switches.sort(key=lambda x: (x["group_num"], (x["name"] or "").lower()))
+    return {"group_id": group_id, "open": open_card, "players": len(here),
+            "adds": adds, "switches": switches}
+
+
+def add_player_to_card(group_id: int, device_id: str, customer_id: int, hole=None,
+                       entered_by=None, db_path=None) -> dict:
+    """"+ Player" on a card (Kerry 10/26): put someone ELSE on this card.
+    Only the phone keeping score for this card, only on a card with fewer
+    than 4 players or with a no-show.
+      - a roster player on no card: a last-second ADD (his tee and playing
+        handicap come from the starter sheet once he is seated);
+      - a player on another card of the same round: a SWITCH. He moves and
+        his old card loses him; his entered holes come WITH him (scores are
+        unique per round and player, so the two cards can never both hold
+        a score for him on one hole). Refused for a Foursomes pair player.
+    After the group has started, he plays from `hole` (kind added) and the
+    scorer is asked about make-up holes. The pairings seat follows him
+    (database.move_pairing_seat) and the Rule 15 blinds re-sync."""
+    if not device_id:
+        return {"error": "device_id required"}
+    cid = int(customer_id)
+    h = int(hole) if hole not in (None, "") else None
+    ch = add_choices(group_id, db_path)
+    if ch.get("error"):
+        return ch
+    if not ch["open"]:
+        return {"error": "This card is full. + Player adds someone only to a card with fewer than "
+                         "4 players or a no-show."}
+    switch = next((s for s in ch["switches"] if s["customer_id"] == cid), None)
+    add = next((a for a in ch["adds"] if a["customer_id"] == cid), None)
+    if not switch and not add:
+        return {"error": "He isn't on this event's roster, or he's on this card already "
+                         "(or in a Foursomes pair)."}
+    with _closing(_conn(db_path)) as conn:
+        g = _group_ctx(conn, group_id)
+        lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
+                            (group_id,)).fetchone()
+        if not (lock and lock["device_id"] == device_id):
+            return {"error": "Only the phone keeping score for this group can do that."}
+        if card_is_final(_group_final_at(conn, group_id, db_path)):
+            return {"error": "This card is final; the manager must Unlock it first."}
+        started = _group_started(conn, group_id, h) if h is not None else _group_started(conn, group_id)
+        from_gid = None
+        if switch:
+            old = conn.execute("SELECT * FROM se_players WHERE round_id = ? AND customer_id = ?",
+                               (g["round_id"], cid)).fetchone()
+            from_gid = old["group_id"]
+            if card_is_final(_group_final_at(conn, from_gid, db_path)):
+                return {"error": "His old card is final; the manager must Unlock it first."}
+    pairing = {}
+    if not switch:
+        # Seat him on the pairings first so the starter sheet's own math
+        # gives his tee and playing handicap.
+        try:
+            from email_parser.database import move_pairing_seat
+            pairing = move_pairing_seat(int(g["event_id"]), cid, int(g["group_num"]),
+                                        name=add["name"], clear_blind=not started,
+                                        db_path=db_path)
+        except Exception as exc:
+            logger.exception("add_player_to_card: pairing seat failed")
+            pairing = {"error": str(exc)}
+    tee, ph = None, None
+    if not switch:
+        try:
+            from email_parser.database import get_event_print_pack
+            pack = get_event_print_pack(int(g["event_id"]), db_path=db_path) or {}
+            for gg in pack.get("groups") or []:
+                for pp in gg.get("players") or []:
+                    if pp.get("customer_id") is not None and int(pp["customer_id"]) == cid:
+                        tee, ph = pp.get("tee_choice"), pp.get("playing_handicap")
+        except Exception:
+            logger.exception("add_player_to_card: starter sheet read failed")
+    with _closing(_conn(db_path)) as conn:
+        now = _now()
+        conn.execute("BEGIN IMMEDIATE")
+        seat = (conn.execute("SELECT COALESCE(MAX(seat), 0) + 1 FROM se_players WHERE group_id = ?",
+                             (group_id,)).fetchone()[0])
+        if switch:
+            conn.execute("UPDATE se_players SET group_id = ?, seat = ? WHERE round_id = ? AND customer_id = ?",
+                         (group_id, seat, g["round_id"], cid))
+            for t in ("se_hole_scores", "se_hole_marks"):
+                conn.execute(f"UPDATE {t} SET group_id = ? WHERE round_id = ? AND subject_key = ?",
+                             (group_id, g["round_id"], f"c:{cid}"))
+            conn.execute("UPDATE se_hio_claims SET group_id = ? WHERE round_id = ? AND customer_id = ?",
+                         (group_id, g["round_id"], cid))
+            conn.execute("UPDATE se_no_shows SET group_id = ? WHERE round_id = ? AND customer_id = ?",
+                         (group_id, g["round_id"], cid))
+            conn.execute("UPDATE se_partial_rounds SET group_id = ? WHERE round_id = ? AND customer_id = ?",
+                         (group_id, g["round_id"], cid))
+            conn.execute("UPDATE se_signoffs SET voided_at = ?, void_reason = 'moved to another card' "
+                         "WHERE round_id = ? AND customer_id = ? AND voided_at IS NULL",
+                         (now, g["round_id"], cid))
+        else:
+            conn.execute("INSERT INTO se_players (round_id, group_id, customer_id, display_name, tee, "
+                         "playing_handicap, seat) VALUES (?,?,?,?,?,?,?)",
+                         (g["round_id"], group_id, cid, add["name"], tee, ph, seat))
+        if started and h is not None:
+            _upsert_partial(conn, g, group_id, cid, "added", h, from_group_id=from_gid,
+                            entered_by=entered_by, device_id=device_id, now=now)
+        conn.execute(
+            "INSERT INTO se_audit (round_id, group_id, kind, customer_id, device_id, result, detail, at) "
+            "VALUES (?, ?, 'no_show', ?, ?, ?, ?, ?)",
+            (g["round_id"], group_id, cid, device_id, "switch" if switch else "add",
+             json.dumps({"hole": h, "from_group_id": from_gid}), now))
+        _bump(conn, g["event_id"])
+        conn.commit()
+        pr = partial_rounds(conn, group_id=group_id).get(cid)
+    if switch:
+        try:
+            from email_parser.database import move_pairing_seat
+            pairing = move_pairing_seat(int(g["event_id"]), cid, int(g["group_num"]),
+                                        clear_blind=not started, db_path=db_path)
+        except Exception as exc:
+            logger.exception("add_player_to_card: pairing move failed")
+            pairing = {"error": str(exc)}
+    out = {"ok": True, "customer_id": cid, "name": (switch or add)["name"],
+           "mode": "switch" if switch else "add", "from_group_id": from_gid, "pairing": pairing}
+    if pr:
+        out.update(joined_hole=pr["joined_hole"], not_played=pr["not_played"],
+                   ask_makeup=pr["ask_makeup"])
+    bl = _sync_blinds_quietly(g["event_id"], db_path)
+    if bl is not None:
+        out["blinds"] = {k: bl.get(k) for k in ("drawn", "updated", "removed", "unfilled")}
+    return out
 
 
 def _group_card_state(conn, group_id: int, db_path=None) -> dict:
@@ -2062,7 +2631,10 @@ def _group_card_state(conn, group_id: int, db_path=None) -> dict:
     have = {r[0]: r[1] for r in conn.execute(
         "SELECT subject_key, COUNT(*) FROM se_hole_scores WHERE group_id = ? "
         "AND gross IS NOT NULL GROUP BY subject_key", (group_id,))}
-    complete = bool(subjects) and all((have.get(k) or 0) >= n for k in subjects)
+    # NOT PLAYED holes (late arrival, WD) never hold the card; holes he said
+    # he will MAKE UP do, until entered or "couldn't finish" (Kerry 10/26).
+    _np = {f"c:{c}": len(s["not_played"]) for c, s in partial_rounds(conn, group_id=group_id).items()}
+    complete = bool(subjects) and all((have.get(k) or 0) >= n - _np.get(k, 0) for k in subjects)
     last = conn.execute("SELECT MAX(server_ts) FROM se_hole_scores WHERE group_id = ?",
                         (group_id,)).fetchone()[0]
     fa = card_final_at(last, complete,
@@ -2557,6 +3129,7 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
         final_at = _group_final_at(conn, group_id, db_path)
         marks = _marks_by_subject(conn, group_id=group_id)
         no_shows = _card_no_shows(conn, group_id, names, db_path)
+        partials = _card_partials(conn, group_id, names)
         ns_after = no_show_after_holes(db_path, conn)
         try:
             match_status = _match_status(conn, g)
@@ -2590,7 +3163,24 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             "lock": _lock_view(lock, device_id, names),
             "final_at": final_at, "final": card_is_final(final_at),
             "lock_minutes": card_lock_minutes(db_path),
-            "no_shows": no_shows, "no_show_after_holes": ns_after}
+            "no_shows": no_shows, "no_show_after_holes": ns_after,
+            "partials": partials, "can_add": len(players) < 4 or any(
+                n["effective"] == "absent" for n in no_shows),
+            "blinds": _card_blinds(g["event_id"], no_shows, partials, db_path)}
+
+
+def _card_blinds(event_id, no_shows, partials, db_path=None) -> dict:
+    """{customer_id: {name, holes}}: the Rule 15 blind playing for each
+    missing / partial player on this card, for the phone ("Blind: Gus
+    Vasquez, holes 1-3"). Read through database.py (it owns blind_draws)."""
+    if not no_shows and not partials:
+        return {}
+    try:
+        from email_parser.database import no_show_blinds_by_player
+        return {str(k): v for k, v in no_show_blinds_by_player(int(event_id), db_path=db_path).items()}
+    except Exception:
+        logger.exception("card blinds unavailable for event %s", event_id)
+        return {}
 
 
 def claim_group(group_id: int, device_id: str, customer_id: int | None,
@@ -2850,6 +3440,16 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
                          (now, group_id))
         version = _bump(conn, g["event_id"]) if applied else None
         conn.commit()
+        # A score on a card with a missing / partial player can change which
+        # holes a Rule 15 blind covers (a made-up hole, a "don't know yet"
+        # turning absent at N group holes): re-sync, no manager tap.
+        resync = bool(applied) and bool(
+            conn.execute("SELECT 1 FROM se_partial_rounds WHERE group_id = ? LIMIT 1",
+                         (group_id,)).fetchone()
+            or conn.execute("SELECT 1 FROM se_no_shows WHERE group_id = ? AND status <> 'present' "
+                            "LIMIT 1", (group_id,)).fetchone())
+    if resync:
+        _sync_blinds_quietly(g["event_id"], db_path)
     return {"results": results, "holds_lock": holds, "version": version}
 
 
@@ -4414,6 +5014,10 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
             players = []
             # NO-SHOW: an absent player is off the card (see absent_ids).
             _abs = absent_ids(conn, round_id=rid, db_path=db_path)
+            # PARTIAL ROUNDS (Kerry 10/26): late arrival / add / WD. NOT
+            # PLAYED holes never hold the card; `incomplete_round` with
+            # INCOMPLETE_ROUND_GAMES decides the games he plays.
+            _part = partial_rounds(conn, round_id=rid)
             absent = []
             for p in conn.execute("SELECT * FROM se_players WHERE round_id = ? "
                                   "ORDER BY group_id, COALESCE(seat, 99), id", (rid,)):
@@ -4428,6 +5032,12 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                                 "scores": d["scores"], "thru": len(d["scores"]),
                                 "marks": marks.get(f"c:{p['customer_id']}", {}),
                                 "last_write_at": d["last"] or None})
+                _ps = _part.get(int(p["customer_id"]))
+                if _ps:
+                    players[-1].update(
+                        joined_hole=_ps["joined_hole"], left_hole=_ps["left_hole"],
+                        makeup=_ps["makeup"], makeup_open=_ps["makeup_open"],
+                        not_played=_ps["not_played"], incomplete_round=_ps["incomplete"])
             teams = []
             for t in conn.execute("SELECT * FROM se_teams WHERE round_id = ? ORDER BY id",
                                   (rid,)):
@@ -4452,7 +5062,9 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
             _n = len(course) or int(r["holes"] or 0)
             _subs: dict = {}
             for _p in players:
-                _subs.setdefault(_p["group_id"], []).append(len(_p["scores"]))
+                # NOT PLAYED holes count as done for the card (never par)
+                _subs.setdefault(_p["group_id"], []).append(
+                    len(_p["scores"]) + len(_p.get("not_played") or []))
             for _t in teams:
                 if _t["group_id"] not in _subs or not any(
                         p["group_id"] == _t["group_id"] for p in players):

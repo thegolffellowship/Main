@@ -500,6 +500,9 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
 
         thru = sum(1 for h in holes_out if h["strokes"] is not None)
         nines = points_by_nine(holes_out, pts_adjust)
+        # PARTIAL ROUND (Kerry 10/26: late arrival, WD): holes he did NOT
+        # PLAY are settled as not played, never waited on.
+        not_played = {int(h) for h in (p.get("not_played") or []) if int(h) in hole_meta}
         cards.append({
             "key": p.get("key"),
             "customer_id": p.get("customer_id"),
@@ -515,7 +518,9 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             "thru": thru,
             "points_plus_adjust": pts_adjust or None,
             "points_by_nine": nines,
-            "complete": thru == len(hole_meta) and len(hole_meta) > 0,
+            "complete": thru + len(not_played) >= len(hole_meta) and len(hole_meta) > 0,
+            "incomplete_round": bool(p.get("incomplete_round")),
+            "not_played": sorted(not_played),
             "allocation_source": allocation_source,
             **totals,
         })
@@ -1362,7 +1367,10 @@ def game_skins(cards: list[dict], cfg: dict, holes_key: str,
                     winners.append(c)
             if best is None:
                 continue
-            settled = played == len(members)
+            # a player who did not play this hole (late arrival, WD) is not
+            # waited on (Kerry 10/26: "his holes played count")
+            settled = played == sum(1 for c in members
+                                    if hole not in (c.get("not_played") or ()))
             if len(winners) == 1:
                 skins.append({"hole": hole, "par": par,
                               "gross": next(x["strokes"] for x in
@@ -1418,12 +1426,16 @@ def game_mvp(cards: list[dict], cfg: dict, holes_count: int) -> dict:
                     for c in entrants[:10]]
     top = entrants[0]
     max_pts = gc.get("max_points_per_hole") or 9
+    # A hole a player did NOT PLAY (late arrival, WD; Kerry 10/26) is final
+    # at zero points: it never leaves the MVP waiting.
+    def _left(c):
+        return holes_count - c["thru"] - len(c.get("not_played") or [])
     unsettled = [
         {"name": c["name"], "thru": c["thru"], "points_so_far": c["stableford_net"]}
         for c in entrants
-        if (holes_count - c["thru"]) > 0
+        if _left(c) > 0
         and top["stableford_net"] - c["stableford_net"]
-        <= (holes_count - c["thru"]) * max_pts]
+        <= _left(c) * max_pts]
     if unsettled:
         out["status"] = "incomplete_cards"
         out["incomplete"] = unsettled
@@ -1501,6 +1513,21 @@ def compute_leaderboard(state: dict, formulas: dict,
     # Per-game flight membership from the flight board ({game: {card key:
     # flight label}}); absent -> the engine's own bands, as before.
     pins = state.get("flight_pins") or {}
+    # INCOMPLETE ROUNDS (Kerry 10/26: "a player cannot compete in Individual
+    # Net or Individual Gross, but could still compete in Skins, MVP, and
+    # CTPs"): `incomplete_round_games` ({game: bool}, score_entry.
+    # INCOMPLETE_ROUND_GAMES) says which games a card flagged
+    # `incomplete_round` plays. Absent = no filtering.
+    _irg = state.get("incomplete_round_games")
+
+    def _for(game):
+        if _irg is None:
+            return cards
+        return [c for c in cards if not c.get("incomplete_round") or _irg.get(game, False)]
+    team_cards = cards
+    if state.get("team_net_incomplete_round") == "blind_whole_round":
+        # his ball never counts for the team; the blind plays every hole
+        team_cards = [c for c in cards if not c.get("incomplete_round")]
     overall = _rank(
         [{"key": c["key"], "customer_id": c["customer_id"], "name": c["name"],
           "playing_handicap": c["playing_handicap"],
@@ -1516,20 +1543,20 @@ def compute_leaderboard(state: dict, formulas: dict,
         "cards": cards,
         "overall": overall,
         "games": {
-            "individual_net": game_individual(cards, cfg, holes_key, "net",
+            "individual_net": game_individual(_for("individual_net"), cfg, holes_key, "net",
                                               pins=pins.get("individual_net")),
             "individual_gross": game_individual(
-                cards, cfg, holes_key, "gross",
+                _for("individual_gross"), cfg, holes_key, "gross",
                 pins=pins.get("individual_gross")),
             "team_net": game_team_net(
-                cards, cfg, blinds=state.get("blinds"),
+                team_cards, cfg, blinds=state.get("blinds"),
                 balls=(state.get("team_balls")
                        or (state.get("meta") or {}).get("team_balls"))),
-            "skins": game_skins(cards, cfg, holes_key,
+            "skins": game_skins(_for("skins"), cfg, holes_key,
                                 pins=pins.get("skins"),
                                 variant_name=(state.get("variant_pins")
                                               or {}).get("skins")),
-            "mvp": game_mvp(cards, cfg, holes_count),
+            "mvp": game_mvp(_for("mvp"), cfg, holes_count),
             "ctp": ctp_slots(state, cfg),
             "hio": game_hio(cards, cfg),
         },

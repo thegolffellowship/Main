@@ -14392,8 +14392,19 @@ def _event_field_complete(conn, event_id: int, holes_n: int) -> dict:
               AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'
             GROUP BY k""", (event_id,))]
     want = int(holes_n or 0) or 9
-    pending = [{"player": r["nm"], "holes": r["n_holes"], "of": want}
-               for r in rows if (r["n_holes"] or 0) < want]
+    # NOT PLAYED holes (late arrival, WD; Kerry 10/26) are accounted for: they
+    # were never going to carry a stroke. Holes still to be MADE UP are not.
+    _np: dict = {}
+    try:
+        from email_parser import score_entry as _se_fc
+        _dbp = _conn_db_path(conn)
+        if _se_fc.event_enabled(event_id, _dbp):
+            _np = {str(c): len(s.get("not_played") or [])
+                   for c, s in _se_fc.event_partial_rounds(event_id, db_path=_dbp).items()}
+    except Exception:
+        _np = {}
+    pending = [{"player": r["nm"], "holes": r["n_holes"], "of": want - _np.get(r["k"], 0)}
+               for r in rows if (r["n_holes"] or 0) < want - _np.get(r["k"], 0)]
     pending.sort(key=lambda r: (r["holes"], r["player"] or ""))
     return {"complete": bool(rows) and not pending,
             "field": len(rows), "pending": pending,
@@ -16084,6 +16095,19 @@ def get_event_leaderboard(event_name: str,
             _start_by_cid[_wc] = str(_w["tee_time"]) + (
                 f" · {_sh}" if _sh not in (None, 1, "1") else "")
 
+    # PARTIAL ROUNDS (Kerry 10/26: late arrival, WD, make-up holes): a hole a
+    # player did not play (or has yet to make up) never holds his team; the
+    # Rule 15 missed-hole blind plays it.
+    _np_by_cid: dict = {}
+    _team_out: set = set()      # TEAM_NET_INCOMPLETE_ROUND "blind_whole_round"
+    try:
+        from email_parser import score_entry as _se_pr
+        _prs = _se_pr.event_partial_rounds(ev["id"], db_path=db_path)
+        _np_by_cid = {int(c): set(s.get("blind_holes") or []) for c, s in _prs.items()}
+        if _se_pr.TEAM_NET_INCOMPLETE_ROUND == "blind_whole_round":
+            _team_out = {int(c) for c, s in _prs.items() if s.get("incomplete")}
+    except Exception:
+        logger.exception("Non-fatal: partial rounds unavailable for event %s", ev["id"])
     teams = []
     for tn, names in sorted(_groups.items(), key=lambda kv: str(kv[0])):
         members, matched = [], 0
@@ -16109,8 +16133,12 @@ def get_event_leaderboard(event_name: str,
                         m["blind_holes"] = sorted(blind["holes"])
                 members.append(m)
             else:
-                # on the sheet but no card (no-show / blind-draw slot)
+                # on the sheet but no card (no-show / blind-draw slot);
+                # `seat_customer_id` lets the payout pair him with the
+                # Rule 15 blind that played his seat (Kerry 10/26)
                 members.append({"player_name": nm, "customer_id": None,
+                                "seat_customer_id": (int(cid) if cid is not None and not blind
+                                                     else None),
                                 "scoring_round_id": None, "hcp": None})
         _upcoming = False
         if not matched:
@@ -16160,6 +16188,9 @@ def get_event_leaderboard(event_name: str,
                     continue
                 if m.get("blind_holes") and hn not in m["blind_holes"]:
                     continue
+                if (not m.get("blind") and m.get("customer_id") is not None
+                        and int(m["customer_id"]) in _team_out):
+                    continue          # his ball never counts; the blind plays his seat
                 v = _player_holes(m["scoring_round_id"]).get(hn)
                 if v and v[0] is not None:
                     tp = _pops_by_rid.get(m["scoring_round_id"])
@@ -16167,6 +16198,9 @@ def get_event_leaderboard(event_name: str,
                         hn, hole_par.get(hn, hole_par.get(str(hn))))
                     nets.append((v[0] - (tp.get(hn, 0) if tp is not None else (v[1] or 0)),
                                  _par, m["scoring_round_id"]))
+                elif (not m.get("blind") and m.get("customer_id") is not None
+                      and hn in _np_by_cid.get(int(m["customer_id"]), ())):
+                    continue          # NOT PLAYED by him: his blind plays it
                 elif not m.get("blind"):
                     waiting_on = True
             if waiting_on or not nets:
@@ -18901,6 +18935,43 @@ def _event_net_buyers(conn, event_name: str) -> dict:
     return _event_game_buyers(conn, event_name, "NET")
 
 
+def _partial_round_mvp_entrants(event_name: str, db_path=None) -> list:
+    """MVP entrants for the event's SHORT ROUNDS (late arrival, WD) when
+    score_entry.INCOMPLETE_ROUND_GAMES["mvp"] is on: the engine's net
+    Stableford over the holes he played. `holes_played` is the full count
+    (his NOT PLAYED holes are final at zero), so the incomplete-card guard
+    never waits on them."""
+    try:
+        from email_parser import score_entry as _se_m
+        if not _se_m.incomplete_round_plays("mvp"):
+            return []
+        st = event_engine_state(event_name, db_path=db_path)
+        if st.get("error"):
+            # nothing published yet: the live day's entered cards
+            st = event_engine_state(event_name, db_path=db_path, live=True)
+        if st.get("error"):
+            return []
+        part = [p for p in st["players"] if p.get("incomplete_round")]
+        if not part:
+            return []
+        from email_parser import live_scoring as _ls_m
+        formulas = (get_championship_formulas(db_path=db_path)
+                    if st["meta"].get("championship") else get_scoring_formulas(db_path))
+        n = len(st["holes"])
+        out = []
+        for c in _ls_m.build_cards({**st, "players": part}, formulas):
+            if not c.get("customer_id") or not c.get("thru"):
+                continue
+            out.append({"customer_id": int(c["customer_id"]), "player": c["name"],
+                        "holes_played": n, "points": c["stableford_net"], "net": c["net"],
+                        "gross": c["gross"], "short_round": True,
+                        "holes_actually_played": c["thru"]})
+        return out
+    except Exception:
+        logger.exception("short-round MVP entrants unavailable for %s", event_name)
+        return []
+
+
 def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
     """Compute City MVP for each linked same-day event from OUR imported
     scorecards + the formula layer, then determine the TGF MVP."""
@@ -18992,6 +19063,15 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
             entrants.append({"customer_id": cid,
                              "player": rd["player_name"] or name,
                              "holes_played": rd.get("holes_played"), **sc})
+        # A SHORT ROUND plays MVP (Kerry 10/26: "could still compete in
+        # Skins, MVP, and CTPs"): it is not in the record, so its net
+        # Stableford comes from the engine on his entered card (holes he
+        # played; zero on the rest; the plus off the round). Its NOT PLAYED
+        # holes are final, so it never leaves the MVP waiting.
+        _have = {e["customer_id"] for e in entrants}
+        for pe in _partial_round_mvp_entrants(d["item_name"], db_path=db_path):
+            if pe["customer_id"] in binfo["buyers"] and pe["customer_id"] not in _have:
+                entrants.append(pe)
         entry = {"event_name": d["item_name"], "course": d.get("course"),
                  "net_buyers": len(binfo["buyers"]),
                  "buyers_without_customer_id": binfo["no_customer_id"],
@@ -27924,6 +28004,45 @@ def event_engine_state(event_name: str, db_path=None, live: bool = False) -> dic
                 "is_member": True, "scores": scores,
                 "strokes_received": received,
                 "stroke_index_by_hole": own_si})
+        # PARTIAL ROUNDS (Kerry 10/26: late arrival, WD). An incomplete
+        # round is not published into the record while points and the
+        # handicap round are out (score_entry.INCOMPLETE_ROUND_GAMES), yet
+        # his holes count for Skins, MVP and Team Net: his entered card joins
+        # the engine here, flagged `incomplete_round`, and compute_leaderboard
+        # plays him only in the games the settings allow.
+        _parts: dict = {}
+        try:
+            from email_parser import score_entry as _se_es
+            _parts = _se_es.event_partial_rounds(ev["id"], db_path=db_path)
+        except Exception:
+            logger.exception("Non-fatal: partial rounds unavailable for %s", ev["id"])
+        if _parts:
+            _have = {p["customer_id"] for p in players if p.get("customer_id")}
+            _want = {c for c, s in _parts.items() if s.get("incomplete") and c not in _have}
+            if _want:
+                try:
+                    from email_parser import entry_publish as _ep_es
+                    for lr in _ep_es.live_board_rows(conn, ev["id"], db_path=db_path):
+                        if lr["customer_id"] not in _want:
+                            continue
+                        players.append({
+                            "key": f"partial:{lr['customer_id']}", "customer_id": lr["customer_id"],
+                            "name": lr["player_name"], "playing_handicap": lr["playing_handicap"],
+                            "flight": None,
+                            "team": teams.get((lr["player_name"] or "").strip().lower()),
+                            "buys_net": lr["customer_id"] in net_buyers,
+                            "buys_gross": lr["customer_id"] in gross_buyers,
+                            "is_member": True,
+                            "scores": {int(h): v for h, v in lr["holes"].items()},
+                            "strokes_received": {int(h): v for h, v in lr["strokes_received"].items()},
+                            "stroke_index_by_hole": {}})
+                except Exception:
+                    logger.exception("Non-fatal: partial cards unavailable for %s", ev["id"])
+            for p in players:
+                s = _parts.get(p.get("customer_id"))
+                if s and s.get("incomplete"):
+                    p["incomplete_round"] = True
+                    p["not_played"] = list(s.get("not_played") or [])
     if not holes:
         # No tee on the cards -> no par / stroke index. Guessing a tee would
         # score every hole against the wrong card; a board of empty holes
@@ -27953,9 +28072,16 @@ def event_engine_state(event_name: str, db_path=None, live: bool = False) -> dic
     warnings = ([f"{len(tee_less)} card(s) carry no tee and were scored on "
                  f"the event's common tee: {', '.join(tee_less)}"]
                 if tee_less else [])
+    try:
+        from email_parser.score_entry import (INCOMPLETE_ROUND_GAMES as _irg,
+                                              TEAM_NET_INCOMPLETE_ROUND as _tni)
+    except Exception:
+        _irg, _tni = {}, "own_ball_and_blind"
     return {"holes": _ls_trim_to_played_nine(holes, players, n_holes),
             "players": players, "meta": meta, "contests": [], "event": ev,
-            "warnings": warnings, "tee_less": tee_less}
+            "warnings": warnings, "tee_less": tee_less,
+            "incomplete_round_games": dict(_irg),
+            "team_net_incomplete_round": _tni}
 
 
 def engine_game_payouts(event_name: str, db_path=None, state: dict | None = None,
@@ -60515,15 +60641,26 @@ def _tracker_team_and_ctp_rows(ev: dict, notes: list, db_path=None,
             f"Team Net / CTP: the field is not complete yet "
             f"({lb.get('holes_posted')} of {lb.get('holes_needed')} holes posted) — skipped")
         return out
+    # A SHARED SLOT (Kerry 10/26): a missing / partial player and the Rule 15
+    # blind that played his missing holes hold ONE slot between them; each
+    # carries a weight = holes covered / holes in the round (team_slot_weights).
+    try:
+        _pairs = no_show_blinds_by_player(int(ev["id"]), db_path=db_path)
+    except Exception:
+        _pairs = {}
     for t in lb.get("teams") or []:
         if t.get("total_net") is None or not t.get("position"):
             continue
-        names = [(m.get("player_name") or "").strip() for m in t.get("players") or []]
-        names = [n for n in names if n]
+        members = [m for m in t.get("players") or [] if (m.get("player_name") or "").strip()]
+        names = [(m.get("player_name") or "").strip() for m in members]
         if names:
-            out.append({"game": "team_net", "player_name": " + ".join(names),
-                        "position": t["position"], "purse": 0,
-                        "detail": f"Tracker team {t.get('team_num')}"})
+            row = {"game": "team_net", "player_name": " + ".join(names),
+                   "position": t["position"], "purse": 0,
+                   "detail": f"Tracker team {t.get('team_num')}"}
+            slots = team_slot_weights(members, _pairs, int(t.get("holes_total") or 0))
+            if slots:
+                row["slots"] = slots
+            out.append(row)
     if not any(r["game"] == "team_net" for r in out):
         notes.append("Team Net: no team totals on the Tracker leaderboard — skipped")
     try:
@@ -60741,9 +60878,18 @@ def assemble_event_game_payouts(event_name: str, db_path=None,
             if pool <= 0:
                 continue
             suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(pos, f"{pos}th")
-            grp_members = [[_member(mname.strip())
-                            for mname in t["player_name"].split("+")
-                            if mname.strip()] for t in grp]
+            grp_members = []
+            for ti_, t in enumerate(grp):
+                ms = [_member(mname.strip()) for mname in t["player_name"].split("+")
+                      if mname.strip()]
+                # A SHARED SLOT (missing / partial player + his blind, Kerry
+                # 10/26 "Split by holes is good"): carry the slot and weight
+                # so the slot is paid ONCE, split between the two.
+                sl = t.get("slots")
+                if sl and len(sl) == len(ms):
+                    ms = [{**m, "slot": f"{pos}:{ti_}:{s['slot']}", "weight": s["weight"],
+                           "slot_holes": s.get("holes")} for m, s in zip(ms, sl)]
+                grp_members.append(ms)
             # TIED teams sharing a duplicate player (real slot on one,
             # blind on the other) stop being separate pots (Kerry ruling
             # 2026-07-20): the COMBINED pool splits evenly among ALL
@@ -60818,10 +60964,33 @@ def assemble_event_game_payouts(event_name: str, db_path=None,
                 if deduping:
                     break
         for team in paid_teams:
-            if team["members"]:
+            if not team["members"]:
+                continue
+            if not any("slot" in m for m in team["members"]):
                 _money_split(team["cents"] / 100.0,
                              [m["name"] for m in team["members"]],
                              "team_net", team["desc"])
+                continue
+            # Equal share per SLOT; a shared slot splits its share by weight
+            # (holes covered), to the cent. One slot is never paid twice.
+            order_, by_slot = [], {}
+            for i_, m in enumerate(team["members"]):
+                k = m.get("slot") or f"solo{i_}"
+                if k not in by_slot:
+                    by_slot[k] = []
+                    order_.append(k)
+                by_slot[k].append(m)
+            for k, sc in zip(order_, split_cents(team["cents"], len(order_))):
+                ms = by_slot[k]
+                parts = (split_weighted_cents(sc, [int(m.get("weight", 1) or 0) for m in ms])
+                         if len(ms) > 1 else [sc])
+                for m, c in zip(ms, parts):
+                    if c > 0:
+                        rows.append({"golferName": m["name"], "category": "team_net",
+                                     "amount": c / 100.0,
+                                     "description": team["desc"] + (
+                                         f" (shared slot: {m.get('slot_holes')} holes)"
+                                         if len(ms) > 1 else "")})
     proxies = ([r for r in gg_rows if r["game"] == "ctp"]
                + [r for r in gg_rows if r["game"] == "longest_putt"])
     ctp_vals = [v for v in (
@@ -64211,6 +64380,309 @@ def clear_event_blinds(event_id: int, db_path=None) -> int:
         return cur.rowcount
 
 
+# ── BLINDS FOR MISSING PLAYERS (Kerry 2026-10-26) ────────────────────
+#    "Also need to account for providing a blind, or potentially more blinds
+#    for any missing players, based on our blind rules." / "Blinds would
+#    happen automatically if a player is removed, correct?"
+#    One Rule 15 blind per missing seat, drawn by the SAME per-seat rule as
+#    the whole-sheet draw and the open-seat RANDOM (`_blind_seat_candidates`
+#    + `_blind_pick`: Team Net = the field outside the group, Cart Net = the
+#    other cart of the same foursome, fewest blinds this year first, one
+#    blind per person per event), reason 'missed_hole', the holes it covers
+#    as blind_draw_holes rows. Keyed to the missing player's own seat; never
+#    written into event_pairings. Nothing here asks a manager.
+
+def _set_blind_holes(conn, blind_id: int, holes) -> bool:
+    """Replace a blind's hole rows. True when they changed."""
+    have = sorted(int(r[0]) for r in conn.execute(
+        "SELECT hole FROM blind_draw_holes WHERE blind_draw_id = ?", (blind_id,)))
+    want = sorted({int(h) for h in holes or []})
+    if have == want:
+        return False
+    conn.execute("DELETE FROM blind_draw_holes WHERE blind_draw_id = ?", (blind_id,))
+    for h in want:
+        conn.execute("INSERT INTO blind_draw_holes (blind_draw_id, hole) VALUES (?, ?)",
+                     (blind_id, h))
+    return True
+
+
+def _delete_blind(conn, blind_id: int) -> None:
+    conn.execute("DELETE FROM blind_draw_holes WHERE blind_draw_id = ?", (blind_id,))
+    conn.execute("DELETE FROM blind_draws WHERE id = ?", (blind_id,))
+
+
+def sync_no_show_blinds(event_id: int, db_path=None, team_unit: str | None = None) -> dict:
+    """Bring the event's missed-hole blinds in line with the scorers'
+    answers (score_entry.event_missing_players): draw one for every missing
+    seat that has none, narrow / widen its holes as the player arrives,
+    leaves or makes holes up, and remove it when he plays every hole after
+    all. An open-seat blind on a seat a "+ Player" newcomer took becomes a
+    missed-hole blind for the holes before he joined (or goes, when he plays
+    them all). Idempotent; run after every answer, every score on such a
+    card and by the no_show_notice job. `team_unit` overrides the matrix
+    (tests), exactly as in `draw_event_blinds`."""
+    from email_parser import score_entry as _se
+    missing = _se.event_missing_players(int(event_id), db_path=db_path)
+    out = {"event_id": int(event_id), "drawn": [], "updated": [], "removed": [],
+           "unfilled": [], "unseated": [], "covered": []}
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        if "reason" not in _blind_cols(conn):
+            out["skipped"] = "blind_draws has no reason column (migration 0004)"
+            return out
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        if not ev:
+            return {**out, "error": f"no event {event_id}"}
+        ev = dict(ev)
+        seats = {int(r["customer_id"]): dict(r) for r in conn.execute(
+            "SELECT holes, group_num, cart_pos, slot_label, customer_id FROM event_pairings "
+            "WHERE event_id = ? AND customer_id IS NOT NULL", (int(event_id),))}
+        rows = {r["slot_key"]: dict(r) for r in conn.execute(
+            "SELECT id, slot_key, reason, source, customer_id, player_name FROM blind_draws "
+            "WHERE event_id = ? AND group_num IS NOT NULL", (int(event_id),))}
+        want: dict = {}
+        for m in missing:
+            st = seats.get(int(m["customer_id"]))
+            if not st:
+                out["unseated"].append({"customer_id": m["customer_id"], "name": m.get("name"),
+                                        "why": "not seated on the saved PAIRINGS"})
+                continue
+            want[_blind_slot_key(st["holes"], st["group_num"], st["cart_pos"])] = (m, st)
+        missing_cids = {int(m["customer_id"]) for m in missing}
+        need_draw = any(m["missed_holes"] and k not in rows for k, (m, _s) in want.items())
+        pool = pairings = unit = None
+        if need_draw:
+            pool = event_blind_pool(conn, int(event_id), db_path=db_path)
+            pairings = get_event_pairings(int(event_id), db_path=db_path)
+            unit = team_unit if team_unit in ("cart", "group") else _event_blind_unit(pairings, db_path=db_path)
+        # 1. a missed-hole blind nobody needs any more is undone
+        for key, row in list(rows.items()):
+            if row["reason"] == "missed_hole" and (row["source"] or "app") == "app" and (
+                    key not in want or not want[key][0]["missed_holes"]):
+                _delete_blind(conn, row["id"])
+                out["removed"].append({"seat": key, "blind": row["player_name"],
+                                       "customer_id": row["customer_id"]})
+                rows.pop(key)
+        for key, (m, st) in want.items():
+            holes = m["missed_holes"]
+            row = rows.get(key)
+            if not holes:
+                # a newcomer who plays every hole fills the seat: its
+                # open-seat blind goes (seat-fill does the same)
+                if row and row["reason"] == "open_seat" and m.get("state") == "added":
+                    _delete_blind(conn, row["id"])
+                    out["removed"].append({"seat": key, "blind": row["player_name"],
+                                           "customer_id": row["customer_id"]})
+                continue
+            if row and row["reason"] in ("missed_hole", "open_seat"):
+                changed = row["reason"] != "missed_hole"
+                if changed:
+                    conn.execute("UPDATE blind_draws SET reason = 'missed_hole' WHERE id = ?", (row["id"],))
+                changed = _set_blind_holes(conn, row["id"], holes) or changed
+                if changed:
+                    out["updated"].append({"seat": key, "blind": row["player_name"],
+                                           "customer_id": row["customer_id"], "holes": holes,
+                                           "for": m.get("name")})
+                continue
+            if row:
+                out["covered"].append({"seat": key, "reason": row["reason"], "for": m.get("name")})
+                continue
+            taken = {int(r[0]) for r in conn.execute(
+                "SELECT customer_id FROM blind_draws WHERE event_id = ? AND customer_id IS NOT NULL",
+                (int(event_id),))} | missing_cids
+            grp = next((g for g in (pairings.get(str(st["holes"])) or [])
+                        if int(g["group_num"]) == int(st["group_num"])), None) or {}
+            cands, source = _blind_seat_candidates(pool["eligible"], taken, grp,
+                                                   int(st["cart_pos"]), unit)
+            if not cands:
+                out["unfilled"].append({"seat": key, "for": m.get("name"),
+                                        "why": "no eligible player left"})
+                continue
+            pick = _blind_pick(cands)
+            _write_blind_row(conn, True, int(event_id), ev, st["holes"], st["group_num"],
+                             st["slot_label"], st["cart_pos"], pick["customer_id"],
+                             pick["name"], "missed_hole")
+            bid = conn.execute("SELECT id FROM blind_draws WHERE event_id = ? AND slot_key = ?",
+                               (int(event_id), key)).fetchone()[0]
+            _set_blind_holes(conn, bid, holes)
+            out["drawn"].append({"seat": key, "blind": pick["name"],
+                                 "customer_id": pick["customer_id"],
+                                 "blinds_ytd": pick["blinds_ytd"], "drawn_from": source,
+                                 "team_unit": unit, "holes": holes, "for": m.get("name"),
+                                 "for_customer_id": m["customer_id"], "state": m.get("state")})
+        conn.commit()
+    for d in out["drawn"]:
+        try:
+            log_agent_action("no-show-blinds", "no_show_blind",
+                             f"event {event_id}: blind {d['blind']} ({d['drawn_from']}) for "
+                             f"{d['for']} ({d['state']}), holes {d['holes']}", outcome="drawn",
+                             db_path=db_path)
+        except Exception:
+            logger.debug("no-show blind log failed", exc_info=True)
+    for d in out["removed"]:
+        try:
+            log_agent_action("no-show-blinds", "no_show_blind",
+                             f"event {event_id}: blind {d['blind']} at {d['seat']} undone",
+                             outcome="removed", db_path=db_path)
+        except Exception:
+            logger.debug("no-show blind log failed", exc_info=True)
+    return out
+
+
+def team_slot_weights(members: list, pairs: dict, n_holes: int) -> list | None:
+    """Who is paid a winning team's slot when a missing / partial player
+    and his Rule 15 blind shared it (Kerry 10/26, ruled: "Split by holes is
+    good - So that player's share is prorated between two players.").
+    `members` are the board's team members in order, `pairs` is
+    `no_show_blinds_by_player`. Returns, aligned with `members`, [{slot,
+    weight}] where members of one slot share its equal share by weight, or
+    None when no slot is shared. score_entry.TEAM_SLOT_PAYOUT:
+      pro_rata  weight = holes covered (late player 6, blind 3 of 9)
+      player    the late / WD player takes the slot
+      blind     the blind takes the slot
+    A player who covered NO hole (a no-show) gives the blind the whole slot
+    in every mode: he played nothing."""
+    try:
+        from email_parser.score_entry import TEAM_SLOT_PAYOUT as mode
+    except Exception:
+        mode = "pro_rata"
+    out = [{"slot": f"m{i}", "weight": 1} for i in range(len(members))]
+    shared = False
+    for i, m in enumerate(members):
+        if m.get("blind"):
+            continue
+        cid = m.get("customer_id") if m.get("customer_id") is not None else m.get("seat_customer_id")
+        pr = pairs.get(int(cid)) if cid is not None else None
+        if not pr or pr.get("reason") != "missed_hole":
+            continue
+        j = next((k for k, b in enumerate(members) if b.get("blind")
+                  and b.get("customer_id") == pr.get("customer_id")), None)
+        if j is None:
+            continue
+        bh = len(pr.get("holes") or []) or n_holes
+        ph = max(0, (n_holes or bh) - bh)
+        if ph == 0:
+            wp, wb = 0, 1
+        elif mode == "player":
+            wp, wb = 1, 0
+        elif mode == "blind":
+            wp, wb = 0, 1
+        else:
+            wp, wb = ph, bh
+        out[i] = {"slot": f"m{i}", "weight": wp, "holes": ph}
+        out[j] = {"slot": f"m{i}", "weight": wb, "holes": bh}
+        shared = True
+    return out if shared else None
+
+
+def split_weighted_cents(total_cents: int, weights: list) -> list:
+    """Split `total_cents` by integer weights, to the cent; the parts add up
+    exactly (largest remainder, earlier first on a tie)."""
+    tw = sum(weights)
+    if tw <= 0:
+        return [0] * len(weights)
+    base = [total_cents * w // tw for w in weights]
+    rem = total_cents - sum(base)
+    order = sorted(range(len(weights)),
+                   key=lambda i: (-(total_cents * weights[i] % tw), i))
+    for i in order[:rem]:
+        base[i] += 1
+    return base
+
+
+def no_show_blinds_by_player(event_id: int, db_path=None) -> dict:
+    """{customer_id of the seat's player: {name, customer_id, holes, reason}}
+    for the blinds keyed to an OCCUPIED seat (missed-hole and N/H): who is
+    playing for whom, for the scorer's phone."""
+    out = {}
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        seat_cid = {(str(r["holes"]), int(r["group_num"]), int(r["cart_pos"])): int(r["customer_id"])
+                    for r in conn.execute(
+                        "SELECT holes, group_num, cart_pos, customer_id FROM event_pairings "
+                        "WHERE event_id = ? AND customer_id IS NOT NULL", (int(event_id),))}
+        bl = get_event_blinds(int(event_id), conn=conn)
+    for h, groups in bl.items():
+        for gnum, bseats in groups.items():
+            for b in bseats:
+                cid = seat_cid.get((str(h), int(gnum), int(b.get("cart_pos") or 0)))
+                if cid is not None and (b.get("reason") or "open_seat") != "open_seat":
+                    out[cid] = {"name": b.get("name"), "customer_id": b.get("customer_id"),
+                                "holes": b.get("missed_holes"), "reason": b.get("reason")}
+    return out
+
+
+def move_pairing_seat(event_id: int, customer_id: int, group_num: int, name: str | None = None,
+                      clear_blind: bool = False, db_path=None) -> dict:
+    """The scorer's "+ Player" reaches the saved PAIRINGS (Kerry 10/26): put
+    the player in the first free seat of `group_num` with ONE targeted write
+    (never a full `save_event_pairings`, which would re-seat every blind mid-
+    round). A switch moves his row; a last-second add inserts one (tee and
+    index resolve from the roster at read time, rule 15g). The seat he left
+    is an OPEN seat and gets its Rule 15 blind at once (`draw_one_blind`, no
+    manager tap); `clear_blind` drops an open-seat blind on the seat he takes
+    when he plays it from the first hole. Refused (reported, nothing
+    written) when the group is not on the saved sheet or has no free seat."""
+    out = {"event_id": int(event_id), "customer_id": int(customer_id), "group_num": int(group_num)}
+    vacated = None
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        cur = conn.execute("SELECT * FROM event_pairings WHERE event_id = ? AND customer_id = ?",
+                           (int(event_id), int(customer_id))).fetchone()
+        hk = (str(cur["holes"]) if cur else None)
+        dest = [dict(r) for r in conn.execute(
+            "SELECT holes, cart_pos, slot_label FROM event_pairings WHERE event_id = ? AND group_num = ?"
+            + (" AND holes = ?" if hk else ""),
+            (int(event_id), int(group_num)) + ((hk,) if hk else ()))]
+        if not dest:
+            return {**out, "skipped": f"group {group_num} is not on the saved PAIRINGS; "
+                                      "the sheet was not changed (fix it on PAIRINGS)"}
+        hk = hk or str(dest[0]["holes"])
+        if cur and int(cur["group_num"]) == int(group_num):
+            return {**out, "unchanged": True}
+        used = {int(d["cart_pos"]) for d in dest}
+        pos = next((p for p in range(1, 6) if p not in used), None)
+        if pos is None:
+            return {**out, "skipped": f"group {group_num} has no free seat on the saved PAIRINGS"}
+        label = dest[0]["slot_label"]
+        if cur:
+            vacated = (str(cur["holes"]), int(cur["group_num"]), int(cur["cart_pos"]))
+            conn.execute("UPDATE event_pairings SET group_num = ?, cart_pos = ?, slot_label = ? WHERE id = ?",
+                         (int(group_num), pos, label, cur["id"]))
+        else:
+            nm = name or ""
+            if not nm:
+                r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                                 (int(customer_id),)).fetchone()
+                nm = f"{(r[0] or '') if r else ''} {(r[1] or '') if r else ''}".strip() or f"customer {customer_id}"
+            conn.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, player_name, "
+                         "cart_pos, customer_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                         (int(event_id), hk, int(group_num), label, nm, pos, int(customer_id)))
+        if clear_blind:
+            conn.execute("DELETE FROM blind_draw_holes WHERE blind_draw_id IN (SELECT id FROM blind_draws "
+                         "WHERE event_id = ? AND slot_key = ? AND COALESCE(reason, 'open_seat') = 'open_seat')",
+                         (int(event_id), _blind_slot_key(hk, group_num, pos)))
+            conn.execute("DELETE FROM blind_draws WHERE event_id = ? AND slot_key = ? "
+                         "AND COALESCE(reason, 'open_seat') = 'open_seat'",
+                         (int(event_id), _blind_slot_key(hk, group_num, pos)))
+        conn.commit()
+        out.update(seat=_blind_slot_key(hk, group_num, pos), moved_from=(
+            _blind_slot_key(*vacated) if vacated else None))
+        size = _blind_team_size(conn)
+    try:
+        log_agent_action("score-entry", "pairing_seat_move",
+                         f"event {event_id}: customer {customer_id} to group {group_num} seat {pos}"
+                         + (f" (from {out['moved_from']})" if vacated else " (last-second add)"),
+                         db_path=db_path)
+    except Exception:
+        logger.debug("seat move log failed", exc_info=True)
+    if vacated and vacated[2] <= size:
+        # The seat he left is open: Rule 15 fills it, no manager tap.
+        res = draw_one_blind(int(event_id), vacated[0], vacated[1], vacated[2], db_path=db_path)
+        out["vacated_blind"] = res
+    return out
+
+
 # ── PAIRINGS REPORTS: Divisions & Flights, Proximity Markers ─────────
 #    Kerry 2026-09-15 (with the two Golf Genius originals): "Let's add to
 #    our Reports in our PAIRINGS tab. Create a Divisions & Flights report
@@ -67560,11 +68032,16 @@ def _reseat_event_blinds(conn, event_id: int) -> dict:
     # `draw_event_blinds` puts it, "we cannot know which slot each one
     # covers, and it does not matter". v2.458.8 re-seated them too, which
     # handed them seats they were never meant to hold. Leave them alone.
+    # A MISSED-HOLE blind (Kerry 10/26) is keyed to a seat that is NOT open:
+    # the missing player still sits there. It never moves to an open seat;
+    # `sync_no_show_blinds` re-keys it from the player's own seat.
+    _no_mh = (" AND COALESCE(reason, 'open_seat') <> 'missed_hole'"
+              if "reason" in _blind_cols(conn) else "")
     rows = [dict(r) for r in conn.execute(
-        """SELECT id, customer_id, player_name, source, holes, group_num,
+        f"""SELECT id, customer_id, player_name, source, holes, group_num,
                   cart_pos
              FROM blind_draws
-            WHERE event_id = ? AND COALESCE(source, 'app') = 'app'
+            WHERE event_id = ? AND COALESCE(source, 'app') = 'app'{_no_mh}
             ORDER BY id""",
         (event_id,)).fetchall()]
     if not rows:

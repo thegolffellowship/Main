@@ -13144,7 +13144,9 @@ def api_se_sign():
 @perf.timed_route("se_missing")
 def api_se_missing():
     """NO-SHOW (Kerry 9/30 #1021): the scorer's "Player missing" answer for a
-    player on his own card: late / unknown / absent, or present ("+ Player")."""
+    player on his own card: late / unknown / absent, or present ("+ Player",
+    "Here now"); wd ("Left the course"); makeup_yes / makeup_no /
+    makeup_unfinished (Kerry 10/26)."""
     from email_parser.score_entry import mark_player_missing
     b = request.get_json(silent=True) or {}
     gid, err = _se_group_from_request(b)
@@ -13154,6 +13156,38 @@ def api_se_missing():
         res = mark_player_missing(gid, str(b.get("device_id") or ""), int(b["customer_id"]),
                                   str(b.get("answer") or ""), hole=b.get("hole"),
                                   entered_by=b.get("who"))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "customer_id is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/add-choices", methods=["GET"])
+@perf.timed_route("se_add_choices")
+def api_se_add_choices():
+    """"+ Player" (Kerry 10/26): who may be put on this card, a roster
+    player on no card (last-second add) or a player on another card of the
+    round (switch). Names and customer_ids only, for the signed link."""
+    from email_parser.score_entry import add_choices
+    gid, err = _se_group_from_request(None)
+    if err:
+        return err
+    res = add_choices(gid)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/add-player", methods=["POST"])
+@perf.timed_route("se_add_player")
+def api_se_add_player():
+    """"+ Player" (Kerry 10/26): the phone keeping score puts someone else on
+    its card (add or switch); his pairing seat and the blinds follow."""
+    from email_parser.score_entry import add_player_to_card
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    try:
+        res = add_player_to_card(gid, str(b.get("device_id") or ""), int(b["customer_id"]),
+                                 hole=b.get("hole"), entered_by=b.get("who"))
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "customer_id is required"}), 400
     return (jsonify(res), 400) if "error" in res else jsonify(res)

@@ -614,11 +614,29 @@ hole. It replaced the JSON column `blind_draws.missed_holes` that 0004
 added and nothing ever wrote (Kerry's #1087 rule: facts are rows); 0007
 drops that column (production SQLite 3.46.1, #1107). `blind_draws.holes` is a different fact: the
 9/18 sheet. `get_event_blinds` returns the list as `missed_holes`, and the
-engine takes it as `holes`. The missed-hole WRITER ships with Track A's
-#1021 wave. `_write_blind_row` upserts on `(event_id, slot_key)` (ON
+engine takes it as `holes`. The missed-hole WRITER is
+`database.sync_no_show_blinds` (branch tb5-no-show-2, Kerry 10/26; it keeps
+a blind's id and replaces only its hole rows as the holes change).
+`_write_blind_row` upserts on `(event_id, slot_key)` (ON
 CONFLICT DO UPDATE; #682, CoS #1100-2), so a redraw keeps the row's id and
 its hole rows; an INSERT OR REPLACE would have re-keyed the row.
-Rule: pairings.md 15i.
+Rule: pairings.md 15i, 15j.
+
+## `se_partial_rounds` (migration 0041, branch tb5-no-show-2, RULE 3b: waits on Kerry's OK)
+
+`(round_id → se_rounds, group_id → se_groups, customer_id → customers, kind
+joined | added | left, hole 1–18, makeup yes | no | unfinished | NULL,
+from_group_id → se_groups, marked_by → customers, device_id, created_at,
+updated_at)`, UNIQUE (round_id, customer_id, kind). One row per player per
+round per kind: put back late (`joined`, plays from `hole`), put on the card
+by "+ Player" (`added`, a switch carries `from_group_id`), or left the course
+(`left`, `hole` = the first hole not played). The NOT PLAYED holes are
+derived, never stored (`score_entry.partial_rounds`). Also in the
+score_entry DDL; only score_entry.py touches it (`test_score_entry.py`
+guard). Why a table and not `se_no_shows`: its status CHECK has no WD, and a
+late arrival can also leave or make holes up; three facts per player per
+round as rows. Reversible: DROP TABLE se_partial_rounds. Rule:
+score-entry.md "No-show".
 
 ## Home chapter by id: `customers.home_chapter_id` + `customer_chapter_history` (Kerry APPROVED, CoS #1084, v2.522.56)
 

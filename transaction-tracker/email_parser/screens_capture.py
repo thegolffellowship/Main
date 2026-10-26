@@ -183,6 +183,10 @@ _NS_CACHE: dict = {}
 
 
 def _ns_seed() -> dict:
+    """The no-show sequence's states, all real: the card JSON from
+    score_entry.get_group_card, the Rule 15 blind drawn by
+    database.sync_no_show_blinds (Kerry 10/26), the notice from
+    no_show_notice.build. A THROWAWAY database; nothing is sent."""
     if _NS_CACHE:
         return _NS_CACHE
     import contextlib, io, tempfile
@@ -192,48 +196,80 @@ def _ns_seed() -> dict:
     path = tempfile.mktemp(suffix=".screens-noshow.db")
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         db.init_db(path)
+    d = (date.today() + timedelta(days=1)).isoformat()
+    people = [(401, "Sam", "Keller"), (402, "Mike", "Ruiz"), (403, "Ned", "Owens"), (404, "Al", "Brandt"),
+              (405, "Pat", "Garza")]
     with db._connect(path) as c:
-        for cid, fn, ln in [(401, "Sam", "Keller"), (402, "Mike", "Ruiz"), (403, "Ned", "Owens"), (404, "Al", "Brandt")]:
-            c.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (?, ?, ?)", (cid, fn, ln))
-        d = (date.today() + timedelta(days=1)).isoformat()
         c.execute("INSERT INTO events (id, item_name, event_date, chapter, course, status, format) VALUES "
                   "(9901, 's9.99 Silverhorn', ?, 'San Antonio', 'Silverhorn Golf Club', 'active', '9-hole')", (d,))
+        for cid, fn, ln in people:
+            c.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) "
+                      "VALUES (?, ?, ?, 'active_member')", (cid, fn, ln))
+            c.execute("INSERT INTO items (email_uid, merchant, customer, customer_id, item_name, event_id, "
+                      "transaction_status, holes, order_date, user_status) VALUES (?, 'The Golf Fellowship', ?, ?, "
+                      "'s9.99 Silverhorn', 9901, 'active', '9', ?, 'MEMBER')", (f"scr{cid}", f"{fn} {ln}", cid, d))
+            c.execute("INSERT INTO handicap_player_links (player_name, customer_id, customer_name) VALUES (?,?,?)",
+                      (f"{fn} {ln}", cid, f"{fn} {ln}"))
+            for i in range(4):
+                c.execute("INSERT INTO handicap_rounds (player_name, round_date, differential, adjusted_score, "
+                          "rating, slope, customer_id) VALUES (?,?,?,?,?,?,?)",
+                          (f"{fn} {ln}", (date.today() - timedelta(days=30 * (i + 1))).isoformat(),
+                           8.0, 44, 35.0, 120, cid))
         c.commit()
+    db.save_event_pairings(9901, {"9": [{"group_num": 1, "slot_label": "1", "players": [
+        {"name": f"{fn} {ln}", "customer_id": cid, "cart_pos": i + 1}
+        for i, (cid, fn, ln) in enumerate(people[:4])]}]}, db_path=path)
     holes = [{"hole": h, "par": pr, "stroke_index": si, "yardage": y} for h, pr, si, y in
              [(1, 4, 5, 382), (2, 3, 9, 164), (3, 5, 1, 512), (4, 4, 3, 401), (5, 4, 7, 356),
               (6, 3, 8, 175), (7, 4, 2, 418), (8, 5, 4, 498), (9, 4, 6, 390)]]
     rid = se.create_round(9901, 9, round_date=d, label="s9.99", course_holes=holes, db_path=path)["round_id"]
     gid = se.upsert_group(rid, 1, players=[
-        {"customer_id": 401, "display_name": "Sam Keller", "playing_handicap": 6},
-        {"customer_id": 402, "display_name": "Mike Ruiz", "playing_handicap": 11},
-        {"customer_id": 403, "display_name": "Ned Owens", "playing_handicap": 9},
-        {"customer_id": 404, "display_name": "Al Brandt", "playing_handicap": 14}], db_path=path)["group_id"]
+        {"customer_id": 401, "display_name": "Sam Keller", "playing_handicap": 6, "seat": 1},
+        {"customer_id": 402, "display_name": "Mike Ruiz", "playing_handicap": 11, "seat": 2},
+        {"customer_id": 403, "display_name": "Ned Owens", "playing_handicap": 9, "seat": 3},
+        {"customer_id": 404, "display_name": "Al Brandt", "playing_handicap": 14, "seat": 4}], db_path=path)["group_id"]
     se.claim_group(gid, "screens-demo", 401, db_path=path)
     before = se.get_group_card(gid, "screens-demo", db_path=path)
     se.mark_player_missing(gid, "screens-demo", 403, "absent", hole=1, entered_by=401, db_path=path)
-    n = 0
-    ops = []
-    for cid, row in ((401, (5, 3, 5)), (402, (4, 4, 6)), (404, (6, 3, 5))):
-        for h, g in zip((1, 2, 3), row):
-            n += 1
-            ops.append({"op_id": f"scr{n}", "hole": h, "gross": g, "customer_id": cid})
-    se.write_scores(gid, "screens-demo", 401, ops, db_path=path)
+    n = [0]
+
+    def put(rows, hs):
+        ops = []
+        for cid, row in rows:
+            for h, g in zip(hs, row):
+                n[0] += 1
+                ops.append({"op_id": f"scr{n[0]}", "hole": h, "gross": g, "customer_id": cid})
+        se.write_scores(gid, "screens-demo", 401, ops, db_path=path)
+    put(((401, (5, 3, 5)), (402, (4, 4, 6)), (404, (6, 3, 5))), (1, 2, 3))
     for h in (1, 2, 3):          # the group answered any CTP / longest-putt question
         se.claim_ctp(gid, "screens-demo", h, None, db_path=path)
     after = se.get_group_card(gid, "screens-demo", db_path=path)
+    choices = se.add_choices(gid, db_path=path)
     notice = nsn.build(9901, db_path=path)
-    _NS_CACHE.update(before=before, after=after, notice=notice, path=path)
+    db.set_app_setting(nsn.SENT_KEY.format(9901), json.dumps(
+        {"sig": notice["signature"], "names": notice["names"], "to": notice["to"]}), db_path=path)
+    # Ned shows up on hole 4 (Kerry 10/26): + Player; holes 1-3 not played.
+    se.mark_player_missing(gid, "screens-demo", 403, "present", hole=4, entered_by=401, db_path=path)
+    late = se.get_group_card(gid, "screens-demo", db_path=path)
+    notice_updated = nsn.build(9901, db_path=path)
+    put(((401, (4, 4, 3, 5, 4, 4)), (402, (5, 4, 3, 6, 5, 4)), (404, (4, 5, 4, 5, 4, 5)),
+         (403, (4, 4, 3, 5, 4, 4))), (4, 5, 6, 7, 8, 9))
+    for h in (4, 5, 6, 7, 8, 9):
+        se.claim_ctp(gid, "screens-demo", h, None, db_path=path)
+    makeup = se.get_group_card(gid, "screens-demo", db_path=path)
+    _NS_CACHE.update(before=before, after=after, late=late, makeup=makeup, choices=choices,
+                     notice=notice, notice_updated=notice_updated, path=path)
     return _NS_CACHE
 
 
 def _r_no_show(ctx, which: str, clicks=(), hole=None) -> str:
     import app as _app
     data = _ns_seed()
-    card = data["after" if which == "after" else "before"]
+    card = data[which]
     page = _app.app.test_client().get("/member/score?t=screens").get_data(as_text=True)
     mem = {"se_device": json.dumps("screens-demo"), "se_who_screens": "401", "se_gate_screens": "true"}
     if hole is not None:
-        mem["se_hole_screens"] = str(hole)
+        mem["se_hole_screens"] = json.dumps(hole)
     stub = ("<script>(function(){var G=URLSearchParams.prototype.get;URLSearchParams.prototype.get="
             "function(k){var v=G.call(this,k);return (k==='t'&&!v)?'screens':v};"
             "var M=" + json.dumps(mem) + ";"
@@ -242,9 +278,11 @@ def _r_no_show(ctx, which: str, clicks=(), hole=None) -> str:
             "try{Object.defineProperty(window,'localStorage',{value:S,configurable:true})}catch(e){}"
             "try{Object.defineProperty(window,'sessionStorage',{value:S,configurable:true})}catch(e){}"
             "var C=" + json.dumps(card, default=str).replace("</", "<\\/") + ";"
+            "var A=" + json.dumps(data["choices"], default=str).replace("</", "<\\/") + ";"
             "var J=function(o){return Promise.resolve(new Response(JSON.stringify(o),{status:200,"
             "headers:{'Content-Type':'application/json'}}))};"
             "window.fetch=function(u){u=String(u);if(u.indexOf('/api/score-entry/card')>=0)return J(C);"
+            "if(u.indexOf('/api/score-entry/add-choices')>=0)return J(A);"
             "if(u.indexOf('/api/player-photos')>=0)return J({h:{},t:{}});return J({})};"
             "var K=" + json.dumps(list(clicks)) + ";"
             "window.addEventListener('load',function(){setTimeout(function(){K.forEach(function(q){"
@@ -252,10 +290,9 @@ def _r_no_show(ctx, which: str, clicks=(), hole=None) -> str:
     return page.replace("<head>", "<head>" + stub, 1)
 
 
-def _r_no_show_notice(ctx) -> str:
-    b = _ns_seed()["notice"]
-    return ('<div style="font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;color:#1B1B1B;'
-            'padding:16px;max-width:560px;font-size:15px;line-height:1.5;">' + b["html"] + "</div>")
+def _r_no_show_notice(ctx, which: str = "notice") -> str:
+    """The course notice exactly as built (house frame, Kerry 10/26)."""
+    return _ns_seed()[which]["html"]
 
 
 RENDERS = {
@@ -274,9 +311,15 @@ RENDERS = {
     "no_show_ask": lambda c: _r_no_show(c, "before", ['[data-act="missing"]', '[data-act="mwho"][data-cid="403"]']),
     "no_show_absent": lambda c: _r_no_show(c, "after", hole=4),
     "no_show_course_notice": _r_no_show_notice,
+    "no_show_wd": lambda c: _r_no_show(c, "after", ['[data-act="missing"]', '[data-act="mwho"][data-cid="402"]'], hole=4),
+    "no_show_add": lambda c: _r_no_show(c, "after", ['[data-act="addp"]'], hole=4),
+    "no_show_late": lambda c: _r_no_show(c, "late", hole=2),
+    "no_show_late_hole": lambda c: _r_no_show(c, "late", hole=4),
+    "no_show_course_notice_updated": lambda c: _r_no_show_notice(c, "notice_updated"),
+    "no_show_makeup": lambda c: _r_no_show(c, "makeup", hole=9),
 }
 EMAIL_RENDERS = {"invitation_email", "lastcall_email", "payment_reminder", "no_show_course_notice",
-                 "rsvp_deadline_warn", "rsvp_deadline_release"}
+                 "no_show_course_notice_updated", "rsvp_deadline_warn", "rsvp_deadline_release"}
 
 
 # --------------------------------------------------------------------------
