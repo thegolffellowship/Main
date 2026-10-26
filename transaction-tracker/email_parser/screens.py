@@ -24,12 +24,17 @@ import json
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / "docs" / "claude" / "screenshots"
+_APP = Path(__file__).resolve().parent.parent
+ROOT = _APP / "docs" / "claude" / "screenshots"
 CATALOG = ROOT / "catalog.json"
+# A sequence's "base" says which folder its pictures live under, so pictures
+# already in use elsewhere are catalogued where they are, never copied.
+BASES = {"screenshots": ROOT, "static": _APP / "static" / "img", "mockups": _APP / "docs" / "claude" / "mockups"}
 TOPIC = "screens"
 AUTHOR = "screens-page"
 ROLE_DIAL = "screens_viewer_role"
 KINDS = ("Improve", "Submit for review", "Note")
+DEVICES = ("desktop", "tablet", "mobile")
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 FILE_EXT = IMAGE_EXT | {".pdf"}
 MAX_TEXT = 4000
@@ -60,11 +65,22 @@ def catalog(root: Path = ROOT) -> dict:
     listed: dict[str, set] = {}
     for s in cat.get("sequences", []):
         folder = s.get("folder") or ""
-        listed.setdefault(folder, set())
+        base = BASES.get(s.get("base") or "screenshots", root) if root == ROOT else root
+        s["base"] = s.get("base") or "screenshots"
+        if s["base"] == "screenshots":
+            listed.setdefault(folder, set())
         for st in s.get("steps", []):
-            listed[folder].add(st.get("file"))
-            st["missing"] = not (root / folder / (st.get("file") or "")).is_file()
-            st["kind"] = "pdf" if str(st.get("file", "")).lower().endswith(".pdf") else "image"
+            # shots: device (desktop / tablet / mobile / any) -> file. A step
+            # written the old way (one file) is that file on mobile.
+            shots = st.get("shots") or {"mobile": st.get("file")}
+            st["shots"] = shots
+            st["missing"] = sorted(d for d, f in shots.items()
+                                   if not (base / folder / (f or "")).is_file())
+            st["kinds"] = {d: ("pdf" if str(f).lower().endswith(".pdf") else "image")
+                           for d, f in shots.items()}
+            if s["base"] == "screenshots":
+                listed[folder].update(shots.values())
+                listed[folder].add(st.get("file"))
     loose = []
     if root.is_dir():
         for d in sorted(p for p in root.iterdir() if p.is_dir()):
@@ -75,11 +91,16 @@ def catalog(root: Path = ROOT) -> dict:
                 loose.append({"folder": d.name, "files": extra,
                               "has_sequence": d.name in listed})
     cat["not_catalogued"] = loose
+    cat.setdefault("devices", list(DEVICES))
     return cat
 
 
-def safe_file(rel: str, root: Path = ROOT) -> Path | None:
-    """A screenshot path inside ROOT with an allowed extension, else None."""
+def safe_file(rel: str, root: Path = ROOT, base: str = "") -> Path | None:
+    """A picture path inside its base folder with an allowed extension, else None."""
+    if base:
+        if base not in BASES:
+            return None
+        root = BASES[base]
     try:
         p = (root / rel).resolve()
         p.relative_to(root.resolve())
@@ -98,7 +119,7 @@ def _sequence(seq_id: str, root: Path = ROOT) -> dict | None:
 
 
 def comment_body(seq: dict, kind: str, text: str, step_file: str = "",
-                 who: str = "admin", when: str = "") -> str:
+                 who: str = "admin", when: str = "", device: str = "") -> str:
     step = next((st for st in seq.get("steps", []) if st.get("file") == step_file), None)
     lines = [
         "TO: librarian-claude (COO › Library)",
@@ -108,7 +129,8 @@ def comment_body(seq: dict, kind: str, text: str, step_file: str = "",
         f"SEQUENCE: {seq['id']} — {seq.get('title', '')}",
     ]
     if step:
-        lines.append(f"STEP: {step['file']} — {step.get('caption', '')}")
+        dev = f" ({device})" if device in DEVICES else ""
+        lines.append(f"STEP: {step['file']} — {step.get('caption', '')}{dev}")
     lines += ["", text.strip(), "",
               "A review note from the Screens page (/admin/screens), not a ruling: it carries "
               "no one's OK for a change. Librarian: file it, route it (Front Desk by default), "
@@ -117,7 +139,7 @@ def comment_body(seq: dict, kind: str, text: str, step_file: str = "",
 
 
 def add_comment(seq_id: str, kind: str, text: str, step_file: str = "",
-                who: str = "admin", root: Path = ROOT, db_path=None) -> dict:
+                who: str = "admin", root: Path = ROOT, db_path=None, device: str = "") -> dict:
     from email_parser import database as db
     from email_parser.timezone_utils import now_central
     seq = _sequence(seq_id, root)
@@ -133,7 +155,7 @@ def add_comment(seq_id: str, kind: str, text: str, step_file: str = "",
         when = now_central().strftime("%a %-m/%-d %-I:%M %p CT")
     except Exception:
         when = ""
-    body = comment_body(seq, kind, text, step_file, who, when)
+    body = comment_body(seq, kind, text, step_file, who, when, device)
     kw = {"db_path": db_path} if db_path else {}
     return db.post_platform_dialogue_entry(AUTHOR, body, TOPIC, **kw)
 

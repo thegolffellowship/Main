@@ -27,11 +27,11 @@ cat = scr.catalog()
 ids = [s["id"] for s in cat["sequences"]]
 check("it loads with sequences", len(ids) >= 10, len(ids))
 check("ids are unique", len(ids) == len(set(ids)))
-missing = [(s["id"], st["file"]) for s in cat["sequences"] for st in s["steps"] if st["missing"]]
+missing = [(s["id"], st["file"], st["missing"]) for s in cat["sequences"] for st in s["steps"] if st["missing"]]
 check("every catalogued file is on disk", not missing, missing[:5])
 check("every sequence has an area the page lists",
       all(s["area"] in cat["areas"] for s in cat["sequences"]))
-check("every status is a known one", all(s["status"] in ("current", "built", "mockup", "superseded", "reference")
+check("every status is a known one", all(s["status"] in ("current", "built", "mockup", "superseded", "reference", "needed")
                                          for s in cat["sequences"]))
 check("nothing on disk is left uncatalogued", cat["not_catalogued"] == [], cat["not_catalogued"])
 
@@ -41,6 +41,9 @@ check("a catalogued file resolves", scr.safe_file(f"{s0['folder']}/{s0['steps'][
 check("climbing out is refused", scr.safe_file("../../../app.py") is None
       and scr.safe_file("../catalog.json") is None)
 check("a non-image is refused", scr.safe_file("catalog.json") is None)
+check("an unknown base is refused", scr.safe_file("x.png", base="templates") is None)
+check("a static picture resolves under its base", scr.safe_file("live-scoring/03-hole.jpg", base="static") is not None
+      and scr.safe_file("../../app.py", base="static") is None)
 
 print("3. Comments are mailbox posts to the Librarian")
 seq = cat["sequences"][0]
@@ -81,7 +84,7 @@ check("signed out, the API is refused", cl.get("/api/screens").status_code == 40
 with cl.session_transaction() as s_:
     s_["role"] = "manager"; s_["authenticated"] = True
 check("a manager is refused while the dial says admin", cl.get("/api/screens").status_code == 403
-      and cl.get(f"/admin/screens/file/{s0['folder']}/{s0['steps'][0]['file']}").status_code == 403)
+      and cl.get(f"/admin/screens/file/screenshots/{s0['folder']}/{s0['steps'][0]['file']}").status_code == 403)
 db.set_app_setting("screens_viewer_role", "manager")
 check("the dial opens it to managers", cl.get("/api/screens").status_code == 200)
 db.set_app_setting("screens_viewer_role", "admin")
@@ -91,14 +94,40 @@ rp = cl.get("/admin/screens")
 check("the page renders for an admin", rp.status_code == 200 and b"Screens" in rp.data)
 ra = cl.get("/api/screens").get_json()
 check("the API returns the catalogue with kinds and counts", ra["sequences"] and ra["kinds"] and "comment_counts" in ra)
-rf = cl.get(f"/admin/screens/file/{s0['folder']}/{s0['steps'][0]['file']}")
+rf = cl.get(f"/admin/screens/file/screenshots/{s0['folder']}/{s0['steps'][0]['file']}")
 check("a screenshot is served", rf.status_code == 200 and rf.data[:4] == b"\x89PNG", rf.status_code)
-check("climbing out of the folder is 404", cl.get("/admin/screens/file/..%2F..%2F..%2Fapp.py").status_code == 404)
+check("climbing out of the folder is 404", cl.get("/admin/screens/file/screenshots/..%2F..%2F..%2Fapp.py").status_code == 404)
 rc = cl.post(f"/api/screens/{seq['id']}/comments", json={"kind": "Submit for review", "text": "Please review."})
 check("the page's comment posts to the mailbox", rc.status_code == 200 and rc.get_json()["post"]["author"] == "screens-page",
       rc.get_json())
 check("and shows in the thread", any(p["id"] == rc.get_json()["post"]["id"]
                                      for p in cl.get(f"/api/screens/{seq['id']}/comments").get_json()["comments"]))
+
+print("5. Try it")
+rd = cl.get("/admin/screens/demo/nope")
+check("an unknown demo is 404", rd.status_code == 404)
+demos = [d["url"] for s in cat["sequences"] for d in s.get("demo", [])]
+check("every demo is a same-site page", demos and all(u.startswith("/") and not u.startswith("//") for u in demos), demos)
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, start_time, "
+                 "course, registration_url, registration_url_status) VALUES (9501, 's9.99 DEMO LINKS', '2099-01-06', "
+                 "'San Antonio', 'active', '9-hole', 'Shotgun', '16:30', 'Demo Links GC', "
+                 "'https://www.thegolffellowship.com/product-page/s9-99-demo-links', 'verified')")
+    conn.execute("INSERT OR IGNORE INTO customers (customer_id, first_name, last_name) VALUES (18, 'Kerry', 'Niester')")
+    conn.commit()
+ri = cl.get("/admin/screens/demo/invitation")
+from email_parser import invitations as _inv
+toks = [t for t in __import__("re").findall(r"/rsvp/([A-Za-z0-9_.-]+)", ri.get_data(as_text=True))]
+check("the invitation demo renders with PREVIEW links only", ri.status_code == 200 and toks
+      and all((_inv.verify_token(t) or {}).get("p") == 1 for t in toks), (ri.status_code, len(toks)))
+rr = cl.get("/admin/screens/demo/payment-reminder")
+check("the reminder demo renders the framed reminder", rr.status_code == 200 and b"Complete Registration" in rr.data,
+      rr.status_code)
+with cl.session_transaction() as s_:
+    s_["role"] = "manager"
+check("a demo needs the Screens role", cl.get("/admin/screens/demo/invitation").status_code == 403)
+with cl.session_transaction() as s_:
+    s_["role"] = "admin"
 
 try:
     os.remove(DB)

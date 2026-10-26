@@ -14956,15 +14956,58 @@ def admin_screens_page():
     return render_template("admin_screens.html")
 
 
-@app.route("/admin/screens/file/<path:rel>")
-def admin_screens_file(rel):
+@app.route("/admin/screens/file/<base>/<path:rel>")
+def admin_screens_file(base, rel):
     from email_parser import screens as _scr
     if not _screens_allowed():
         return jsonify({"error": "Admin access required."}), 403
-    p = _scr.safe_file(rel)
+    p = _scr.safe_file(rel, base=base)
     if not p:
         return jsonify({"error": "not found"}), 404
     return send_file(str(p), max_age=3600)
+
+
+def _screens_demo_event(need_link: bool = False):
+    """The next upcoming active event (with a usable store link when asked)."""
+    from email_parser.event_links import event_url_for_message
+    today = today_central_str()
+    for ev in sorted(get_all_events(), key=lambda e: (e.get("event_date") or "9999")):
+        if (ev.get("event_date") or "") < today or (ev.get("status") or "active") != "active":
+            continue
+        if need_link and not event_url_for_message(ev)[0]:
+            continue
+        return ev
+    return None
+
+
+@app.route("/admin/screens/demo/<name>")
+def admin_screens_demo(name):
+    """Test-drive renders for the Screens page. Nothing is sent or recorded:
+    the invitation uses PREVIEW links on the staff preview person (taps open
+    the real pages and record nothing); the reminder is only rendered."""
+    from email_parser import invitations as _inv, payment_reminder as _pr
+    if not _screens_allowed():
+        return jsonify({"error": "Admin access required."}), 403
+    pcid = int(_inv._setting(_inv.PREVIEW_CID_KEY) or _inv.DEFAULT_PREVIEW_CID)
+    if name == "invitation":
+        ev = _screens_demo_event()
+        if not ev:
+            return "No upcoming event to preview.", 404
+        from email_parser.database import get_connection
+        conn = get_connection()
+        try:
+            r = conn.execute("SELECT first_name FROM customers WHERE customer_id = ?", (pcid,)).fetchone()
+        finally:
+            conn.close()
+        msg = _inv.build_message(ev, {"customer_id": pcid, "first_name": (r[0] if r else "") or "Kerry"},
+                                 "invite", preview=True)
+        return Response(msg["html"], mimetype="text/html")
+    if name == "payment-reminder":
+        ev = _screens_demo_event(need_link=True)
+        if not ev:
+            return "No upcoming event with a registration link.", 404
+        return Response(_pr.preview(int(ev["id"]), pcid)["html"], mimetype="text/html")
+    return jsonify({"error": "no such demo"}), 404
 
 
 @app.route("/api/screens", methods=["GET"])
@@ -14987,7 +15030,8 @@ def api_screens_comments(seq_id):
         data = request.get_json(silent=True) or {}
         res = _scr.add_comment(seq_id, data.get("kind") or "Note", data.get("text") or "",
                                step_file=data.get("step") or "",
-                               who=session.get("role") or "admin")
+                               who=session.get("role") or "admin",
+                               device=data.get("device") or "")
         if res.get("error"):
             return jsonify(res), 400
         return jsonify({"status": "ok", "post": res})

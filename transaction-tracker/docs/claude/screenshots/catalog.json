@@ -1,17 +1,20 @@
 {
- "_about": "The Screens catalogue (Kerry 2026-10-26). Owned by the Librarian. Each sequence is one folder under docs/claude/screenshots/; steps show in order. status: current = what members/managers see now; built = on a branch, not live; mockup = a proposal; superseded = kept for history; reference = taken at build time, may have moved on. A step's own state overrides the sequence's. The /admin/screens page reads this file; files in a folder but not listed here show as Not catalogued.",
+ "_about": "The Screens catalogue (Kerry 2026-10-26). Owned by the Librarian. Each sequence is one folder under docs/claude/screenshots/; steps show in order. Each step's shots map a device (desktop, tablet, mobile, or any for prints and cart signs) to a file; the page's toggle picks the device and says when one hasn't been shot yet. status: current = what members/managers see now; built = on a branch, not live; mockup = a proposal; superseded = kept for history; reference = taken at build time, may have moved on; needed = a screen we should have and don't yet. demo = links the page opens in a device-sized frame to test drive (read-only or preview only). A step's own state overrides the sequence's. The /admin/screens page reads this file; files in a folder but not listed here show as Not catalogued.",
  "areas": [
-  "Member emails & pages",
+  "Invitations & member emails",
+  "Member pages",
   "Leaderboard",
   "Live scoring",
   "Lone Star Cup",
-  "Manager & admin"
+  "Reports",
+  "Back-end pages",
+  "Mockups"
  ],
  "sequences": [
   {
    "id": "invitations",
    "title": "Event invitation, from the email to the answer",
-   "area": "Member emails & pages",
+   "area": "Invitations & member emails",
    "audience": "member",
    "status": "current",
    "version": "v2.580.2",
@@ -23,50 +26,89 @@
     {
      "file": "1-invite-email.png",
      "caption": "The 7 AM invitation email",
-     "view": "email"
+     "shots": {
+      "mobile": "1-invite-email.png",
+      "tablet": "1-invite-email.tablet.png",
+      "desktop": "1-invite-email.desktop.png"
+     }
     },
     {
      "file": "2-last-call-email.png",
      "caption": "Last call email (sent the morning of the event)",
-     "view": "email"
+     "shots": {
+      "mobile": "2-last-call-email.png",
+      "tablet": "2-last-call-email.tablet.png",
+      "desktop": "2-last-call-email.desktop.png"
+     }
     },
     {
      "file": "3-one-more-tap.png",
      "caption": "One more tap: shown to a known mail scanner or a non-browser opening I'm in",
-     "view": "phone"
+     "shots": {
+      "mobile": "3-one-more-tap.png",
+      "tablet": "3-one-more-tap.tablet.png",
+      "desktop": "3-one-more-tap.desktop.png"
+     }
     },
     {
      "file": "4-cant-make-it-thanks.png",
      "caption": "Can't make it: thanks page, with the small Remove me link",
-     "view": "phone"
+     "shots": {
+      "mobile": "4-cant-make-it-thanks.png",
+      "tablet": "4-cant-make-it-thanks.tablet.png",
+      "desktop": "4-cant-make-it-thanks.desktop.png"
+     }
     },
     {
      "file": "4-old-cant-make-it-thanks.png",
      "caption": "Before v2.579.3: Remove me was a big grey button",
-     "view": "phone",
-     "state": "superseded"
+     "state": "superseded",
+     "shots": {
+      "mobile": "4-old-cant-make-it-thanks.png",
+      "tablet": "4-old-cant-make-it-thanks.tablet.png",
+      "desktop": "4-old-cant-make-it-thanks.desktop.png"
+     }
     },
     {
      "file": "5-reason-thanks.png",
      "caption": "After they tap a reason",
-     "view": "phone"
+     "shots": {
+      "mobile": "5-reason-thanks.png",
+      "tablet": "5-reason-thanks.tablet.png",
+      "desktop": "5-reason-thanks.desktop.png"
+     }
     },
     {
      "file": "6-remove-me-confirm.png",
      "caption": "Remove me: the confirm page",
-     "view": "phone"
+     "shots": {
+      "mobile": "6-remove-me-confirm.png",
+      "tablet": "6-remove-me-confirm.tablet.png",
+      "desktop": "6-remove-me-confirm.desktop.png"
+     }
     },
     {
      "file": "7-remove-me-done.png",
      "caption": "Remove me: done",
-     "view": "phone"
+     "shots": {
+      "mobile": "7-remove-me-done.png",
+      "tablet": "7-remove-me-done.tablet.png",
+      "desktop": "7-remove-me-done.desktop.png"
+     }
+    }
+   ],
+   "demo": [
+    {
+     "label": "The invitation, as a preview",
+     "url": "/admin/screens/demo/invitation",
+     "note": "Preview links: tapping I'm in or Can't make it opens the real pages and records nothing."
     }
    ]
   },
   {
    "id": "payment-reminder",
    "title": "Payment reminder email",
-   "area": "Member emails & pages",
+   "area": "Invitations & member emails",
    "audience": "member",
    "status": "built",
    "version": "v2.581.0 (built, not live)",
@@ -78,25 +120,48 @@
     {
      "file": "1-reminder-email.png",
      "caption": "The reminder as built (v2.581.0)",
-     "view": "email"
+     "shots": {
+      "mobile": "1-reminder-email.png",
+      "tablet": "1-reminder-email.tablet.png",
+      "desktop": "1-reminder-email.desktop.png"
+     }
     },
     {
      "file": "mockup-3.png",
      "caption": "Mockup 3, the one Kerry picked",
-     "view": "email",
-     "state": "mockup"
+     "state": "mockup",
+     "shots": {
+      "mobile": "mockup-3.png",
+      "tablet": "mockup-3.tablet.png",
+      "desktop": "mockup-3.desktop.png"
+     }
     },
     {
      "file": "old-1-remind-tag-email.png",
      "caption": "Before: what the Remind tag sent (no link)",
-     "view": "email",
-     "state": "superseded"
+     "state": "superseded",
+     "shots": {
+      "mobile": "old-1-remind-tag-email.png",
+      "tablet": "old-1-remind-tag-email.tablet.png",
+      "desktop": "old-1-remind-tag-email.desktop.png"
+     }
     },
     {
      "file": "old-2-template-email.png",
      "caption": "Before: the Messages template version",
-     "view": "email",
-     "state": "superseded"
+     "state": "superseded",
+     "shots": {
+      "mobile": "old-2-template-email.png",
+      "tablet": "old-2-template-email.tablet.png",
+      "desktop": "old-2-template-email.desktop.png"
+     }
+    }
+   ],
+   "demo": [
+    {
+     "label": "The reminder for the next event",
+     "url": "/admin/screens/demo/payment-reminder",
+     "note": "Rendered only; nothing is sent."
     }
    ]
   },
@@ -113,44 +178,48 @@
    "notes": "L = the build before deploy, PROD = live, UP = the Upcoming section.",
    "steps": [
     {
-     "file": "L_desk_list.png",
-     "caption": "Desktop: the month list",
-     "view": "desktop"
-    },
-    {
-     "file": "L_desk_team.png",
-     "caption": "Desktop: an open event on the TEAM tab, one team expanded",
-     "view": "desktop"
-    },
-    {
      "file": "L_phone_list.png",
-     "caption": "Phone: the month list",
-     "view": "phone"
+     "caption": "The month list",
+     "shots": {
+      "mobile": "L_phone_list.png",
+      "desktop": "L_desk_list.png"
+     }
     },
     {
      "file": "L_phone_sheet.png",
-     "caption": "Phone: the how-it-works sheet",
-     "view": "phone"
+     "caption": "The how-it-works sheet",
+     "shots": {
+      "mobile": "L_phone_sheet.png"
+     }
     },
     {
      "file": "L_phone_team.png",
-     "caption": "Phone: TEAM tab",
-     "view": "phone"
+     "caption": "An open event on the TEAM tab, one team expanded",
+     "shots": {
+      "mobile": "L_phone_team.png",
+      "desktop": "L_desk_team.png"
+     }
     },
     {
      "file": "PROD_phone_team.png",
-     "caption": "Phone: TEAM tab, live",
-     "view": "phone"
-    },
-    {
-     "file": "UP_desk.png",
-     "caption": "Desktop: Upcoming events with one open",
-     "view": "desktop"
+     "caption": "TEAM tab, live",
+     "shots": {
+      "mobile": "PROD_phone_team.png"
+     }
     },
     {
      "file": "UP_phone.png",
-     "caption": "Phone: Upcoming events with one open",
-     "view": "phone"
+     "caption": "Upcoming events with one open",
+     "shots": {
+      "mobile": "UP_phone.png",
+      "desktop": "UP_desk.png"
+     }
+    }
+   ],
+   "demo": [
+    {
+     "label": "Live leaderboard",
+     "url": "/member"
     }
    ]
   },
@@ -168,27 +237,37 @@
     {
      "file": "event-board-net-fullpage.png",
      "caption": "Event board net fullpage",
-     "view": "phone"
+     "shots": {
+      "mobile": "event-board-net-fullpage.png"
+     }
     },
     {
      "file": "event-board-overall-phone.png",
      "caption": "Event board overall phone",
-     "view": "phone"
+     "shots": {
+      "mobile": "event-board-overall-phone.png"
+     }
     },
     {
      "file": "how-to-read-modal-phone.png",
      "caption": "How to read modal phone",
-     "view": "phone"
+     "shots": {
+      "mobile": "how-to-read-modal-phone.png"
+     }
     },
     {
      "file": "lsc-skins-phone.png",
      "caption": "Lsc skins phone",
-     "view": "phone"
+     "shots": {
+      "mobile": "lsc-skins-phone.png"
+     }
     },
     {
      "file": "season-contests-monthly-phone.png",
      "caption": "Season contests monthly phone",
-     "view": "phone"
+     "shots": {
+      "mobile": "season-contests-monthly-phone.png"
+     }
     }
    ]
   },
@@ -205,47 +284,65 @@
     {
      "file": "1-join.png",
      "caption": "Join",
-     "view": "phone"
+     "shots": {
+      "mobile": "1-join.png"
+     }
     },
     {
      "file": "2-hole.png",
      "caption": "Hole",
-     "view": "phone"
+     "shots": {
+      "mobile": "2-hole.png"
+     }
     },
     {
      "file": "3-ctp.png",
      "caption": "Ctp",
-     "view": "phone"
+     "shots": {
+      "mobile": "3-ctp.png"
+     }
     },
     {
      "file": "4-second-phone.png",
      "caption": "Second phone",
-     "view": "phone"
+     "shots": {
+      "mobile": "4-second-phone.png"
+     }
     },
     {
      "file": "5-weak-signal.png",
      "caption": "Weak signal",
-     "view": "phone"
+     "shots": {
+      "mobile": "5-weak-signal.png"
+     }
     },
     {
      "file": "6-sign.png",
      "caption": "Sign",
-     "view": "phone"
+     "shots": {
+      "mobile": "6-sign.png"
+     }
     },
     {
      "file": "6b-every-hole-in.png",
      "caption": "Every hole in",
-     "view": "phone"
+     "shots": {
+      "mobile": "6b-every-hole-in.png"
+     }
     },
     {
      "file": "7-keeper-done.png",
      "caption": "Keeper done",
-     "view": "phone"
+     "shots": {
+      "mobile": "7-keeper-done.png"
+     }
     },
     {
      "file": "8-cart-sign-qr.png",
      "caption": "Cart sign qr",
-     "view": "phone"
+     "shots": {
+      "any": "8-cart-sign-qr.png"
+     }
     }
    ]
   },
@@ -262,42 +359,58 @@
     {
      "file": "1-join.png",
      "caption": "Join",
-     "view": "phone"
+     "shots": {
+      "mobile": "1-join.png"
+     }
     },
     {
      "file": "2-hole-14-back-nine.png",
      "caption": "Hole 14 back nine",
-     "view": "phone"
+     "shots": {
+      "mobile": "2-hole-14-back-nine.png"
+     }
     },
     {
      "file": "3-the-turn.png",
      "caption": "The turn",
-     "view": "phone"
+     "shots": {
+      "mobile": "3-the-turn.png"
+     }
     },
     {
      "file": "4-ctp-hole-16.png",
      "caption": "Ctp hole 16",
-     "view": "phone"
+     "shots": {
+      "mobile": "4-ctp-hole-16.png"
+     }
     },
     {
      "file": "5-sign-your-card-out-in-total.png",
      "caption": "Sign your card out in total",
-     "view": "phone"
+     "shots": {
+      "mobile": "5-sign-your-card-out-in-total.png"
+     }
     },
     {
      "file": "5b-every-hole-in.png",
      "caption": "Every hole in",
-     "view": "phone"
+     "shots": {
+      "mobile": "5b-every-hole-in.png"
+     }
     },
     {
      "file": "6-scorekeeper-finish.png",
      "caption": "Scorekeeper finish",
-     "view": "phone"
+     "shots": {
+      "mobile": "6-scorekeeper-finish.png"
+     }
     },
     {
      "file": "7-shotgun-start-hole-10.png",
      "caption": "Shotgun start hole 10",
-     "view": "phone"
+     "shots": {
+      "mobile": "7-shotgun-start-hole-10.png"
+     }
     }
    ]
   },
@@ -314,42 +427,58 @@
     {
      "file": "1-check-front.png",
      "caption": "Check front",
-     "view": "phone"
+     "shots": {
+      "mobile": "1-check-front.png"
+     }
     },
     {
      "file": "2-check-front-tap-a-number.png",
      "caption": "Check front tap a number",
-     "view": "phone"
+     "shots": {
+      "mobile": "2-check-front-tap-a-number.png"
+     }
     },
     {
      "file": "3-check-front-changed-and-help.png",
      "caption": "Check front changed and help",
-     "view": "phone"
+     "shots": {
+      "mobile": "3-check-front-changed-and-help.png"
+     }
     },
     {
      "file": "4-check-back.png",
      "caption": "Check back",
-     "view": "phone"
+     "shots": {
+      "mobile": "4-check-back.png"
+     }
     },
     {
      "file": "5-photo-me-note.png",
      "caption": "Photo me note",
-     "view": "phone"
+     "shots": {
+      "mobile": "5-photo-me-note.png"
+     }
     },
     {
      "file": "6-photo-taken.png",
      "caption": "Photo taken",
-     "view": "phone"
+     "shots": {
+      "mobile": "6-photo-taken.png"
+     }
     },
     {
      "file": "7-submitted.png",
      "caption": "Submitted",
-     "view": "phone"
+     "shots": {
+      "mobile": "7-submitted.png"
+     }
     },
     {
      "file": "8-mark-signed-for-him.png",
      "caption": "Mark signed for him",
-     "view": "phone"
+     "shots": {
+      "mobile": "8-mark-signed-for-him.png"
+     }
     }
    ]
   },
@@ -366,52 +495,72 @@
     {
      "file": "1-join.png",
      "caption": "Join",
-     "view": "phone"
+     "shots": {
+      "mobile": "1-join.png"
+     }
     },
     {
      "file": "2-hole.png",
      "caption": "Hole",
-     "view": "phone"
+     "shots": {
+      "mobile": "2-hole.png"
+     }
     },
     {
      "file": "3-ctp.png",
      "caption": "Ctp",
-     "view": "phone"
+     "shots": {
+      "mobile": "3-ctp.png"
+     }
     },
     {
      "file": "4-second-phone.png",
      "caption": "Second phone",
-     "view": "phone"
+     "shots": {
+      "mobile": "4-second-phone.png"
+     }
     },
     {
      "file": "5-weak-signal.png",
      "caption": "Weak signal",
-     "view": "phone"
+     "shots": {
+      "mobile": "5-weak-signal.png"
+     }
     },
     {
      "file": "6-sign.png",
      "caption": "Sign",
-     "view": "phone"
+     "shots": {
+      "mobile": "6-sign.png"
+     }
     },
     {
      "file": "6b-every-hole-in.png",
      "caption": "Every hole in",
-     "view": "phone"
+     "shots": {
+      "mobile": "6b-every-hole-in.png"
+     }
     },
     {
      "file": "6c-sign-tap-hole.png",
      "caption": "Sign tap hole",
-     "view": "phone"
+     "shots": {
+      "mobile": "6c-sign-tap-hole.png"
+     }
     },
     {
      "file": "6d-sign-somethings-wrong.png",
      "caption": "Sign somethings wrong",
-     "view": "phone"
+     "shots": {
+      "mobile": "6d-sign-somethings-wrong.png"
+     }
     },
     {
      "file": "7-keeper-done.png",
      "caption": "Keeper done",
-     "view": "phone"
+     "shots": {
+      "mobile": "7-keeper-done.png"
+     }
     }
    ]
   },
@@ -428,42 +577,58 @@
     {
      "file": "1-hole-match-tags-and-max-notice.png",
      "caption": "Hole match tags and max notice",
-     "view": "phone"
+     "shots": {
+      "mobile": "1-hole-match-tags-and-max-notice.png"
+     }
     },
     {
      "file": "2-ball-in-hole-or-picked-up.png",
      "caption": "Ball in hole or picked up",
-     "view": "phone"
+     "shots": {
+      "mobile": "2-ball-in-hole-or-picked-up.png"
+     }
     },
     {
      "file": "3-picked-up-chosen-with-help.png",
      "caption": "Picked up chosen with help",
-     "view": "phone"
+     "shots": {
+      "mobile": "3-picked-up-chosen-with-help.png"
+     }
     },
     {
      "file": "4-check-card-ringed-pickup.png",
      "caption": "Check card ringed pickup",
-     "view": "phone"
+     "shots": {
+      "mobile": "4-check-card-ringed-pickup.png"
+     }
     },
     {
      "file": "5-hole-9-match-standing.png",
      "caption": "Hole 9 match standing",
-     "view": "phone"
+     "shots": {
+      "mobile": "5-hole-9-match-standing.png"
+     }
     },
     {
      "file": "6-the-turn-holes-under-names.png",
      "caption": "The turn holes under names",
-     "view": "phone"
+     "shots": {
+      "mobile": "6-the-turn-holes-under-names.png"
+     }
     },
     {
      "file": "7-check-card-back-same-columns.png",
      "caption": "Check card back same columns",
-     "view": "phone"
+     "shots": {
+      "mobile": "7-check-card-back-same-columns.png"
+     }
     },
     {
      "file": "8-your-card-my-row-and-flag-to-fix.png",
      "caption": "Your card my row and flag to fix",
-     "view": "phone"
+     "shots": {
+      "mobile": "8-your-card-my-row-and-flag-to-fix.png"
+     }
     }
    ]
   },
@@ -480,29 +645,37 @@
     {
      "file": "1-foursomes-one-row-per-team-and-X.png",
      "caption": "Foursomes one row per team and x",
-     "view": "phone"
+     "shots": {
+      "mobile": "1-foursomes-one-row-per-team-and-X.png"
+     }
     },
     {
      "file": "2-austin-leads-banner-in-austin-colour.png",
      "caption": "Austin leads banner in austin colour",
-     "view": "phone"
+     "shots": {
+      "mobile": "2-austin-leads-banner-in-austin-colour.png"
+     }
     },
     {
      "file": "3-san-antonio-leads-banner-in-sa-colour.png",
      "caption": "San antonio leads banner in sa colour",
-     "view": "phone"
+     "shots": {
+      "mobile": "3-san-antonio-leads-banner-in-sa-colour.png"
+     }
     },
     {
      "file": "4-check-card-X-and-won-in-team-colour.png",
      "caption": "Check card x and won in team colour",
-     "view": "phone"
+     "shots": {
+      "mobile": "4-check-card-X-and-won-in-team-colour.png"
+     }
     }
    ]
   },
   {
    "id": "score-entry-admin",
    "title": "Live scoring: admin page and cart sign",
-   "area": "Manager & admin",
+   "area": "Back-end pages",
    "audience": "admin",
    "status": "reference",
    "taken": "2026-09-26",
@@ -512,19 +685,23 @@
     {
      "file": "cart-sign.png",
      "caption": "Cart sign",
-     "view": "desktop"
+     "shots": {
+      "any": "cart-sign.png"
+     }
     },
     {
      "file": "live-scoring-page.png",
      "caption": "Live scoring page",
-     "view": "desktop"
+     "shots": {
+      "desktop": "live-scoring-page.png"
+     }
     }
    ]
   },
   {
    "id": "score-entry-manager-panel",
    "title": "Live scoring: the manager panel",
-   "area": "Manager & admin",
+   "area": "Back-end pages",
    "audience": "manager",
    "status": "reference",
    "taken": "2026-09-28",
@@ -532,21 +709,19 @@
    "source_doc": "docs/claude/score-entry.md",
    "steps": [
     {
-     "file": "1-desktop.png",
-     "caption": "Desktop",
-     "view": "desktop"
-    },
-    {
      "file": "2-phone.png",
-     "caption": "Phone",
-     "view": "phone"
+     "caption": "The manager panel",
+     "shots": {
+      "mobile": "2-phone.png",
+      "desktop": "1-desktop.png"
+     }
     }
    ]
   },
   {
    "id": "score-entry-pairings-panel",
    "title": "Live scoring: the pairings panel",
-   "area": "Manager & admin",
+   "area": "Back-end pages",
    "audience": "manager",
    "status": "reference",
    "taken": "2026-09-28",
@@ -555,23 +730,25 @@
    "steps": [
     {
      "file": "1-desktop-before-seed.png",
-     "caption": "Desktop, before seeding",
-     "view": "desktop"
-    },
-    {
-     "file": "2-desktop-seeded-qr.png",
-     "caption": "Desktop, seeded with QR",
-     "view": "desktop"
+     "caption": "Before seeding",
+     "shots": {
+      "desktop": "1-desktop-before-seed.png"
+     }
     },
     {
      "file": "3-phone-seeded.png",
-     "caption": "Phone seeded",
-     "view": "phone"
+     "caption": "Seeded, with the QR code",
+     "shots": {
+      "mobile": "3-phone-seeded.png",
+      "desktop": "2-desktop-seeded-qr.png"
+     }
     },
     {
      "file": "4-phone-closed.png",
-     "caption": "Phone closed",
-     "view": "phone"
+     "caption": "Closed",
+     "shots": {
+      "mobile": "4-phone-closed.png"
+     }
     }
    ]
   },
@@ -588,197 +765,275 @@
     {
      "file": "00-landing-held.png",
      "caption": "Landing held",
-     "view": "phone"
+     "shots": {
+      "mobile": "00-landing-held.png"
+     }
     },
     {
      "file": "00-landing.png",
      "caption": "Landing",
-     "view": "phone"
+     "shots": {
+      "mobile": "00-landing.png"
+     }
     },
     {
      "file": "00-preview-shell-folded.png",
      "caption": "Preview shell folded",
-     "view": "phone"
+     "shots": {
+      "mobile": "00-preview-shell-folded.png"
+     }
     },
     {
      "file": "00-preview-shell.png",
      "caption": "Preview shell",
-     "view": "phone"
+     "shots": {
+      "mobile": "00-preview-shell.png"
+     }
     },
     {
      "file": "00-splash.png",
      "caption": "Splash",
-     "view": "phone"
+     "shots": {
+      "mobile": "00-splash.png"
+     }
     },
     {
      "file": "01-landing.png",
      "caption": "Landing",
-     "view": "phone"
+     "shots": {
+      "mobile": "01-landing.png"
+     }
     },
     {
      "file": "01-who.png",
      "caption": "Who",
-     "view": "phone"
+     "shots": {
+      "mobile": "01-who.png"
+     }
     },
     {
      "file": "02-fb.png",
      "caption": "Fb",
-     "view": "phone"
+     "shots": {
+      "mobile": "02-fb.png"
+     }
     },
     {
      "file": "02-held.png",
      "caption": "Held",
-     "view": "phone"
+     "shots": {
+      "mobile": "02-held.png"
+     }
     },
     {
      "file": "03-fs.png",
      "caption": "Fs",
-     "view": "phone"
+     "shots": {
+      "mobile": "03-fs.png"
+     }
     },
     {
      "file": "04-s.png",
      "caption": "S",
-     "view": "phone"
+     "shots": {
+      "mobile": "04-s.png"
+     }
     },
     {
      "file": "05-qr.png",
      "caption": "Qr",
-     "view": "phone"
+     "shots": {
+      "mobile": "05-qr.png"
+     }
     },
     {
      "file": "06-who.png",
      "caption": "Who",
-     "view": "phone"
+     "shots": {
+      "mobile": "06-who.png"
+     }
     },
     {
      "file": "07-held.png",
      "caption": "Held",
-     "view": "phone"
+     "shots": {
+      "mobile": "07-held.png"
+     }
     },
     {
      "file": "08-board.png",
      "caption": "Board",
-     "view": "phone"
+     "shots": {
+      "mobile": "08-board.png"
+     }
     },
     {
      "file": "09-open.png",
      "caption": "Open",
-     "view": "phone"
+     "shots": {
+      "mobile": "09-open.png"
+     }
     },
     {
      "file": "10-info-foursomes.png",
      "caption": "Info foursomes",
-     "view": "phone"
+     "shots": {
+      "mobile": "10-info-foursomes.png"
+     }
     },
     {
      "file": "10-info-schedule.png",
      "caption": "Info schedule",
-     "view": "phone"
+     "shots": {
+      "mobile": "10-info-schedule.png"
+     }
     },
     {
      "file": "10-info-teams.png",
      "caption": "Info teams",
-     "view": "phone"
+     "shots": {
+      "mobile": "10-info-teams.png"
+     }
     },
     {
      "file": "20-draw-start.png",
      "caption": "Draw start",
-     "view": "phone"
+     "shots": {
+      "mobile": "20-draw-start.png"
+     }
     },
     {
      "file": "21-draw-four-landed.png",
      "caption": "Draw four landed",
-     "view": "phone"
+     "shots": {
+      "mobile": "21-draw-four-landed.png"
+     }
     },
     {
      "file": "22-draw-singles.png",
      "caption": "Draw singles",
-     "view": "phone"
+     "shots": {
+      "mobile": "22-draw-singles.png"
+     }
     },
     {
      "file": "30-cart-sign-sat-am.png",
      "caption": "Cart sign sat am",
-     "view": "phone"
+     "shots": {
+      "any": "30-cart-sign-sat-am.png"
+     }
     },
     {
      "file": "30-cart-sign-sun.png",
      "caption": "Cart sign sun",
-     "view": "phone"
+     "shots": {
+      "any": "30-cart-sign-sun.png"
+     }
     },
     {
      "file": "40-skins-pane.png",
      "caption": "Skins pane",
-     "view": "phone"
+     "shots": {
+      "mobile": "40-skins-pane.png"
+     }
     },
     {
      "file": "50-logo-cart-sign.png",
      "caption": "Logo cart sign",
-     "view": "phone"
+     "shots": {
+      "any": "50-logo-cart-sign.png"
+     }
     },
     {
      "file": "51-logo-event-info.png",
      "caption": "Logo event info",
-     "view": "phone"
+     "shots": {
+      "mobile": "51-logo-event-info.png"
+     }
     },
     {
      "file": "52-logo-splash.png",
      "caption": "Logo splash",
-     "view": "phone"
+     "shots": {
+      "mobile": "52-logo-splash.png"
+     }
     },
     {
      "file": "53-splash-shimmer-a.png",
      "caption": "Splash shimmer a",
-     "view": "phone"
+     "shots": {
+      "mobile": "53-splash-shimmer-a.png"
+     }
     },
     {
      "file": "53-splash-shimmer-b.png",
      "caption": "Splash shimmer b",
-     "view": "phone"
+     "shots": {
+      "mobile": "53-splash-shimmer-b.png"
+     }
     },
     {
      "file": "chapman-hole4.png",
      "caption": "Chapman hole4",
-     "view": "phone"
+     "shots": {
+      "mobile": "chapman-hole4.png"
+     }
     },
     {
      "file": "chapman-match-open.png",
      "caption": "Chapman match open",
-     "view": "phone"
+     "shots": {
+      "mobile": "chapman-match-open.png"
+     }
     },
     {
      "file": "cup-board-follow.png",
      "caption": "Cup board follow",
-     "view": "phone"
+     "shots": {
+      "mobile": "cup-board-follow.png"
+     }
     },
     {
      "file": "cup-cart-signs-sat-am.pdf",
      "caption": "Cup cart signs sat am",
-     "view": "phone"
+     "shots": {
+      "any": "cup-cart-signs-sat-am.pdf"
+     }
     },
     {
      "file": "cup-cart-signs-sun.pdf",
      "caption": "Cup cart signs sun",
-     "view": "phone"
+     "shots": {
+      "any": "cup-cart-signs-sun.pdf"
+     }
     },
     {
      "file": "fourball-hole4.png",
      "caption": "Fourball hole4",
-     "view": "phone"
+     "shots": {
+      "mobile": "fourball-hole4.png"
+     }
     },
     {
      "file": "fourball-match-open.png",
      "caption": "Fourball match open",
-     "view": "phone"
+     "shots": {
+      "mobile": "fourball-match-open.png"
+     }
     },
     {
      "file": "singles-hole4.png",
      "caption": "Singles hole4",
-     "view": "phone"
+     "shots": {
+      "mobile": "singles-hole4.png"
+     }
     },
     {
      "file": "singles-match-open.png",
      "caption": "Singles match open",
-     "view": "phone"
+     "shots": {
+      "mobile": "singles-match-open.png"
+     }
     }
    ]
   },
@@ -795,34 +1050,498 @@
     {
      "file": "00-landing.png",
      "caption": "Landing",
-     "view": "phone"
+     "shots": {
+      "mobile": "00-landing.png"
+     }
     },
     {
      "file": "chapman-hole4.png",
      "caption": "Chapman hole4",
-     "view": "phone"
+     "shots": {
+      "mobile": "chapman-hole4.png"
+     }
     },
     {
      "file": "cup-board-follow.png",
      "caption": "Cup board follow",
-     "view": "phone"
+     "shots": {
+      "mobile": "cup-board-follow.png"
+     }
     },
     {
      "file": "fourball-hole4.png",
      "caption": "Fourball hole4",
-     "view": "phone"
+     "shots": {
+      "mobile": "fourball-hole4.png"
+     }
     },
     {
      "file": "fourball-match-open.png",
      "caption": "Fourball match open",
-     "view": "phone"
+     "shots": {
+      "mobile": "fourball-match-open.png"
+     }
     },
     {
      "file": "singles-hole4.png",
      "caption": "Singles hole4",
-     "view": "phone"
+     "shots": {
+      "mobile": "singles-hole4.png"
+     }
+    }
+   ]
+  },
+  {
+   "id": "member-pages",
+   "title": "Member pages, live",
+   "area": "Member pages",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.580.2 (live)",
+   "taken": "2026-10-26",
+   "folder": "member-pages-2026-10-26",
+   "notes": "Taken from the live site at the top of each page. Spotlight is the base for the player dashboard when member logins come.",
+   "demo": [
+    {
+     "label": "Leaderboard",
+     "url": "/member"
+    },
+    {
+     "label": "Season contests",
+     "url": "/member/contests"
+    },
+    {
+     "label": "Handicaps",
+     "url": "/member/handicaps"
+    },
+    {
+     "label": "Spotlight",
+     "url": "/member/spotlight?player=18"
+    },
+    {
+     "label": "Live scoring guide",
+     "url": "/member/live-scoring"
+    }
+   ],
+   "steps": [
+    {
+     "file": "1-leaderboard.png",
+     "caption": "Leaderboard (events)",
+     "shots": {
+      "mobile": "1-leaderboard.png",
+      "tablet": "1-leaderboard.tablet.png",
+      "desktop": "1-leaderboard.desktop.png"
+     }
+    },
+    {
+     "file": "2-season-contests.png",
+     "caption": "Season contests",
+     "shots": {
+      "mobile": "2-season-contests.png",
+      "tablet": "2-season-contests.tablet.png",
+      "desktop": "2-season-contests.desktop.png"
+     }
+    },
+    {
+     "file": "3-handicaps.png",
+     "caption": "Handicaps",
+     "shots": {
+      "mobile": "3-handicaps.png",
+      "tablet": "3-handicaps.tablet.png",
+      "desktop": "3-handicaps.desktop.png"
+     }
+    },
+    {
+     "file": "4-spotlight.png",
+     "caption": "Player Spotlight, one player (Kerry). The future player dashboard once members sign in",
+     "shots": {
+      "mobile": "4-spotlight.png",
+      "tablet": "4-spotlight.tablet.png",
+      "desktop": "4-spotlight.desktop.png"
+     }
+    },
+    {
+     "file": "5-live-scoring-guide.png",
+     "caption": "The live scoring guide page",
+     "shots": {
+      "mobile": "5-live-scoring-guide.png",
+      "tablet": "5-live-scoring-guide.tablet.png",
+      "desktop": "5-live-scoring-guide.desktop.png"
+     }
+    }
+   ]
+  },
+  {
+   "id": "live-scoring-guide-pictures",
+   "title": "Live scoring how-to, the pictures members see",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "current",
+   "taken": "2026-10-13",
+   "base": "static",
+   "folder": "live-scoring",
+   "source_doc": "templates/live_scoring_guide.html",
+   "notes": "In use: these pictures are the member guide (/member/live-scoring) and the 10/13 how-to email. They live in static/img/live-scoring; the catalogue points at them, it does not copy them.",
+   "demo": [
+    {
+     "label": "Guide page",
+     "url": "/member/live-scoring"
+    }
+   ],
+   "steps": [
+    {
+     "file": "00-email.jpg",
+     "caption": "The how-to email",
+     "shots": {
+      "mobile": "00-email.jpg"
+     }
+    },
+    {
+     "file": "00-cart-sign.jpg",
+     "caption": "The cart sign QR",
+     "shots": {
+      "mobile": "00-cart-sign.jpg"
+     }
+    },
+    {
+     "file": "00-scorecard.jpg",
+     "caption": "The scorecard",
+     "shots": {
+      "mobile": "00-scorecard.jpg"
+     }
+    },
+    {
+     "file": "01-open.jpg",
+     "caption": "Open the link",
+     "shots": {
+      "mobile": "01-open.jpg"
+     }
+    },
+    {
+     "file": "02-name.jpg",
+     "caption": "Pick your name",
+     "shots": {
+      "mobile": "02-name.jpg"
+     }
+    },
+    {
+     "file": "03-hole.jpg",
+     "caption": "Enter a hole",
+     "shots": {
+      "mobile": "03-hole.jpg"
+     }
+    },
+    {
+     "file": "04-ctp.jpg",
+     "caption": "Closest to the pin",
+     "shots": {
+      "mobile": "04-ctp.jpg"
+     }
+    },
+    {
+     "file": "05-check.jpg",
+     "caption": "Check the card",
+     "shots": {
+      "mobile": "05-check.jpg"
+     }
+    },
+    {
+     "file": "06-fix.jpg",
+     "caption": "Fix a number",
+     "shots": {
+      "mobile": "06-fix.jpg"
+     }
+    },
+    {
+     "file": "07-photo.jpg",
+     "caption": "Photo of the card",
+     "shots": {
+      "mobile": "07-photo.jpg"
+     }
+    },
+    {
+     "file": "08-keeper-signs.jpg",
+     "caption": "The scorekeeper signs",
+     "shots": {
+      "mobile": "08-keeper-signs.jpg"
+     }
+    },
+    {
+     "file": "09-follow.jpg",
+     "caption": "Follow the board",
+     "shots": {
+      "mobile": "09-follow.jpg"
+     }
+    },
+    {
+     "file": "10-sign.jpg",
+     "caption": "Sign your card",
+     "shots": {
+      "mobile": "10-sign.jpg"
+     }
+    }
+   ]
+  },
+  {
+   "id": "mockups-card-check",
+   "title": "Card check options A-D (mockups)",
+   "area": "Mockups",
+   "audience": "member",
+   "status": "mockup",
+   "taken": "2026-09-25",
+   "base": "mockups",
+   "folder": "",
+   "source_doc": "docs/claude/mockups/card-check-options.html",
+   "demo": [
+    {
+     "label": "Open the options page",
+     "url": "/admin/mockups/card-check-options.html"
+    }
+   ],
+   "steps": [
+    {
+     "file": "card-check-A.png",
+     "caption": "Option A",
+     "shots": {
+      "mobile": "card-check-A.png"
+     }
+    },
+    {
+     "file": "card-check-B.png",
+     "caption": "Option B",
+     "shots": {
+      "mobile": "card-check-B.png"
+     }
+    },
+    {
+     "file": "card-check-C.png",
+     "caption": "Option C",
+     "shots": {
+      "mobile": "card-check-C.png"
+     }
+    },
+    {
+     "file": "card-check-D.png",
+     "caption": "Option D",
+     "shots": {
+      "mobile": "card-check-D.png"
+     }
+    }
+   ]
+  },
+  {
+   "id": "mockups-leaderboard",
+   "title": "Leaderboard mockups",
+   "area": "Mockups",
+   "audience": "member",
+   "status": "mockup",
+   "taken": "2026-09-26",
+   "base": "mockups",
+   "folder": "",
+   "source_doc": "docs/claude/mockups/",
+   "demo": [
+    {
+     "label": "Leaderboard mockup (Tracker page)",
+     "url": "/admin/mockups/leaderboard"
+    },
+    {
+     "label": "Board mockup",
+     "url": "/admin/mockups/leaderboard-board.html"
+    },
+    {
+     "label": "Team names mockup",
+     "url": "/admin/mockups/leaderboard-team-names.html"
+    }
+   ],
+   "steps": [
+    {
+     "file": "leaderboard-9-hole.png",
+     "caption": "9-hole board",
+     "shots": {
+      "mobile": "leaderboard-9-hole.png"
+     }
+    },
+    {
+     "file": "leaderboard-18-hole.png",
+     "caption": "18-hole board",
+     "shots": {
+      "mobile": "leaderboard-18-hole.png"
+     }
+    },
+    {
+     "file": "leaderboard-page-9.png",
+     "caption": "9-hole page",
+     "shots": {
+      "mobile": "leaderboard-page-9.png"
+     }
+    },
+    {
+     "file": "leaderboard-page-18.png",
+     "caption": "18-hole page",
+     "shots": {
+      "mobile": "leaderboard-page-18.png"
+     }
+    },
+    {
+     "file": "leaderboard-team-names.png",
+     "caption": "Team names",
+     "shots": {
+      "mobile": "leaderboard-team-names.png"
+     }
+    }
+   ]
+  },
+  {
+   "id": "report-manager-event",
+   "title": "Manager event report (with the pace addition, still to be designed)",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+  },
+  {
+   "id": "report-daily-digest",
+   "title": "Daily digest email to Kerry",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+  },
+  {
+   "id": "report-event-day",
+   "title": "Event-day email (Add Handicap box)",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+  },
+  {
+   "id": "report-pairings-approval",
+   "title": "Pairings approval email to the manager",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+  },
+  {
+   "id": "report-membership",
+   "title": "Membership renewal and roster notices",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+  },
+  {
+   "id": "report-starter-sheet",
+   "title": "Starter sheet and cart signs (print)",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+  },
+  {
+   "id": "report-finance",
+   "title": "Finance: event financial summary, payouts, sales tax",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+  },
+  {
+   "id": "be-events",
+   "title": "Events page (manager view): roster, Remind, Message Players",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+  },
+  {
+   "id": "be-messages",
+   "title": "Messages composer and templates",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+  },
+  {
+   "id": "be-customers",
+   "title": "Customers and the customer profile",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+  },
+  {
+   "id": "be-transactions",
+   "title": "Transactions",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+  },
+  {
+   "id": "be-accounting",
+   "title": "Accounting and the admin pages",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+  },
+  {
+   "id": "be-pairings",
+   "title": "Pairings and the Tee Time Advisor",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+  },
+  {
+   "id": "be-test-center",
+   "title": "Test Center (practice scoring)",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered.",
+   "demo": [
+    {
+     "label": "Test Center",
+     "url": "/admin/test-center",
+     "note": "Practice rounds write only to test tables."
     }
    ]
   }
+ ],
+ "devices": [
+  "desktop",
+  "tablet",
+  "mobile"
  ]
 }

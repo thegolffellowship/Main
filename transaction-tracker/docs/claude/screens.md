@@ -17,6 +17,22 @@ Kerry: "I want to be able to go to a page and select whatever I want to look at 
   - A step's state overrides its sequence's status.
 - **Gaps:** a file on disk that isn't in the catalogue shows under **Not catalogued**. `test_screens.py` fails on one, and also fails on a catalogued file that is missing.
 
+## Devices, demos and source (Kerry 10/26, same day)
+
+- **Device toggle:** each step's `shots` maps `desktop` / `tablet` / `mobile` (or `any`, for prints, cart signs and PDFs) to a file. The page's Desktop / Tablet / Mobile toggle shows each device's count (for example "Tablet 0/5"), and the viewer remembers the choice. A missing device shows "No tablet screenshot yet" with a button to show one the step does have.
+  - Standard capture sizes: mobile 390 px at 2x, tablet 820 px, desktop 1280 px.
+  - Name the files `<name>.png` (mobile), `<name>.tablet.png` and `<name>.desktop.png`.
+- **Pictures already in use elsewhere** are catalogued where they live, not copied. A sequence's `base` is `screenshots` (the default), `static` (static/img, for example the live scoring guide pictures) or `mockups` (docs/claude/mockups).
+- **Try it:** a sequence's `demo` list is links the page opens in a frame sized to the chosen device. Every demo must be read-only or preview-only:
+  - the live member pages;
+  - `/admin/screens/demo/invitation`, the invitation on the staff preview person with PREVIEW links, so taps open the real pages and record nothing;
+  - `/admin/screens/demo/payment-reminder`, the reminder for the next event, only rendered;
+  - the mockups;
+  - the Test Center, which writes only to test tables.
+  Never add a demo that can send, pay or write a real row.
+- **HTML/CSS tab:** shows the exact source the demo serves, with Copy and Download .html, so Claude Design and the CA can take a screen straight into their work.
+- **Status `needed`:** a screen we should have and don't yet. Reports and Back-end pages start as `needed` entries. Back-end pages must be shot against the test database, or with member details covered, because they show money and contact details.
+
 ## Comments go to the Librarian, through the mailbox
 
 A comment on the page is a mailbox post:

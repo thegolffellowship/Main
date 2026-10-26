@@ -39,12 +39,40 @@
         .st-superseded { background:#F3F4F6; color:#6B7280; }
         .st-reference { background:#FEF3C7; color:#92400E; }
         .st-missing { background:#FEE2E2; color:#B91C1C; }
+        .st-needed { background:#FFE4E6; color:#9F1239; }
+        .scr-demo-btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; align-items:center; }
+        .scr-demo-btns .lbl { font-size:.72rem; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:#6B7280; margin-right:2px; }
+        .scr-demo-btns button { background:#FFF4EC; color:#C2410C; border:1px solid #FED7AA; border-radius:999px; padding:5px 12px;
+                                font:inherit; font-size:.82rem; font-weight:600; cursor:pointer; }
+        .scr-demo-btns button.on { background:#E8803A; color:#fff; border-color:#E8803A; }
+        .scr-demo { margin-bottom:14px; }
+        .scr-demo-bar { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+        .scr-tabs { display:inline-flex; border:1px solid var(--border,#E5E7EB); border-radius:8px; overflow:hidden; }
+        .scr-tabs button { border:0; background:#fff; padding:5px 12px; font:inherit; font-size:.82rem; font-weight:600; cursor:pointer; }
+        .scr-tabs button.on { background:#1B1B1B; color:#fff; }
+        .scr-stage { background:#E5E7EB; border-radius:10px; padding:12px; overflow:hidden; display:flex; justify-content:center; }
+        .scr-device { background:#fff; box-shadow:0 2px 12px rgba(0,0,0,.15); border-radius:10px; overflow:hidden; transform-origin:top center; }
+        .scr-device iframe { border:0; display:block; background:#fff; }
+        .scr-src { width:100%; height:520px; box-sizing:border-box; font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;
+                   border:1px solid var(--border,#E5E7EB); border-radius:8px; padding:10px; background:#0F172A; color:#E2E8F0; white-space:pre-wrap; word-break:break-all; }
+        .scr-note { font-size:.8rem; color:var(--text-muted,#6B7280); }
         .scr-main { min-width:0; }
         .scr-card { background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
         .scr-title { font-family:'Bitter',serif; font-weight:700; font-size:1.3rem; margin:0 0 4px; }
         .scr-meta { font-size:.85rem; color:var(--text-muted,#6B7280); display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
         .scr-notes { margin:8px 0 0; font-size:.9rem; }
         .scr-views { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+        .scr-dev { display:inline-flex; border:1px solid var(--border,#E5E7EB); border-radius:999px; overflow:hidden; margin-top:10px; }
+        .scr-dev button { border:0; background:#fff; padding:6px 14px; font:inherit; font-size:.82rem; font-weight:600; cursor:pointer; color:#374151; }
+        .scr-dev button + button { border-left:1px solid var(--border,#E5E7EB); }
+        .scr-dev button.on { background:#1B1B1B; color:#fff; }
+        .scr-dev .c { font-weight:400; opacity:.7; margin-left:4px; font-size:.75rem; }
+        .scr-grid.dev-desktop { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+        .scr-grid.dev-tablet { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+        .scr-none { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; height:300px;
+                    background:repeating-linear-gradient(45deg,#F9FAFB,#F9FAFB 10px,#F3F4F6 10px,#F3F4F6 20px);
+                    color:#6B7280; font-size:.85rem; text-align:center; padding:0 12px; }
+        .scr-none button { background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:999px; padding:4px 10px; cursor:pointer; font:inherit; font-size:.78rem; }
         .scr-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:14px; }
         .scr-step { background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
         .scr-step.superseded { opacity:.75; }
@@ -125,9 +153,19 @@
     <script src="/static/js/auth.js"></script>
     <script>
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-    const STATUS_WORD = {current: "Current", built: "Built, not live", mockup: "Mockup", superseded: "Superseded", reference: "Reference"};
-    let CAT = null, SEL = null, VIEW = "all", STATUS = "all", LB = 0;
-    const fileUrl = (seq, st) => `/admin/screens/file/${encodeURIComponent(seq.folder)}/${encodeURIComponent(st.file)}`;
+    const STATUS_WORD = {current: "Current", built: "Built, not live", mockup: "Mockup", superseded: "Superseded", reference: "Reference", needed: "Not shot yet", missing: "File missing"};
+    const DEV_W = {desktop: 1280, tablet: 820, mobile: 390}, DEV_H = {desktop: 800, tablet: 1100, mobile: 760};
+    let DEMO = null, DEMO_TAB = "live";
+    let CAT = null, SEL = null, STATUS = "all", LB = 0;
+    // The device toggle (Kerry 10/26): desktop / tablet / mobile, remembered
+    // on this browser. A step's "any" shot (prints, cart signs) shows in all.
+    let DEV = "mobile";
+    try { DEV = localStorage.getItem("scr_dev") || "mobile"; } catch (e) {}
+    const DEV_WORD = {desktop: "Desktop", tablet: "Tablet", mobile: "Mobile"};
+    const shotOf = (st, d) => (st.shots || {})[d || DEV] || (st.shots || {}).any || null;
+    const fileUrl = (seq, f) => `/admin/screens/file/${encodeURIComponent(seq.base || "screenshots")}/`
+        + [seq.folder, f].filter(Boolean).map(x => x.split("/").map(encodeURIComponent).join("/")).join("/");
+    const isPdf = (f) => /\.pdf$/i.test(f || "");
     const chip = (s) => `<span class="st st-${esc(s)}">${esc(STATUS_WORD[s] || s)}</span>`;
 
     async function load() {
@@ -156,7 +194,7 @@
                 const n = (CAT.comment_counts || {})[s.id] || 0;
                 return `<button type="button" class="scr-item${SEL && SEL.id === s.id ? " on" : ""}" data-id="${esc(s.id)}">
                     <div class="scr-item-t">${esc(s.title)}</div>
-                    <div class="scr-item-m">${chip(s.status)}<span>${s.steps.length} screens</span>${n ? `<span>${n} comment${n === 1 ? "" : "s"}</span>` : ""}</div></button>`;
+                    <div class="scr-item-m">${chip(s.status)}<span>${s.steps.length ? s.steps.length + " screens" : "none yet"}</span>${s.demo ? "<span>Try it</span>" : ""}${n ? `<span>${n} comment${n === 1 ? "" : "s"}</span>` : ""}</div></button>`;
             }).join("");
         }
         if (CAT.not_catalogued && CAT.not_catalogued.length) {
@@ -170,32 +208,40 @@
         });
     }
 
-    function steps() {
-        return SEL.steps.filter(st => VIEW === "all" || st.view === VIEW);
-    }
+    function steps() { return SEL.steps; }
 
     function pick(seq) {
         if (!seq) { document.getElementById("scr-main").innerHTML = ""; return; }
         SEL = seq; history.replaceState(null, "", "#" + encodeURIComponent(seq.id));
         renderList();
-        const views = ["all", ...new Set(seq.steps.map(s => s.view))];
-        if (!views.includes(VIEW)) VIEW = "all";
         const list = steps();
         document.getElementById("scr-main").innerHTML = `
             <div class="scr-card">
                 <h3 class="scr-title">${esc(seq.title)}</h3>
                 <div class="scr-meta">${chip(seq.status)}${seq.version ? `<span>${esc(seq.version)}</span>` : ""}<span>Taken ${esc(seq.taken || "?")}</span>${seq.audience ? `<span>Seen by: ${esc(seq.audience)}</span>` : ""}${seq.source_doc ? `<span>Doc: ${esc(seq.source_doc)}</span>` : ""}</div>
                 ${seq.notes ? `<p class="scr-notes">${esc(seq.notes)}</p>` : ""}
-                ${views.length > 2 ? `<div class="scr-views">${views.map(v => `<button type="button" class="scr-chip${v === VIEW ? " on" : ""}" data-v="${esc(v)}">${esc(v === "all" ? "All views" : v)}</button>`).join("")}</div>` : ""}
+                ${(seq.demo || []).length ? `<div class="scr-demo-btns"><span class="lbl">Try it</span>${seq.demo.map((d, i) =>
+                    `<button type="button" data-demo="${i}" class="${DEMO && DEMO.seq === seq.id && DEMO.i === i ? "on" : ""}">${esc(d.label)}</button>`).join("")}</div>` : ""}
+                <div class="scr-dev" role="group" aria-label="Device">${(CAT.devices || ["desktop", "tablet", "mobile"]).map(d => {
+                    const have = seq.steps.filter(st => shotOf(st, d)).length;
+                    return `<button type="button" data-d="${d}" class="${d === DEV ? "on" : ""}">${DEV_WORD[d] || d}<span class="c">${have}/${seq.steps.length}</span></button>`;
+                }).join("")}</div>
             </div>
-            <div class="scr-grid">${list.map((st, i) => {
-                const state = st.missing ? "missing" : (st.state || "");
-                const thumb = st.kind === "pdf"
-                    ? `<a class="scr-thumb pdf" href="${fileUrl(seq, st)}" target="_blank" rel="noopener">PDF</a>`
-                    : `<button type="button" class="scr-thumb" data-i="${i}"><img loading="lazy" src="${fileUrl(seq, st)}" alt="${esc(st.caption)}"></button>`;
+            <div class="scr-card scr-demo" id="scr-demo" style="display:none;"></div>
+            ${list.length ? "" : `<div class="scr-card"><p class="scr-sub" style="margin:0;">No screenshots yet. The Librarian or UI/UX Review takes these on all three devices.</p></div>`}
+            <div class="scr-grid dev-${DEV}">${list.map((st, i) => {
+                const f = shotOf(st);
+                const gone = f && (st.missing || []).some(d => st.shots[d] === f);
+                const state = gone ? "missing" : (st.state || "");
+                const other = ["mobile", "desktop", "tablet"].find(d => d !== DEV && (st.shots || {})[d]);
+                const thumb = !f
+                    ? `<div class="scr-none">No ${esc((DEV_WORD[DEV] || DEV).toLowerCase())} screenshot yet${other ? `<button type="button" data-show="${other}">Show ${esc(DEV_WORD[other].toLowerCase())}</button>` : ""}</div>`
+                    : isPdf(f)
+                    ? `<a class="scr-thumb pdf" href="${fileUrl(seq, f)}" target="_blank" rel="noopener">PDF</a>`
+                    : `<button type="button" class="scr-thumb" data-i="${i}"><img loading="lazy" src="${fileUrl(seq, f)}" alt="${esc(st.caption)}"></button>`;
                 return `<div class="scr-step${st.state === "superseded" ? " superseded" : ""}">${thumb}
                     <div class="scr-cap"><span class="n">${i + 1}</span>${esc(st.caption)}
-                    <div class="row"><span>${state ? chip(state === "missing" ? "missing" : state) : `<span class="scr-sub">${esc(st.view)}</span>`}</span>
+                    <div class="row"><span>${state ? chip(state) : ""}</span>
                     <button type="button" class="lnk" data-c="${esc(st.file)}">Comment</button></div></div></div>`;
             }).join("")}</div>
             <div class="scr-card" style="margin-top:14px;">
@@ -211,14 +257,66 @@
                     <p class="scr-msg" id="scr-msg"></p>
                 </form>
             </div>`;
-        document.querySelectorAll(".scr-views .scr-chip").forEach(b => b.onclick = () => { VIEW = b.dataset.v; pick(SEL); });
+        const setDev = (d) => { DEV = d; try { localStorage.setItem("scr_dev", d); } catch (e) {} pick(SEL); };
+        document.querySelectorAll(".scr-dev button").forEach(b => b.onclick = () => setDev(b.dataset.d));
+        document.querySelectorAll(".scr-none button").forEach(b => b.onclick = () => setDev(b.dataset.show));
         document.querySelectorAll(".scr-thumb[data-i]").forEach(b => b.onclick = () => openLb(parseInt(b.dataset.i)));
         document.querySelectorAll(".scr-cap .lnk").forEach(b => b.onclick = () => {
             const f = document.getElementById("scr-form");
             f.step.value = b.dataset.c; f.text.focus(); f.scrollIntoView({behavior: "smooth", block: "center"});
         });
         document.getElementById("scr-form").onsubmit = send;
+        document.querySelectorAll(".scr-demo-btns button").forEach(b => b.onclick = () => {
+            const i = parseInt(b.dataset.demo);
+            DEMO = (DEMO && DEMO.seq === seq.id && DEMO.i === i) ? null : {seq: seq.id, i};
+            pick(SEL);
+        });
+        if (DEMO && DEMO.seq !== seq.id) DEMO = null;
+        renderDemo();
         loadThread();
+    }
+
+    // TRY IT (Kerry 10/26): the demo page in a device-sized frame, or its
+    // HTML/CSS source to copy or download for Claude Design and the CA.
+    async function renderDemo() {
+        const box = document.getElementById("scr-demo");
+        if (!box) return;
+        if (!DEMO) { box.style.display = "none"; return; }
+        const d = SEL.demo[DEMO.i];
+        box.style.display = "";
+        box.innerHTML = `<div class="scr-demo-bar"><strong>${esc(d.label)}</strong>
+            <span class="scr-tabs"><button type="button" data-t="live" class="${DEMO_TAB === "live" ? "on" : ""}">Live</button><button type="button" data-t="src" class="${DEMO_TAB === "src" ? "on" : ""}">HTML/CSS</button></span>
+            <span class="scr-note">${esc(DEV_WORD[DEV])} · ${DEV_W[DEV]} px${d.note ? " · " + esc(d.note) : ""} · <a href="${esc(d.url)}" target="_blank" rel="noopener">Open in a new tab</a></span></div>
+            <div id="scr-demo-body"></div>`;
+        box.querySelectorAll(".scr-tabs button").forEach(b => b.onclick = () => { DEMO_TAB = b.dataset.t; renderDemo(); });
+        const body = document.getElementById("scr-demo-body");
+        if (DEMO_TAB === "live") {
+            const w = DEV_W[DEV], h = DEV_H[DEV];
+            body.innerHTML = `<div class="scr-stage" id="scr-stage"><div class="scr-device" id="scr-device" style="width:${w}px;height:${h}px;">
+                <iframe src="${esc(d.url)}" width="${w}" height="${h}" title="${esc(d.label)}"></iframe></div></div>`;
+            const stage = document.getElementById("scr-stage"), dev = document.getElementById("scr-device");
+            const k = Math.min(1, (stage.clientWidth - 24) / w);
+            dev.style.transform = `scale(${k})`;
+            stage.style.height = (h * k + 24) + "px";
+        } else {
+            body.innerHTML = `<p class="scr-note">Loading the source&hellip;</p>`;
+            let html = "";
+            try { html = await (await fetch(d.url)).text(); } catch (e) { html = "Could not load: " + e.message; }
+            body.innerHTML = `<textarea class="scr-src" readonly spellcheck="false"></textarea>
+                <div class="scr-demo-btns"><button type="button" id="src-copy">Copy</button><button type="button" id="src-dl">Download .html</button>
+                <span class="scr-note">The exact HTML and CSS this screen serves, for Claude Design or the CA.</span></div>`;
+            body.querySelector("textarea").value = html;
+            document.getElementById("src-copy").onclick = async () => {
+                try { await navigator.clipboard.writeText(html); document.getElementById("src-copy").textContent = "Copied"; }
+                catch (e) { body.querySelector("textarea").select(); }
+            };
+            document.getElementById("src-dl").onclick = () => {
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(new Blob([html], {type: "text/html"}));
+                a.download = `${SEL.id}-${d.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.html`;
+                a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            };
+        }
     }
 
     async function loadThread() {
@@ -252,7 +350,7 @@
         f.querySelector("button").disabled = true;
         const r = await fetch(`/api/screens/${encodeURIComponent(SEL.id)}/comments`, {
             method: "POST", headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({kind: f.kind.value, step: f.step.value, text})});
+            body: JSON.stringify({kind: f.kind.value, step: f.step.value, device: f.step.value ? DEV : "", text})});
         const d = await r.json();
         f.querySelector("button").disabled = false;
         if (!r.ok) { msg.textContent = d.error || "Could not send."; return; }
@@ -262,8 +360,9 @@
         renderList(); loadThread();
     }
 
+    const lbList = () => steps().filter(st => shotOf(st) && !isPdf(shotOf(st)));
     function openLb(i) {
-        const list = steps().filter(st => st.kind !== "pdf");
+        const list = lbList();
         const all = steps();
         const st = all[i]; if (!st) return;
         LB = list.indexOf(st);
@@ -271,11 +370,11 @@
         document.getElementById("scr-lb").classList.add("on");
     }
     function showLb(list) {
-        list = list || steps().filter(st => st.kind !== "pdf");
+        list = list || lbList();
         LB = (LB + list.length) % list.length;
         const st = list[LB];
-        document.getElementById("lb-img").src = fileUrl(SEL, st);
-        document.getElementById("lb-cap").textContent = `${LB + 1} of ${list.length} · ${st.caption}`;
+        document.getElementById("lb-img").src = fileUrl(SEL, shotOf(st));
+        document.getElementById("lb-cap").textContent = `${LB + 1} of ${list.length} · ${st.caption} · ${DEV_WORD[DEV] || DEV}`;
     }
     document.getElementById("lb-prev").onclick = () => { LB--; showLb(); };
     document.getElementById("lb-next").onclick = () => { LB++; showLb(); };
