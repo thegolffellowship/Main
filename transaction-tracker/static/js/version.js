@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.596.0";
+window.TGF_VERSION = "2.597.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.597.0",
+    date: "2026-10-26",
+    title: "Morning events (like the Fall Championship): Event Info at noon the day before, with the Course Files",
+    changes: [
+      "Kerry 10/26 (CoS #2355): \"18 hole event info like Fall Champ needs to go out one day prior at noon, same time as course files.\" An event whose first tee is before 1:00 PM now sends each player's Event Info at noon the day before, the same moment and the same test as its Course Files (Fall Championship: Friday 10/30 at noon). Evening events keep Event Info at 6:00 AM on event day. The evening tee-times email for a morning event says \"Your full Event Info email, with your start, group, cart and games, went out at noon today.\" (not-yet-registered: \"...follows as soon as we place you.\"), the approve page says \"noon the day before\", and the after-lock update emails start from that noon send. Guards test_pairings_approval.py, test_course_files_noon.py, test_after_lock.py."
+    ]
+  },
   {
     version: "2.596.0",
     date: "2026-10-26",

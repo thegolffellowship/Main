@@ -401,9 +401,14 @@ def check(render=None, static_dir=None, now=None, db_path=None) -> dict:
         from email_parser.timezone_utils import now_central
         now = now_central()
     with db._connect(db_path) as conn:
+        # Today's events, and tomorrow's whose Event Info already went (a
+        # morning event's goes at noon the day before, Kerry 10/26 #2355);
+        # an event with no Event Info send has no baseline and is skipped below.
+        from datetime import timedelta as _td
         rows = [dict(r) for r in conn.execute(
-            "SELECT * FROM events WHERE substr(event_date, 1, 10) = ? "
-            "AND COALESCE(status, 'active') = 'active'", (now.date().isoformat(),))]
+            "SELECT * FROM events WHERE substr(event_date, 1, 10) IN (?, ?) "
+            "AND COALESCE(status, 'active') = 'active'",
+            (now.date().isoformat(), (now.date() + _td(days=1)).isoformat()))]
     out = {}
     for ev in rows:
         if not _get(STATE_KEY.format(int(ev["id"])), db_path):

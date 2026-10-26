@@ -427,7 +427,7 @@ def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
             logger.exception("tee-times send on approval failed for %s", event_id)
             tt = {"error": str(exc)}
         return {"status": "approved", "fingerprint": cur, "teetimes": tt,
-                "sends_at": f"{info_time()} on the event day",
+                "sends_at": (lambda _t: _t if _t.startswith("noon") else f"{_t} on the event day")(info_time_for_id(event_id, db_path)),
                 "counts": {"approved": 1, "ready": (rv.get("counts") or {}).get("ready", 0),
                            "held": (rv.get("counts") or {}).get("held", 0)}}
     try:
@@ -501,7 +501,7 @@ button[disabled] {{ opacity:.6; }}
 (function () {{
   var b = document.getElementById("go"); if (!b) return;
   b.addEventListener("click", function () {{
-    if (!confirm("Approve these pairings? Players get their Event Info email at {info_time()}.")) return;
+    if (!confirm("Approve these pairings? Players get their Event Info email at {info_time_for_id(ev['id'])}.")) return;
     b.disabled = true; b.textContent = "Approving\\u2026";
     fetch("/api/events/{int(ev['id'])}/approve-pairings", {{method: "POST", headers: {{"Content-Type": "application/json"}},
       body: JSON.stringify({{fingerprint: b.getAttribute("data-fp")}})}})
@@ -512,7 +512,7 @@ button[disabled] {{ opacity:.6; }}
         if (!r.ok || d.error || d.refused) {{ m.textContent = "Not sent: " + (d.error || d.refused); b.disabled = false; b.textContent = "Try again"; return; }}
         var k = d.counts || {{}};
         m.innerHTML = d.status === "approved"
-          ? '<div class="done">Approved. Event Info emails go to ' + (k.ready || 0) + ' players at ' + (d.sends_at || "{info_time()}") + '.</div>'
+          ? '<div class="done">Approved. Event Info emails go to ' + (k.ready || 0) + ' players at ' + (d.sends_at || "{info_time_for_id(ev['id'])}") + '.</div>'
           : '<div class="done">Approved. Sent ' + (k.sent || 0) + ", already sent before " + (k.skipped || 0) + ", failed " + (k.failed || 0) + ".</div>";
         b.style.display = "none";
       }}).catch(function (e) {{ b.disabled = false; b.textContent = "Try again"; document.getElementById("msg").textContent = String(e); }});
@@ -531,6 +531,32 @@ button[disabled] {{ opacity:.6; }}
 # player email the night before; the personal Event Info email goes at 7 AM.
 AUTO_DIAL = "pairings_auto_send"
 AUTO_HOUR = 19
+
+
+MORNING_BEFORE_HOUR = 13
+
+
+def is_morning_event(ev: dict) -> bool:
+    """First tee before 1:00 PM: Event Info and Course Files go at noon the
+    day before (course_files_noon.send_day is the same test)."""
+    from email_parser.after_lock import _first_tee
+    ft = _first_tee(ev)
+    return ft is not None and ft.hour < MORNING_BEFORE_HOUR
+
+
+def info_time_for(ev: dict, db_path=None) -> str:
+    """When this event's Event Info goes, as people read it."""
+    return "noon the day before" if is_morning_event(ev) else info_time(db_path)
+
+
+def info_time_for_id(event_id, db_path=None) -> str:
+    from email_parser import database as db
+    try:
+        with db._connect(db_path) as conn:
+            r = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        return info_time_for(dict(r), db_path) if r else info_time(db_path)
+    except Exception:
+        return info_time(db_path)
 
 
 def auto_send_check(now=None, db_path=None) -> dict:
@@ -553,14 +579,35 @@ def auto_send_check(now=None, db_path=None) -> dict:
     today = now.date()
     lock_day = (today + timedelta(days=1)).isoformat() if now.hour >= AUTO_HOUR else None
     send_day = today.isoformat() if info_hour(db_path) <= now.hour < 12 else None
-    days = [d for d in (lock_day, send_day) if d]
-    if not days:
-        return {"status": "not yet"}
+    # A MORNING event (first tee before 1:00 PM: the noon Course Files job's
+    # own test, course_files_noon.send_day) gets its Event Info at NOON THE
+    # DAY BEFORE, with the Course Files (Kerry 10/26, CoS #2355: "18 hole
+    # event info like Fall Champ needs to go out one day prior at noon, same
+    # time as course files."). It has no separate 7 PM auto-approve: the noon
+    # send approves the sheet as it stands.
+    from email_parser.course_files_noon import send_day as _cf_day
+    from email_parser.after_lock import _first_tee
+    tomorrow = (today + timedelta(days=1)).isoformat()
     with db._connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT id, item_name, event_date, status FROM events WHERE substr(event_date, 1, 10) IN ({}) "
-            "AND COALESCE(status, 'active') = 'active'".format(",".join("?" * len(days))),
-            days).fetchall()
+        cand = [dict(r) for r in conn.execute(
+            "SELECT * FROM events WHERE substr(event_date, 1, 10) IN (?, ?) "
+            "AND COALESCE(status, 'active') = 'active'", (today.isoformat(), tomorrow)).fetchall()]
+    rows = []
+    for r in cand:
+        d = str(r["event_date"])[:10]
+        if is_morning_event(r):
+            ft = _first_tee(r)
+            if _cf_day(r) == today.isoformat() and now.hour >= 12:
+                rows.append({**r, "_mode": "send"})
+            elif d == today.isoformat() and (ft is None or now < ft):
+                rows.append({**r, "_mode": "send"})        # a failed noon send keeps retrying
+            continue
+        if d == lock_day:
+            rows.append({**r, "_mode": "lock"})
+        elif d == send_day:
+            rows.append({**r, "_mode": "send"})
+    if not rows:
+        return {"status": "not yet"}
     out = {}
     for r in rows:
         eid = int(r["id"])
@@ -577,7 +624,7 @@ def auto_send_check(now=None, db_path=None) -> dict:
                 out[eid] = {"skipped": "no saved pairings"}
                 continue
             st = event_state(eid, db_path)
-            if str(r["event_date"])[:10] == lock_day:
+            if r["_mode"] == "lock":
                 if st.get("approved_fp") == fp:
                     out[eid] = {"skipped": "a manager approved this sheet"}
                 else:

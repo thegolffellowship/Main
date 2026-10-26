@@ -282,6 +282,22 @@ def _guard(subject: str, body: str, used: set, values: dict) -> list:
     return why
 
 
+MORNING_EVENT_INFO = "went out at noon today"
+MORNING_NONREG = "follows as soon as we place you"
+
+
+def event_info_phrase(body: str, morning: bool = False) -> str:
+    """The stamped line names when Event Info comes. A morning event's Event
+    Info went at noon the day before, with the Course Files (Kerry 10/26,
+    CoS #2355), before this evening email; everyone else's comes at the
+    event_info_hour dial's time tomorrow. The template keeps its words and hash."""
+    if morning:
+        return (body.replace("comes at 7:00 AM tomorrow", MORNING_EVENT_INFO)
+                    .replace("follows at 7:00 AM tomorrow", MORNING_NONREG))
+    from email_parser.pairings_approval import info_time
+    return body.replace("at 7:00 AM tomorrow", f"at {info_time()} tomorrow")
+
+
 def _render(version: str, tpl: dict, values: dict) -> tuple[str, str, list]:
     from email_parser.fetcher import render_msg_template, normalize_email_html
     from email_parser.event_day_email import html_to_text
@@ -296,8 +312,7 @@ def _render(version: str, tpl: dict, values: dict) -> tuple[str, str, list]:
     body = normalize_email_html(render_msg_template(html_body, values))
     # The Event Info time follows its dial (Kerry 10/26: "Move event info
     # email to 6:00am"); the stamped template keeps its words and hash.
-    from email_parser.pairings_approval import info_time
-    body = body.replace("at 7:00 AM tomorrow", f"at {info_time()} tomorrow")
+    body = event_info_phrase(body, values.get("_morning"))
     return subject, body, _guard(subject, body, used, values)
 
 
@@ -379,6 +394,13 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
     common = {"event_name": _e(short), "course": _e(evp.get("course")),
               "date_long": _e(date_long), "tee_sheet": sheet, "chapter": _e(chap),
               "mailing_address": _e(mailing), "footer_block": footer}
+    try:
+        from email_parser.pairings_approval import is_morning_event
+        with db._connect(db_path) as _c:
+            _evr = _c.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        common["_morning"] = bool(_evr and is_morning_event(dict(_evr)))
+    except Exception:
+        common["_morning"] = False
     ready, held, skipped = [], [], []
 
     def add(version, key, cid, name, email, subject_body_why, cc=None, extra=None):
@@ -469,9 +491,8 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
                 vals = {**common, "first_name": _e((c[0] if c else "") or "there"),
                         "spots_block": box}
                 s, b, why = _render("player", tpl_p, vals)
-                from email_parser.pairings_approval import info_time as _it
-                b = b.replace(EVENT_INFO_LINE.replace("7:00 AM", _it()),
-                              NONREG_LINE.replace("7:00 AM", _it()))
+                b = b.replace(event_info_phrase(EVENT_INFO_LINE, common.get("_morning")),
+                              event_info_phrase(NONREG_LINE, common.get("_morning")))
                 if not link:
                     why = why + ["blank: {registration_link} (the event has no registration link)"]
                 add("player", key, cid, full, email, (s, b, why), extra={"spots_box": True})

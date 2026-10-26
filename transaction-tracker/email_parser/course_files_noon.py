@@ -52,8 +52,8 @@ def send_day(ev: dict) -> str:
     from datetime import date, timedelta
     from email_parser import after_lock
     d = str(ev.get("event_date") or "")[:10]
-    ft = after_lock._first_tee(ev)
-    if ft is not None and ft.hour < MORNING_BEFORE_HOUR:
+    from email_parser.pairings_approval import is_morning_event
+    if is_morning_event(ev):
         try:
             return (date.fromisoformat(d) - timedelta(days=1)).isoformat()
         except ValueError:
