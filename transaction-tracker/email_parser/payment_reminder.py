@@ -156,17 +156,11 @@ def _template(db_path=None) -> tuple:
 
 
 def lock_at(ev: dict, db_path=None):
-    """When this event's groups are locked: 5:00 PM on its pairings day
-    (the weekday dial's lead; the day before for an undialled weekday).
-    None when the event has no date."""
-    from datetime import date, datetime, time, timedelta
+    """When this event's groups are locked: database.event_lock_at (the
+    manager's override on Edit Event, else 5:00 PM on the standard lock
+    day). None when the event has no date."""
     from email_parser import database as db
-    try:
-        d = date.fromisoformat(str(ev.get("event_date") or "")[:10])
-    except ValueError:
-        return None
-    lead = db.pairings_auto_weekdays(db_path).get(db._WEEKDAY_NAMES[d.weekday()], 1)
-    return datetime.combine(d - timedelta(days=lead), time(LOCK_HOUR, 0))
+    return db.event_lock_at(ev, db_path)
 
 
 def past_lock(ev: dict, now=None, db_path=None) -> bool:

@@ -319,27 +319,42 @@ def lock_targets(today, db_path=None) -> set:
     return out
 
 
+def windows(lock):
+    """(warn_from, release_from) for a lock: the warning four hours before
+    (1:00 PM for a 5:00 PM lock, never before 7:00 AM) and the release ten
+    minutes before (4:50 PM)."""
+    from datetime import timedelta
+    warn = lock - timedelta(hours=4)
+    earliest = lock.replace(hour=7, minute=0, second=0, microsecond=0)
+    return max(warn, earliest), lock - timedelta(minutes=10)
+
+
 def tick(now=None, db_path=None) -> list:
-    """The scheduler step (every 10 minutes, 1:00-5:00 PM Central): for the
-    events whose groups are built at 5:00 PM today, WARN once the clock
-    passes 1:00 PM and RELEASE in the 4:50-4:59 PM slot, each once per person."""
+    """The scheduler step (every 10 minutes): for each event whose lock is
+    today (database.event_lock_at, so a manager's override counts), WARN from
+    four hours before the lock and RELEASE in the ten minutes before it, each
+    once per person."""
+    from datetime import timedelta
     from email_parser import database as db
     from email_parser.timezone_utils import now_central
     if not _on(db_path):
         return []
     now = now or now_central()
-    hm = (now.hour, now.minute)
-    if hm < WARN_FROM or hm >= RELEASE_UNTIL:
-        return []
-    kind = "release" if hm >= RELEASE_FROM else "warn"
-    targets = lock_targets(now.date(), db_path)
     skip = _excluded_events(db_path)
+    days = {(now.date() + timedelta(days=i)).isoformat() for i in range(0, 8)}
     out = []
     for ev in db.get_all_events(db_path=db_path):
-        if str(ev.get("event_date") or "")[:10] not in targets:
+        if str(ev.get("event_date") or "")[:10] not in days:
             continue
         if (ev.get("status") or "active") != "active" or int(ev["id"]) in skip:
             continue
+        lock = db.event_lock_at(ev, db_path)
+        if lock is None or lock.date() != now.date() or now >= lock:
+            continue
+        warn_from, release_from = windows(lock)
+        if now < warn_from:
+            continue
+        kind = "release" if now >= release_from else "warn"
         res = run(int(ev["id"]), kind, confirm=True, db_path=db_path)
         if res.get("send") or res.get("held"):
             out.append({k: res.get(k) for k in ("event", "kind", "sent", "failed", "held", "skip")})

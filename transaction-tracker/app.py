@@ -1678,11 +1678,13 @@ def start_scheduler():
     # nobody has paired them yet. Kerry 2026-09-21: "Generate Pairings
     # automatically at 5:00p on Mondays for Tuesday events. Only if they
     # aren't run already." v2.468.5.
+    # Since v2.591.0 (Kerry 10/26, the manager's lock override) it runs
+    # every 15 minutes and pairs each event at ITS lock
+    # (database.event_lock_at); the standard lock is still 5:00 PM.
     scheduler.add_job(
         auto_generate_pairings_job,
         "cron",
-        hour=17,
-        minute=0,
+        minute="0-59/15",
         timezone="US/Central",
         id="pairings_auto_generate",
         replace_existing=True,
@@ -1701,10 +1703,12 @@ def start_scheduler():
     # event's lock day, the 1:00 PM warning to unpaid RSVP-only players and
     # the 4:50 PM release before the 5:00 PM pairings run.
     # email_parser/rsvp_deadline.py, dial rsvp_deadline_auto.
+    # Since v2.591.0 the windows follow each event's own lock (a manager's
+    # override): the warning four hours before, the release ten minutes before.
     scheduler.add_job(
         rsvp_deadline_job,
         "cron",
-        hour="13-16",
+        hour="7-23",
         minute="*/10",
         timezone="US/Central",
         id="rsvp_deadline",

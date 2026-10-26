@@ -1079,6 +1079,7 @@
                         </select>
                     </label>
                     <label title="Where the group meets after this event. Fills {fellowship_spot} in the Fellowship preset; the send refuses while it is blank.">Fellowship spot<input type="text" id="edit-event-fellowship_spot" class="modal-input" placeholder="e.g. Clubhouse (on site), or the restaurant's name"></label>
+                    <label title="Kerry 10/26: the standard lock is 5:00 PM the day before (Monday to Thursday events), two days before (Friday), three days before (Saturday, Sunday). Set a date and time here only to change it for this event; clear it to go back to the standard.">Lock (blank = standard)<input type="datetime-local" id="edit-event-lock_override" class="modal-input"></label>
                 </div>
                 <!-- Format -->
                 <div style="margin-top:0.75rem;">
@@ -16215,6 +16216,8 @@
         renderRegistrationUrlStatus(ev);
         const editSpot = document.getElementById("edit-event-fellowship_spot");
         if (editSpot) editSpot.value = ev.fellowship_spot || "";
+        const editLock = document.getElementById("edit-event-lock_override");
+        if (editLock) editLock.value = (ev.lock_override || "").replace(" ", "T").slice(0, 16);
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -16385,6 +16388,11 @@
         if (spotEl) {
             const spotVal = spotEl.value.trim();
             if (spotVal !== (ev.fellowship_spot || "")) changes.fellowship_spot = spotVal;
+        }
+        const lockEl = document.getElementById("edit-event-lock_override");
+        if (lockEl) {
+            const lockVal = (lockEl.value || "").replace("T", " ").slice(0, 16);
+            if (lockVal !== (ev.lock_override || "").slice(0, 16)) changes.lock_override = lockVal;
         }
 
         // Pricing fields — depends on format

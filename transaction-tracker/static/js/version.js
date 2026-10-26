@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.590.0";
+window.TGF_VERSION = "2.591.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.591.0",
+    date: "2026-10-26",
+    title: "Lock days for every weekday, and a manager's lock override on Edit Event",
+    changes: [
+      "Kerry 10/26: \"Monday thru Thursday: 1 day before at 5:00p / Friday: 2 days before at 5:00p / Sat/Sunday: 3 days before at 5:00p\" ... \"Lock days should be set for any future event, whether there's any scheduled or not.\" These are now the code's default lock days as well as the production setting, so they cover every event on any weekday.",
+      "Kerry 10/26: \"These could be overridden by Managers if necessary\" ... \"Yes build the manager override.\" Edit Event has a new field, Lock (blank = standard). A manager or admin can set a date and time for one event's lock; clearing it goes back to the standard. Everything that depends on the lock reads it through one helper (event_lock_at): the automatic pairings (now checked every 15 minutes, so an event pairs at its own lock, once), the RSVP deadline warning (four hours before) and release (ten minutes before), the stop on payment reminders, and seat-fill. New column events.lock_override (migration 0038). The manager's approve prompt and the evening tee-times email still follow the day before play. Guards test_pairings_automation.py, test_payment_reminder.py, test_rsvp_deadline.py."
+    ]
+  },
   {
     version: "2.590.0",
     date: "2026-10-26",

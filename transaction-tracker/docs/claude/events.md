@@ -120,7 +120,15 @@ Kerry: "I want the last 'warning' email to go out ... at 1:00p to let him know w
 
 `email_parser/rsvp_deadline.py`, job `rsvp_deadline` (every 10 minutes, 1:00-4:59 PM Central), dial `rsvp_deadline_auto` (on unless `off`).
 
-- **Which events:** the ones whose groups the 5:00 PM pairings run builds today (`lock_targets`, the same weekday dial and lead as `auto_generate_pairings`): Monday for a Tuesday nine, two days ahead for a dialled Saturday. Events in `payment_reminder_exclude_events` are skipped.
+- **Which events:** the ones whose lock is today (`database.event_lock_at`, v2.591.0): the event's own `lock_override` when a manager set one, else 5:00 PM on the standard lock day. The warning goes from four hours before the lock (1:00 PM; never before 7:00 AM) and the release in the ten minutes before it (4:50 PM); the job runs every 10 minutes, 7:00 AM to 11:50 PM. Events in `payment_reminder_exclude_events` are skipped.
+
+## Lock days (Kerry 2026-10-26, v2.591.0)
+
+Kerry: "Monday thru Thursday: 1 day before at 5:00p / Friday: 2 days before at 5:00p / Sat/Sunday: 3 days before at 5:00p. These could be overridden by Managers if necessary, or possible Course Contacts within our future TGF Course Connect module."
+- The standard is the dial `pairings_auto_weekdays`, default (and production value) `mon:1,tue:1,wed:1,thu:1,fri:2,sat:3,sun:3`. It applies to every event on that weekday, scheduled or not.
+- The override: `events.lock_override` (migration 0038), 'YYYY-MM-DD HH:MM' Central, set on Edit Event ("Lock (blank = standard)") by a manager or admin; blank goes back to the standard. `update_event` ignores a malformed value.
+- ONE reader, `database.event_lock_at(ev)`. It drives the 5:00 PM pairings run (now every 15 minutes, each event once per lock at its own lock, `pairings_auto_done:<event_id>`; an event with no override still needs its weekday in the dial), the RSVP deadline emails, the payment-reminder stop at lock (`payment_reminder.lock_at`) and seat-fill.
+- Not yet on it: the manager's approve prompt and the evening tee-times email still key off "the day before" (`live_scoring_default.due_event_ids`), so for a weekend event they come the evening before play, not at the lock. Course Connect (course contacts setting it) is a Platform item.
 - **Who:** everyone the Events page shows as RSVP-only (`payment_reminder.rsvp_only_people`), minus known mail scanners (`invitations.known_scanner`) and anyone with no email.
 - **WARN, from 1:00 PM:** one email: pay by 5:00 PM or the spot is released. It uses the payment reminder's frame, variables and holds.
 - **RELEASE, 4:50-4:59 PM, before the pairings run:** anyone still RSVP-only who WAS warned is taken off the roster and gets one email. The roster mark is the Events page's own `rsvp_email_overrides` not_playing, so nothing is deleted and it can be undone on the page. A later registration puts them back as registered.

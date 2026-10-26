@@ -185,10 +185,12 @@ db.set_app_setting("payment_reminder_exclude_events", "[]")
 ev_row = {"event_date": "2026-12-15"}  # a Tuesday nine: locks Monday 5:00 PM
 check("a Tuesday nine locks Monday at 5:00 PM", pr.lock_at(ev_row, DB) == _dt(2026, 12, 14, 17, 0),
       pr.lock_at(ev_row, DB))
-check("a dialled Saturday locks two days ahead",
-      pr.lock_at({"event_date": "2026-12-19"}, DB) == _dt(2026, 12, 17, 17, 0))
-check("an undialled weekday locks the day before",
-      pr.lock_at({"event_date": "2026-12-17"}, DB) == _dt(2026, 12, 16, 17, 0))
+check("a Saturday locks three days ahead (Kerry 10/26)",
+      pr.lock_at({"event_date": "2026-12-19"}, DB) == _dt(2026, 12, 16, 17, 0))
+check("a Friday locks two days ahead", pr.lock_at({"event_date": "2026-12-18"}, DB) == _dt(2026, 12, 16, 17, 0))
+check("a Thursday locks the day before", pr.lock_at({"event_date": "2026-12-17"}, DB) == _dt(2026, 12, 16, 17, 0))
+check("a manager's lock_override wins", pr.lock_at({"event_date": "2026-12-19", "lock_override": "2026-12-18 12:00"}, DB)
+      == _dt(2026, 12, 18, 12, 0))
 check("4:59 PM on the lock day is not past the lock",
       not pr.past_lock(ev_row, now=_dt(2026, 12, 14, 16, 59), db_path=DB))
 check("5:00 PM on the lock day is past the lock", pr.past_lock(ev_row, now=_dt(2026, 12, 14, 17, 0), db_path=DB))

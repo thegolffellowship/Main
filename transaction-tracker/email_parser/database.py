@@ -31581,8 +31581,20 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
                 "course_surcharge", "per_game_addon",
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
-                "rescheduled_to_event_id", "status_badge"}
+                "rescheduled_to_event_id", "status_badge", "lock_override"}
     safe = {k: v for k, v in fields.items() if k in allowed}
+    if "lock_override" in safe:
+        # A manager's lock for this event, 'YYYY-MM-DD HH:MM' Central; blank
+        # puts it back on the standard lock day (event_lock_at).
+        _lo = str(safe["lock_override"] or "").strip().replace("T", " ")[:16]
+        if _lo:
+            try:
+                datetime.strptime(_lo, "%Y-%m-%d %H:%M")
+            except ValueError:
+                safe.pop("lock_override")
+                _lo = None
+        if "lock_override" in safe:
+            safe["lock_override"] = _lo or None
     if not safe:
         return False
 
@@ -71103,7 +71115,9 @@ PAIRINGS_AUTO_WEEKDAYS_KEY = "pairings_auto_weekdays"
 #: evening before (Monday 5 PM); Saturday 18s pair two days ahead
 #: (Thursday 5 PM) — Kerry 2026-09-21: "Add sat to the auto-pairings dial
 #: too, but make it for Thursday nights at 5:00p."
-PAIRINGS_AUTO_WEEKDAYS_DEFAULT = "tue:1,sat:2"
+# Kerry 2026-10-26: "Monday thru Thursday: 1 day before at 5:00p / Friday:
+# 2 days before at 5:00p / Sat/Sunday: 3 days before at 5:00p" (was tue:1,sat:2).
+PAIRINGS_AUTO_WEEKDAYS_DEFAULT = "mon:1,tue:1,wed:1,thu:1,fri:2,sat:3,sun:3"
 _WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
@@ -71126,12 +71140,40 @@ def pairings_auto_weekdays(db_path=None) -> dict:
     return out
 
 
+LOCK_HOUR = 17
+
+
+def event_lock_at(ev: dict, db_path=None):
+    """THE lock of one event, as naive Central time (Kerry 2026-10-26). The
+    event's own lock_override ('YYYY-MM-DD HH:MM', set by a manager on Edit
+    Event: "These could be overridden by Managers if necessary") wins;
+    otherwise 5:00 PM on the standard lock day from pairings_auto_weekdays
+    (Monday-Thursday the day before, Friday two days before, Saturday and
+    Sunday three days before). Every lock reader goes through here: the 5:00
+    PM pairings run, the RSVP deadline emails, the stop-at-lock guard and
+    seat-fill. None when the event has no date."""
+    from datetime import date as _date, time as _time
+    raw = str(ev.get("lock_override") or "").strip().replace("T", " ")
+    if raw:
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return datetime.strptime(raw, fmt)
+            except ValueError:
+                continue
+    try:
+        d = _date.fromisoformat(str(ev.get("event_date") or "")[:10])
+    except ValueError:
+        return None
+    lead = pairings_auto_weekdays(db_path).get(_WEEKDAY_NAMES[d.weekday()], 1)
+    return datetime.combine(d - timedelta(days=lead), _time(LOCK_HOUR, 0))
+
+
 def _event_has_saved_pairings(event_id: int, db_path=None) -> bool:
     saved = get_event_pairings(event_id, db_path=db_path) or {}
     return any(g.get("players") for groups in saved.values() if isinstance(groups, list) for g in groups)
 
 
-def auto_generate_pairings(db_path=None, today=None) -> list[dict]:
+def auto_generate_pairings(db_path=None, today=None, now=None) -> list[dict]:
     """The 5 PM routine: for every ACTIVE event on a dialled weekday at
     that weekday's lead (the day before for Tuesdays, two days before for
     Saturdays) that has NO saved pairings, run the
@@ -71139,24 +71181,35 @@ def auto_generate_pairings(db_path=None, today=None) -> list[dict]:
     partner requests honoured, history on) and SAVE the result. An event
     Kerry already paired is left exactly as it is ("Only if they aren't
     run already"). Returns one row per event considered."""
-    from email_parser.timezone_utils import today_central
-    today = today or today_central()
-    # Every dialled weekday names its own lead: the target date for a
-    # "sat:2" entry is today + 2, and it only fires when that date IS a
-    # Saturday (so Thursday's run pairs Saturday; Friday's does not).
-    targets = set()
-    for wd, lead in pairings_auto_weekdays(db_path).items():
-        target = today + timedelta(days=lead)
-        if _WEEKDAY_NAMES[target.weekday()] == wd:
-            targets.add(target.isoformat())
-    if not targets:
-        return []
+    from email_parser.timezone_utils import now_central
+    # The event's lock (event_lock_at: its manager override, else the
+    # standard lock day at 5:00 PM). The job runs every 15 minutes, so an
+    # override at any time is paired at its lock; each event once per lock
+    # (app setting pairings_auto_done:<event_id> = the lock it ran for).
+    if now is None:
+        now = now_central() if today is None else datetime.combine(today, datetime.min.time()).replace(hour=LOCK_HOUR)
     out = []
     for ev in get_all_events(db_path):
-        if (ev.get("event_date") or "")[:10] not in targets:
-            continue
         if (ev.get("status") or "active") != "active":
             continue
+        if not str(ev.get("lock_override") or "").strip():
+            # no override: only the weekdays the dial names are auto-paired
+            try:
+                _wd = _WEEKDAY_NAMES[datetime.strptime(str(ev.get("event_date") or "")[:10], "%Y-%m-%d").weekday()]
+            except ValueError:
+                continue
+            if _wd not in pairings_auto_weekdays(db_path):
+                continue
+        lock = event_lock_at(ev, db_path)
+        if lock is None or lock.date() != now.date() or now < lock or now >= lock + timedelta(hours=1):
+            continue
+        _done_key = f"pairings_auto_done:{ev['id']}"
+        if get_app_setting(_done_key, db_path=db_path) == lock.isoformat():
+            continue
+        try:
+            set_app_setting(_done_key, lock.isoformat(), db_path=db_path)
+        except Exception:
+            pass
         row = {"event_id": ev["id"], "event": ev.get("item_name"), "chapter": ev.get("chapter")}
         try:
             if _event_has_saved_pairings(ev["id"], db_path):
