@@ -1,0 +1,11 @@
+-- UNUSED TEE TIMES: WHICH TO KEEP (Kerry 2026-10-26, through the Chief of
+-- Staff #2331 A and #2332: "If we have more tee times than we need the tee
+-- times should save the later times and release the earlier times and let
+-- the course know which ones" ... "We do that for 9 hole weeknight events,
+-- but with weekend events we keep the earliest times by default and give
+-- back the later ones." The CoS ruled it a per-event setting a manager can
+-- flip.) tee_keep is 'latest' or 'earliest'; NULL (the default) means the
+-- rule by weekday: Monday-Friday keep the latest, Saturday/Sunday keep the
+-- earliest. One reader: database.tee_keep_mode(). Shotguns are unaffected.
+-- Reversible: the column is ignored when NULL.
+ALTER TABLE events ADD COLUMN tee_keep TEXT CHECK (tee_keep IN ('latest', 'earliest'));

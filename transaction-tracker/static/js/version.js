@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.594.0";
+window.TGF_VERSION = "2.595.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.595.0",
+    date: "2026-10-26",
+    title: "Unused tee times: weeknights keep the latest, weekends keep the earliest, and the course is told which are released",
+    changes: [
+      "Kerry 10/26 (CoS #2331, #2332): \"If we have more tee times than we need the tee times should save the later times and release the earlier times and let the course know which ones\" ... \"We do that for 9 hole weeknight events, but with weekend events we keep the earliest times by default and give back the later ones.\" When a tee-time event holds more times than its groups need, the pairings now use the latest times on a weeknight (Monday to Friday) and the earliest on a weekend. Edit Event has a per-event choice, Unused tee times: Default / Keep latest / Keep earliest (events.tee_keep, migration 0039). A sheet with seeded groups keeps its seeded slots. Shotguns are unchanged.",
+      "The course contact's tee-times email now names the released times under the tee sheet, in bold, only when there are any: \"We're releasing these tee times: 3:40 PM, 3:50 PM.\" The stamped template is unchanged; the line is added by code. Guard test_tee_keep.py."
+    ]
+  },
   {
     version: "2.594.0",
     date: "2026-10-26",
