@@ -1856,6 +1856,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-handicap-ask[:preview|<event_id>[|<staff addr>][|reminder] | :state]  THE HANDICAP ASK (Kerry 10/16): bare = who would be asked / reminded now; preview to STAFF only; member sends only from the job (dial handicap_ask_auto=on + wording stamp handicap_ask_approved)
       scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm] | 0|unplay|<kerry-ok post id>|<cid,cid>[|confirm] (take back Tracker I'm in rows a mail scanner gave, Kerry 10/26)  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
       scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]  the 7 PM TEE-TIMES EMAIL, three versions (player / course contact / manager, CMO #2101): dry build = per-recipient ready / held with reasons, wording hashes, stamps (teetimes_<version>_approved) and dials (teetimes_email_auto, teetimes_spots_audience); |preview mails ONE combined preview to STAFF only. No send bridge: only the 7 PM job sends
+      scoring-no-show-notice:<event_id>[|preview[|<staff addr>]]  THE COURSE NO-SHOW NOTICE (Kerry 9/30 #1021): READ ONLY, who the scorers marked missing, whether the notice is due (group played no_show_course_notice_holes, default 3), To/CC, held reasons, sent or not; |preview mails ONE sample to STAFF only. The job sends itself (dial no_show_course_notice, on unless off)
       scoring-course-update:<event_id>[|preview[|<staff addr>]]  THE COURSE UPDATE BEFORE THE LOCK (Kerry 10/26): who it would go to, held reasons, wording hash; |preview mails ONE sample to STAFF only. The job sends only with dial course_update_auto=on and stamp course_update_approved
       scoring-course-files-noon:<event_id>  NOON COURSE FILES, read only (Kerry 10/26): would the event-day noon job send the Course Files now (To the course contact, CC TGF contacts + the chapter manager), or why not (already sent, no pairings, no course contact, within the hour before first tee, a scorecard gap)
       scoring-scoring-window:<event_id>  THE SCORING WINDOW, read only (Kerry 10/26): first tee, saves open (first tee - 60 min), cards final, last score, scoring closes (last score + 15 min once every card is final), closeout start (last score + 15 min)
@@ -7542,6 +7543,18 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _b = _cu.build(int(_p[0]))
             _b.pop("html", None)
             return json.dumps(_b, indent=2, default=str)
+        if cmd == "scoring-no-show-notice":
+            # "<event_id>[|preview[|<staff addr>]]" (Kerry 9/30 #1021): the
+            # course no-show notice, built read only, or one PREVIEW to staff.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>[|preview[|<staff addr>]]"})
+            from email_parser import no_show_notice as _nsn
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-no-show-notice", arg)
+                return json.dumps(_nsn.send_preview(int(_p[0]), _p[2] if len(_p) > 2 else None),
+                                  indent=2, default=str)
+            return json.dumps(_nsn.run_event(int(_p[0]), confirm=False), indent=2, default=str)
         if cmd == "scoring-course-files-noon":
             # "<event_id>" — NOON COURSE FILES (Kerry 10/26, CoS #2331 item 4),
             # READ ONLY: would the noon job send now, to whom (manager CC'd),

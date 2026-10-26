@@ -231,7 +231,7 @@ for dirpath, _, files in os.walk(ROOT):
         # only describes the tables in its comments).
         if re.search(r"(?i)\b(from|join|into|update|table)\s+se_(hole_scores|players|rounds|teams|groups|"
                      r"ctp_claims|hio_claims|signoffs|audit|group_locks|card_checks|hole_marks|"
-                     r"group_pace|player_pace)\b", src):
+                     r"group_pace|player_pace|no_shows)\b", src):
             readers.append(os.path.relpath(path, ROOT))
 check("only score_entry.py touches se_* tables", readers == [], readers)
 

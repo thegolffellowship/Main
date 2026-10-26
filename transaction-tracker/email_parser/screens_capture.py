@@ -175,6 +175,89 @@ def _r_deadline(ctx, kind):
                                     "preview": True}, kind)["html"]
 
 
+# NO-SHOW (Kerry 9/30 #1021, built 10/26): the real /member/score page and
+# the real card JSON (score_entry.get_group_card) from a round seeded in a
+# THROWAWAY database of its own (never the Tracker's, production included),
+# with the page's fetch answered from that card and its taps replayed.
+_NS_CACHE: dict = {}
+
+
+def _ns_seed() -> dict:
+    if _NS_CACHE:
+        return _NS_CACHE
+    import contextlib, io, tempfile
+    from email_parser import database as db
+    from email_parser import score_entry as se
+    from email_parser import no_show_notice as nsn
+    path = tempfile.mktemp(suffix=".screens-noshow.db")
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        db.init_db(path)
+    with db._connect(path) as c:
+        for cid, fn, ln in [(401, "Sam", "Keller"), (402, "Mike", "Ruiz"), (403, "Ned", "Owens"), (404, "Al", "Brandt")]:
+            c.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (?, ?, ?)", (cid, fn, ln))
+        d = (date.today() + timedelta(days=1)).isoformat()
+        c.execute("INSERT INTO events (id, item_name, event_date, chapter, course, status, format) VALUES "
+                  "(9901, 's9.99 Silverhorn', ?, 'San Antonio', 'Silverhorn Golf Club', 'active', '9-hole')", (d,))
+        c.commit()
+    holes = [{"hole": h, "par": pr, "stroke_index": si, "yardage": y} for h, pr, si, y in
+             [(1, 4, 5, 382), (2, 3, 9, 164), (3, 5, 1, 512), (4, 4, 3, 401), (5, 4, 7, 356),
+              (6, 3, 8, 175), (7, 4, 2, 418), (8, 5, 4, 498), (9, 4, 6, 390)]]
+    rid = se.create_round(9901, 9, round_date=d, label="s9.99", course_holes=holes, db_path=path)["round_id"]
+    gid = se.upsert_group(rid, 1, players=[
+        {"customer_id": 401, "display_name": "Sam Keller", "playing_handicap": 6},
+        {"customer_id": 402, "display_name": "Mike Ruiz", "playing_handicap": 11},
+        {"customer_id": 403, "display_name": "Ned Owens", "playing_handicap": 9},
+        {"customer_id": 404, "display_name": "Al Brandt", "playing_handicap": 14}], db_path=path)["group_id"]
+    se.claim_group(gid, "screens-demo", 401, db_path=path)
+    before = se.get_group_card(gid, "screens-demo", db_path=path)
+    se.mark_player_missing(gid, "screens-demo", 403, "absent", hole=1, entered_by=401, db_path=path)
+    n = 0
+    ops = []
+    for cid, row in ((401, (5, 3, 5)), (402, (4, 4, 6)), (404, (6, 3, 5))):
+        for h, g in zip((1, 2, 3), row):
+            n += 1
+            ops.append({"op_id": f"scr{n}", "hole": h, "gross": g, "customer_id": cid})
+    se.write_scores(gid, "screens-demo", 401, ops, db_path=path)
+    for h in (1, 2, 3):          # the group answered any CTP / longest-putt question
+        se.claim_ctp(gid, "screens-demo", h, None, db_path=path)
+    after = se.get_group_card(gid, "screens-demo", db_path=path)
+    notice = nsn.build(9901, db_path=path)
+    _NS_CACHE.update(before=before, after=after, notice=notice, path=path)
+    return _NS_CACHE
+
+
+def _r_no_show(ctx, which: str, clicks=(), hole=None) -> str:
+    import app as _app
+    data = _ns_seed()
+    card = data["after" if which == "after" else "before"]
+    page = _app.app.test_client().get("/member/score?t=screens").get_data(as_text=True)
+    mem = {"se_device": json.dumps("screens-demo"), "se_who_screens": "401", "se_gate_screens": "true"}
+    if hole is not None:
+        mem["se_hole_screens"] = str(hole)
+    stub = ("<script>(function(){var G=URLSearchParams.prototype.get;URLSearchParams.prototype.get="
+            "function(k){var v=G.call(this,k);return (k==='t'&&!v)?'screens':v};"
+            "var M=" + json.dumps(mem) + ";"
+            "var S={getItem:function(k){return k in M?M[k]:null},setItem:function(k,v){M[k]=String(v)},"
+            "removeItem:function(k){delete M[k]},clear:function(){M={}},key:function(){return null},length:0};"
+            "try{Object.defineProperty(window,'localStorage',{value:S,configurable:true})}catch(e){}"
+            "try{Object.defineProperty(window,'sessionStorage',{value:S,configurable:true})}catch(e){}"
+            "var C=" + json.dumps(card, default=str).replace("</", "<\\/") + ";"
+            "var J=function(o){return Promise.resolve(new Response(JSON.stringify(o),{status:200,"
+            "headers:{'Content-Type':'application/json'}}))};"
+            "window.fetch=function(u){u=String(u);if(u.indexOf('/api/score-entry/card')>=0)return J(C);"
+            "if(u.indexOf('/api/player-photos')>=0)return J({h:{},t:{}});return J({})};"
+            "var K=" + json.dumps(list(clicks)) + ";"
+            "window.addEventListener('load',function(){setTimeout(function(){K.forEach(function(q){"
+            "var b=document.querySelector(q);if(b)b.click()})},120)});})();</script>")
+    return page.replace("<head>", "<head>" + stub, 1)
+
+
+def _r_no_show_notice(ctx) -> str:
+    b = _ns_seed()["notice"]
+    return ('<div style="font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;color:#1B1B1B;'
+            'padding:16px;max-width:560px;font-size:15px;line-height:1.5;">' + b["html"] + "</div>")
+
+
 RENDERS = {
     "invitation_email": lambda c: _r_invite(c, "invite"),
     "lastcall_email": lambda c: _r_invite(c, "lastcall"),
@@ -186,8 +269,13 @@ RENDERS = {
     "payment_reminder": _r_payment,
     "rsvp_deadline_warn": lambda c: _r_deadline(c, "warn"),
     "rsvp_deadline_release": lambda c: _r_deadline(c, "release"),
+    "no_show_hole": lambda c: _r_no_show(c, "before"),
+    "no_show_who": lambda c: _r_no_show(c, "before", ['[data-act="missing"]']),
+    "no_show_ask": lambda c: _r_no_show(c, "before", ['[data-act="missing"]', '[data-act="mwho"][data-cid="403"]']),
+    "no_show_absent": lambda c: _r_no_show(c, "after", hole=4),
+    "no_show_course_notice": _r_no_show_notice,
 }
-EMAIL_RENDERS = {"invitation_email", "lastcall_email", "payment_reminder",
+EMAIL_RENDERS = {"invitation_email", "lastcall_email", "payment_reminder", "no_show_course_notice",
                  "rsvp_deadline_warn", "rsvp_deadline_release"}
 
 
@@ -241,7 +329,11 @@ def capture_all(out_for, base_url: str, only: str = "", db_path=None, demo: dict
             raise RuntimeError("no Chromium executable on this deploy")
         done = []
         with sync_playwright() as pw:
+            # A sandbox reaches the web (the Tracker's /static, Google Fonts)
+            # only through its HTTPS proxy; production sets none.
+            _px = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
             browser = pw.chromium.launch(executable_path=exe, headless=False,
+                                         proxy={"server": _px} if _px else None,
                                          args=["--headless=new", "--no-sandbox", "--disable-gpu",
                                                "--disable-dev-shm-usage"])
             try:

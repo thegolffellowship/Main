@@ -120,6 +120,19 @@
         .se-grp .t.aus { color: #BF5700; } .se-grp .t.sa { color: #4B6274; }
         .se-grp .nm { font: 600 16px Bitter, Georgia, serif; line-height: 1.3; }
         .se-pill.line { border: 1px solid var(--se-ink); background: transparent; color: var(--se-ink); }
+        /* NO-SHOW (Kerry 9/30 #1021: "an obvious red player missing button at
+           the bottom"): red, on every hole screen, under the save bar's row. */
+        .se-pill.miss { border: none; background: #B91C1C; color: #FFFFFF; font-weight: 700; }
+        .se-missrow { max-width: 480px; margin: 0 auto 6px; display: flex; }
+        .se-missrow button { flex: 1; height: 36px; border-radius: 18px; border: 2px solid #B91C1C;
+                             background: #FFFFFF; color: #B91C1C; font: 700 14px/1 inherit; }
+        body.se-focus .se-hole.has-miss { padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
+        .se-absent { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #FEF2F2;
+                     border: 1px solid #FECACA; font-size: 13.5px; color: #7F1D1D; }
+        .se-absent .r { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+        .se-absent .r b { flex: 1; min-width: 0; }
+        .se-absent .r button { height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #0d7556;
+                               background: #FFFFFF; color: #0d7556; font: 700 13px/1 inherit; }
         .se-pill:disabled { opacity: .45; }
         .se-name-btn { height: 60px; border-radius: 12px; border: 1px solid #E5E7EB; background: #F8F8F8;
                        display: flex; align-items: center; justify-content: space-between; padding: 0 18px;
@@ -751,6 +764,9 @@
         // Match play pickup prompt + the max-triple notice (Kerry 2026-09-25).
         let draftX = {}, closedGate = false, pinMsg = "";
         let pickupHole = null, pickupKeys = [], pickupAns = {}, maxNote = "";
+        // NO-SHOW: missing = null | "who" | {cid, again}; missAsked = "cid:hole" re-asks shown.
+        let missing = null;
+        const missAsked = new Set();
         const checkChanged = new Set();
         let photo = store.get(K.photo, null);        // {op_id, data, submitted, sent}
 
@@ -774,6 +790,12 @@
 
         // ── derived state ───────────────────────────────────────────────
         function byId(cid) { return card.players.find((p) => p.customer_id === cid) || {}; }
+        // NO-SHOW (Kerry 9/30 #1021): card.no_shows from get_group_card.
+        // absent = off this card (no row, never holds the hole or the card);
+        // late / unknown = still on the card, but Save leaves his hole blank.
+        const noShowOf = (cid) => ((card && card.no_shows) || []).find((n) => n.customer_id === cid) || null;
+        const isAbsent = (cid) => { const n = noShowOf(cid); return !!n && n.effective === "absent"; };
+        const nsWaiting = (cid) => { const n = noShowOf(cid); return !!n && (n.effective === "late" || n.effective === "unknown"); };
         function subjects() {
             // FOURSOMES: a pair plays one ball, so the pair is scored, not its players.
             const inTeam = new Set(), rows = [];
@@ -785,6 +807,7 @@
             }
             for (const p of card.players) {
                 if (inTeam.has(p.customer_id)) continue;
+                if (isAbsent(p.customer_id)) continue;
                 rows.push({key: "c:" + p.customer_id, cid: p.customer_id, name: p.display_name,
                            ph: p.playing_handicap, cids: [p.customer_id]});
             }
@@ -810,7 +833,7 @@
             const s = (card.scores[key] || {})[String(n)];
             return {v: s == null ? null : s, waiting: false};
         }
-        const holeDone = (n) => subjects().every((s) => value(s.key, n).v != null);
+        const holeDone = (n) => subjects().every((s) => (s.cid != null && nsWaiting(s.cid)) || value(s.key, n).v != null);
         const holeWaiting = (n) => queue.some((o) => o.hole === n);
         const allDone = () => holeOrder().every(holeDone);
         const keeping = () => card.lock.state === "mine" && !following;
@@ -1038,7 +1061,15 @@
                         .find(([h, c]) => !c.answered && !ctpAsked.has(h) && holeDone(h));
                     if (due) ctpHole = due[0];
                 }
-                if (keeping() && pickupHole != null) body = pickupScreen(pickupHole);
+                // NO-SHOW RE-ASK: "Don't know yet" asks again on each new hole
+                // until he is here, off the card, or N holes have gone by.
+                if (keeping() && missing == null && ctpHole == null && pickupHole == null && Number.isInteger(hole)) {
+                    const ask = ((card.no_shows) || []).find((n) => n.effective === "unknown"
+                        && n.last_asked_hole !== hole && !missAsked.has(n.customer_id + ":" + hole));
+                    if (ask) { missAsked.add(ask.customer_id + ":" + hole); missing = {cid: ask.customer_id, again: true}; }
+                }
+                if (keeping() && missing != null) body = missingScreen();
+                else if (keeping() && pickupHole != null) body = pickupScreen(pickupHole);
                 else if (keeping() && ctpHole != null) body = ctpScreen(ctpHole);
                 else if (keeping() && turnNext != null) body = turnScreen(turnNext);
                 else {
@@ -1246,7 +1277,8 @@
                 // so vs [Name] doesn't need to be there"; no format prose on a
                 // scoring screen, so a pair's row carries no "Team · one ball").
                 const meta2 = [s.team ? teamPh(s.cids) : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
-                               !s.team && s.ph != null ? "PH " + s.ph : null].filter(Boolean).join(" · ");
+                               !s.team && s.ph != null ? "PH " + s.ph : null,
+                               s.cid != null && nsWaiting(s.cid) ? (noShowOf(s.cid).effective === "late" ? "Running late" : "Not here yet") : null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
                     <div class="se-who"><div class="se-name"><span class="nm"${inkStyle(s.cids)}>${esc(s.name)}</span>${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
@@ -1269,7 +1301,12 @@
             const cta = editing ? "Save Hole " + hole
                       : next == null ? "Save Last Hole" : "Save &amp; Go to Hole " + next;
             const hio = hioForKeeper();
-            return `<div class="se-hole"><div class="se-top"><div style="min-width:0">
+            const off = (card.no_shows || []).filter((n) => n.effective === "absent");
+            const offBox = off.length ? `<div class="se-absent"><div>Off this card (no-show)</div>${off.map((n) =>
+                `<div class="r"><b>${esc(n.name || byId(n.customer_id).display_name || "")}</b><button type="button" data-act="unmiss" data-cid="${n.customer_id}">+ Player</button></div>`).join("")}</div>` : "";
+            const canMiss = card.players.some((p) => p.customer_id !== who && !isAbsent(p.customer_id)
+                && !(card.teams || []).some((t) => t.customer_id_a === p.customer_id || t.customer_id_b === p.customer_id));
+            return `<div class="se-hole${canMiss ? " has-miss" : ""}"><div class="se-top"><div style="min-width:0">
                     <div class="se-eyebrow">${esc(eyebrow())}</div>
                     <div class="se-hl"><h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">${esc(meta)}</div></div></div>
                   </div>
@@ -1277,6 +1314,7 @@
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${teamWrap(rowsByKey)}</div>
+                ${offBox}
                 ${""/* TEAM SCORE box off the hole screen (Kerry 10/10: "I don't think
                    that team score is necessary. I think they'll be able to see in the
                    match display above just fine"); teamScoreBox stays for its test */}
@@ -1285,7 +1323,7 @@
                 ${hiwPill()}
                 ${queue.length ? statusLine() : ""}
                 ${popKey(hole)}
-                <div class="se-bottom"><div class="se-row-act">
+                <div class="se-bottom">${canMiss ? `<div class="se-missrow"><button type="button" data-act="missing">Player missing</button></div>` : ""}<div class="se-row-act">
                   <div class="se-nav"><button type="button" data-act="prev" aria-label="Previous hole" ${i <= 0 ? "disabled" : ""}>${ICON.back}</button></div>
                   <button type="button" class="se-pill go" data-act="save">${cta}</button>
                   <div class="se-nav"><button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button></div>
@@ -1718,6 +1756,32 @@
                 <div class="se-gap" style="height:12px"></div>
                 ${rows}
                 <button type="button" class="se-pill go" data-act="pudone" ${ready ? "" : "disabled"}>Continue</button>`;
+        }
+
+        // NO-SHOW SCREENS (Kerry 9/30 #1021): "Who's missing?" then "Is <Name>
+        // coming?" with three answers. Only this card's players; the scorer
+        // never takes anyone off another card.
+        function missingScreen() {
+            const n = missing && missing.cid != null ? missing.cid : null;
+            if (n == null) {
+                const ps = card.players.filter((p) => p.customer_id !== who && !isAbsent(p.customer_id)
+                    && !(card.teams || []).some((t) => t.customer_id_a === p.customer_id || t.customer_id_b === p.customer_id));
+                return `<div class="se-eyebrow">${Number.isInteger(hole) ? "Hole " + hole + " · " : ""}Player missing</div>
+                    <h1 class="se-h1">Who's missing?</h1><div class="se-gap"></div>
+                    <div class="se-stack">${ps.map((p) => `<button type="button" class="se-pill line" data-act="mwho" data-cid="${p.customer_id}">${esc(p.display_name)}</button>`).join("")}
+                      <button type="button" class="se-pill dark" data-act="mcancel">Everyone's here</button></div>`;
+            }
+            const nm = byId(n).display_name || (noShowOf(n) || {}).name || "";
+            const ns = noShowOf(n), left = Math.max(0, (card.no_show_after_holes || 3) - ((ns && ns.holes_asked) || 0));
+            return `<div class="se-eyebrow">${Number.isInteger(hole) ? "Hole " + hole + " · " : ""}Player missing</div>
+                <h1 class="se-h1">Is ${esc(first(nm) || nm)} coming?</h1><div class="se-gap"></div>
+                <div class="se-stack">
+                  <button type="button" class="se-pill go" data-act="mans" data-a="late">Running late, keep him on the card</button>
+                  <button type="button" class="se-pill miss" data-act="mans" data-a="absent">No, take him off this card</button>
+                  <button type="button" class="se-pill line" data-act="mans" data-a="unknown">Don't know yet</button>
+                  ${missing.again ? "" : `<button type="button" class="se-pill dark back" data-act="mcancel">Back</button>`}</div>
+                <div class="se-gap"></div>
+                <div class="se-copy">${missing.again ? `Still asking each hole. ` : ""}Don't know yet asks again on the next hole; after ${card.no_show_after_holes || 3} holes with no answer he comes off this card${ns && ns.effective === "unknown" ? ` (${left} more)` : ""}. Off the card, his blank holes never hold your card, and + Player puts him back.</div>`;
         }
 
         function ctpScreen(n) {
@@ -2277,7 +2341,8 @@
                 maxNote = "";
                 // "Save" means what is on screen: an untouched player is saved at par.
                 const h = info(hole);
-                for (const s of subjects()) if (!(s.key in draft) && value(s.key, hole).v == null && h.par) draft[s.key] = h.par;
+                for (const s of subjects()) if (!(s.key in draft) && value(s.key, hole).v == null && h.par
+                                                && !(s.cid != null && nsWaiting(s.cid))) draft[s.key] = h.par;
                 const saved = hole;
                 commitDraft(); flush();
                 const c = (card.ctp || {})[String(saved)];
@@ -2294,6 +2359,19 @@
                 store.set(K.hole, hole); render(); return;
             }
             if (act === "turn") { turnNext = null; render(); return; }
+            if (act === "missing") { commitDraft(); missing = "who"; render(); return; }
+            if (act === "mcancel") { missing = null; render(); return; }
+            if (act === "mwho") { missing = {cid: Number(b.dataset.cid), again: false}; render(); return; }
+            if (act === "mans") {
+                const cid = missing && missing.cid;
+                missing = null;
+                if (cid != null) post("/api/score-entry/missing", {customer_id: cid, answer: b.dataset.a,
+                                      hole: Number.isInteger(hole) ? hole : null, who});
+                else render();
+                return;
+            }
+            if (act === "unmiss") { post("/api/score-entry/missing", {customer_id: Number(b.dataset.cid), answer: "present",
+                                        hole: Number.isInteger(hole) ? hole : null, who}); return; }
             if (act === "ctp") {
                 const n = ctpHole; ctpHole = null; ctpAsked.add(n);
                 // A STALE SCREEN NEVER OVERWRITES A CLAIM (Kerry 10/13): send the holder this
