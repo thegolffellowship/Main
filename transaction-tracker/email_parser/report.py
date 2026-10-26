@@ -173,6 +173,46 @@ def _build_rsvps_section(rsvps: list[dict]) -> str:
 </div>"""
 
 
+def _build_unsubscribes_section(rows: list[dict] | None) -> str:
+    """Who unsubscribed in the last 24 hours (Kerry 2026-10-23): Tracker
+    invitation opt-outs and Brevo (TGF Insider) unsubscribes; see
+    email_parser/unsubscribes.py."""
+    if rows is None:
+        return ""
+    from html import escape
+    from email_parser.unsubscribes import SOURCE_LABEL
+    if not rows:
+        return f"""
+<div style="{STYLES['section']}">
+  <h3 style="{STYLES['h3']}">Unsubscribes (Last 24 Hours)</h3>
+  <p style="{STYLES['empty']}">Nobody unsubscribed.</p>
+</div>"""
+    table_rows = ""
+    for r in rows:
+        who = escape(r.get("name") or r.get("email") or f"#{r.get('customer_id')}")
+        what = escape(SOURCE_LABEL.get(r.get("source"), r.get("source") or ""))
+        kind = "Resubscribed" if r.get("kind") == "resubscribed" else "Unsubscribed"
+        color = "#16a34a" if kind == "Resubscribed" else "#dc2626"
+        table_rows += f"""\
+<tr>
+  <td style="{STYLES['td']}">{who}</td>
+  <td style="{STYLES['td']}">{what}</td>
+  <td style="{STYLES['td']}"><span style="color:{color}; font-weight:700;">{kind}</span></td>
+</tr>"""
+    return f"""
+<div style="{STYLES['section']}">
+  <h3 style="{STYLES['h3']}">Unsubscribes (Last 24 Hours)</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
+  <thead><tr style="background:#f9fafb;">
+    <th style="{STYLES['th']}">Person</th>
+    <th style="{STYLES['th']}">From</th>
+    <th style="{STYLES['th']}">Change</th>
+  </tr></thead>
+  <tbody>{table_rows}</tbody>
+  </table>
+</div>"""
+
+
 def _build_upcoming_events_section(events: list[dict]) -> str:
     """Build the upcoming events section of the digest."""
     if not events:
@@ -358,13 +398,15 @@ def _build_health_section(metrics: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def build_digest_html(items, rsvps, upcoming_events, recent_feedback, open_feedback,
-                      health_metrics: dict | None = None) -> str:
+                      health_metrics: dict | None = None,
+                      unsubscribes: list[dict] | None = None) -> str:
     """Build the full daily digest HTML email."""
     now = now_central().strftime("%B %d, %Y")
 
     sections = [
         _build_transactions_section(items),
         _build_rsvps_section(rsvps),
+        _build_unsubscribes_section(unsubscribes),
         _build_upcoming_events_section(upcoming_events),
         _build_feedback_section(recent_feedback, open_feedback),
         _build_health_section(health_metrics) if health_metrics is not None else "",
@@ -442,7 +484,15 @@ def send_daily_report():
         logger.warning("DB health check failed — skipping section: %s", e)
         health = None
 
-    html_body = build_digest_html(items, rsvps, upcoming, recent_fb, open_fb, health)
+    try:
+        from email_parser import unsubscribes as _unsub
+        _unsub.refresh()
+        unsubs = _unsub.recent(hours=24)
+    except Exception as e:
+        logger.warning("Unsubscribes read failed — skipping section: %s", e)
+        unsubs = None
+
+    html_body = build_digest_html(items, rsvps, upcoming, recent_fb, open_fb, health, unsubs)
 
     # Build a summary subject line
     parts = []
@@ -452,6 +502,8 @@ def send_daily_report():
         parts.append(f"{len(rsvps)} RSVP(s)")
     if recent_fb:
         parts.append(f"{len(recent_fb)} ticket(s)")
+    if unsubs:
+        parts.append(f"{sum(1 for u in unsubs if u.get('kind') == 'unsubscribed')} unsubscribe(s)")
     if health:
         problem_count = (
             (health.get("credited_duplicates") or 0)

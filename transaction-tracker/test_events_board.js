@@ -34,8 +34,10 @@ const d = {
   // net stableford points per hole -> the MVP/Points tab's PTS row
   hole_pts:{"1":{"1":2,"2":1},"2":{"1":1},"3":{"1":3}},
   // [hole, gross, strokes_received] — rid 1 pops on hole 2, rid 3 gets
-  // two on hole 1, so the dot rendering is exercised at 0/1/2 strokes
-  cards:{ 1:[[1,4,0],[2,5,1]], 2:[[1,5,0]], 3:[[1,6,2]], 4:[[1,4,0]] },
+  // two on hole 1, so the dot rendering is exercised at 0/1/2 strokes.
+  // rid 2 posts hole 2 too: a TEAM hole counts only once every player on
+  // the team has posted it (Kerry 10/19), and rids 1+2 are the team.
+  cards:{ 1:[[1,4,0],[2,5,1]], 2:[[1,5,0],[2,6,0]], 3:[[1,6,2]], 4:[[1,4,0]] },
   skin_cells:{ "2":[1] },
   overall_board:[
     // won_total is the whole event; won_by_cat is what each game paid,
@@ -86,7 +88,7 @@ const boards={
   gross:{sections:secsFrom(d.gross_board),sort:'gross',game:'gross',gameCol:false,netCol:false},
   skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'#',title:'Skins won',value:skinsCount},gameColAfterWon:true,holesOnLanding:true,netCol:false,noCard:true},
   points:{sections:[{label:null,rows:d.points_board.map(x=>ovOf(x,x.mvp_note)).filter(Boolean)}],sort:'keep',game:'points',grossCol:false},
-  team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,grossCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep'},
+  team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,grossCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep',holesOnLanding:true,noCard:true},
 };
 
 let fails=0;
@@ -153,7 +155,10 @@ console.log('== bands + order ==');
 ck('net board carries both flight bands',
    (htmls.net.match(/class="evlb-band"/g)||[]).length === 2);
 ck('overall has no bands', !htmls.overall.includes('evlb-band'));
-ck('team bands are tappable', htmls.team.includes('data-team="0"'));
+// Kerry 10/19 (B8): nothing opens inside an expanded team — the band is a
+// heading, with no chevron and no tap target
+ck('team bands are NOT tappable (no player expansion inside a team)',
+   !htmls.team.includes('data-team=') && !/evlb-band[\s\S]{0,80}tchev/.test(htmls.team));
 ck('points keeps the MVP tiebreak note', htmls.points.includes('MVP tiebreak 2'));
 
 console.log('== rank runs within a band ==');
@@ -341,10 +346,13 @@ console.log('== ONE green for BOUGHT IN, app-wide ==');
   // in the page is .lsc-dep:hover — a hover shade on a deposit badge,
   // not a buy-in signal — so it is named here rather than silently
   // allowed by a loose regex.
+  // The FINAL state strip's border (design-claude #2147 §2) is the other:
+  // a state colour, not a buy-in signal.
   const bare = (src.match(/^.*#bbf7d0.*$/gim)||[])
     .filter(l => !l.includes('var(--buyin-green'));
-  ck('every buy-in use goes through the token (only .lsc-dep:hover is bare)',
-     bare.length === 1 && /\.lsc-dep:hover/.test(bare[0]),
+  ck('every buy-in use goes through the token (only .lsc-dep:hover and the FINAL strip are bare)',
+     bare.length === 2 && bare.some(l => /\.lsc-dep:hover/.test(l))
+       && bare.some(l => /\.evlb-state\.s-final/.test(l)),
      bare.join(' || '));
 }
 
@@ -511,7 +519,12 @@ console.log('== holes start CLOSED, and the PTS rows ride with them ==');
   // SKINS lands hole by hole (Kerry 10/19)
   ck('skins: lands with the hole grid open',
      !/class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls.skins));
-  for (const k of ['net','gross','points','team'])
+  // an opened TEAM is today's full board WITH its holes (Kerry 10/19: "The
+  // attached view should be the fully expanded view state"); the collapsed
+  // row in front of it is the TEAM tab's landing
+  ck('team: an opened team shows its hole grid',
+     !/class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls.team));
+  for (const k of ['net','gross','points'])
     ck(`${k}: lands with the hole columns closed`,
        /class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls[k]),
        (htmls[k].match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
@@ -646,7 +659,16 @@ ck('blank Won rows sink (rank blank)', /<td><\/td>/.test(sorted));
 
 // Kerry 10/9: "Won column shouldn't show at all if there aren't any side games"
 ck('no WON column on a no-games event', /d\._moneyHeld \|\| evlbNoGames\(d\) \? " no-won"/.test(src));
-ck('no money notice on a no-games event', /function evlbMoneyNotice\(d\) \{\s*if \(!d \|\| !d\._moneyHeld \|\| evlbNoGames\(d\)\) return ""/.test(src));
+// Kerry 10/21: "closed and come back it got stuck" on Loading…. The loaded
+// flag lives on the card's own body (a re-drawn list made new cards whose
+// NAME was flagged), a frozen fetch times out, and coming back re-reads.
+ck('the loaded flag is per card body, not per event name', /if \(!body \|\| body\._evlbLoading \|\| body\._evlbD\) return;/.test(src) && !/if \(EVLB_LOADED_EVENTS\[name\]\) return;/.test(src));
+ck('a board read times out (AbortController)', /function evlbFetchJson\(url\)[\s\S]{0,300}AbortController/.test(src));
+ck('coming back to the page re-reads an open card that never drew',
+   /addEventListener\("visibilitychange", \(\) => \{ if \(!document\.hidden\) evlbOnReturn\(\); \}\)/.test(src) && /e\.persisted\) evlbOnReturn\(\)/.test(src));
+// Batch 1 R1 (design-claude #2147): the state strip is the ONLY money
+// message, so there is no money notice at all, games or not
+ck('no money notice on any board (R1)', !/function evlbMoneyNotice\(/.test(src) && !/Round in play &mdash; winnings/.test(src));
 ck('team purses are blanked while a round is in play', /\(d\.teams \|\| \[\]\)\.forEach\(t => \{ if \(t && typeof t === "object"\) t\.purse = null; \}\)/.test(src));
 ck('no Purse column on the team board until every score is in', /\$\{d\._moneyHeld \? "" : '<th style="text-align:right;">Purse<\/th>'\}/.test(src));
 ck('no team winner tint mid-round', /const win = !d\._moneyHeld && /.test(src));

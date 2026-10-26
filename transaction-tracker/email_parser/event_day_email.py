@@ -308,7 +308,8 @@ def _cart_of(p: dict) -> str:
 
 
 def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
-              tee: dict | None, format_line: str, card_html: str = "") -> str:
+              tee: dict | None, format_line: str, card_html: str = "",
+              photos: dict | None = None, base_url: str = "") -> str:
     """The orange START header, the group with initials and carts, then
     tees and format. Blinds are not people and are never listed."""
     my_cart = _cart_of(me)
@@ -326,14 +327,31 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
         else:
             note = f"Cart {cart}" if cart else ""
         bg, ink = (INK, "#ffffff") if mine else ("#D3DDE4", INK)
+        # Kerry 10/19: "put player photos with player spotlight links into
+        # the player emails so they can see who they're playing with, if we
+        # have photos. Otherwise it's the initials."
+        cid = p.get("customer_id")
+        ver = (photos or {}).get(str(cid)) if cid else None
+        # Larger faces, side by side (Kerry 10/19: "photos are larger? I
+        # can't see them very well to distinguish features").
+        if ver and base_url:
+            face = (f'<img src="{_e(base_url)}/member/photo/h/{int(cid)}.jpg?v={int(ver)}" width="72" height="72" '
+                    f'alt="{_e(_initials(nm))}" style="display:block;margin:0 auto;width:72px;height:72px;'
+                    f'border-radius:36px;object-fit:cover;border:{"3px solid " + ORANGE if mine else "0"};">')
+        else:
+            face = (f'<div style="width:72px;height:72px;margin:0 auto;border-radius:36px;background:{bg};color:{ink};'
+                    f'text-align:center;font:bold 24px Arial,sans-serif;line-height:72px;">{_e(_initials(nm))}</div>')
+        link = f"{base_url}/member/spotlight?player={int(cid)}" if (cid and base_url) else ""
+        if link:
+            face = f'<a href="{_e(link)}" style="text-decoration:none;">{face}</a>'
+        label = f"<b>{_e(nm)}</b>" if mine else _e(nm)
+        if link:
+            label = f'<a href="{_e(link)}" style="color:{INK};text-decoration:none;">{label}</a>'
         rows.append(
-            f'<tr><td width="40" style="padding:0 10px 10px 0;vertical-align:middle;">'
-            f'<div style="width:36px;height:36px;border-radius:18px;background:{bg};color:{ink};'
-            f'text-align:center;font:bold 13px Arial,sans-serif;line-height:36px;">{_e(_initials(nm))}</div></td>'
-            f'<td style="padding:0 0 10px;vertical-align:middle;">'
-            + (f"<b>{_e(nm)}</b>" if mine else _e(nm))
-            + (f' <span style="font-size:13px;color:{MUTED};">{note}</span>' if note else "")
-            + "</td></tr>")
+            f'<td width="25%" align="center" style="padding:0 4px 10px;vertical-align:top;text-align:center;">'
+            f'{face}<div style="font-size:14px;line-height:1.3;padding-top:6px;">{label}</div>'
+            + (f'<div style="font-size:12px;color:{MUTED};">{note}</div>' if note else "")
+            + "</td>")
     foot = []
     if tee and tee.get("name"):
         sw = (tee.get("color") or "").strip()
@@ -342,7 +360,7 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
             white = sw.lower() in ("#ffffff", "#fff")
             dot = (f'<span style="display:inline-block;width:12px;height:12px;border-radius:6px;'
                    f'background:{"#ffffff" if white or tee.get("ring") else sw};'
-                   f'border:2px solid {"#9CA3AF" if white else sw};vertical-align:middle;"></span> ')
+                   f'border:2px solid {"#9CA3AF" if white else sw};vertical-align:middle;margin-right:6px;"></span>')
         foot.append(f'<td width="50%" style="font-size:14px;vertical-align:top;">'
                     f'<span style="{_EYEBROW}color:{MUTED};">TEES</span><br>{dot}<b>{_e(tee["name"])}</b></td>')
     if format_line:
@@ -356,7 +374,7 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
         f'<div style="font-size:14px;">{_e(start_sub)}</div></td></tr>'
         f'<tr><td style="padding:12px 16px 4px;">'
         f'<div style="{_EYEBROW}color:{MUTED};padding-bottom:8px;">YOUR GROUP</div>'
-        f'<table {_T}>{"".join(rows)}</table></td></tr>'
+        f'<table {_T}><tr>{"".join(rows)}</tr></table></td></tr>'
         + (f'<tr><td style="border-top:1px solid {LINE};padding:10px 16px;"><table {_T}><tr>'
            f'{"".join(foot)}</tr></table></td></tr>' if foot else "")
         + (f'<tr><td style="border-top:1px solid {LINE};padding:12px 16px 14px;">{card_html}</td></tr>'
@@ -373,6 +391,7 @@ def _game_label(name: str) -> str:
     n = re.sub(r"[^\w\s#.&'/+-]", "", name or "").strip()
     n = re.sub(r"^CTP\b", "Closest to the Pin", n)
     n = re.sub(r"^Skins Gross$", "Skins", n)
+    n = re.sub(r"^Skins 1/2 Net\b.*$", "Skins \u00bd Net", n)
     n = re.sub(r"^(TEAM|CART)\b", lambda m: m.group(1).title(), n)
     return re.sub(r"^Ind\.\s*", "Individual ", n)
 
@@ -541,14 +560,30 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
     ph_d, net_d = row.get("ph_dots") or {}, row.get("net_dots") or {}
     net_short = "CART" if (net or {}).get("unit") == "cart" else "TEAM"
     cell = 'align="center" style="padding:3px 0;font-size:12px;border-top:1px solid ' + LINE + ';"'
-    lab = f'style="padding:3px 6px 3px 0;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"'
+    lab = f'style="padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"'
     head = "".join(f'<td align="center" style="padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in holes)
     pars = "".join(f"<td {cell}>{par.get(h, '')}</td>" for h in holes)
-    ph_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(ph_d.get(h))}</span></td>' for h in holes)
-    net_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(net_d.get(h))}</span></td>' for h in holes)
+    ph_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(ph_d.get(h))}</span></td>' for h in holes)
+    net_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(net_d.get(h))}</span></td>' for h in holes)
+    # TOT column (Kerry 10/20): par total, and the pops each game gives.
+    def _sum(d, keys):
+        t = 0
+        for h in keys:
+            try:
+                t += int(d.get(h) or 0)
+            except (TypeError, ValueError):
+                pass
+        return t
+    tcell = ('align="center" style="padding:3px 6px;font:bold 12px Arial,sans-serif;border-top:1px solid '
+             + LINE + ';border-left:1px solid ' + LINE + ';"')
+    head += (f'<td align="center" style="padding:3px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;'
+             f'color:#ffffff;" bgcolor="{INK}">TOT</td>')
+    pars += f"<td {tcell}>{_sum(par, holes) or ''}</td>"
+    ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, holes)}</span></td>'
+    net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, holes)}</span></td>'
     grid_html = (
         f'<table {_T} style="border:1px solid {LINE};border-radius:6px;">'
-        f'<tr><td bgcolor="{INK}" style="padding:3px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
+        f'<tr><td bgcolor="{INK}" style="padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
         f'<tr><td {lab}>PAR</td>{pars}</tr>'
         f'<tr><td {lab}>NET</td>{ph_row}</tr>'
         f'<tr><td {lab}>{net_short}</td>{net_row}</tr></table>')
@@ -676,6 +711,15 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                         sc_dump[int(d["customer_id"])] = d
             except Exception:
                 logger.exception("event-day email: scorecard read failed (non-fatal)")
+        # player photos + Spotlight links in YOUR GROUP (Kerry 10/19)
+        try:
+            from email_parser.player_photos import photo_index as _pidx
+            from email_parser.score_entry import _base_url as _bu
+            group_photos = _pidx(db_path).get("h") or {}
+            group_base = _bu()
+        except Exception:
+            logger.exception("event-day email: photo index unavailable (initials only)")
+            group_photos, group_base = {}, ""
         scoring_note = None
         if "{scoring_button}" in tpl_text and not links:
             scoring_note = ("Live Scoring is not on for this event, so no player gets a "
@@ -716,6 +760,11 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             seen.add(key)
             people.append(r)
 
+        try:
+            nh_cids = set((db.event_nh_seat_set(conn, int(event_id), db_path=db_path) or {}).get("cids") or ())
+        except Exception:
+            logger.exception("event-day email: N/H set unavailable for %s", event_id)
+            nh_cids = set()
         messages, held = [], []
         used = set(_TAG_RE.findall((tpl or {}).get("subject", "") + (tpl or {}).get("html_body", "")))
         for r in people:
@@ -786,7 +835,8 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                 except Exception:
                     logger.exception("event-day email: card strip failed for cid %s", cid)
             spot = spot_card(g, me, start_headline=start_headline, start_sub=start_sub,
-                             tee=tee, format_line=format_line, card_html=card_html) if sl else ""
+                             tee=tee, format_line=format_line, card_html=card_html,
+                             photos=group_photos, base_url=group_base) if sl else ""
             tbutton = (teesheet_button(f"{teesheet_url}#g{_e(g.get('group_num'))}")
                        if teesheet_url and "{teesheet_button}" in tpl_text else "")
             gcard = games_card(gview, cid, bool(r.get("rsvp_only")), as_of, day) if gview.get("ok") else ""
@@ -813,13 +863,24 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             if "{spot_card}" in tpl["html_body"]:
                 body = frame(body, chapter_label, title)
             why = _guard(subject, body, text, used, vals_html)
+            kind = newcomer_kind(r)
             msg = {**base, "subject": subject, "html": body, "text": text,
+                   "newcomer": kind, "first_name": first,
                    "start_line": g.get("start_line"), "group": g.get("slot_label"),
                    "games_shown": bool(gcard or games_block),
                    "scoring_link": bool(scoring_block or sbutton)}
             if why:
                 held.append({**base, "reason": "; ".join(why)})
                 continue
+            if cid in nh_cids:
+                from email_parser.handicap_ask import ask_url, make_token
+                hurl = ask_url(make_token(cid, int(event_id)))
+                msg["html"] = with_banner(msg["html"], add_handicap_note(hurl))
+                msg["text"] = f"No handicap on file: add yours at {hurl}\n\n" + msg["text"]
+                msg["no_handicap"] = True
+            if kind:
+                msg["html"] = with_banner(msg["html"], rules_note())
+                msg["text"] = f"New to TGF? Please review our TGF Rules of Play: {RULES_OF_PLAY_URL}\n\n" + msg["text"]
             messages.append(msg)
     finally:
         conn.close()
@@ -867,11 +928,29 @@ def _creds():
     return c if all(c) else None
 
 
-def _graph_send(creds, to, subject, html_body) -> bool:
+def _graph_send(creds, to, subject, html_body, cc=None) -> bool:
     from email_parser import fetcher
     return fetcher.send_mail_graph(tenant_id=creds[0], client_id=creds[1],
                                    client_secret=creds[2], from_address=creds[3],
-                                   to_address=to, subject=subject, html_body=html_body)
+                                   to_address=to, subject=subject, html_body=html_body,
+                                   cc_address=cc or None)
+
+
+#: Kerry 2026-10-20: "CC me on any emails that go out for handicap/venmo for
+#: now". App setting `asks_cc` (default Kerry's address; "off" stops it) is
+#: copied on every handicap-ask and payout-ask email.
+ASKS_CC_DEFAULT = "kerry@thegolffellowship.com"
+
+
+def asks_cc(db_path=None) -> str | None:
+    from email_parser import database as db
+    try:
+        v = (db.get_app_setting("asks_cc", db_path=db_path) or "").strip()
+    except Exception:
+        v = ""
+    if v.lower() == "off":
+        return None
+    return v or ASKS_CC_DEFAULT
 
 
 def _ensure_scoring(event_id: int, db_path=None) -> None:
@@ -1063,6 +1142,12 @@ def send_event_day_emails(event_id: int, confirm: bool = False, db_path=None) ->
                 pass
     finally:
         conn.close()
+    # the sheet these emails carried is the baseline for after-lock changes
+    # (Kerry #2139); the first send sets it, a later re-run leaves it alone
+    if sent:
+        from email_parser import after_lock
+        if not after_lock._get(after_lock.STATE_KEY.format(int(event_id)), db_path):
+            after_lock.record_sent(event_id, db_path)
     return {"event": built["event"], "sent": sent, "skipped": skipped,
             "failed": failed, "held": built["held"],
             "counts": {**built["counts"], "sent": len(sent), "skipped": len(skipped),
@@ -1103,6 +1188,186 @@ def reissue_key(event_id: int, messages: list) -> str:
     """One key per sheet state: the start line of every ready player."""
     sig = "|".join(sorted(f"{m['customer_id']}:{m.get('start_line') or ''}" for m in messages))
     return f"event_day_reissue:{int(event_id)}:{hashlib.sha256(sig.encode()).hexdigest()[:12]}"
+
+
+LATE_ADD_PREFIX = "UPDATED GROUP: "
+RULES_OF_PLAY_URL = "https://tgf-tracker.up.railway.app/static/print/TGF_Rules_of_Play.pdf"
+
+
+def newcomer_kind(r: dict) -> str | None:
+    """Kerry 10/20: "1st Timers, Guests or New Members". 'first' (first TGF
+    event, _mark_first_timers), 'guest', 'new' (joined as a new member this
+    year), else None."""
+    if r.get("is_first_timer"):
+        return "first"
+    st = f"{r.get('user_status') or ''} {r.get('current_player_status') or ''}".lower()
+    if "guest" in st:
+        return "guest"
+    if r.get("is_new"):
+        return "new"
+    return None
+
+
+def add_handicap_note(url: str) -> str:
+    """Kerry 10/20: a player with no handicap sees it in his own email, with
+    a button to the handicap ask page (/handicap/<token>)."""
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td bgcolor="#FFF7ED" style="background:#FFF7ED;'
+            f'border:2px solid {ORANGE};border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">NO HANDICAP ON FILE</div>'
+            f'<div style="padding-top:4px;color:{INK};">We don\'t have a handicap for you yet, so a blind '
+            f'stands in for your team score. Add yours and the blind comes off.</div>'
+            f'<div style="padding-top:10px;"><a href="{_e(url)}" style="display:inline-block;background:{ORANGE};'
+            f'color:#ffffff;text-decoration:none;font:bold 14px Arial,sans-serif;border-radius:999px;'
+            f'padding:9px 18px;">ADD HANDICAP</a></div></td></tr></table>')
+
+
+def rules_note() -> str:
+    """Rules of Play link for a new player (Kerry 10/20)."""
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td style="border:1px solid {LINE};'
+            f'border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{INK};">NEW TO TGF?</div>'
+            f'<div style="padding-top:4px;color:{INK};">Please review our '
+            f'<a href="{RULES_OF_PLAY_URL}" style="color:{ORANGE};font-weight:bold;">TGF Rules of Play</a> '
+            f'before your round.</div></td></tr></table>')
+
+
+def welcome_line(first: str, kind: str | None, gender: str | None = None) -> str:
+    """The UPDATED GROUP line for a newcomer (Kerry 10/20: "This is Adam's
+    first time playing with us! Welcome him in and help him understand our
+    rules."). Pronoun from the profile's gender; they/them when unknown."""
+    if not kind:
+        return ""
+    g = (gender or "").strip().upper()[:1]
+    pr = "him" if g == "M" else "her" if g == "F" else "them"
+    nm = _e(first)
+    lead = {"first": f"This is {nm}'s first time playing with us!",
+            "guest": f"{nm} is joining us as a guest!",
+            "new": f"{nm} is one of our new members!"}[kind]
+    return f"{lead} Welcome {pr} in and help {pr} understand our rules."
+
+
+def late_add_banner(names: list, welcomes: list | None = None) -> str:
+    """The orange notice for a group that just gained a late add."""
+    who = _e(" and ".join(n for n in names if n))
+    verb = "join" if len(names) > 1 else "joins"
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td bgcolor="#FFF7ED" '
+            f'style="background:#FFF7ED;border:2px solid {ORANGE};border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">UPDATED GROUP</div>'
+            f'<div style="padding-top:4px;color:{INK};"><strong>{who}</strong> {verb} your group. '
+            f'Your start is the same. This replaces the earlier email; '
+            f'your group and cart are below.</div>'
+            + "".join(f'<div style="padding-top:6px;color:{INK};font-weight:bold;">{w}</div>'
+                      for w in (welcomes or []) if w)
+            + '</td></tr></table>')
+
+
+def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: bool = False,
+                             db_path=None) -> dict:
+    """LATE ADD (event-timeline.md, Kerry 10/17 + 10/20): each late add gets
+    the approved event-day email as-is, and everyone already in that group
+    gets it again with "UPDATED GROUP: " before the subject and a notice
+    naming who joined. Nobody else is mailed. Same gates as the re-issue
+    (approved template hash, Kerry-OK mailbox post, confirm=True to send);
+    once per player per group state (app setting event_day_lateadd:...)."""
+    import json as _json
+    from email_parser import database as db
+    from email_parser.customer_query import _kerry_ok
+    late = {int(c) for c in late_cids}
+    tpl = load_template(db_path)
+    appr = approval_state(tpl, db_path)
+    if not appr["approved"]:
+        return {"refused": "template not approved: app setting "
+                           f"{APPROVAL_KEY} must equal the current template hash", **appr}
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+    finally:
+        conn.close()
+    if not ok:
+        return {"refused": f"rule 3b: {why}"}
+    _ensure_scoring(event_id, db_path)
+    built = build_event_day_emails(event_id, db_path=db_path)
+    if built.get("error"):
+        return built
+    if built["template_hash"] != appr["template_hash"]:
+        return {"refused": "template changed during the build"}
+    msgs = built["messages"]
+    missing = sorted(late - {m["customer_id"] for m in msgs})
+    if missing:
+        held = [h for h in built["held"] if h.get("customer_id") in late]
+        return {"refused": f"no sendable message for late add(s) {missing}", "held": held}
+    groups, welcomes = {}, {}
+    conn = db.get_connection(db_path)
+    try:
+        for m in msgs:
+            if m["customer_id"] in late:
+                groups.setdefault(m.get("group"), []).append(m["name"])
+                g = conn.execute("SELECT gender FROM customers WHERE customer_id = ?",
+                                 (m["customer_id"],)).fetchone()
+                welcomes.setdefault(m.get("group"), []).append(
+                    welcome_line(m.get("first_name") or m["name"].split()[0],
+                                 m.get("newcomer"), g["gender"] if g else None))
+    finally:
+        conn.close()
+    todo = [m for m in msgs if m.get("group") in groups]
+    sig = "|".join(sorted(f"{m['customer_id']}:{m.get('group')}" for m in todo))
+    key = f"event_day_lateadd:{int(event_id)}:{hashlib.sha256(sig.encode()).hexdigest()[:12]}"
+    try:
+        done = set(_json.loads(db.get_app_setting(key, db_path=db_path) or "[]"))
+    except Exception:
+        done = set()
+    todo = [m for m in todo if m["customer_id"] not in done]
+
+    def _shape(m):
+        if m["customer_id"] in late:
+            return m["subject"], m["html"], "LATE ADD "
+        return (LATE_ADD_PREFIX + m["subject"],
+                with_banner(m["html"], late_add_banner(groups[m.get("group")], welcomes.get(m.get("group")))),
+                "LATE-ADD GROUP ")
+
+    out = {"event": built["event"], "authority": why, "key": key,
+           "late_adds": {g: n for g, n in groups.items()}, "already_sent": sorted(done),
+           "counts": {"to_send": len(todo)}}
+    if confirm is not True:
+        return {**out, "dry_run": True,
+                "plan": [{"customer_id": m["customer_id"], "name": m["name"], "email": m["email"],
+                          "group": m.get("group"), "subject": _shape(m)[0]} for m in todo]}
+    creds = _creds()
+    if not creds:
+        return {"error": "Email credentials not configured on server"}
+    sent, failed = [], []
+    for m in todo:
+        subject, html, tag = _shape(m)
+        good = False
+        try:
+            good = _graph_send(creds, m["email"], subject, html)
+        except Exception:
+            logger.exception("event-day late add failed for cid %s", m["customer_id"])
+        row = {"customer_id": m["customer_id"], "name": m["name"], "email": m["email"],
+               "group": m.get("group")}
+        (sent if good else failed).append(row)
+        if good:
+            done.add(m["customer_id"])
+            try:
+                db.set_app_setting(key, _json.dumps(sorted(done)), db_path=db_path)
+            except Exception:
+                logger.exception("event-day late add: could not record cid %s", m["customer_id"])
+        try:
+            db.log_message({"event_name": built["event"]["name"], "channel": "email",
+                            "recipient_name": m["name"], "recipient_address": m["email"],
+                            "subject": subject, "body_preview": tag + m["text"][:180],
+                            "status": "sent" if good else "failed",
+                            "sent_by": "event_day_email_late_add"}, db_path=db_path)
+        except Exception:
+            pass
+    if sent and not failed:
+        # a hand-run late add moves the after-lock baseline, so the job never
+        # mails the same change again
+        from email_parser import after_lock
+        if after_lock._get(after_lock.STATE_KEY.format(int(event_id)), db_path):
+            after_lock.record_sent(event_id, db_path)
+    return {**out, "sent": sent, "failed": failed,
+            "counts": {**out["counts"], "sent": len(sent), "failed": len(failed)}}
 
 
 def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
@@ -1180,5 +1445,9 @@ def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
                             "sent_by": "event_day_email_reissue"}, db_path=db_path)
         except Exception:
             pass
+    if sent and not failed:
+        from email_parser import after_lock
+        if after_lock._get(after_lock.STATE_KEY.format(int(event_id)), db_path):
+            after_lock.record_sent(event_id, db_path)
     return {**out, "sent": sent, "failed": failed,
             "counts": {**out["counts"], "sent": len(sent), "failed": len(failed)}}

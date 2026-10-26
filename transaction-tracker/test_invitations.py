@@ -207,8 +207,12 @@ print("6c. Kerry 10/13: Can't make it is one tap, with change-my-mind, remove an
 tok_out = inv.make_token(770002, EV, "out", date(2026, 12, 15))
 pg = cl.get(f"/rsvp/{tok_out}").get_data(as_text=True)
 check("Can't make it lands on Thanks, with I'm in, Remove me and the optional reasons",
-      "Thanks for letting us know" in pg and "Changed my mind" in pg and "Remove me from invitations" in pg
+      "Thanks for letting us know" in pg and "Changed my mind" in pg and "Remove me from ALL event invitations" in pg
       and "Mind sharing why" in pg, pg[:200])
+_rm = pg.split("Remove me from ALL event invitations")[0].rsplit("<a ", 1)[-1]
+check("Remove me is a small grey text link below the reasons, not a button (Kerry 10/25)",
+      "border-radius" not in _rm and "#6B7280" in _rm
+      and pg.index("Remove me from ALL event invitations") > pg.index("Mind sharing why"), _rm)
 cl.post(f"/rsvp/{tok_out}", headers={"X-Requested-With": "fetch"})
 with db._connect(DB) as conn:
     r = conn.execute("SELECT response FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()
@@ -262,6 +266,21 @@ with db._connect(DB) as conn:
 check("restore puts them back on, clears the no and the reason", done_.get("applied")
       and 770002 not in inv._opted_out(DB) and left == 0
       and all(x["customer_id"] != 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), done_)
+print("6f2. Kerry 10/20: restore with keep_answers leaves the real answers")
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps([770002]), db_path=DB)
+cl.post(f"/rsvp/{inv.make_token(770002, EV, 'out', date(2026, 12, 15))}", headers={"X-Requested-With": "fetch"})
+inv.record_reason(inv.make_token(770002, EV, 'out', date(2026, 12, 15)), "Schedule", db_path=DB)
+kept = inv.restore_answers([770002], kpost, confirm=True, keep_answers=True, db_path=DB)
+with db._connect(DB) as conn:
+    left = conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
+                        (f"tracker:{EV}:770002",)).fetchone()[0]
+check("keep_answers: back on invitations, the no and the reason stay", kept.get("applied")
+      and 770002 not in inv._opted_out(DB) and left == 1 and kept["not_playing_rows_removed"] == []
+      and any(x["customer_id"] == 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), kept)
+with db._connect(DB) as conn:   # leave the state 6f left for the later sections
+    conn.execute("DELETE FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",))
+    conn.execute("DELETE FROM event_decline_reasons WHERE event_id = ? AND customer_id = 770002", (EV,))
+    conn.commit()
 print("6g. Kerry 10/14: the scanner filter (2-minute grace, burst rule)")
 inv.BURST_S = 30   # the earlier sections tap buttons back to back on purpose
 import time as _time
@@ -407,7 +426,7 @@ check("...the email security filter reason is there, and no one else gets it",
       "email security filter" in _m["html"] and "email security filter" not in _m2["html"] and not _m["held"])
 _mu = inv.build_message(_ev, {"customer_id": 770001, "first_name": "Ann"}, "lastcall", DB, clarify="unsub")
 check("after Remove me the note names it and says they are still on the list",
-      "Remove me from invitations" in _mu["html"] and "still on our invitation list" in _mu["html"])
+      "Remove me from ALL event invitations" in _mu["html"] and "still on our invitation list" in _mu["html"])
 check("the note does not change the approved invitation wording stamp",
       inv.template_hash() == inv.approval_state(DB)["template_hash"])
 cl.get(f"/rsvp/{inv.make_token(770001, EV, 'in', date(2026, 12, 15), sent_at=int(_time.time()) - 3600)}")

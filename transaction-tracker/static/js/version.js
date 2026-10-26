@@ -1,5 +1,374 @@
-window.TGF_VERSION = "2.571.27";
+window.TGF_VERSION = "2.579.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.579.3",
+    date: "2026-10-25",
+    title: "Can't make it page: Remove me is a small link, not a button",
+    changes: [
+      "Kerry 10/25: \"Move the Remove me button to a small link\". On the Can't make it thank-you page, Remove me from invitations sat as a pill button beside Changed my mind, I'm in, and it was mis-tapped twice in a week (Lou Schneider 10/20, Michele McCormick 10/24; both restored). It is now a small grey underlined text link at the bottom of the page, below the optional reasons, and it reads Remove me from ALL event invitations (Kerry 10/25: \"I think it's in the wording\"). The confirm page says Remove you from ALL event invitations? and that it stops every TGF event, not just this one; the clarify note quotes the same words. The invitation email's own footer link (Stop event invitations) is unchanged, so Kerry's approved wording stamp stands. Guard test_invitations.py."
+    ]
+  },
+  {
+    version: "2.579.1",
+    date: "2026-10-23",
+    title: "Security: a new Claude connector must be approved with the ADMIN PIN",
+    changes: [
+      "Found during the Railway round-2 review (Kerry 10/23). The MCP OAuth flow (mcp_auth.py) handed the connector's client id to anyone through /oauth/register, the authorize step auto-approved any request carrying it, and the PKCE code exchange needs no secret. So anyone who knew the Tracker's URL could have added it as their own Claude connector with the same read/write tools as our lanes; rotating MCP_CLIENT_SECRET alone would not have closed it. Now GET /oauth/authorize shows an Approve page naming the app that asks, and only a POST with the right ADMIN_PIN issues a code; wrong PINs are throttled (8 per 15 minutes), and with no ADMIN_PIN set nobody is approved. Connectors already signed in keep working until MCP_CLIENT_SECRET is rotated, after which Kerry re-authorizes once and types the PIN. Guard test_mcp_auth_pin.py."
+    ]
+  },
+  {
+    version: "2.579.0",
+    date: "2026-10-23",
+    title: "Daily digest: who unsubscribed in the last 24 hours",
+    changes: [
+      "Kerry 10/23: \"let's add any daily unsubscribed to my Daily TGF Briefings/Digest\". New email_parser/unsubscribes.py reads two sources, read-only toward both. (1) Tracker event invitations: every confirmed Stop invitations tap is already logged (agent_action_log event_invite_unsubscribe), so the window is read from the log, with the person's name. (2) The Brevo Insider list: Brevo has no 'unsubscribed since' query, so once a day the Tracker compares Brevo's unsubscribed (emailBlacklisted) contacts with yesterday's stored set (app setting brevo_blacklist_snapshot) and logs each new unsubscribe, and anyone who came back, in app setting unsubscribe_log (90 days), matched to the customer by email. The first run only stores the baseline. The daily digest email gets an Unsubscribes (Last 24 Hours) section and a count in its subject line; a failed Brevo read never stops the digest. New read-only bridge scoring-unsubscribes[:<hours>][|refresh] for the Front Desk's 7:15 brief. Nothing is written to Brevo and nobody's preferences change. Guard test_unsubscribes.py."
+    ]
+  },
+  {
+    version: "2.578.0",
+    date: "2026-10-21",
+    title: "Events list: UPCOMING events on top, with who's registered and REGISTER",
+    changes: [
+      "Kerry 10/21: \"Option A, but I want player list and REGISTER button on expanded view\", then \"Build the upcoming events mockup\". The EVENTS list now opens with an UPCOMING group: this season's events still to come, soonest first, each card with its chapter bar, the UPCOMING chip, \"—\" for the pot and \"N registered\" in the meta line. Opened, a card shows the UPCOMING strip (\"Pairings are not set yet.\" or \"Pairings are set. First tee 3:40 PM.\"), REGISTERED · N with every registered player as First LAST sorted by last name (three columns on desktop, two on the phone), and an orange REGISTER button to the event's registration page while the link is open (no link or an expired one, no button). No money and no board fetch for an upcoming card. The roster is the pairings roster (_event_roster_rows), keyed by customer_id. Chapter filters keep joint events; past seasons have no upcoming group; the scorer's own board is unchanged. Server: get_events_leaderboard returns `upcoming` (_evlb_upcoming). Guard test_evlb_batch1.py."
+    ]
+  },
+  {
+    version: "2.577.5",
+    date: "2026-10-21",
+    title: "Insider writer: name the date, print the tagline once",
+    changes: [
+      "The 10/21 Insider draft called the Fall Championship on October 31 \"this Saturday\" when it was ten days out. The writer's public rules now say to name the date, and validate() refuses \"this/next <weekday>\", \"this weekend\", \"next week\" and \"tomorrow\", so the retry fixes it before Kerry sees it.",
+      "The same draft printed \"It's the best part, and it's yours if you want it.\" twice, because the template adds that line after the writer's Celebrate text and the writer had written it too. insider.strip_celebrate_tagline removes it from the writer's text where the slot is filled, and the rules tell the writer not to write it. Guard: test_insider_writer.py section 2e.",
+    ],
+  },
+  {
+    version: "2.577.4",
+    date: "2026-10-21",
+    title: "Results email: an invitation opt-out who played still gets the results",
+    changes: [
+      "Kerry 10/21 (rule 3b, via the Front Desk): \"Players who opted out of invitations should only get results emails if they played in the event.\" The results-email audience dropped every invitation opt-out, so a player who opted out of invitations got no results for a night he played (Lou Schneider, Event Ops #2164/#2166). Now an opt-out is dropped only when he did not play that event; one who did not play still gets nothing. No other audience rule, wording or schedule changes. Guard test_results_email.py."
+    ]
+  },
+  {
+    version: "2.577.3",
+    date: "2026-10-21",
+    title: "Health: approve-pairings slow lines and laps, one retry on a cut-off Graph reply",
+    changes: [
+      "Digest #2083 (10/20). (1) approve_pairings_page took 10.4 s and 11.6 s and the Approve press (approve_pairings_api) 97.6 s on 10/19 at host load 80-90. The page builds every player's Event Info email to show the counts and a sample, and Approve sends the tee-times emails inline, one Graph call each. Neither is a fault; the slow lines were set for pages that read one table (2 s). They are now 15 s for the page and 180 s for the Approve press. The page's sample now carries laps (print_pack, audit, build_emails) so the next digest names the slow section before anything is changed. (2) The staff bridges scoring-pairings-run (|resend and |prompt send mail; 15-20 s) and scoring-health (the report with its fresh replica read, 33.6 s) get 60 s and 90 s lines. (3) inbox_check failed twice in two days (10/18 and 10/19 12:04 UTC) with a JSONDecodeError: Microsoft's reply arrived cut off at 110 KB and 243 KB, each time with the host at load 80-90 and a mail send running. A Graph read whose body will not parse is now asked for once more (reads only; a repeat is safe); if it fails twice the job fails as before. No email, audience, wording, send behaviour or money changes."
+    ]
+  },
+  {
+    version: "2.577.2",
+    date: "2026-10-21",
+    title: "Events: an opened event no longer sticks on Loading",
+    changes: ["Kerry 10/21, iPhone: \"Event stuck loading ... Seems to load fine when it's a fresh browser but then closed and come back it got stuck.\" Two causes, both reproduced: the board's loaded flag was kept per event NAME, so after the list re-drew (a chapter, a season, a month opened) the new card for the same event never fetched; and a fetch the phone froze when the app went to the background never finished, so the flag never cleared. The flag now lives on the card itself, a board read times out after 15 seconds (with a plain 'close and reopen it' line), and coming back to the page (app switch or bfcache) re-reads any open card that never drew and refreshes a LIVE one. Guard test_events_board.js."]
+  },
+  {
+    version: "2.577.1",
+    date: "2026-10-21",
+    title: "Tee-times email only goes the evening before",
+    changes: ["Duplicate-send fix 1 of the 10/20 send map: the tee-times email went out whenever a manager approved the pairings, at any hour, including on event morning, when its \"comes at 7:00 AM tomorrow\" line is wrong and the Event Info email follows within hours. teetimes_email._deliver, the one sender for the 7 PM job and the approval alike, now refuses unless it is the day before the event between the 5 PM lock and midnight Central (send_window_ok). Guard test_teetimes_email.py; events.md."]
+  },
+  {
+    version: "2.577.0",
+    date: "2026-10-21",
+    title: "After-lock changes send themselves: moved players, tee and games changes",
+    changes: ["Kerry 10/20 (#2139): \"A moved player should trigger a resend to affected players and should send only the affected sheets to the course for reprint with a CC to manager and me. A tee change and a games change is NOT a reason to send new print packs to course.\" and (#2168) \"No manager approval needed but cc the manager on all changes.\" New email_parser/after_lock.py: the Event Info send saves the sheet it carried (group, start, cart, tee and games per player), and job after_lock_changes (every 15 min, until the first tee) compares the live sheet against it.", "A moved, added or removed player: the player gets the Event Info again under UPDATED GROUP (an added player is welcomed in and recorded as sent), and everyone in the group they left or joined gets it with a notice naming who joined or left. The course gets only the sheets whose contents changed, marked UPDATED, To the course with the manager and Kerry on CC, once the Course Files have gone.", "A tee change or a games change: a short UPDATED TEES / UPDATED GAMES notice to that player only; nothing goes to the course. The chapter manager is CC'd on every email. Each change sends once, then the saved sheet moves on; a hand-run late add or re-issue moves it too, so nothing is mailed twice. Dial after_lock_auto (on unless it reads off). Read-only bridge scoring-after-lock:<event_id>. Push notifications to the manager wait for push. Guard test_after_lock.py; events.md."]
+  },
+  {
+    version: "2.576.1",
+    date: "2026-10-21",
+    title: "TEAM board: a Golf Genius name reads First LAST",
+    changes: ["Kerry 10/21, an opened team on a Golf Genius-era event showed \"JONES, James\" in the names and \"James\" as the surname on the card. Names stored LAST, First now split on the comma, so the board reads James JONES and the phone card JONES. Guard test_team_board_collapsed.js."]
+  },
+  {
+    version: "2.576.0",
+    date: "2026-10-21",
+    title: "Events leaderboard, batch 1: one state, month list, state strip, tabs, TEAM",
+    changes: ["Design-claude's batch 1 (#2147 with #2148-#2150), Kerry-approved 10/20: \"2a - 2d is perfect\". One board state, computed once on the server (database.evlb_state), drives the strip word and colour, the list chip and the landing tab. board_summary.attach no longer recomputes it, which is how a LIVE-coloured strip could read UPCOMING or a held board turn FINAL.", "The state strip is the only money message: UPCOMING \"Pairings are set. First tee 3:40 PM.\", LIVE \"Money is projected until every card is in.\" with UPDATED m:ss AGO, IN REVIEW \"Every score is in. Cards lock at 7:34 PM.\" (the lock time from the event), held \"Results are being checked.\", FINAL \"Results are closed and prizes are set.\" The amber Round in play notice, its list of who is short, the not-final banner and every typed 10 minutes are gone. A LIVE board re-reads itself every 30 seconds.", "The events list is paged by month (older months are a dashed row that loads on tap) with a real season dropdown. Each card has its chapter colour bar, a state chip and the pot in one green with two decimals.", "Tabs are underline tabs; SUMMARY looks like the others; HOW IT WORKS is an outlined pill, a round i on a phone, where the tabs scroll sideways instead of wrapping. The Tap a player footer is gone.", "TEAM: the dial line carries the team pot once, then # | TEAM | +/- | THRU | WON (PROJ. while live). +/- is the big number; a finished team shows only its team net in THRU, no F (Kerry 10/20), and THRU drops the F on every tab. Names are First LAST in Bitter on one line with the tee dot after each name; a blind leads with the BLIND chip in italic brown. An opened team is its card: HOLE, PAR, each player's gross with Team Net pops and counted balls green, TEAM NET, then N, +/- and USED. On a phone the team cell is a 2 x 2 grid of last names and an opened team is a full-screen sheet that fits 390px.", "Money everywhere on the board now prints two decimals ($46.00). Guards test_evlb_batch1.py, test_team_board_collapsed.js (with the #2147 sample: 47 vs 54 = -7), test_team_board_order_blinds.js, test_evlb_rulings_b1_b7.js, test_lb_summary.js; docs events.md."]
+  },
+  {
+    version: "2.575.17",
+    date: "2026-10-20",
+    title: "Put someone back on invitations without erasing their real answers",
+    changes: ["Kerry 10/20, Lou Schneider: he tapped Can't make it for the Fall Championship and then Remove me, meaning only that one event. The restore bridge also deleted every NOT PLAYING row and decline reason on upcoming events, which is right for a mail scanner's taps but would have erased Lou's real no and started Fall Championship reminders. restore_answers(..., keep_answers=True), bridge flag |keep-answers, puts the person back on the invitation list and leaves their answers and reasons as they are. Guard test_invitations.py 6f2.", "Also fixed: the 2.575.16 entry carried an unescaped quote pair, so version.js failed to parse in the browser (the version chip and the changelog page had no data). Escaped."]
+  },
+  {
+    version: "2.575.16",
+    date: "2026-10-20",
+    title: "Live scoring drops a player taken off the pairings",
+    changes: ["Kerry 10/20, a9.28 Avery Ranch: \"I removed Paul Reed from the pairings and credited him ... the live scoring link still shows him.\" Re-seeding a live-scoring round from the pairings only ever added or moved players, never removed one. seed_round_from_pairings now drops a player who is no longer on the sheet from an OPEN round, scores and marks included (Kerry: \"It presets on par, so it will look like he shot par\" — anything entered for a removed player is not a real round); what was removed is kept in one se_audit row ('off_sheet_drop'). Guard test_score_entry.py."]
+  },
+  {
+    version: "2.575.15",
+    date: "2026-10-20",
+    title: "Handicap ask: resend to one player on Kerry's word",
+    changes: ["Kerry 10/20: \"Have another email sent to Adam requesting his handicap & venmo. He said he didn't receive the one this morning.\" handicap_ask.resend(customer_id, post) sends the same ask and link again to one player (CC asks_cc), refused without a mailbox post carrying Kerry's word, dry run without confirm, never to someone who has answered. Bridge scoring-handicap-ask:resend|<cid>|<post>[|confirm]."]
+  },
+  {
+    version: "2.575.14",
+    date: "2026-10-20",
+    title: "No handicap prints blank and never holds or reprints the course files",
+    changes: ["Kerry 10/20, after TPC's Scorecards.pdf arrived as the \"These cards can't print yet\" page: \"This is NOT good!!!\" Course Files now refuse to send (send_course_files -> _unprintable) whenever the scorecards carry a gap or failed to render; the gap page is for a manager's screen, never a course attachment. Guard test_nh_no_reprint.py.", "Kerry 10/20: \"Send them now with Adam blank. And make this standard. If a handicap comes in later, just update it on the tracker and remove the blind. That's not reason to resend the print pack or even just his affected printouts.\" A player with no TGF index yet is a print-log note on the scorecards (his card prints PH and net blank), never a gap that holds the print.", "The morning print-pack routine records who sat where on which tee (blinds left out) with each send. When the seats are unchanged and only the Starter Sheet, Scorecards or Cart Signs changed, it does not send again: that is a handicap or its blind. A moved player, a tee change or a games change still resends. Guard test_nh_no_reprint.py."]
+  },
+  {
+    version: "2.575.13",
+    date: "2026-10-20",
+    title: "Tee sheet shows TGF indexes and blinds with the reason; ADD HANDICAP in the email; gender from men's tees",
+    changes: ["Kerry 10/20: \"Blinds should also show on this tee sheet, along with raw TGF Handicap Indexes. If a player like Adam doesn't have a handicap, then it should say no handicap ... and then when the blind is shown it needs to show the explanation.\" The member tee sheet (/member/teesheet/<id>) shows each player's 18-hole TGF index (or No handicap) under his name, and each drawn blind as its own amber row: BLIND, the name, and why (the open seat, or the player with no TGF handicap it stands in for).", "An event-day email to a player with no handicap opens with NO HANDICAP ON FILE and an ADD HANDICAP button to his handicap ask page.", "Gender from tees: \"65+, 50-64, <50 are all men's tees. Forward tees are for women generally.\" A registration on a men's band with no rated rounds now infers M (Forward still F; both is a conflict for a manager). Still only while app setting gender_infer is on."]
+  },
+  {
+    version: "2.575.12",
+    date: "2026-10-20",
+    title: "Newcomer welcome + Rules of Play link; YOUR CARD totals and colours; N/H blind drops when a handicap arrives",
+    changes: ["Kerry 10/20: a late add who is a 1st timer, guest or new member gets a line in their group's UPDATED GROUP notice (\"This is Adam's first time playing with us! Welcome him in and help him understand our rules.\"; him/her from the profile's gender, them when unknown).", "Every event-day email to a 1st timer, guest or new member opens with a NEW TO TGF? box linking the TGF Rules of Play PDF.", "YOUR CARD: a TOT column (par total and the pops each game gives), more room left of PAR / NET / TEAM, a gap after the tee colour dot, and NET pops black / TEAM (CART) pops orange to match the scorecards, online scoring and the Tracker.", "Kerry: \"If and when we get a handicap for Adam, that blind would go away immediately.\" set_starting_handicap now clears any N/H blind whose seat's player has a handicap, on events from today on (drop_stale_nh_blinds); before, the draw only reported it as stale. Open-seat blinds are never touched.", "Bridge scoring-blinds:<event>|set|<holes>|<group>|<pos>|<cid|clear> chooses one seat's blind (the CHOOSE the pairings screen already has)."]
+  },
+  {
+    version: "2.575.11",
+    date: "2026-10-20",
+    title: "Late adds: event info to the new player, UPDATED GROUP to their group",
+    changes: ["Kerry 10/20, s9.28 TPC Canyons: \"send each new player and their groups the event info per our standards.\" event_day_email.send_event_day_late_adds sends the approved event-day message to each late add unchanged, and to their groupmates with \"UPDATED GROUP: \" before the subject and an orange notice naming who joined. Nobody else is mailed. Same gates as the re-issue: approved template hash, a mailbox post carrying Kerry's word, dry run without confirm, once per player per group state. Bridge: scoring-event-day-email:<id>|lateadd|<cid,cid>|<post>[|confirm]. Guard test_event_day_email.py 4d."]
+  },
+  {
+    version: "2.575.10",
+    date: "2026-10-20",
+    title: "TEAM board: tee-time order, names left-aligned, blinds marked",
+    changes: ["Kerry 10/20, s9.28 TPC Canyons before the round: \"These should show in Tee time order and be left aligned.\" The collapsed TEAM rows sorted unscored teams by NAME. get_event_leaderboard now stamps each team's start_order (tee time, then start hole, A before B on a shotgun or in cart mode, from the print pack's slots); the TEAM board lists unranked teams in that order and breaks to-par ties on it (the live order too). Scored teams still rank on to-par.", "The names cell was centred because the row rule (td, text-align:center) outweighed the column's left rule; the row-level name cell now restates text-align:left, desktop and phone, with the chevron first.", "Kerry: \"Should also show their blinds in a different font color or somehow denote it.\" A drawn blind shows as the team's 4th name with the amber BLIND tag, italic and brown. Before the round the blind has no card, so the board used to drop him; the team now carries blinds_pending ({customer_id, name}) from the saved blind draws, display only, never scored. A blind playing his card (Bl[...]) is marked the same way. Guards test_team_board_order_blinds.js and test_events_board_blinds.py."]
+  },
+  {
+    version: "2.575.9",
+    date: "2026-10-20",
+    title: "Kerry CC'd on handicap and Venmo asks; member nav LEADERBOARD | PLAYERS | HANDICAPS",
+    changes: ["Kerry 10/20: \"CC me on any emails that go out for handicap/venmo for now.\" Every handicap-ask and payout-ask email copies app setting asks_cc (default kerry@thegolffellowship.com; set it to off to stop).", "Kerry 10/20: \"Make nav: LEADERBOARD | PLAYERS | HANDICAPS.\" The member shell's tabs now read in that order."]
+  },
+  {
+    version: "2.575.8",
+    date: "2026-10-20",
+    title: "Handicap ask reaches same-day sign-ups; set-sheet seats late adds",
+    changes: ["Kerry 10/20, Adam Wilson signed up at 9:02 AM for that evening's s9.28 TPC and got no handicap/Venmo email: \"there should be no limitations on an email being sent to someone that we don't have a handicap for...or Venmo.\" The handicap ask's event window now includes TODAY (it read only events after today). Guard test_handicap_ask.py.", "scoring-pairings-set-sheet may now place a roster player who is not yet seated (a late add), so Kerry's placements can be saved; everyone already seated must still appear exactly once."]
+  },
+  {
+    version: "2.575.7",
+    date: "2026-10-20",
+    title: "Leaderboard: the rank gap, for real on phones",
+    changes: ["Kerry 10/20: \"I don't see the spacing fix.\" The phone standings table is table-layout:fixed, so the RK column takes its width from the header cell's inline 28px and ignored v2.575.6's row padding. A board whose rows carry the chapter bar now widens the RK header to 50px (CSS :has on the table), which gives the rank and name their gap on the Monthly and cross-chapter boards."]
+  },
+  {
+    version: "2.575.6",
+    date: "2026-10-20",
+    title: "Leaderboard: room between rank and name",
+    changes: ["Kerry 10/20 on the Monthly board: \"Needs a little more space between rank and player\" (T10MARROQUIN ran together once the 8px chapter bar took space from the rank cell). Rows with a chapter bar give the rank cell 46px minimum and 10px before the name."]
+  },
+  {
+    version: "2.575.5",
+    date: "2026-10-20",
+    title: "Leaderboard: chapter colour bars, one line, and the house chevron everywhere",
+    changes: [
+      "Kerry 10/20, on the Monthly board on his phone: \"No reason for two lines on these. Let's do color bars for the chapter on the left of each entry like we've done elsewhere, rather than the chapter badges.\" The A / SA chapter badge is gone from every Season Contests standings board. Each row now carries the chapter as an 8px colour bar on its left edge, using the Events table's own classes and tokens (ev-ch-*: Austin burnt orange, SA slate, joint TGF black, any other chapter the national grey). The bar shows on Monthly, THE FELLOWSHIP CUP and every cross-chapter Points Race board (the cups). Monthly rows are one line (the month-won trophy sits beside the name), and the Fellowship Cup handicap moved up onto the name line. Champion, captain and guest badges keep their own line, as ruled 10/12.",
+      "\"Also, the chevrons don't match our standard. Review all chevrons across the leaderboard and match standard.\" The boxed blue play button was the house arrow itself: inside a Bitter name cell the iPhone found no ▶ in Bitter or Georgia and drew the colour emoji. The house arrow (.tgf-exp) now uses the system font and asks for text presentation, and every leaderboard arrow is written with U+FE0E, so it is the plain orange triangle the Events board shows. Every open state is now a 90° turn like the Events board, instead of a swap to ▼: standings, Monthly, Pot & details, Season history, and the scorecard / city-championship / Not Counted lines. Match Play's › and ▴ markers and the browser's own triangle on Past Champions are now the house arrow too.",
+      "New guard test_lb_chapter_bars_chevrons.js; lone-star-cup-board.md."
+    ]
+  },
+  {
+    version: "2.575.4",
+    date: "2026-10-20",
+    title: "Print pack re-sent for nothing: the scorecards' printed-at time",
+    changes: ["Kerry 10/20: \"what changed between 6 and 7\" / \"Do it now.\" Nothing had: the scorecards' footer prints 'printed <minute>' outside the pstamp span the once-per-change hash strips, so the pack's fingerprint moved every minute and the 6–9 AM routine re-sent an unchanged pack each hour. Found with the new diffself bridge (only the scorecards part's fingerprint moved between builds minutes apart). The stamp now sits inside the pstamp span. Guard test_print_pack.py."]
+  },
+  {
+    version: "2.575.3",
+    date: "2026-10-20",
+    title: "Print pack: per-part fingerprints and a self-diff check",
+    changes: ["Kerry 10/20: \"what changed between 6 and 7\" (a print pack re-sent with nothing changed) / \"Do it now.\" The pack build now returns one fingerprint per part (part_shas), and the read-only bridge scoring-print-pack-pdf:<id>|diffself builds the pack twice and names every part whose content differs between the two builds, with the first differing lines. It sends nothing; it finds the part that makes the once-per-change send fire for no reason."]
+  },
+  {
+    version: "2.575.2",
+    date: "2026-10-20",
+    title: "No morning print pack when the course has a contact",
+    changes: ["Kerry 10/20, after two morning print packs per event (6:05 and 7:05 AM): \"Neither should have come because there are course contacts at both courses, so the only print packs that should have gone were theirs at noon with managers CCd.\" The 6–9 AM day-of print pack routine now skips any event whose course has a TGF course contact; those files go only through Course Files at noon (To the course, CC the managers). Events at a course with no contact keep the morning pack. Guard test_print_pack.py; events.md."]
+  },
+  {
+    version: "2.575.0",
+    date: "2026-10-19",
+    title: "Pairings generator: a First Year player riding alone is a real miss, for his first 10 events",
+    changes: [
+      "s9.28 TPC Canyons (event 3301): the generator seated Michele McCormick (First Year) alone and scored it as 0 rule misses while the audit called it hard. _group_seat_misses tested 'someone else can ride solo' and 'the 1st Timer can ride with an Ambassador' on DIFFERENT seatings, so Vasquez (Ambassador) + Copeland (1st Timer) + McCormick passed both though no single seating keeps both. One seating must now keep both; when only one can be kept the First Year player rides alone and the group counts a miss. The same hole let the final pass move a First Year player into the solo seat (cost 0) and accept a 3rd meeting for it; that trade is gone with it.",
+      "Kerry 10/19: \"First year player hard miss for first 10 events only.\" The never-alone protection (rule 16) now covers a First Year member while he has played fewer than 10 events (distinct round dates before the event, every chapter; FIRST_YEAR_NO_SOLO_EVENTS). A 1st Timer is always covered. From his 11th event a First Year player may take the solo seat like anyone else, ranked by season solos. The audit's 'first year player alone' hard flag reads the same window.",
+      "New guard test_pairings_reviewer_3301.py: the 10/19 TPC field as a fixture (21 players, three threesomes, the 7:40 PM generation log's history and flags). Over 20 seeds no First Year player or 1st Timer rides alone, the 1st Timer rides with an Ambassador, threesomes tee off first, the final pass never trades a deeper repeat for a solo point, the audit shows zero hard flags, and a First Year player at 10 events loses the protection. pairings.md."
+    ]
+  },
+  {
+    version: "2.574.5",
+    date: "2026-10-19",
+    title: "Scorecards: full course name, SCAN TO SCORE",
+    changes: ["Kerry 10/19, s9.28 TPC cards: \"Seems like full course name should be able to fit. QR code text could just say SCAN TO SCORE.\" The card header's course name now steps its font size down when it is long (past 22 characters beside a QR, 30 without) instead of ending in an ellipsis, and the QR caption on scorecards, cart signs and the Cup's cart signs reads SCAN TO SCORE."]
+  },
+  {
+    version: "2.574.4",
+    date: "2026-10-19",
+    title: "Cart record counts our own rounds (GG Retirement A2/A3)",
+    changes: ["Kerry 10/19: \"Another GG bug sticking around\" / \"Definitely need to be counting our own.\" A2: the CoS pairing-history cart record and solo-cart count (cos_reads.pairing_history_view) skipped any event without Golf Genius tee-sheet rows, so every round since 10/7 was missing; it now accepts every source with a cart record (database._CART_SOURCES) and COUNTED_RULE says so. A3: hand-loaded tee sheets (import_manual_pairing_groups, source tee_sheet, seat order 1&2 / 3&4) now count as a cart record in the generator's history too; 45 such rows in 2026 had read as 'no cart data'. Guard test_cos_reads.py."]
+  },
+  {
+    version: "2.574.3",
+    date: "2026-10-19",
+    title: "Scorecards print only the tees someone plays",
+    changes: ["Kerry 10/19, a9.28 Avery Ranch card: \"Why are forward tees showing here when there's no one playing forward tees?\" The printed tee rows now keep only the designated tees a player on the event's sheet plays (scorecards._tees_in_play), in legend order. Dots, each player's own stroke index and name circles still read every designated tee. An empty sheet and the Lone Star Cup keep the full legend. Guard test_scorecards.py."]
+  },
+  {
+    version: "2.574.2",
+    date: "2026-10-19",
+    title: "Bridge to set a player's pace rating",
+    changes: ["Kerry 10/19: \"I do want you to add a tool for it still\" (after setting Will Peterson and Michele McCormick to pace 1 by hand). New bridge scoring-pace-set:<customer_id>[,<id>...]|<1|2|3>[|apply], the twin of the Customers page 1-2-3 buttons: dry run shows each player's current rating, apply writes through set_customer_pace_rating (explicit value, source manager) and logs. 1 = slowest. Guard test_pairings_gen_fixes.py; customers.md."]
+  },
+  {
+    version: "2.574.1",
+    date: "2026-10-19",
+    title: "Bridge to save a hand-picked pairings sheet",
+    changes: ["Kerry 10/19 (s9.28 TPC): \"Yes, use that sheet\" -- a sheet picked from the generation log. New bridge scoring-pairings-set-sheet:<event_id>|<a;b;c;d>/<e;f;g>...[|apply] replaces the whole saved sheet with the groups given, in order, on the event's own start slots (seats 1&2 and 3&4 ride together). Every seated player must appear exactly once; each keeps his tee and index. Refused once the event has started. Dry run returns the audit of the proposed sheet; apply saves, redraws the blinds and returns the audit. Guard test_pairings_gen_fixes.py."]
+  },
+  {
+    version: "2.574.0",
+    date: "2026-10-19",
+    title: "Pairings generator: every event in history, solo carts by season, newer players in foursomes, generation log",
+    changes: [
+      "Kerry 10/19: \"add ALL events into the pairings generator history...LSC too.\" One history reader now feeds pair counts, cart counts and solo counts for the generator, the cards' History line and the audit alike: Golf Genius rows, the closeout's entry rows, and score-entry rounds not yet published (every Lone Star Cup session). Preview rounds never count; an event with both GG and entry rows counts GG only.",
+      "Kerry 10/19: \"We need to look at season totals ... Definitely need to be counting our own.\" Solo carts are now counted across the season from every cart record, our own entered groups included. The solo seat goes to the qualified player with the fewest season solos; 1st Timers and First Year members are never solo.",
+      "Kerry 10/19: \"newer players would be able to get foursomes where possible to maximize new connections.\" A new lowest-priority term keeps newer players out of threesomes when the rest of the sheet allows it. Sheet cost order: 1st Timer/First Year/guest misses, then lone back tee and leaderless groups, then season solos, then repeat depth, then newer players outside foursomes. A final swap and 3-way rotation pass (capped at 6 s) lowers the cost without breaking a rule.",
+      "Generation log: inputs, every repair and swap with who moved and why, each group's breakdown, the final cost against the alternatives, and why each remaining repeat stayed. Stored in app setting pairings_gen_log:<event_id>; bridges scoring-pairings-gen-log:<id> and scoring-pairings-generate-preview:<id> (runs the generator and saves nothing). Guard test_pairings_gen_fixes.py; pairings.md."
+    ]
+  },
+  {
+    version: "2.573.12",
+    date: "2026-10-19",
+    title: "No approval email for a sheet already approved",
+    changes: ["Kerry 10/19: \"Robert had already approved his I believe. You didn't need to send his.\" send_prompt (the job and the resend bridge alike) now skips a sheet whose current fingerprint is already approved. Guard test_pairings_approval.py."]
+  },
+  {
+    version: "2.573.11",
+    date: "2026-10-19",
+    title: "Blind counts on the Pairings tab; approve pages timed",
+    changes: [
+      "Kerry 10/19: \"on the PAIRINGS tab, next to the BLIND names, add (x) for number of times player has been a blind in the calendar year.\" Each BLIND seat reads e.g. \"BLIND \u00b7 Mary Wade (3)\": every blind this calendar year, this event included, from blind_draws (Golf Genius-era rows count too).",
+      "Kerry 10/19: \"Put all these load times into CTO Tracker Health & Performance.\" The manager's approve page and the approve API are now timed routes (approve_pairings_page / approve_pairings_api), so their load times show on /admin/health and in the daily digest beside pairings_get."
+    ]
+  },
+  {
+    version: "2.573.10",
+    date: "2026-10-19",
+    title: "Manager email: one-tap Approve pairings",
+    changes: ["Kerry 10/19: \"This should show two buttons: APPROVE Pairings / EDIT Pairings ... Why go to a review page that shows the same thing.\" The manager's email now has Approve pairings (log in and it is approved; the link carries this sheet's fingerprint, so an older email can never approve a changed sheet) and Edit pairings. Guard test_pairings_approval.py."]
+  },
+  {
+    version: "2.573.9",
+    date: "2026-10-19",
+    title: "Event Info email: larger group photos, side by side",
+    changes: ["Kerry 10/19: \"Can you show in a different way so photos are larger? I can't see them very well to distinguish features.\" YOUR GROUP now shows the players side by side, each a 72px photo (or initials) with the name and cart beneath; yours is ringed in orange. Photo and name still open the Spotlight."]
+  },
+  {
+    version: "2.573.8",
+    date: "2026-10-19",
+    title: "Bridge: resend a manager's pairings approval email",
+    changes: ["scoring-pairings-run:resend|<event_id> sends the chapter manager's approval email again for the current sheet (Kerry 10/19: \"Send me another manager email with the changes\")."]
+  },
+  {
+    version: "2.573.7",
+    date: "2026-10-19",
+    title: "Event Info email: group photos + Spotlight links",
+    changes: [
+      "Kerry 10/19: \"put player photos with player spotlight links into the player emails so they can see who they're playing with, if we have photos. Otherwise it's the initials.\" YOUR GROUP in the 7 AM Event Info email shows each player's headshot (from the player photos) or their initials, and both the picture and the name open that player's Spotlight. Guard test_event_day_email.py."
+    ]
+  },
+  {
+    version: "2.573.6",
+    date: "2026-10-19",
+    title: "Pairings approval: Edit pairings + Approve in the Pairings view",
+    changes: [
+      "Kerry 10/19: \"how do I EDIT the groups? There needs to be an EDIT button ... takes me to the PAIRINGS view in the EVENT. Then it would ALSO need an APPROVE button.\" The approval email and the review page carry an Edit pairings button (opens the event's Pairings view), and the Pairings toolbar has an orange Approve button that opens the review page for the saved sheet. The sample in both is now labelled as the 7:00 AM Event Info email, not tonight's tee-times email. Guard test_pairings_approval.py."
+    ]
+  },
+  {
+    version: "2.573.5",
+    date: "2026-10-19",
+    title: "Tee-times email to the not-yet-registered",
+    changes: [
+      "Kerry 10/19: \"Everyone invited except those who said I can't make it ... Yes I want it to go tonight.\" With teetimes_spots_audience = invited, everyone in the event's invitation audience who has not registered and did not answer Can't make it gets the player tee-times email with the spots-open box (only while seats are open). Their 7 AM line reads \"Register and we'll fit you into a group; your full Event Info email ... follows at 7:00 AM tomorrow.\" The new line is part of the player wording, so the player stamp is re-approved. The staff preview shows this version as section 4 with its head count."
+    ]
+  },
+  {
+    version: "2.573.4",
+    date: "2026-10-19",
+    title: "GAMES tab: drop the stale '1/2 Net rule pending' note",
+    changes: [
+      "The GAMES tab still labelled a small-field skins game \"Skins 1/2 Net manual \u2014 \u00bd-net rule pending\", a note from before \u00bd Net Skins was ratified and built (v2.571.27). That text fed the players' 7 AM Event Info email (a9.28 Avery Ranch tonight). The note is gone, and the email names the game \"Skins \u00bd Net\". Guard test_event_day_email.py."
+    ]
+  },
+  {
+    version: "2.573.3",
+    date: "2026-10-19",
+    title: "Tee-times player email sends without the footer until an address is on file",
+    changes: [
+      "Kerry 10/19 (\"Send without footer\"): a tee sheet to players who registered is transactional, so while tgf_mailing_address is empty the player version drops its footer line instead of being held. Setting the address brings the line back by itself. The approved wording hash is unchanged. Guard test_teetimes_email.py."
+    ]
+  },
+  {
+    version: "2.573.2",
+    date: "2026-10-19",
+    title: "Bridge: run the pairings generator / approval prompt now",
+    changes: [
+      "Kerry 10/19: \"Delay the generator 10 minutes for both events and the manager emails...today only.\" New bridge scoring-pairings-run:generate|prompt runs the same 5 PM generator or manager-prompt job on demand (the generator still skips an event already paired), so a night's start can be moved without a code change."
+    ]
+  },
+  {
+    version: "2.573.1",
+    date: "2026-10-19",
+    title: "Tee-times preview shows the three emails",
+    changes: [
+      "Kerry 10/19 on the first preview: \"Don't know what I'm looking at.\" The staff preview listed who was held and why but showed no email, because a held message kept no draft. It now shows the player, course contact and manager emails exactly as they would go, then one plain list of what each is still waiting on (pairings saved, mailing address, wording OK, send switch). Guard test_teetimes_email.py."
+    ]
+  },
+  {
+    version: "2.573.0",
+    date: "2026-10-19",
+    title: "Leaderboard: Kerry's 10/19 rulings, all of it",
+    changes: [
+      "Kerry 10/19: \"I want everything built.\" / \"Build it all now.\" (Leaderboard Review #2098/#2099, handoff-2026-10-19-leaderboard-review.md sections 12-13).",
+      "Tabs: TEAM, MVP, NET, GROSS, SKINS, then CTPs, or PROXIES when an event has a contest other than Closest to the Pin (from the event's proxy slots). OVERALL is retired behind app setting evlb_overall_tab (off), code kept; a no-games event keeps its single board.",
+      "Member names read First LAST on every board (Michelle DelCARMEN, Adam BAKER, Sean MacBRIDE; Delgado stays DELGADO), display only.",
+      "A state strip above the tabs: UPCOMING / LIVE / IN REVIEW / FINAL, each with one plain line; a hold keeps IN REVIEW with 'Results are being checked.' Minutes come from the dials. HOW IT WORKS explains the four words and THRU.",
+      "THRU, PGA style, on boards not showing hole by hole: the tee time and start hole before the round, holes done during it, 'F' and that tab's total when finished. While LIVE the boards rank on to-par, then holes done.",
+      "TEAM: opens on one row per team (# / TEAM / THRU / NET / \u00b1 / WON); tap a team to open today's full board, with no further player expansion; Expand all / Collapse all. Team Net 1-, 2- and 3-ball from the event's dial (the sum of the N lowest nets per hole, \u00b1 against par for each counted ball), the same rule the payouts now rank on; every counted ball is green, ties at the cutoff too. A hole counts once every player on the team has posted it.",
+      "SUMMARY: once every score is in, a first tab (and the landing tab) with every game's winners and money and a link to each board, badged IN REVIEW until closeout, then FINAL.",
+      "Projected WON: while LIVE, the WON column shows what each player would win if play ended now, muted and marked PROJ., from the same calculation the auto-payouts preview uses (never recorded); each flight header shows its pot and places. Money only on its own game's tab.",
+      "Match Play: an event with City Match Play matches gets a Match Play tab with the standard match cards, read-only.",
+      "Guards: test_evlb_rulings_b1_b7.py/.js, test_team_net_nball.py, test_team_board_collapsed.js, test_lb_summary.py/.js, plus the existing board tests."
+    ]
+  },
+  {
+    version: "2.572.1",
+    date: "2026-10-19",
+    title: "Tee-times email goes on approval, or at 7 PM",
+    changes: [
+      "Kerry 10/19: \"Initial tee sheets email that CMO mocked up goes out to the parties as designated between 5-7 either upon manager approval or 7pm end of review window. Then the full event info email (same as we sent last week) goes out at 7am tomorrow morning.\" Approving the pairings now sends that event's tee-times email (players, course, manager) at once; from 5 PM the job also sends any approved sheet, and at 7 PM every sheet. Each version still needs its wording stamp and the teetimes_email_auto dial. Guards test_teetimes_email.py, test_pairings_approval.py."
+    ]
+  },
+  {
+    version: "2.572.0",
+    date: "2026-10-19",
+    title: "Night before: tee times at 7 PM; Event Info at 7 AM",
+    changes: [
+      "Kerry 10/19: \"I thought we're just sending tee times tonight and then the full event info email at 7:00am.\" Approving the pairings (manager, 5-7 PM) now signs off the sheet and emails NO player. At 7 PM a sheet nobody approved is auto-approved as it stands, still with no player email. At 7:00 AM on event day every event's players get their personal Event Info email (the approved 'Event Day \u2014 Your Pairing' template), approved or not, on the sheet as it stands then. A failure emails Kerry and retries hourly until noon. The manager's prompt and review page say so. Guard test_pairings_approval.py.",
+      "The 7 PM TEE-TIMES email, three versions (CMO #2101): players (with \"Your full Event Info email ... comes at 7:00 AM tomorrow\"), the course contact (To the primary, CC the other TGF contacts; skipped without a contact) and the chapter manager. Tee sheet from the Starter Sheet's own reader, no money or contact details. Every message is held on a blank or leftover tag, sent once per person per event, logged with event_id and customer_id. LOCKED until Kerry stamps each wording (teetimes_player_approved / teetimes_course_approved / teetimes_manager_approved = the template hash) AND turns on dial teetimes_email_auto; the player version also waits for tgf_mailing_address (the footer). Job teetimes_email every 15 min 7 PM-midnight; bridge scoring-teetimes-email:<id>[|preview]. Guard test_teetimes_email.py."
+    ]
+  },
+  {
+    version: "2.571.28",
+    date: "2026-10-19",
+    title: "Austin pairings prompt goes to robert@thegolffellowship.com",
+    changes: [
+      "Kerry 10/19: \"Robert's email for TGF is robert@thegolffellowship.com.\" The 5 PM pairings-approval prompt for Austin read Robert's personal address off his customer row because the chapter_managers dial carries no email for Austin. A manager's prompt now goes to their TGF address (Austin: robert@thegolffellowship.com; San Antonio: kerry@); an email typed into the dial still wins, and the customer row is only the last resort. Guard test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.571.27",
     date: "2026-10-19",

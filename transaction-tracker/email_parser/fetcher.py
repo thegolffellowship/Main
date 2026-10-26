@@ -50,6 +50,19 @@ TRANSACTION_SUBJECTS = [
 ]
 
 
+def _json_or_retry(resp: requests.Response, **kwargs):
+    """The body of a Graph GET as JSON; if the reply arrived cut off or garbled
+    (JSONDecodeError at ~110 KB on 10/18 and ~243 KB on 10/19, both with the host
+    at load 80-90 and a mail send running), ask once more. A GET is safe to repeat."""
+    try:
+        return resp.json()
+    except ValueError as exc:
+        logger.warning("Graph API reply for %s would not parse (%s) — asking once more", resp.url, exc)
+        again = _request_with_retry("get", resp.url, **kwargs)
+        again.raise_for_status()
+        return again.json()
+
+
 def _get_graph_token(tenant_id: str, client_id: str, client_secret: str) -> str | None:
     """Acquire an access token for Microsoft Graph using client credentials flow."""
     authority = f"https://login.microsoftonline.com/{tenant_id}"
@@ -135,7 +148,7 @@ def fetch_transaction_emails(
 
         logger.info("Graph API response status: %s  url: %s", resp.status_code, resp.url)
         resp.raise_for_status()
-        data = resp.json()
+        data = _json_or_retry(resp, headers=headers, timeout=30)
 
         messages = data.get("value", [])
         logger.info("Page returned %d messages", len(messages))
@@ -272,7 +285,7 @@ def fetch_all_emails(
         while url and remaining > 0:
             resp = _request_with_retry("get", url, headers=headers, params=params, timeout=30)
             resp.raise_for_status()
-            data = resp.json()
+            data = _json_or_retry(resp, headers=headers, timeout=30)
 
             for msg in data.get("value", []):
                 if remaining <= 0:

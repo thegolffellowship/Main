@@ -2443,6 +2443,51 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # AFTER-LOCK CHANGES (Kerry 2026-10-20 #2139, #2168): from the Event Info
+    # send to the first tee, a moved / added / removed player, a tee change
+    # or a games change sends its notices (manager CC'd) and, for a seat
+    # change, only the changed sheets to the course. Dial `after_lock_auto`.
+    def after_lock_changes_job():
+        from email_parser.after_lock import check
+        try:
+            res = check(_print_pack_render, app.static_folder)
+            ran = {k: v for k, v in (res.get("events") or {}).items()
+                   if v.get("sent") or v.get("failed") or v.get("error")}
+            if ran:
+                logger.info("After-lock changes: %s", ran)
+        except Exception:
+            logger.exception("After-lock changes failed (non-fatal)")
+    scheduler.add_job(
+        after_lock_changes_job,
+        "cron", minute="2-59/15",
+        timezone="US/Central",
+        id="after_lock_changes",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # 7:00 PM TEE-TIMES EMAIL, three versions (CMO #2076/#2101): player,
+    # course contact, manager, for tomorrow's events with saved pairings.
+    # BESIDE the pairing auto-send above, not instead of it. Does nothing
+    # unless dial `teetimes_email_auto` = on, and each version only with its
+    # wording stamp. email_parser/teetimes_email.py.
+    def teetimes_email_job():
+        from email_parser.teetimes_email import auto_check
+        try:
+            res = auto_check()
+            if res.get("events"):
+                logger.info("Tee-times email: %s", res["events"])
+        except Exception:
+            logger.exception("Tee-times email failed (non-fatal)")
+    scheduler.add_job(
+        teetimes_email_job,
+        "cron", minute="0-59/15",
+        timezone="US/Central",
+        id="teetimes_email",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -5248,7 +5293,7 @@ def public_event_rsvp(token):
         if done and res.get("ignored"):
             # Tapped within the scanner grace (Kerry 10/14): never claim it
             # was done; ask again so a real person can confirm.
-            body = ("<h2>Remove you from event invitations?</h2>"
+            body = ("<h2>Remove you from ALL event invitations?</h2>"
                     "<p>Please tap the button once more to confirm.</p>"
                     f"<form method='post'><button type='submit' style='{btn}border:0;"
                     "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
@@ -5257,8 +5302,8 @@ def public_event_rsvp(token):
             body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
                     "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>")
             return _public_page("Invitations", body)
-        body = ("<h2>Remove you from event invitations?</h2>"
-                "<p>You'll stop getting our event invitations and reminders.</p>"
+        body = ("<h2>Remove you from ALL event invitations?</h2>"
+                "<p>You'll stop getting invitations and reminders for every TGF event, not just this one.</p>"
                 f"<form method='post'><button type='submit' style='{btn}border:0;"
                 "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
         return _public_page("Invitations", body)
@@ -5275,10 +5320,14 @@ def public_event_rsvp(token):
             f"on {_h.escape(info['date_long'])}.</p>"
             f'<a href="{_h.escape(links.get("in", ""))}" style="{btn}background:#15803D;color:#fff;">'
             "Changed my mind, I'm in</a>"
-            f'<a href="{_h.escape(links.get("unsub", ""))}" style="{btn}background:#E5E7EB;color:#1B1B1B;">'
-            "Remove me from invitations</a>"
             "<p style='margin-top:22px;color:#6B7280;font-size:14px'>Mind sharing why? (optional)</p>"
-            + reasons + record)
+            + reasons +
+            # Kerry 10/25 ("Move the Remove me button to a small link"): a
+            # button beside "Changed my mind" was mis-tapped twice in a week
+            # (Lou Schneider 10/20, Michele McCormick 10/24).
+            f'<p style="margin-top:28px;font-size:13px"><a href="{_h.escape(links.get("unsub", ""))}" '
+            'style="color:#6B7280;text-decoration:underline">Remove me from ALL event invitations</a></p>'
+            + record)
     return _public_page("RSVP", body)
 
 
@@ -6469,6 +6518,7 @@ def auto_generate_pairings_job():
 
 @app.route("/events/<int:event_id>/approve-pairings")
 @require_role("manager")
+@perf.timed_route("approve_pairings_page")
 def approve_pairings_page(event_id):
     """MANAGER APPROVES THE PAIRINGS (Kerry 2026-10-13: "the manager needs to
     receive a prompt to review and approve the pairings which would then
@@ -6482,11 +6532,23 @@ def approve_pairings_page(event_id):
     why = may_approve(session.get("role"), session.get("chapter"), rv["event"]["chapter"])
     if why:
         return why, 403
+    # One-tap Approve from the manager's email (Kerry 10/19): the link
+    # carries the sheet's fingerprint; a stale one just shows the review.
+    want = (request.args.get("approve") or "").strip()
+    if want and want == rv.get("fingerprint") and not rv["state"].get("approved_fp") == want:
+        from email_parser.pairings_approval import approve_and_send
+        who = session.get("role") or "?"
+        if session.get("chapter"):
+            who = f"{who} ({session.get('chapter')})"
+        approve_and_send(event_id, want, role=session.get("role"),
+                         session_chapter=session.get("chapter"), approved_by=who)
+        rv = review(event_id)
     return render_page(rv)
 
 
 @app.route("/api/events/<int:event_id>/approve-pairings", methods=["POST"])
 @require_role("manager")
+@perf.timed_route("approve_pairings_api")
 def api_approve_pairings(event_id):
     """Approve the saved sheet (its fingerprint must match) and email every
     player their event-day email. Manager of the event's chapter, or admin."""
@@ -12341,7 +12403,9 @@ def api_events_leaderboard():
         return jsonify({"error": "Manager access required."}), 403 if session.get("role") else 401
     d = get_events_leaderboard(
         chapter=request.args.get("chapter") or None,
-        year=request.args.get("year") or None)
+        year=request.args.get("year") or None,
+        month=request.args.get("month") or None,
+        event=request.args.get("event") or None)
     if only_ev:
         d["events"] = [e for e in d.get("events", []) if e.get("id") == only_ev]
     return jsonify(d)
@@ -12356,6 +12420,14 @@ def api_events_leaderboard_event():
     d = get_event_leaderboard(request.args.get("name", ""))
     if d and only_ev and (d.get("event") or {}).get("id") != only_ev:
         return jsonify({"error": "this link reads its own event only"}), 403
+    if d:
+        # board state, SUMMARY's money, projected WON, pots, Match Play
+        # (Kerry 10/19, B10-B12) — read-only decoration of the same payload
+        try:
+            from email_parser.board_summary import attach as _bs_attach
+            _bs_attach(d)
+        except Exception:
+            logger.exception("Non-fatal: board summary decoration failed")
     return (jsonify(d), 200) if d else (jsonify({"error": "event not found"}), 404)
 
 

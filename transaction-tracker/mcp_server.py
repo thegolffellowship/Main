@@ -1779,6 +1779,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-unsubscribes[:<hours>][|refresh]  who unsubscribed (Tracker invitations + Brevo Insider) in the last <hours>, default 24 (read-only toward Brevo)
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
       scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
       scoring-role-flags  the live AMB / CAPT / BACK chips with home chapter, vs the 9/15 seed (read-only)
@@ -1851,8 +1852,10 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
       scoring-payout-ask[:preview[|<cid>][|<staff>][|reminder] | :send|<cid>,<cid> | :state]  THE PAYOUT ASK (Kerry 10/17): bare = who would be asked; send needs the wording stamp payout_ask_approved
       scoring-handicap-ask[:preview|<event_id>[|<staff addr>][|reminder] | :state]  THE HANDICAP ASK (Kerry 10/16): bare = who would be asked / reminded now; preview to STAFF only; member sends only from the job (dial handicap_ask_auto=on + wording stamp handicap_ask_approved)
-      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
-      scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13)
+      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
+      scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]  the 7 PM TEE-TIMES EMAIL, three versions (player / course contact / manager, CMO #2101): dry build = per-recipient ready / held with reasons, wording hashes, stamps (teetimes_<version>_approved) and dials (teetimes_email_auto, teetimes_spots_audience); |preview mails ONE combined preview to STAFF only. No send bridge: only the 7 PM job sends
+      scoring-after-lock:<event_id>  AFTER-LOCK CHANGES, read only (Kerry #2139/#2168): moved / added / removed players, tee and games changes since the Event Info send, the emails the 15-min job would send (manager CC'd) and the changed course sheets
+      scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13). |lateadd|<cid,cid>|<kerry-ok post id>[|confirm] sends the approved message to each late add and "UPDATED GROUP:" + a notice to their groupmates only, same gates (Kerry 10/20)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
       scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
@@ -1952,6 +1955,14 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    sheet with the generator (every rule) and,
                                    with |apply, save it; refused once the
                                    event has started (Kerry 2026-10-12)
+      scoring-pairings-generate-preview:<event_id>  run the generator WITHOUT
+                                   saving anything (no sheet, no blinds, no log
+                                   setting): proposed groups, cost, audit
+                                   flags on the proposed sheet, the gen log
+      scoring-pace-set:<cid>[,<cid>]|<1|2|3>[|apply]  pace rating (1 slowest)
+      scoring-pairings-set-sheet:<id>|<a;b;c;d>/<e;f;g>...[|apply]  replace the saved sheet
+      scoring-pairings-gen-log:<event_id>  the latest Generate's reasoning
+                                   (app setting pairings_gen_log:<id>)
       scoring-pairings-add-group:<event_id>|<a>;<b>[;...][|apply]  append
                                    one hand-built group on the next slot
       scoring-pairings-remove:<event>|<player>[|dry]  pull one player from
@@ -1968,7 +1979,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    open seats: no arg / draw = preview,
                                    apply = write, clear = drop this
                                    event's app-drawn blinds, pool = who is
-                                   eligible and who is not, with reasons
+                                   eligible and who is not, with reasons;
+                                   |set|<holes>|<group>|<pos>|<cid|clear>
+                                   chooses one seat's blind
       scoring-blinds-history[:<year>[|backfill]]  who has been a blind
                                    this year (backfill reads the year's
                                    Golf Genius team strings into the store)
@@ -4132,6 +4145,24 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _nm = "|".join(_p[1:-1] if _apply else _p[1:])
             return json.dumps(db.rename_course(_cid, _nm, apply=_apply, set_by="mcp-claude"),
                               indent=2, default=str)
+        if cmd == "scoring-pairings-run":
+            # scoring-pairings-run:generate|prompt — run the 5 PM pairings
+            # generator or the manager-approval prompt job NOW (Kerry 10/19:
+            # "Delay the generator 10 minutes for both events and the manager
+            # emails...today only"). Same functions the scheduler calls; the
+            # generator still skips any event already paired.
+            db.log_agent_action("mcp-claude", "scoring-pairings-run", arg)
+            if arg.strip() == "generate":
+                return json.dumps({"generated": db.auto_generate_pairings()}, indent=2, default=str)
+            if arg.strip() == "prompt":
+                from email_parser.pairings_approval import prompt_check
+                return json.dumps(prompt_check(), indent=2, default=str)
+            if arg.strip().startswith("resend|"):
+                # resend|<event_id>: the manager's approval email again, now
+                # (Kerry 10/19: "Send me another manager email with the changes")
+                from email_parser.pairings_approval import send_prompt
+                return json.dumps(send_prompt(int(arg.split("|", 1)[1])), indent=2, default=str)
+            return json.dumps({"error": "usage: scoring-pairings-run:generate|prompt"})
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).
@@ -4139,6 +4170,17 @@ def _scoring_dispatch_inner(url: str, extract: str):
             db.set_app_setting(_k.strip(), _v.strip())
             return json.dumps({"key": _k.strip(), "value": _v.strip(),
                                "saved": True})
+        if cmd == "scoring-unsubscribes":
+            # "[<hours>][|refresh]" (Kerry 10/23): who unsubscribed from Tracker
+            # invitations or the Brevo Insider list in the last <hours>
+            # (default 24). |refresh first compares Brevo with yesterday's
+            # snapshot (read-only toward Brevo). For the Front Desk brief.
+            from email_parser import unsubscribes as _us
+            _a = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            _h = int(_a[0]) if _a and _a[0].isdigit() else 24
+            _r = _us.refresh() if "refresh" in [x.lower() for x in _a] else None
+            return json.dumps({"hours": _h, "refresh": _r, "rows": _us.recent(hours=_h)},
+                              indent=2, default=str)
         if cmd == "scoring-setting-get":
             # "<key>" — read an app_settings dial (null when unset, i.e.
             # the code default applies).
@@ -5972,10 +6014,30 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     else:
                         out["send"] = send_print_pack_files(built, to_address=(parts[3] if len(parts) > 3 else None))
                 return json.dumps(out, indent=2, default=str)
+            if len(parts) > 1 and parts[1].lower() == "diffself":
+                # scoring-print-pack-pdf:<id>|diffself -- build the pack twice
+                # and report every part whose content differs between the two
+                # builds, with the first differing text (Kerry 10/20: a pack
+                # re-sent with nothing changed). Read-only, sends nothing.
+                import difflib
+                b1 = build_print_pack_for_event(int(parts[0]))
+                b2 = build_print_pack_for_event(int(parts[0]))
+                if not b1 or not b2:
+                    return json.dumps({"error": "event not found or nothing to print"})
+                v1, v2 = b1.get("_views") or {}, b2.get("_views") or {}
+                diffs = {}
+                for sl in v1:
+                    if v1.get(sl) != v2.get(sl):
+                        d = list(difflib.unified_diff((v1.get(sl) or "").splitlines(),
+                                                      (v2.get(sl) or "").splitlines(), lineterm="", n=0))
+                        diffs[sl] = [x[:300] for x in d[:12]]
+                return json.dumps({"sha": [b1.get("sha"), b2.get("sha")],
+                                   "part_shas": [b1.get("part_shas"), b2.get("part_shas")],
+                                   "differing_parts": diffs}, indent=2, default=str)
             built = build_print_pack_for_event(int(parts[0]))
             if not built:
                 return json.dumps({"error": "event not found or nothing to print"})
-            summary = {k: built.get(k) for k in ("parts", "sha", "filename", "engine", "engine_note", "assets", "error", "scorecards")}
+            summary = {k: built.get(k) for k in ("parts", "sha", "part_shas", "filename", "engine", "engine_note", "assets", "error", "scorecards")}
             summary["bytes"] = len(built.get("pdf") or b"")
             if len(parts) > 1 and parts[1].lower() == "send" and not built.get("error"):
                 db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)
@@ -6428,6 +6490,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps({"event": _ev["item_name"],
                                    "cleared": db.clear_event_blinds(_ev["id"])},
                                   indent=2, default=str)
+            if _mode == "set":
+                # "<event>|set|<holes>|<group>|<cart_pos>|<cid|clear>" (Kerry
+                # 10/20 "put Reggie back as the 3:40 blind"): CHOOSE one seat.
+                if len(_parts) < 6:
+                    return json.dumps({"error": "<event>|set|<holes>|<group>|<cart_pos>|<cid|clear>"})
+                db.log_agent_action("mcp-claude", "scoring-blinds", arg)
+                _cid = None if _parts[5].lower() == "clear" else int(_parts[5])
+                return json.dumps(db.set_event_blind(_ev["id"], _parts[2], int(_parts[3]),
+                                                     int(_parts[4]), _cid),
+                                  indent=2, default=str)
             if _mode == "pool":
                 with db._connect() as _c2:
                     return json.dumps(db.event_blind_pool(_c2, _ev["id"]),
@@ -6471,6 +6543,60 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _apply and "error" not in _res:
                 _audit("scoring-pairings-swap", f"event {_ev} swap {_a}<->{_b}")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-pairings-gen-log":
+            # "<event_id>" (Kerry 2026-10-19: the generator's reasoning,
+            # logged for review). The latest Generate's log from app setting
+            # pairings_gen_log:<event_id>. Read-only.
+            _a = (arg or "").strip()
+            if not _a.isdigit():
+                return json.dumps({"error": "give scoring-pairings-gen-log:<event_id>"})
+            _raw = db.get_app_setting(f"pairings_gen_log:{int(_a)}")
+            if not _raw:
+                return json.dumps({"event_id": int(_a), "log": None,
+                                   "note": "no Generate has run for this event since the log was added"})
+            try:
+                return json.dumps({"event_id": int(_a), "log": json.loads(_raw)}, indent=2, default=str)
+            except ValueError:
+                return json.dumps({"event_id": int(_a), "log_raw": _raw})
+        if cmd == "scoring-pairings-generate-preview":
+            # "<event_id>" (Kerry 2026-10-19). Runs the generator exactly as
+            # the 5 PM routine / Generate does (random, partner requests
+            # protected) WITHOUT saving anything: no event_pairings, no
+            # blind_draws, no gen-log setting, no action log. Returns the
+            # proposed groups, the cost summary, the audit's checks applied
+            # to the proposed sheet, and the generation log.
+            _a = (arg or "").strip()
+            if not _a.isdigit():
+                return json.dumps({"error": "give scoring-pairings-generate-preview:<event_id>"})
+            _eid = int(_a)
+            try:
+                res = db.generate_event_pairings(_eid, mode="random", protect_partner_requests=True,
+                                                 save_log=False)
+            except ValueError as e:
+                return json.dumps({"error": str(e)})
+            sets = {h: res[h] for h in ("9", "18") if res.get(h)}
+            _glog = res.get("gen_log") or {}
+            out = {"event_id": _eid, "preview": True, "saved": False,
+                   "notes": res.get("mp_notes") or [],
+                   "groups": {h: [{"slot": g.get("slot_label"),
+                                   "players": [p["name"] for p in sorted(g["players"], key=lambda p: p["cart_pos"])]}
+                                  for g in gs] for h, gs in sets.items()},
+                   "cost": {h: (v or {}).get("final_cost") for h, v in (_glog.get("holes") or {}).items()}}
+            try:
+                from email_parser.pairings_audit import event_pairing_audit
+                _au = event_pairing_audit(_eid, sheet=sets, with_alternative=False)
+                out["audit"] = {"summary": _au.get("summary"), "flags": _au.get("flags"),
+                                "repeats": _au.get("repeats"),
+                                "solo_carts": [{"player": p["name"],
+                                                "season_solos_all_sources": (p.get("solo_history") or {}).get("season_solos_all_sources")}
+                                               for g in _au.get("groups") or [] for c in g.get("carts") or []
+                                               if len(c) == 1 and len(g.get("players") or []) > 1
+                                               for p in (_au.get("players") or []) if p["name"] == c[0]]}
+            except Exception as e:  # noqa: BLE001 — the preview still returns the sheet
+                import traceback as _tb
+                out["audit"] = {"error": str(e), "where": _tb.format_exc()[-600:]}
+            out["gen_log"] = _glog
+            return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-pairings-generate":
             # "<event_id>[|apply]" (Kerry 2026-10-12: "Deploy and then
             # re-generate yourself and review it against our rules."). The
@@ -6568,6 +6694,125 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 from email_parser.pairings_audit import event_pairing_audit
                 _a = event_pairing_audit(_eid)
                 out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags")}
+            return json.dumps(out, indent=2, default=str)
+        if cmd == "scoring-pace-set":
+            # "<customer_id>[,<customer_id>...]|<1|2|3>[|apply]" (Kerry
+            # 2026-10-19: "I do want you to add a tool for it"). The bridge
+            # twin of the Customers page 1-2-3 pace buttons: writes through
+            # set_customer_pace_rating (explicit value, source 'manager').
+            # 1 = slowest, 3 = fastest. Dry run by default shows each
+            # player's current rating; |apply writes and logs.
+            _parts = [x.strip() for x in (arg or "").split("|")]
+            try:
+                _ids = [int(x) for x in _parts[0].split(",") if x.strip()]
+                _rating = int(_parts[1])
+            except (ValueError, IndexError):
+                return json.dumps({"error": "<customer_id>[,<id>...]|<1|2|3>[|apply]"})
+            if _rating not in (1, 2, 3) or not _ids:
+                return json.dumps({"error": "rating must be 1, 2 or 3 (1 = slowest)"})
+            _apply = len(_parts) > 2 and _parts[2].lower() == "apply"
+            with db._connect() as _c:
+                _rows = {r["customer_id"]: dict(r) for r in _c.execute(
+                    "SELECT customer_id, first_name, last_name, pace_rating, pace_rating_source "
+                    "FROM customers WHERE customer_id IN (%s)" % ",".join("?" * len(_ids)),
+                    _ids).fetchall()}
+            _missing = [i for i in _ids if i not in _rows]
+            if _missing:
+                return json.dumps({"refused": {"customer not found": _missing}})
+            out = {"rating": _rating, "applied": False, "players": [
+                {"customer_id": i,
+                 "name": f"{_rows[i]['first_name'] or ''} {_rows[i]['last_name'] or ''}".strip(),
+                 "current": _rows[i]["pace_rating"], "current_source": _rows[i]["pace_rating_source"]}
+                for i in _ids]}
+            if _apply:
+                for i in _ids:
+                    db.set_customer_pace_rating(i, _rating)
+                db.log_agent_action("tracker-claude", "pace-set",
+                                    f"pace {_rating} for customers {', '.join(map(str, _ids))}")
+                out["applied"] = True
+            return json.dumps(out, indent=2, default=str)
+        if cmd == "scoring-pairings-set-sheet":
+            # "<event_id>|<name>;<name>;.../<name>;...[|apply]" (Kerry
+            # 2026-10-19, s9.28 TPC: "Yes, use that sheet" -- a sheet picked
+            # from the generation log). Replaces the WHOLE saved sheet with
+            # the groups given, in order, seats in the order given (1&2 and
+            # 3&4 ride together), on the event's own start slots. Every
+            # seated player must appear exactly once and nobody else; each
+            # keeps the tee and index already on his seat. Refused once the
+            # event has started or is past. Dry run by default (the audit of
+            # the proposed sheet); |apply saves, redraws the blinds for the
+            # new open seats, and returns the audit of the saved sheet.
+            _parts = [x.strip() for x in arg.split("|")]
+            _apply = len(_parts) > 2 and _parts[2].lower() == "apply"
+            try:
+                _eid = int(_parts[0])
+                _gnames = [[n.strip() for n in g.split(";") if n.strip()]
+                           for g in _parts[1].split("/") if g.strip()]
+            except (TypeError, ValueError, IndexError):
+                return json.dumps({"error": "<event_id>|<name>;<name>/<name>;...[|apply]"})
+            if not _gnames or any(not 1 <= len(g) <= 5 for g in _gnames):
+                return json.dumps({"error": "each group is 1 to 5 players"})
+            with db._connect() as _c:
+                _ev = _c.execute("SELECT * FROM events WHERE id = ?", (_eid,)).fetchone()
+                if not _ev:
+                    return json.dumps({"error": f"event {_eid} not found"})
+                _ev = dict(_ev)
+            from email_parser.timezone_utils import today_central_str
+            if str(_ev["event_date"] or "") < today_central_str() or db._event_started(_ev):
+                return json.dumps({"refused": "event has started or is past; its sheet is frozen"})
+            _sheet = db.get_event_pairings(_eid)
+            _fmt = (_ev.get("format") or "").strip()
+            _holes = "18" if _fmt in ("18 Holes", "27 Holes") else "9"
+            _seats = {db._pair_key_name(p["name"]): p for g in (_sheet.get(_holes) or [])
+                      for p in g.get("players") or [] if p.get("name")}
+            # a roster player not yet seated (a late add, Kerry 10/20) may be
+            # placed too; everyone already seated must still appear
+            with db._connect() as _c:
+                _roster = {db._pair_key_name(r["name"]): r for r in db._event_roster_players(_c, _eid)}
+            _pool = dict(_roster)
+            _pool.update(_seats)
+            _given = [db._pair_key_name(n) for g in _gnames for n in g]
+            _bad = {"not on the roster": [n for g in _gnames for n in g
+                                          if db._pair_key_name(n) not in _pool],
+                    "named twice": sorted({n for n in _given if _given.count(n) > 1}),
+                    "left out": [p["name"] for k, p in _seats.items() if k not in _given]}
+            if any(_bad.values()):
+                return json.dumps({"refused": {k: v for k, v in _bad.items() if v}})
+            _slots = db._pairing_time_slots(_ev, _holes, needed=len(_gnames))
+            _groups = []
+            for i, g in enumerate(_gnames):
+                _players = []
+                for j, n in enumerate(g):
+                    _old = _pool[db._pair_key_name(n)]
+                    _players.append({"name": _old["name"], "cart_pos": j + 1,
+                                     "customer_id": _old.get("customer_id"),
+                                     "tee_choice": _old.get("tee_choice"),
+                                     "handicap_index": _old.get("handicap_index")})
+                _groups.append({"group_num": i + 1,
+                                "slot_label": _slots[i] if i < len(_slots) else f"Group {i + 1}",
+                                "players": _players})
+            _sets = {h: gs for h, gs in _sheet.items() if h in ("9", "18") and gs}
+            _sets[_holes] = _groups
+            out = {"event_id": _eid, "event": _ev["item_name"], "applied": False,
+                   "groups": [{"slot": g["slot_label"], "players": [p["name"] for p in g["players"]]}
+                              for g in _groups]}
+            from email_parser.pairings_audit import event_pairing_audit
+            if not _apply:
+                _a = event_pairing_audit(_eid, sheet=_sets, with_alternative=False)
+                out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags"),
+                                "repeats": _a.get("repeats")}
+                return json.dumps(out, indent=2, default=str)
+            db.save_event_pairings(_eid, _sets)
+            db.log_agent_action("tracker-claude", "pairings-set-sheet",
+                                f"event {_eid}: sheet replaced, {len(_groups)} groups")
+            out["applied"] = True
+            try:
+                out["blinds"] = db.draw_event_blinds(_eid, dry_run=False, redraw=True)
+            except Exception as e:  # noqa: BLE001 -- the sheet is saved either way
+                out["blinds"] = {"error": str(e)}
+            _a = event_pairing_audit(_eid, with_alternative=False)
+            out["audit"] = {"summary": _a.get("summary"), "flags": _a.get("flags"),
+                            "repeats": _a.get("repeats")}
             return json.dumps(out, indent=2, default=str)
         if cmd == "scoring-pairings-remove":
             # "<event>|<player>[|dry]" — pull one player from the event's
@@ -7153,6 +7398,14 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_ha.send_preview(int(_p[1]), _addr, _kind), indent=2, default=str)
             if _p[0].lower() == "state":
                 return json.dumps(_ha.load_state(), indent=2, default=str)
+            if _p[0].lower() == "resend":
+                # "resend|<cid>|<kerry-ok post>[|confirm]" (Kerry 10/20, Adam)
+                if len(_p) < 3 or not _p[1].isdigit():
+                    return json.dumps({"error": "resend|<customer_id>|<kerry-ok post id>[|confirm]"})
+                db.log_agent_action("mcp-claude", "scoring-handicap-ask", arg)
+                return json.dumps(_ha.resend(int(_p[1]), int(_p[2].lstrip("#")),
+                                             confirm=(len(_p) > 3 and _p[3].lower() == "confirm")),
+                                  indent=2, default=str)
             _pl = _ha.plan()
             _slim = lambda xs: [{k: x.get(k) for k in ("customer_id", "name", "event_id", "event",
                                                         "event_date", "why")} for x in xs]
@@ -7195,13 +7448,17 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 # 10/14): undo answers a person did not give (mail scanners,
                 # preview taps): back on invitations, their Tracker NOT
                 # PLAYING rows and decline reasons on upcoming events removed.
+                # |keep-answers (Kerry 10/20): only the "Remove me" was a
+                # mistake; their real answers stay.
                 db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
                 if len(_p) < 4 or not _p[2].lstrip("#").isdigit():
-                    return json.dumps({"error": "0|restore|<kerry-ok post id>|<cid,cid>[|confirm]"})
+                    return json.dumps({"error": "0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm]"})
+                _flags = [x.lower() for x in _p[4:]]
                 return json.dumps(_inv.restore_answers(
                     [c for c in _p[3].split(",") if c.strip().isdigit()],
                     int(_p[2].lstrip("#")),
-                    confirm=("confirm" in [x.lower() for x in _p[4:]])), indent=2, default=str)
+                    confirm=("confirm" in _flags),
+                    keep_answers=("keep-answers" in _flags)), indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "send":
                 db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
                 if len(_p) < 3 or not _p[2].lstrip("#").isdigit():
@@ -7218,6 +7475,36 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                  "would_send": len(_pl["to_send"]),
                                  "sample": [{k: x[k] for k in ("customer_id", "name", "why")}
                                             for x in _pl["to_send"][:10]]}, indent=2, default=str)
+        if cmd == "scoring-teetimes-email":
+            # "<event_id>[|preview[|<staff addr>]]" (CMO #2101): the 7 PM
+            # tee-times email in three versions. Bare = dry build, per
+            # recipient ready / held with reasons, wording hashes, stamps and
+            # dials; |preview mails ONE combined preview to STAFF only. There
+            # is no send bridge: only the 7 PM job sends, behind the dial
+            # teetimes_email_auto and each version's wording stamp.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>[|preview[|<staff addr>]]"})
+            from email_parser import teetimes_email as _tte
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-teetimes-email", arg)
+                return json.dumps(_tte.send_preview(
+                    int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None)),
+                    indent=2, default=str)
+            if len(_p) > 1 and _p[1]:
+                return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview (there is no send bridge)"})
+            return json.dumps(_tte.summarize(_tte.build(int(_p[0]))), indent=2, default=str)
+        if cmd == "scoring-after-lock":
+            # "<event_id>" — AFTER-LOCK CHANGES (Kerry #2139, #2168), READ
+            # ONLY: what changed since the Event Info send and every email
+            # (and course sheet) the job would send. The job sends itself.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>"})
+            from email_parser import after_lock as _al
+            from app import _print_pack_render, app as _flask
+            return json.dumps(_al.run_event(int(_p[0]), _print_pack_render, _flask.static_folder,
+                                            confirm=False), indent=2, default=str)
         if cmd == "scoring-event-day-email":
             # "<event_id>[|preview[|<staff addr>[|cids=1,2]]]" or
             # "<event_id>|test|<staff addr>|cid=<id>" — CA #829. The dry build
@@ -7238,6 +7525,17 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_ede.send_event_day_preview(
                     int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None),
                     only=_only),
+                    indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "lateadd":
+                # "<event_id>|lateadd|<cid,cid>|<kerry-ok post id>[|confirm]"
+                # (Kerry 10/20): the approved message to each late add, and
+                # "UPDATED GROUP:" + a notice to their groupmates only.
+                db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
+                if len(_p) < 4 or not _p[3].lstrip("#").isdigit():
+                    return json.dumps({"error": "<event_id>|lateadd|<cid,cid>|<kerry-ok post id>[|confirm]"})
+                return json.dumps(_ede.send_event_day_late_adds(
+                    int(_p[0]), [int(x) for x in _p[2].split(",") if x.strip().isdigit()],
+                    int(_p[3].lstrip("#")), confirm=(len(_p) > 4 and _p[4].lower() == "confirm")),
                     indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "reissue":
                 # "<event_id>|reissue|<kerry-ok post id>[|confirm]" (Kerry

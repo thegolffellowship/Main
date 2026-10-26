@@ -7,6 +7,9 @@ PASS #1855).
 Kerry: "Should automatically know this if they select Forward tees … 95% of
 the time or greater it's probably a woman."
 
+Kerry 2026-10-20 widened it: "Gender should be assumed based on tee
+selection for an event. 65+, 50-64, <50 are all men's tees." A registration
+on a men's band with no rated rounds now sets M the same way.
 THE RULE. A person with NO gender on file is set to F, marked
 `gender_source = 'inferred_from_tees'`, when the signals say so:
   1. played tees: their scorecards are majority on F-rated tees
@@ -37,6 +40,9 @@ logger = logging.getLogger(__name__)
 DIAL = "gender_infer"
 SOURCE = "inferred_from_tees"
 FORWARD = "forward"
+# Kerry 2026-10-20: "65+, 50-64, <50 are all men's tees. Forward tees are for
+# women generally."
+MEN_BANDS = ("65+", "50-64", "<50")
 
 
 def enabled(db_path=None) -> bool:
@@ -68,12 +74,14 @@ def _signals(conn, cid: int) -> dict:
             bands |= {r[0] for r in conn.execute(sql, (cid,)).fetchall() if r[0]}
         except Exception:
             pass
-    return {"rounds_f": rated["F"], "rounds_m": rated["M"], "forward": FORWARD in bands}
+    return {"rounds_f": rated["F"], "rounds_m": rated["M"], "forward": FORWARD in bands,
+            "men_band": any(b in MEN_BANDS for b in bands)}
 
 
 def decide(sig: dict) -> tuple[str | None, str]:
     """('F', why) to set, (None, why) to leave alone. Pure."""
     f, m, fwd = sig["rounds_f"], sig["rounds_m"], sig["forward"]
+    men = sig.get("men_band", False)
     if f or m:
         if f > m:
             return "F", f"{f} of {f + m} rounds on F-rated tees"
@@ -81,8 +89,12 @@ def decide(sig: dict) -> tuple[str | None, str]:
             return None, (f"conflict: Forward band but {m} of {f + m} rounds on "
                           "M-rated tees (a manager decides)")
         return None, "rounds say M (the boot step fills that one)"
+    if fwd and men:
+        return None, "conflict: registered on both Forward and a men's band (a manager decides)"
     if fwd:
         return "F", "registered on the Forward band; no rated rounds yet"
+    if men:
+        return "M", "registered on a men's band (65+ / 50-64 / <50); no rated rounds yet"
     return None, "no signal"
 
 
@@ -115,21 +127,22 @@ def infer(apply: bool = False, customer_ids=None, db_path=None) -> dict:
                    "name": f"{r['first_name'] or ''} {r['last_name'] or ''}".strip(),
                    "why": why, **sig}
             if g:
+                row["gender"] = g
                 out["would_set"].append(row)
             elif why.startswith("conflict"):
                 out["conflicts"].append(row)
         if apply:
             for row in out["would_set"]:
                 cur = conn.execute(
-                    "UPDATE customers SET gender = 'F', gender_source = ? "
+                    "UPDATE customers SET gender = ?, gender_source = ? "
                     "WHERE customer_id = ? AND (gender IS NULL OR trim(gender) = '')",
-                    (SOURCE, row["customer_id"]))
+                    (row["gender"], SOURCE, row["customer_id"]))
                 out["set"] += cur.rowcount or 0
             conn.commit()
     if apply and out["set"]:
         try:
             db.log_agent_action("gender-infer", "gender_inferred",
-                                f"{out['set']} set F from tees: "
+                                f"{out['set']} set from tees: "
                                 + ", ".join(str(r["customer_id"]) for r in out["would_set"]),
                                 outcome="ok", db_path=db_path)
         except Exception:

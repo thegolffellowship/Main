@@ -5,7 +5,7 @@ Implements:
   - /.well-known/oauth-protected-resource  (RFC 9728 discovery)
   - /.well-known/oauth-authorization-server  (RFC 8414 metadata)
   - /oauth/register  (RFC 7591 Dynamic Client Registration)
-  - /oauth/authorize   (authorization endpoint — auto-approves for known clients)
+  - /oauth/authorize   (authorization endpoint — a person approves with the ADMIN PIN, Kerry 10/23)
   - /oauth/token       (token endpoint — client_credentials + authorization_code)
 
 Tokens AND authorization codes are self-contained HMAC-SHA256 signed
@@ -235,9 +235,55 @@ async def oauth_metadata(request: Request) -> JSONResponse:
     }, headers=_CORS_HEADERS)
 
 
+# Kerry 10/23 (Tracker Build 4 security finding): the authorize step used to
+# AUTO-APPROVE any request carrying the client id, and /oauth/register hands
+# that id to anyone, so whoever knew the URL could add the Tracker as their own
+# Claude connector. Now a person must type the ADMIN PIN on this page before a
+# code is issued. Failed PINs are throttled.
+_PIN_FAILS: list = []
+_PIN_FAIL_WINDOW = 900
+_PIN_FAIL_MAX = 8
+
+
+def _pin_locked() -> bool:
+    now = time.time()
+    _PIN_FAILS[:] = [t for t in _PIN_FAILS if now - t < _PIN_FAIL_WINDOW]
+    return len(_PIN_FAILS) >= _PIN_FAIL_MAX
+
+
+def _approve_page(params: dict, error: str = "") -> Response:
+    from html import escape
+    keep = ("client_id", "redirect_uri", "state", "response_type",
+            "code_challenge", "code_challenge_method", "scope")
+    hidden = "".join(
+        f'<input type="hidden" name="{k}" value="{escape(params.get(k, ""), quote=True)}">'
+        for k in keep)
+    err = f'<p style="color:#B91C1C">{escape(error)}</p>' if error else ""
+    host = escape(urllib.parse.urlparse(params.get("redirect_uri", "")).netloc or "unknown")
+    html = f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approve connector - TGF Tracker</title></head>
+<body style="font-family:Helvetica,Arial,sans-serif;background:#F8F8F8;color:#1B1B1B;margin:0">
+<div style="max-width:420px;margin:48px auto;background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:24px">
+<h2 style="margin:0 0 8px">Approve a connector</h2>
+<p style="color:#4B5563">An app at <b>{host}</b> is asking for full access to the TGF Tracker.
+Only approve this if you just added the Tracker connector yourself.</p>{err}
+<form method="post" action="/oauth/authorize">{hidden}
+<label>Admin PIN<br><input name="pin" type="password" inputmode="numeric" autocomplete="off"
+ style="width:100%;padding:10px;margin:6px 0 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:16px"></label>
+<button type="submit" style="background:#E87C3E;color:#fff;border:0;border-radius:999px;padding:12px 22px;font-size:15px">Approve</button>
+</form></div></body></html>"""
+    return Response(html, media_type="text/html", headers={"Cache-Control": "no-store"})
+
+
 async def oauth_authorize(request: Request) -> Response:
-    """Authorization endpoint — auto-approves for valid client_id."""
-    params = dict(request.query_params)
+    """Authorization endpoint: GET shows the approve page, POST checks the
+    ADMIN PIN and only then issues a code."""
+    if request.method == "POST":
+        form = await request.form()
+        params = {k: str(v) for k, v in form.items()}
+    else:
+        params = dict(request.query_params)
     client_id = params.get("client_id", "")
     redirect_uri = params.get("redirect_uri", "")
     state = params.get("state", "")
@@ -247,9 +293,9 @@ async def oauth_authorize(request: Request) -> Response:
     scope = params.get("scope", "")
 
     logger.info(
-        "OAuth authorize: client_id=%s redirect_uri=%s response_type=%s "
+        "OAuth authorize (%s): client_id=%s redirect_uri=%s response_type=%s "
         "code_challenge_method=%s scope=%s",
-        client_id, redirect_uri, response_type, code_challenge_method, scope,
+        request.method, client_id, redirect_uri, response_type, code_challenge_method, scope,
     )
 
     if response_type != "code":
@@ -261,7 +307,7 @@ async def oauth_authorize(request: Request) -> Response:
 
     expected_id = _client_id()
     if not expected_id or not secrets.compare_digest(client_id, expected_id):
-        logger.warning("OAuth authorize: invalid client_id=%s (expected=%s)", client_id, expected_id)
+        logger.warning("OAuth authorize: invalid client_id=%s", client_id)
         return JSONResponse({"error": "invalid_client"}, status_code=401)
 
     if not redirect_uri:
@@ -270,6 +316,17 @@ async def oauth_authorize(request: Request) -> Response:
             {"error": "invalid_request", "error_description": "redirect_uri required"},
             status_code=400,
         )
+
+    if request.method != "POST":
+        return _approve_page(params)
+    if _pin_locked():
+        logger.warning("OAuth authorize: PIN attempts locked")
+        return _approve_page(params, "Too many wrong PINs. Try again in 15 minutes.")
+    admin_pin = os.getenv("ADMIN_PIN", "")
+    if not admin_pin or not secrets.compare_digest(params.get("pin", ""), admin_pin):
+        _PIN_FAILS.append(time.time())
+        logger.warning("OAuth authorize: wrong PIN")
+        return _approve_page(params, "That PIN is not right.")
 
     # Generate stateless signed authorization code
     code = _generate_auth_code(client_id, redirect_uri, code_challenge, code_challenge_method)
@@ -280,7 +337,7 @@ async def oauth_authorize(request: Request) -> Response:
     if state:
         location += f"&state={urllib.parse.quote(state)}"
 
-    logger.info("OAuth authorize: issuing code, redirecting to %s", redirect_uri)
+    logger.info("OAuth authorize: PIN approved, issuing code, redirecting to %s", redirect_uri)
     return RedirectResponse(url=location, status_code=302)
 
 

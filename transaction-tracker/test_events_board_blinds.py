@@ -140,5 +140,53 @@ check("team 1's total is the same best ball (33)", t1.get("total_net") == sum(PA
 # and counted a par-3 pop on no hole here; the point is the number moved
 # off the card's dots and onto the game's.
 
+# ── TEE-TIME ORDER + A BLIND WITH NO CARD YET (Kerry 10/20, s9.28 TPC
+# Canyons before the round: "These should show in Tee time order ... Should
+# also show their blinds"). Groups are numbered out of start order on
+# purpose; group 3 is a threesome whose drawn blind has no card yet.
+EV2, NAME2 = 993, "s9.98 Order Test"
+SLOTS = {1: "4:50 PM", 2: "4:30 PM", 3: "4:40 PM"}
+with db._connect(tmp) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, format, "
+                 "course_id, course) VALUES (?, ?, '2026-10-20', 'San Antonio', "
+                 "'9 Holes', ?, 'Blind Test GC')", (EV2, NAME2, COURSE))
+    rid2, c2 = 500, 500
+    for g in (1, 2, 3):
+        for cp in range(1, 5 if g != 3 else 4):
+            rid2 += 1; c2 += 1
+            conn.execute("INSERT INTO customers (customer_id, first_name, last_name) "
+                         "VALUES (?, 'Ord', ?)", (c2, f"Player{c2}"))
+            conn.execute("INSERT INTO scoring_rounds (id, customer_id, player_name, event_id, "
+                         "round_date, course_id, tee_id, holes_played, playing_handicap, "
+                         "source) VALUES (?,?,?,?, '2026-10-20', ?, ?, 9, 2, 'entry')",
+                         (rid2, c2, f"PLAYER{c2}, Ord", EV2, COURSE, TEE))
+            conn.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, "
+                         "player_name, cart_pos, customer_id) VALUES (?, '9', ?, ?, ?, ?, ?)",
+                         (EV2, g, SLOTS[g], f"Ord Player{c2}", cp, c2))
+    conn.execute("INSERT INTO customers (customer_id, first_name, last_name) "
+                 "VALUES (999, 'Reggie', 'Johnson')")
+    conn.execute("INSERT INTO blind_draws (event_id, event_date, chapter, holes, group_num, "
+                 "slot_label, cart_pos, customer_id, player_name, slot_key, source) "
+                 "VALUES (?, '2026-10-20', 'San Antonio', '9', 3, ?, 4, 999, "
+                 "'Reggie Johnson', '9:3:4', 'app')", (EV2, SLOTS[3]))
+    conn.commit()
+lb2 = db.get_event_leaderboard(NAME2, db_path=tmp)
+tm2 = {str(t["team_num"]): t for t in (lb2 or {}).get("teams") or []}
+# 11 players → CART Net: each group is two cart teams, A and B
+check("six cart teams on the pre-round board", set(tm2) == {"1a", "1b", "2a", "2b", "3a", "3b"}, str(sorted(tm2)))
+order = [k for k, _ in sorted(tm2.items(), key=lambda kv: kv[1].get("start_order", 99))]
+check("start_order follows the tee times (4:30, 4:40, 4:50), not the group numbers, cart A before B",
+      order == ["2a", "2b", "3a", "3b", "1a", "1b"], str({k: (t.get("start_order"), t.get("start_line")) for k, t in tm2.items()}))
+t3 = tm2.get("3b") or {}     # the blind fills seat 4 = cart B
+check("the threesome's drawn blind with no card yet is named on the team (blinds_pending)",
+      [b.get("customer_id") for b in t3.get("blinds_pending") or []] == [999]
+      and "Reggie Johnson" in (t3.get("blinds_pending") or [{}])[0].get("name", ""),
+      str(t3.get("blinds_pending")))
+check("…display only: the pending blind is not a scoring member",
+      len(t3.get("players") or []) == 1 and all(not p.get("blind") for p in t3.get("players") or []),
+      str(t3.get("players")))
+check("team 5 on the first event has no pending blind (Miller's card is in play)",
+      not (teams.get("5") or {}).get("blinds_pending"))
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

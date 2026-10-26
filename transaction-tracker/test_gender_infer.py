@@ -80,5 +80,17 @@ check("a gender stated after the list was read is never overwritten", g[802] == 
 check("the conflict and the stated man are untouched", g[803] == (None, None) and g[804][0] == "M", g)
 check("one id only", cg.infer(customer_ids=[805], db_path=DB)["would_set"] == [])
 
+print("Kerry 10/20: men's bands mean M")
+check("a 65+ / 50-64 / <50 registration with no rounds sets M",
+      cg.decide({"rounds_f": 0, "rounds_m": 0, "forward": False, "men_band": True})[0] == "M")
+check("Forward still sets F", cg.decide({"rounds_f": 0, "rounds_m": 0, "forward": True, "men_band": False})[0] == "F")
+check("both bands is a conflict, nothing set",
+      cg.decide({"rounds_f": 0, "rounds_m": 0, "forward": True, "men_band": True})[0] is None)
+check("rated rounds still win over the band",
+      cg.decide({"rounds_f": 3, "rounds_m": 0, "forward": False, "men_band": True})[0] == "F")
+check("ADD HANDICAP note links the ask page",
+      "ADD HANDICAP" in __import__("email_parser.event_day_email", fromlist=["x"]).add_handicap_note("https://x/handicap/t")
+      and "https://x/handicap/t" in __import__("email_parser.event_day_email", fromlist=["x"]).add_handicap_note("https://x/handicap/t"))
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILED: {F}"))
 sys.exit(1 if F else 0)

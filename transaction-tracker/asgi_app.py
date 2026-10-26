@@ -78,7 +78,7 @@ application = Starlette(
         Route("/.well-known/oauth-authorization-server", oauth_metadata, methods=["GET"]),
         # RFC 7591 — Dynamic Client Registration
         Route("/oauth/register", oauth_register, methods=["POST", "OPTIONS"]),
-        Route("/oauth/authorize", oauth_authorize, methods=["GET"]),
+        Route("/oauth/authorize", oauth_authorize, methods=["GET", "POST"]),
         Route("/oauth/token", oauth_token, methods=["POST", "OPTIONS"]),
         Mount("/mcp", app=mcp_protected),
         Mount("/", app=WSGIMiddleware(flask_app)),

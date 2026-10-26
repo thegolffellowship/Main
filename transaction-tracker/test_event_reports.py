@@ -681,11 +681,14 @@ check("a half-posted field names no WINNER either, not just no dollars",
 check("the page blanks every board's money in ONE place, not seven",
       "function evlbBlankMoney(d)" in _cts
       and "if (d.money_visible === false) evlbBlankMoney(d);" in _cts)
-check("…and says why, above the boards",
-      "Round in play &mdash; winnings are not posted yet." in _cts
-      and "evlbMoneyNotice(d) +" in _cts)
-check("the event list hides the pot while play is on",
-      'ev.money_visible === false' in _cts and "POT PENDING" in _cts)
+# Batch 1 R1 (design-claude #2147, Kerry-approved 10/20): the state strip is
+# the one money message; the amber "Round in play" notice is gone
+check("…and says why, above the boards (the state strip, R1)",
+      "Money is projected until every card is in." in open("email_parser/database.py", encoding="utf-8").read()
+      and "Round in play &mdash; winnings are not posted yet." not in _cts
+      and "evlbStateStrip(d) +" in _cts)
+check("the event list hides the pot while play is on (a dash; the state chip tells the state, #2147 §1)",
+      'ev.money_visible === false' in _cts and 'class="pot none"' in _cts and "POT PENDING" not in _cts)
 
 print("\n== which nine is which, from the data ==")
 # Kerry 2026-09-15: "That 'The course card...' note WILL NOT fly. We can

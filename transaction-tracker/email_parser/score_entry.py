@@ -857,6 +857,22 @@ def round_event_id(round_id: int, db_path=None) -> int | None:
     return int(r[0]) if r else None
 
 
+def rounds_index(db_path=None) -> list[dict]:
+    """Every score-entry round, one row each: {round_id, event_id,
+    round_date, label, pairings_holes, status}. Read-only. The pairings
+    history (Kerry 2026-10-19: "You need to add ALL events into the pairings
+    generator history...LSC too.") reads it to find played entry rounds and
+    Lone Star Cup sessions (`pairings_holes` 'lsc:<session>'); the groups
+    themselves still come through get_entered_scores."""
+    with _closing(_conn(db_path)) as conn:
+        return [{"round_id": r["id"], "event_id": r["event_id"],
+                 "round_date": r["round_date"], "label": r["label"],
+                 "pairings_holes": r["pairings_holes"], "status": r["status"]}
+                for r in conn.execute(
+                    "SELECT id, event_id, round_date, label, pairings_holes, status "
+                    "FROM se_rounds ORDER BY id")]
+
+
 def event_version(event_id: int, db_path=None) -> int:
     with _closing(_conn(db_path)) as conn:
         r = conn.execute("SELECT version FROM se_event_versions WHERE event_id = ?",
@@ -1182,6 +1198,43 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
                       "seat": p.get("cart_pos")} for p in g.get("players") or []],
             db_path=db_path)
         skipped += res.get("skipped_no_customer_id", [])
+    # A player taken OFF the sheet (credited / WD) leaves the card too (Kerry
+    # 2026-10-20, Paul Reed at a9.28: "I removed Paul Reed from the pairings
+    # and credited him ... the live scoring link still shows him"). The card
+    # presets par, so a scorer cannot leave his line blank ("It presets on
+    # par, so it will look like he shot par unless the press plus to go to
+    # X"): anything entered for a removed player is not a real round. His
+    # scores and marks are copied into one se_audit row ('off_sheet_drop')
+    # and his row goes. A closed round is never touched.
+    on_sheet = {int(p["customer_id"]) for g in groups for p in g.get("players") or []
+                if p.get("customer_id")}
+    dropped = []
+    with _closing(_conn(db_path)) as conn:
+        st = conn.execute("SELECT status FROM se_rounds WHERE id = ?", (rid,)).fetchone()
+        if st and st[0] == "open":
+            for row in conn.execute("SELECT customer_id, display_name, group_id FROM se_players "
+                                    "WHERE round_id = ?", (rid,)).fetchall():
+                cid = int(row[0])
+                if cid in on_sheet:
+                    continue
+                key = f"c:{cid}"
+                scores = [dict(r) for r in conn.execute(
+                    "SELECT hole_number, gross FROM se_hole_scores WHERE round_id = ? AND subject_key = ? "
+                    "ORDER BY hole_number", (rid, key))]
+                marks = [dict(r) for r in conn.execute(
+                    "SELECT hole_number, mark FROM se_hole_marks WHERE round_id = ? AND subject_key = ?",
+                    (rid, key))]
+                conn.execute(
+                    "INSERT INTO se_audit (round_id, group_id, kind, device_id, result, detail, at) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (rid, row[2], "off_sheet_drop", None, "ok",
+                     json.dumps({"customer_id": cid, "name": row[1], "scores": scores, "marks": marks}),
+                     _now()))
+                conn.execute("DELETE FROM se_hole_scores WHERE round_id = ? AND subject_key = ?", (rid, key))
+                conn.execute("DELETE FROM se_hole_marks WHERE round_id = ? AND subject_key = ?", (rid, key))
+                conn.execute("DELETE FROM se_players WHERE round_id = ? AND customer_id = ?", (rid, cid))
+                dropped.append({"customer_id": cid, "name": row[1], "scores_removed": len(scores)})
+            conn.commit()
     from email_parser.database import event_games_off
     if not event_games_off(evrow):        # no games, no team handicap (Kerry 10/8)
         set_game_handicaps(rid, {p["customer_id"]: p.get("team_handicap")
@@ -1193,6 +1246,8 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
            "course_holes": len(course_holes)}
     if skipped:
         out["skipped_no_customer_id"] = skipped
+    if dropped:
+        out["dropped_off_sheet"] = dropped
     if len(course_holes) < n_holes:
         out["warning"] = (f"course card gave {len(course_holes)} of {n_holes} holes; "
                           "set par and stroke index before scoring")

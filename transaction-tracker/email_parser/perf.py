@@ -79,8 +79,14 @@ SLOW_MS = {
     "scoring-import-orders": 60_000,  # staff order-email import through Graph (19.8 s on 10/15)
     "event_invite_auto": 900_000,     # job: sends mail to a roster through Graph (346 s on 10/14 at host load 110)
     "results_email_auto": 900_000,    # job: the 6 AM results email, one message per recipient (233 s for 209 on 10/14)
+    "scoring-teetimes-email": 60_000,  # |preview builds three versions + one Graph send
+    "teetimes_email": 900_000,        # job: one Graph send per roster player, course and manager
     "scoring-event-day-email": 60_000, # sends one email per roster player through Graph: p50 6.7 s, 12 s on 10/12
-    "scoring-health": 30_000,        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; cached reads are fast
+    "approve_pairings_page": 15_000,  # route: builds every player's Event Info email to show the counts and a sample (10.4 s and 11.6 s on 10/19 at load 90); laps in the sample say which part
+    "approve_pairings_api": 180_000,  # route: Approve also sends the tee-times emails inline, one Graph call each (97.6 s on 10/19 at load 80)
+    "scoring-pairings-run": 60_000,   # staff bridge: |resend and |prompt send mail (15-20 s on 10/19 at load 76-91)
+    "scoring-health": 90_000,        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; the 5:00 read may wait up to 75 s on the replica (33.6 s on 10/19)
+        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; cached reads are fast
     "scoring-recap-draft-email": 30_000,
     "auto_gg_results_sync": 600_000,
     # Live score entry: a phone waits on these. One save is ~40 ms of write

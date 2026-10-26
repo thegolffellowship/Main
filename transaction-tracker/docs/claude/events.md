@@ -143,7 +143,7 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   unclear person's next email carries `CLARIFY_NOTE` (why we are asking again;
   list `event_invite_unclear:<id>`, cleared by a clear answer; v2.571.3). **Can't make it** lands straight on "Thanks for
   letting us know" with **Changed my mind, I'm in** (-> registration),
-  **Remove me from invitations** (-> straight to Done) and an optional one-tap
+  **Remove me from ALL event invitations** (since v2.579.3 a small grey text link at the bottom, below the reasons, never a button, worded ALL: Kerry 10/25 after two mis-taps; it opens the confirm step) and an optional one-tap
   reason (`REASONS`, table `event_decline_reasons` from migration 0016, one
   row per event + customer_id, a later tap updates it; `decline_reasons(id)`
   reads the counts; route `/rsvp/<token>/reason`) (Kerry 10/13: "The sequence for Can't make it is too
@@ -158,9 +158,12 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   preview mark (`make_token(..., preview=True)`): they open the same pages and
   record nothing (no RSVP, opt-out, reason or click). Can't make it still saves
   from the page's script, as Kerry ruled, so a scanner can still mark a NOT
-  PLAYING. `restore_answers` (bridge `0|restore|<kerry-ok post>|<cids>[|confirm]`)
+  PLAYING. `restore_answers` (bridge `0|restore|<kerry-ok post>|<cids>[|keep-answers][|confirm]`)
   undoes answers a person did not give: back on invitations, their Tracker
-  NOT PLAYING rows and decline reasons on upcoming events removed.
+  NOT PLAYING rows and decline reasons on upcoming events removed. With
+  `|keep-answers` (Kerry 10/20, Lou Schneider: his Can't make it was real,
+  only the Remove me was a mistake) it only puts them back on invitations
+  and leaves every answer and reason as it is.
 - **Scanner filter (Kerry 10/14: "yes on the scanner filter", CoS #1793/#1794).**
   Each sent link carries its send time (`s` in the token). A tap is ignored
   (the page looks normal, nothing is recorded, `agent_action_log`
@@ -2518,10 +2521,68 @@ figure is what a member remembers, not the caveat beside it.
 `money_visible` from `MAX(scoring_rounds.imported_at)` for the event plus
 `leaderboard_money_hold_minutes` (default 10). `imported_at` is stamped
 every time a round is written, so it IS "when scores were last posted".
-While held: the list row reads IN PLAY / POT PENDING instead of a pot,
-and the board's money is blanked client-side by `evlbBlankMoney` — ONE
-place, not in each of the seven boards that read money — with
-`evlbMoneyNotice` above the tabs saying when it posts. Scores stay live.
+While held: the list card's pot reads a dash (its state chip says LIVE or
+UPCOMING), and the board's money is blanked client-side by `evlbBlankMoney`
+— ONE place, not in each of the seven boards that read money. Since Batch 1
+(v2.576.0, design-claude #2147 R1) the state strip is the only money
+message on the board; `evlbMoneyNotice` and the "not final yet" banner are
+gone. Scores stay live.
+
+## EVENTS list: UPCOMING group (v2.578.0, Kerry 10/21)
+
+Kerry: "Option A, but I want player list and REGISTER button on expanded view."
+`get_events_leaderboard` returns `upcoming` (from `_evlb_upcoming`): this
+season's dated events from today on that are not already listed as played or
+live, soonest first, filtered by chapter (joint events show under both) and the
+pilot codes. Past seasons get none. Each upcoming card shows:
+- `registered` and `players` [{customer_id, first, last}], from
+  `_event_roster_players` (the pairings roster), sorted by last name;
+- `pairings_set`, `first_tee` and `strip_text`;
+- `register_url`: the event's `registration_url`, or None when there is none
+  or its status is `expired`.
+
+No money is carried. `templates/contests.html` renders the cards with
+`evlbUpcomingCardHtml` above the month groups. The collapsed card has "—" for
+the pot and "N registered"; opened, it shows the strip, First LAST in 3 columns
+(2 on the phone) and REGISTER. An upcoming card (`data-up`) never fetches a
+board. Guard `test_evlb_batch1.py`.
+
+## EVENTS leaderboard Batch 1 (v2.576.0, design-claude #2147-#2150, Kerry-approved 10/20)
+
+- **One state value (R2).** `database.evlb_state` is the only rule for
+  UPCOMING / LIVE / IN REVIEW / FINAL. `_evlb_board_state` (the opened board)
+  and `get_events_leaderboard` (each list card's `board_state`) both call it,
+  and `board_summary.attach()` keeps the payload's value instead of
+  recomputing it (the two calculators were pain point 1).
+- **The strip** says one line per state (`EVLB_STRIP_TEXT`): "Pairings are
+  set. First tee {first_tee}." / "Money is projected until every card is in."
+  / "Every score is in. Cards lock at {lock_at}." / "Results are being
+  checked." (held, HELD on the right) / "Results are closed and prizes are
+  set." `first_tee` is the earliest saved tee start (`_evlb_first_tee`);
+  `lock_at` is `money_final_at` in Central (`_evlb_clock`). No minute is ever
+  typed into a line. LIVE shows "UPDATED m:ss AGO" and the open board re-reads
+  itself every 30 s (`evlbRefreshEvent`; the open tab, open teams and an open
+  phone sheet survive the repaint).
+- **The list** is paged by month: `/api/events-leaderboard?year=&month=YYYY-MM&event=`
+  returns one month's cards (`events`) plus `months` [{ym, label, count}];
+  `event` opens that event's month (an event's own link, the scorer's board).
+  Cards: chapter bar (`chapter_color`, AUS #BF5700 / SA #44596B), state
+  chip, pot in #047857 with two decimals. The year is a real dropdown of the
+  seasons with events.
+- **Tabs** are underline tabs, SUMMARY styled like the rest; HOW IT WORKS is
+  an outlined pill (a 28px "i" circle on a phone, tabs scroll sideways there).
+  No "Tap a player for their scorecard." footer.
+- **TEAM** collapsed: dial line with the team pot shown once, then
+  `# | TEAM | ± | THRU | WON/PROJ.`. ± is the big number; a finished team's
+  THRU is its team net score only (no F, Kerry 10/20, also on every tab's
+  THRU); names First 600 + LAST 800 Bitter on one line, tee dot after each
+  name, a blind leads with the BLIND chip and reads italic brown. Opened
+  (`evlbTeamGrid`): HOLE / PAR / players (gross with Team Net pops, counted
+  balls green) / TEAM NET, then N · ± · USED; USED blank on TEAM NET. A phone
+  shows last names in a 2 x 2 grid and opens a team as a full-screen sheet.
+- Guards: `test_evlb_batch1.py`, `test_team_board_collapsed.js` (incl. the
+  #2147 §5 sample: 7·5·8·7·7·8·5 = 47 vs 54 = −7), `test_team_board_order_blinds.js`,
+  `test_evlb_rulings_b1_b7.js`, `test_lb_summary.js`.
 
 NB the clock runs off the IMPORT, and the Golf Genius scorecard import is
 manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
@@ -2571,6 +2632,103 @@ rules since v2.525.9:
   (`evlbTeamPopsOf`). A member whose tee lacks a complete index for the
   holes keeps his card's pops, marked `team_pops_src = "card"`. Same rule
   as the phone card, the printed scorecard and `live_scoring.game_team_net`.
+
+## The TEAM tab: N-ball Team Net, counted balls, collapsed rows (Kerry 10/19, B5/B8/B9)
+
+From the leaderboard review (`handoff-2026-10-19-leaderboard-review.md`
+11.6, 12.4, 12.6, 13). Kerry: "build in TEAM Net 2 and 3 ball options
+too, where we're adding cumulative of the two best or three best net
+scores" and "TEAM should be simpler ... collapsed state to show a single
+row for each team with their net score".
+
+- **N-ball (B9).** N is the event's dial, `event_team_net_dial` (the
+  event's `team_ball_count`, else `team_net_balls`, else Best 1), sent to
+  the board as `team_balls` with `team_unit` ("team" / "cart"). Each hole
+  the team scores the SUM of the N lowest nets (Team Net pops as above).
+  A hole counts only once EVERY player on the team has posted it; a
+  blind's card never holds a hole, an N/H seat or a seat with no card is
+  not a ball. `±` is against par for each counted ball (N x par when the
+  tees agree). Never "total minus PH".
+- **One rule, three places.** `get_event_leaderboard` puts on each team
+  `total_net`, `to_par`, `thru`, `complete`, `team_holes` ({hole: {net,
+  balls, counted: [round ids]}}) and `start_line`; non-GG teams rank on
+  `±`, then holes played, then name (ties share a place on `±`; if a
+  counted ball has no par every team falls back to the total). The
+  untethered payouts rank on this list (`_tracker_team_and_ctp_rows`), so
+  the board and the money agree. `live_scoring.game_team_net(balls=)`
+  plays the same N (from `event_engine_state` / `ls_leaderboard` meta
+  `team_balls`) and lists every counted ball per hole. The page's
+  `evlbTeamMins` computes the same thing from the payload. A GG-era event
+  keeps GG's positions and posted total.
+- **Counted balls (B5).** Every ball that counted on a hole is green: one
+  for Best 1, two for Best 2, three for Best 3; a tie at the cutoff greens
+  all the tied balls (`evlbTeamCounted`).
+- **Collapsed by default (B8).** The TEAM tab lands on one row a team:
+  `# | TEAM | THRU | NET | ± | WON` (`evlbTeamPanel`). THRU is the
+  team's start line (print pack `start_line`, else the live waiting
+  list's tee time) before it tees off, the holes the whole team has
+  posted while it plays, and `F <net>` when every hole is in. WON is the
+  team purse once money shows. Tap a row to open today's full board for
+  that team (band, player rows with holes, green counted cells, TEAM NET
+  row); each team opens on its own and Expand all / Collapse all does
+  them all. Nothing opens inside a team: the band chevron that opened
+  every player's card and the tap-a-player scorecard are gone on TEAM
+  (`noCard`); the tee dot, BLIND chip and per-player WON stay. A team
+  that has not teed off on a live entry-mode day is kept on the board
+  (`upcoming`) so its start shows. The heading and HOW IT WORKS read
+  the dial: "Team Net · best 2 of 4 · 85% allowance".
+- Guards: `test_team_net_nball.py` (server + engine), `test_team_board_collapsed.js`
+  (sums, highlight with ties, row values, expand/collapse), `test_events_board.js`.
+## The board's SUMMARY tab, projected WON, pots, Match Play (Kerry 2026-10-19, B10-B12)
+
+Spec: `docs/claude/handoff-2026-10-19-leaderboard-review.md` §12-13. The
+server half is `email_parser/board_summary.py`; `attach()` decorates the
+`/api/events-leaderboard/event` payload after `get_event_leaderboard` and
+writes nothing. Guards `test_lb_summary.py` (server) and
+`test_lb_summary.js` (the page's own renderer, headless).
+
+- **`board_state`**: `upcoming` (no card), `live` (a hole is out),
+  `in_review` (every score in, money showing), `final` (closeout fired:
+  payouts recorded in `tgf_payouts`, or the auto-payouts preview says every
+  card is final). An Unlock puts a hole back out, so the board goes back to
+  LIVE and SUMMARY leaves with it.
+- **SUMMARY (B10)**: shown at IN REVIEW and FINAL only (never on a
+  no-games event, never while the money is held), prepended as the FIRST
+  tab and the landing tab, its own green colour with an IN REVIEW / FINAL
+  badge (`evlbSummaryShown`, `evlbSummaryHtml` in contests.html). One block
+  per game in tab order (Team, MVP, Net by flight, Gross, Skins, CTPs + HIO)
+  with winners, amounts and a "See the board" link. It reads the same
+  `won` / `teams[].purse` / `proxies` the WON columns read, so a changed
+  figure moves here too.
+- **Projected WON (B11)**: while LIVE on an entry-mode event the server
+  sends `projected` = the SAME assembly the auto-payouts preview runs,
+  `assemble_event_game_payouts(name, projected=True, lb=board)`: the engine
+  on the LIVE entered cards (`event_engine_state(live=True)`, the board's
+  own TEMP overlay), a game still in play pays what it would now, Team Net
+  and CTPs off the board's teams and phone holders, City MVP off the points
+  board's leader (`_projected_city_mvp`; TGF MVP is not projected).
+  Customer ids resolve as the preview does (`auto_payouts._with_ids`),
+  team purses through `team_slot_money`. Cached per event per score-entry
+  version. The page blanks the record money as before, then fills the WON
+  column with the projection (`evlbBlankMoneyProj`), header `Won PROJ.`,
+  cells muted italic, no win tints. Nothing records projected rows; the
+  default assembly path is unchanged.
+- **Pots (B11)**: `pots` from the flight board's AMOUNTS (`individual_net`,
+  `individual_gross`, `skins`: total, per-flight pot, players, places) and
+  the live matrix (team 1st/2nd, CTP values). Flight bands read
+  "LOW FLIGHT · 10 players · pot $90 (1st $60 · 2nd $30)"; TEAM, MVP and
+  CTPs get one pot line above the board (MVP = the MVP money on the board).
+- **Money per tab**: audited, no mixing found. `EVLB_GAME_CATS` gives each
+  payout category to one tab (Team = team_net, MVP = mvp + tgf_mvp, Net,
+  Gross, Skins; CTP / HIO only on CTPs); the projection follows the same map.
+- **Match Play (B12)**: `match_play` = `cmp_matches` rows whose `event_id`
+  is this event plus `cmp_bracket` knockout pairs with that `event_id` (or,
+  like `cmp_get_bracket`, whose hardened GG detail names the event code).
+  A "Match Play" tab is appended when there is any, rendering the Season
+  Contests' own `mpMatchCardFromMatch` cards inside `.mpv2`, read-only.
+  **Gap:** a pool match recorded without an `event_id` (a private match,
+  or one the manager never linked) is not shown; nothing infers it from
+  the date.
 
 ## Event Setup: GAMES OFFERED (v2.475.0, Kerry ratified 2026-09-21)
 
@@ -2928,6 +3086,10 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   same markers prints beside it ("Green (32.3/109 · 34.5/117)"). Players,
   chips, dots and the yardage grid keep reading each band
   (`merge_shared_tees`). Tees with different yardage keep their own rows.
+- **Only the tees someone plays (v2.574.3, Kerry 2026-10-19):** a designated
+  tee no player on the event's sheet plays prints no row (`_tees_in_play`,
+  applied before the merge). An empty sheet and the Lone Star Cup keep the
+  full legend.
 - **A women's band reads the women's row (v2.525.1):** `_event_tee_rows`
   (the playing-handicap tee resolver) takes the legend's own designated
   row when it is a candidate, else the row whose gender matches the band.
@@ -3132,6 +3294,12 @@ emailed to me."
   so the first check sends and the later ones re-send only a sheet that
   changed. (v2.465.0–2.468.4 sent the evening before, 5–10 PM; Kerry
   2026-09-21: "probably shouldn't be sent until 6:00a day of".)
+- **No morning pack when the course has a contact (v2.575.2, Kerry
+  2026-10-20):** "Neither should have come because there are course contacts
+  at both courses, so the only print packs that should have gone were theirs
+  at noon with managers CCd." The 6–9 AM routine skips an event whose course
+  has a TGF course contact (`course_contact_for_event`); that event's files
+  go only by Course Files at noon (To the course, CC the managers).
 - **SEND PACK (v2.468.5):** button on the pairings toolbar beside Starter
   Sheet / Cart Signs (saved sheet only) → `POST
   /api/events/<id>/print-pack/send` builds and mails the pack now and
@@ -3435,6 +3603,63 @@ does, the member send refuses.**
 - Test: `test_event_day_email.py` (Graph mocked).
 
 
+## The 7:00 PM TEE-TIMES EMAIL, three versions (CMO #2076 copy, #2101 build, 2026-10-19, LOCKED until Kerry stamps)
+
+`email_parser/teetimes_email.py`. At 7:00 PM Central the day before (E-1),
+for every active event dated tomorrow with a saved sheet, three emails go at
+the same moment. Job `teetimes_email` (every 15 min, 7 PM to midnight) sits
+BESIDE the pairing auto-send (`pairings_approval.auto_send_check`), never in
+place of it.
+
+- **Tee sheet block** (all three): from `get_event_print_pack`, the Starter
+  Sheet's reader. Header = course · date · holes · first tee (`start_label`);
+  one row per group, start then players with cart pairs joined by "&";
+  "Preliminary: changes are still possible until the morning of the event.";
+  a link to `/member/teesheet/<event>`. Names and starts only. No groups, no
+  course, no date or no first-tee time empties the block, which holds every
+  message.
+- **Player** (`Tee Times — Player`): the registered roster (`_event_roster_rows`
+  minus RSVP-only rows). Kerry 10/19 line: "Your full Event Info email, with
+  your start, group, cart and games, comes at 7:00 AM tomorrow." Needs the
+  mailing-address footer (CA #1793): app setting `tgf_mailing_address`; until
+  it is set every player message is HELD on `{mailing_address}`.
+- **Spots-open box**: only for NON-registered recipients, only while the event
+  is not full (lock rule: field ÷ 4, remainder r leaves 4 − r). Audience is
+  Kerry's open question (#2076 Q2), so dial `teetimes_spots_audience` =
+  `off` (default) | `rsvp_in` (I'm in, not paid: the roster's RSVP-only rows)
+  | `invited` (also the invitation audience minus Can't make it). The Register
+  link is the invitation "in" token (`/rsvp/<token>` → `click_in`, the scanner
+  filter → the event's registration_url); no registration_url holds it.
+- **Course contact** (`Tee Times — Course Contact`): To the primary TGF
+  contact, CC the other TGF contacts (`course_staff.print_recipients` via
+  `print_pack.course_recipients_for_event`). Skipped when there is none. Pack
+  line: weekday "will arrive by email at noon tomorrow"; Sat/Sun "were sent
+  at noon today".
+- **Manager** (`Tee Times — Manager`): the chapter manager
+  (`pairings_approval.manager_for`). A sent line says what actually went
+  (players / course / both), then ONE closing line: contact on file → "You
+  don't need to print anything"; none → "Please print them" plus "Add course
+  contact" → `/courses?course=<id>` (opens the Contacts panel).
+- **Guards**: any blank required variable, leftover `{tag}` or `[BLANK]`
+  holds that message; once per event + person (app setting
+  `teetimes_email_sent:<event_id>`, keys `player:<cid>` / `course:<cid>` /
+  `manager:<cid>`); preview to staff only; every send logged to `message_log`
+  with `event_id` and `customer_id` (`log_message` now writes both when given).
+- **The evening-before window (v2.577.1)**: `_deliver` (the one sender, for the
+  7 PM job and a manager's approval alike) refuses unless it is the day before
+  the event, 5 PM to midnight Central (`send_window_ok`). An approval on event
+  morning used to send the "comes at 7:00 AM tomorrow" email (handoff
+  2026-10-20 §4 risk 1).
+- **The gate**: each version sends only when `teetimes_<version>_approved`
+  equals its CURRENT wording hash (the DB template plus the fixed lines in the
+  module, so editing either voids the stamp) AND dial `teetimes_email_auto` =
+  `on` (default off). Seeded hashes: Player `df90086871b4587a`, Course Contact
+  `98a0903c7877fb4f`, Manager `16e7f8c738ecc3b7`.
+- **Bridge** `scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]`:
+  bare = dry build (per-recipient ready / held / skipped with reasons, hashes,
+  stamps, dials, `would_send_now`); `|preview` mails one combined preview to
+  staff. No send bridge. Guard `test_teetimes_email.py`.
+
 ## Credit from a received payment (v2.525.8, Kerry 2026-10-06)
 
 Kerry: "What do you mean no tool records a payment into a credit? We do that
@@ -3482,3 +3707,122 @@ them like Cart Net should hide or turn off."
   cell. No non-LSC event carries a $0 fee today, and the LSC theme already
   prints a single PH on the practice round.
 - Guard: `test_event_games_off.py`.
+
+
+## Night-before timing (v2.572.0, Kerry 10/19)
+
+"I thought we're just sending tee times tonight and then the full event info email at 7:00am."
+- 5:00 PM the day before: pairings generate; the manager gets the approval prompt (every 15 min from :05).
+- Approve (5-7 PM) signs off the sheet and sends that event's TEE-TIMES email at once (v2.572.1; each version needs its stamp and `teetimes_email_auto` on). The personal Event Info email is not sent.
+- 7:00 PM: an unapproved sheet is auto-approved as it stands (still no player email); the TEE-TIMES email (players / course / manager) goes once its wordings are stamped and `teetimes_email_auto` is on.
+- 7:00 AM event day: `pairings_approval.auto_send_check` sends every event's personal Event Info email (`event_day_email.send_event_day_emails`), on the sheet as it stands; failure emails Kerry, hourly retry until noon. Dial `pairings_auto_send`.
+## EVENTS leaderboard: tabs, state strip, THRU, member casing (10/19 rulings B1-B4, B6, B7)
+
+Kerry's 10/19 rulings, specced in
+`docs/claude/handoff-2026-10-19-leaderboard-review.md` sections 11-13 (13 is
+final). This slice built B1, B2, B3, B4, B6 and B7 of the 12.7 build list;
+the TEAM collapsed row, counted-ball highlight, N-ball Team Net, SUMMARY and
+the "Playing for" line are other slices. `get_event_leaderboard` gains a
+post-step, `_evlb_board_extras` (database.py), that only reads and adds
+fields beside the board's numbers; each part is wrapped so the board opens
+even if one part cannot be worked out.
+
+- **B1 Tabs.** TEAM, MVP, NET, GROSS, SKINS, then CTPs/PROXIES. OVERALL is
+  retired behind app setting **`evlb_overall_tab`** (off unless it reads
+  on; payload `overall_tab`). Its board, the whole-event Won roll-up and
+  the renderer stay in the code. An event with **no games** keeps its single
+  Overall board (Gross and Net side by side, Kerry 10/9), the simpler of the
+  two paths. Landing stays TEAM, or NET with no team board.
+- **B2 CTPs / PROXIES.** Payload `proxy_tab_label`: "CTPs" when every proxy
+  contest is Closest to the Pin, "PROXIES" when any is something else. The
+  contests played (`proxies[].game`) decide once there are any; before that
+  the event's slots from `event_proximity_report` (via the cached
+  `score_entry._ctp_report`) decide: fewer par 3s than slots makes a Longest
+  Putt, so PROXIES. The tab keeps its small s (`.evlb-keepcase`).
+- **B3 Member casing.** `member_caps_first_last(name, last_name=None)` is
+  the First LAST form of `member_caps_name`, on the same tokenizer
+  (`_member_caps_last`): "Michelle DelCARMEN", "Adam BAKER", "Sean MacBRIDE",
+  "Tom DELGADO" (no false Del prefix). A "Last, First" name is turned round;
+  the stored `customers.last_name` marks where a two-word last name starts;
+  Jr/Sr/II-V keep their case. `_evlb_member_casing` applies it to every
+  board's `player_name` (overall, net/gross/skins, points, waiting, team
+  members incl. `Bl[...]`, proxies and HIO by customer_id or by the same
+  name) for players `derive_member_financial_status_bulk` calls "member".
+  Non-members keep the name as stored. **Display only: nothing is written.**
+- **B4 State strip.** Payload `board_state` (`upcoming` / `live` /
+  `in_review` / `final`), `board_state_word`, `board_state_text`,
+  `board_state_held`, `board_state_guide` (the four words, one line each).
+  Rule (`_evlb_board_state`): no hole posted = UPCOMING; field not complete
+  = LIVE; every score in = IN REVIEW until results close; FINAL when the
+  payouts are recorded (`tgf_payouts` rows), or the auto-payouts state says
+  final with nothing to pay, or the event has no games. A hold (the
+  `auto_payouts_hold` setting, a held or refused record in
+  `auto_payouts_fp`, or an unconfirmed CTP takeover) keeps it IN REVIEW with
+  the line "Results are being checked." Minutes in the copy come from
+  `se_card_lock_minutes` and `leaderboard_money_hold_minutes`. The strip sits
+  above the tabs (`evlbStateStrip`); the old "Winnings are not final yet"
+  banner yields to it (the strip adds "Cards lock at <time>"). HOW IT WORKS
+  gains "State words" and "Thru" sections.
+- **B6 Live ranking.** While `field_complete === false`: NET and GROSS rank
+  on to-par as before and now break a tie on more holes done; MVP ranks on
+  points against par (`evlbPtsPace` = points less `pts_par_hole`, the
+  Stableford table's par rung, per hole played); SKINS keeps skins won first
+  (the count is the game) and breaks ties on gross to-par, then holes; TEAM
+  reorders the teams on to-par then holes (`evlbTeamsLiveOrder`; the
+  position label, e.g. "T1", follows). Once the field is in, every board
+  returns to its settled order.
+- **B7 THRU.** Each overall row carries `thru` (holes posted), `finished`,
+  and with no hole yet `tee_start` {tee_time, start_hole} from the saved
+  sheet (`_evlb_tee_starts`: shotgun = start time + the slot's hole; tee
+  times = the slot). The board's Thru column (after the score pairs) shows
+  "3:40 PM · 10" before the tee, the hole count in play, and "F" plus the
+  tab's own total when done (gross on GROSS, net on NET, points on MVP; the
+  TEAM NET row shows the team's THRU and "F" + team net; other tabs show
+  "F"). Hidden while the hole-by-hole grid shows, and on a payload with no
+  THRU (the Cup boards, `no-thru`). The waiting rows read "3:40 PM · 10" too.
+- **Hooks for the TEAM slice:** `evlbTeamStanding(d, t)` (a hole counts once
+  every ball posted it; net from `evlbTeamMins`; to-par against par x
+  `t.balls || d.team_balls || 1`) feeds the live team order and the TEAM NET
+  row's Thru cell. The N-ball build should set the ball count there.
+- Guards: `test_evlb_rulings_b1_b7.py` (server), `test_evlb_rulings_b1_b7.js`
+  (renderer); `test_scorer_nav.py` now counts six tabs and measures name
+  cells on the visible board.
+
+
+## After-lock changes send themselves (v2.577.0, Kerry 10/20 #2139, #2168)
+
+Kerry: "A moved player should trigger a resend to affected players and should
+send only the affected sheets to the course for reprint with a CC to manager
+and me. A tee change and a games change is NOT a reason to send new print
+packs to course ... email notices going only to either the player (tee change)
+or to the affected players (games change) with CC's to the manager." Then:
+"No manager approval needed but cc the manager on all changes. Push
+notifications to manager when we have that capability."
+
+`email_parser/after_lock.py`:
+- **Baseline.** `send_event_day_emails` (the Event Info send) saves the sheet it
+  carried in app setting `after_lock_state:<event_id>`: per customer_id the
+  group, start, cart, tee band and games bought (`sheet_state`, read from
+  `get_event_print_pack` and `_games_context`; blinds left out). A Course Files
+  send records its sheets' hashes in `course_files_sent:<event_id>`.
+- **Job `after_lock_changes`** (app.py, every 15 min at :02/:17/:32/:47 Central,
+  dial `after_lock_auto`): for today's events with a baseline, until the first
+  tee (`database._evlb_first_tee`), `run_event` diffs the live sheet against
+  the baseline (`diff`):
+  - moved (group, start or cart) / added / removed: the mover gets the Event
+    Info with an UPDATED GROUP notice (added: "You're in!", and an
+    `event_day_email_sends` row so nothing else sends it), each other player in
+    the old and the new group gets it with "X joins / is no longer in your
+    group". The course gets only the COURSE_FILE_PARTS whose hash changed
+    (`send_course_files(only=..., updated=True)`: "UPDATED" subject, "these
+    replace the same sheets"), To the course, CC its contacts + the pack
+    recipients (manager, Kerry); only once Course Files have gone;
+  - tee change: UPDATED TEES notice to that player; games change: UPDATED GAMES
+    to that player. Never the course.
+- The chapter manager (`pairings_approval.manager_for`) is CC'd on every email.
+  One email per person per run. When every email went, the baseline moves to
+  the new sheet; a failure keeps it so the next run retries. The hand-run late
+  add / re-issue bridges move the baseline too, so the job never repeats them.
+- Read-only bridge `scoring-after-lock:<event_id>` shows what the job would send.
+- Not built: push notifications to the manager (waits for push in the app).
+- Guard `test_after_lock.py`.

@@ -37,6 +37,7 @@ RULED (Kerry 10/17) at lock:
 | E-1 5:00 PM | Lock. Pairings build. Manager review prompt. Course gets the tee-time count; open times released; more times requested if over | RULED "Yes on all" + release/request added by Kerry |
 | E-1 5-7 PM | Manager review window; approval not required | RULED "Agreed" |
 | E-1 7:00 PM | Preliminary tee sheet to players, NO personal link | RULED (Kerry: "I don't think personal link would go then") |
+| E-1 7:00 PM (built) | Tee-times email in three versions: players (registered roster), course contact (To primary, CC other TGF contacts), chapter manager (print or not). `email_parser/teetimes_email.py`, job `teetimes_email`, beside the 7 PM pairing auto-send. LOCKED until Kerry stamps each wording and turns on `teetimes_email_auto`; player version also waits on `tgf_mailing_address`. Spots-open box behind `teetimes_spots_audience` (off). events.md | BUILT 10/19, not stamped |
 | E 7:00 AM | Personal Event Info email to every player (the full breakdown sent 10/13), with the personal link | RULED |
 | E 12:00 PM | Print pack to course contact, TGF CC'd (TGF only if no contact). Revised Event Info ONLY to players whose details changed since 7 AM | RULED |
 | E noon → first tee | Late adds into open seats (see §3) | RULED |
@@ -46,11 +47,45 @@ out a whole new set of updates. There would just be an email sent to that
 player and the players group letting them know they now have a 4th. In
 future these are push notifications as well as emails."
 
+Late add, WHICH SEAT (RULED, Kerry 2026-10-20): "we fill threesomes starting
+later to forward on a tee time start. So if it were automated, Pat would have
+automatically been entered into the 4:00p slot and then Adam in the 3:50 slot.
+If it's automation on a shotgun, then we would fill them from earlier holes to
+later holes. Like if there were threesomes on 3A, 4A & 4B, we'd fill them
+starting with 3A, then 4B, then 4A." Tee times: the latest threesome first,
+then earlier. Shotgun: the lowest hole first; on one hole, B before A.
+NOT BUILT YET (10/20: late adds sit in Unassigned until placed).
+
 Late add (RULED): the player gets their own info email right after signing
 up; the group is told they have a 4th and who; the course is told there is
 another player on that time, with that group's scorecard and cart sign only
 (not the whole print pack). The scorer is NOT chosen in advance (decided at
 the course).
+
+Requests after the lock (RULED, Kerry 2026-10-20): "Requests should not be
+honored after the 5:00p lock deadline and generator goes. Only a manager can
+honor that." A late add's pairing request is ignored by the seat-fill; a
+manager may still place them by hand.
+
+The emails (BUILT v2.575.11, manual): scoring-event-day-email:<id>|lateadd|
+<cid,cid>|<kerry-ok post>[|confirm] sends the approved event-day message to
+each late add as-is, and to everyone else in that group the same message with
+"UPDATED GROUP: " before the subject and a notice naming who joined. Nobody
+outside those groups is mailed. The course notice is still manual.
+A late add who is a 1st timer, guest or new member: their group's notice
+carries Kerry's welcome line ("This is Adam's first time playing with us!
+Welcome him in and help him understand our rules."), and their own email (any
+event-day email to a newcomer) opens with a link to the TGF Rules of Play
+(v2.575.12). An N/H blind is cleared the moment that player gets a starting
+handicap (Kerry 10/20, `drop_stale_nh_blinds`).
+
+No handicap at print time (RULED, Kerry 2026-10-20): "Send them now with Adam
+blank. And make this standard. If a handicap comes in later, just update it on
+the tracker and remove the blind. That's not reason to resend the print pack or
+even just his affected printouts." The player's line prints blank (N/H) and
+never holds Course Files; a later handicap is entered on the Tracker, the N/H
+blind comes off, and nothing is reprinted or resent (v2.575.14:
+`scorecards` flags it instead of a gap; `print_pack._handicap_only_change`).
 
 ## 3. Adds and withdrawals after lock (PROPOSAL, Kerry: "the messiest and most complex of all")
 

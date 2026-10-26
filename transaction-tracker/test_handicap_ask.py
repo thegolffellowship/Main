@@ -227,5 +227,12 @@ src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates",
 check("the page keeps the one 560px phone rule", "@media (max-width: 560px)" in src and "768" not in src)
 check("inputs are 16px (no iOS zoom)", "font-size:16px" in src)
 
+# Same-day sign-up (Kerry 10/20, Adam Wilson: "there should be no limitations
+# on an email being sent to someone that we don't have a handicap for")
+_c2 = sqlite3.connect(DB); _c2.row_factory = sqlite3.Row
+check("an event dated TODAY is in the ask window",
+      9001 in [e["id"] for e in ha._upcoming_events(_c2, EV_DATE)])
+_c2.close()
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILED: {F}"))
 sys.exit(1 if F else 0)

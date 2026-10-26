@@ -269,10 +269,13 @@ def parse_venmo(text) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _upcoming_events(conn, today: str, days: int = LOOKAHEAD_DAYS) -> list[dict]:
+    # TODAY counts (Kerry 2026-10-20, Adam Wilson signed up at 9:02 AM for that
+    # evening: "there should be no limitations on an email being sent to
+    # someone that we don't have a handicap for...or Venmo").
     end = (date.fromisoformat(today) + timedelta(days=days)).isoformat()
     return [dict(r) for r in conn.execute(
         "SELECT * FROM events WHERE COALESCE(status, 'active') = 'active' "
-        "AND substr(event_date, 1, 10) > ? AND substr(event_date, 1, 10) <= ? "
+        "AND substr(event_date, 1, 10) >= ? AND substr(event_date, 1, 10) <= ? "
         "ORDER BY event_date, id", (today, end)).fetchall()]
 
 
@@ -395,11 +398,12 @@ def _event_row(event_id: int, db_path=None) -> dict | None:
 def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:
     from email_parser import database as db
     if sender is None:
-        from email_parser.event_day_email import _creds, _graph_send
+        from email_parser.event_day_email import _creds, _graph_send, asks_cc
         creds = _creds()
         if not creds:
             return {"error": "Email credentials not configured on server"}
-        sender = lambda to, s, h: _graph_send(creds, to, s, h)   # noqa: E731
+        _cc = asks_cc(db_path)
+        sender = lambda to, s, h: _graph_send(creds, to, s, h, cc=_cc)   # noqa: E731
     sent, failed, held = [], [], []
     for p in people:
         ev = _event_row(p["event_id"], db_path)
@@ -450,6 +454,33 @@ def auto_check(now: datetime | None = None, db_path=None, sender=None) -> dict:
     r = (_deliver(pl["reminders"], "reminder", db_path, sender)
          if pl["reminders"] and by_day else {})
     return {"asks": a, "reminders": r}
+
+
+def resend(customer_id: int, kerry_ok_post, confirm: bool = False, db_path=None) -> dict:
+    """The ask again to ONE player, on Kerry's word (Kerry 2026-10-20: "Have
+    another email sent to Adam requesting his handicap & venmo. He said he
+    didn't receive the one this morning."). Same message and link as the
+    first ask, CC asks_cc; refused without a mailbox post carrying Kerry's
+    word; dry run without confirm; never to someone who has answered."""
+    from email_parser import database as db
+    from email_parser.customer_query import _kerry_ok
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+    finally:
+        conn.close()
+    if not ok:
+        return {"refused": f"rule 3b: {why}"}
+    if (load_state(db_path).get(str(int(customer_id))) or {}).get("answer"):
+        return {"refused": "already answered"}
+    person = next((c for c in candidates(db_path=db_path) if int(c["customer_id"]) == int(customer_id)), None)
+    if not person:
+        return {"refused": f"customer {customer_id} is not on an upcoming roster without a handicap"}
+    if not person.get("email"):
+        return {"refused": "no sendable email"}
+    if confirm is not True:
+        return {"dry_run": True, "authority": why, "to": person["email"], "event_id": person["event_id"]}
+    return {"authority": why, **_deliver([person], "ask", db_path=db_path)}
 
 
 def send_preview(event_id: int, to_address: str | None = None, kind: str = "ask",

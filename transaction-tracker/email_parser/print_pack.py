@@ -26,6 +26,7 @@ sends nothing here; the pack goes to Kerry.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import html as html_mod
 import os
@@ -263,6 +264,11 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     pdf, parts = _append_rules_sheet(pdf, parts, rules)
     from email_parser.database import print_file_stub as _pfs
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
+            # one short hash per part, so a re-send can be traced to the part
+            # that changed (Kerry 10/20: "what changed between 6 and 7")
+            "part_shas": {sl: hashlib.sha256(_hash_view(h).encode("utf-8")).hexdigest()[:12]
+                          for sl, h in htmls},
+            "_views": {sl: _hash_view(h) for sl, h in htmls},
             "scorecards": sc_info, "games_sheet": gs_info, "skipped": skipped_parts,
             "engine_note": engine_note, "pack": sheet_pack,
             "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
@@ -458,10 +464,33 @@ def course_contact_for_event(ev: dict | None, db_path=None) -> str | None:
     return r.get("to") if r.get("ok") else None
 
 
-def send_course_files(built: dict, db_path=None) -> dict:
+def send_course_files(built: dict, db_path=None, only=None, updated: bool = False) -> dict:
     """Course Files to the course's primary TGF contact; its other TGF
-    contacts and Kerry's pack recipients on CC."""
+    contacts and Kerry's pack recipients on CC. ``only`` sends just those
+    parts (an after-lock change, Kerry #2139: "only the affected sheets");
+    ``updated`` says so in the email. A successful send records the sheets
+    as sent (after_lock.record_course_files)."""
     ev = built.get("event") or {}
+    held = _unprintable(built)
+    if held:
+        return {"sent": False, "why": held}
+    res = _send_course_files(built, db_path, only, updated)
+    if res.get("sent") and ev.get("id") is not None:
+        try:
+            from email_parser import after_lock
+            prev = (after_lock._get(after_lock.COURSE_KEY.format(int(ev["id"])), db_path) or {}).get("parts") or {}
+            now = dict(prev) if only else {}
+            now.update({k: v for k, v in (built.get("part_shas") or {}).items() if not only or k in only})
+            after_lock.record_course_files(int(ev["id"]), now, db_path)
+        except Exception:
+            logger.exception("course files: could not record the sheets sent")
+    return res
+
+
+def _send_course_files(built: dict, db_path=None, only=None, updated: bool = False) -> dict:
+    ev = built.get("event") or {}
+    # None lets send_print_pack_files cut the usual course set itself
+    files = lambda: split_print_pack(built, only=tuple(only)) if only else None
     rec = course_recipients_for_event(ev, db_path)
     if not rec.get("ok"):
         # Kerry 10/19: "If there is a course contact - send to course contact
@@ -471,8 +500,9 @@ def send_course_files(built: dict, db_path=None) -> dict:
         if not mgr:
             return {"sent": False, "no_contact": True, "course_id": rec.get("course_id"),
                     "course": ev.get("course"), "why": why}
-        res = send_print_pack_files(built, to_address=mgr[0], db_path=db_path,
-                                    cc_address=", ".join(mgr[1:]) or None, for_course=True)
+        res = send_print_pack_files(built, to_address=mgr[0], db_path=db_path, files=files(),
+                                    cc_address=", ".join(mgr[1:]) or None, for_course=True,
+                                    updated=updated)
         return {**res, "no_contact": True, "to_manager": True, "course_id": rec.get("course_id"),
                 "course": ev.get("course"), "why": why}
     cc = list(rec.get("cc") or [])
@@ -480,8 +510,9 @@ def send_course_files(built: dict, db_path=None) -> dict:
         a = a.strip()
         if a and a.lower() not in {x.lower() for x in cc} and a.lower() != rec["to"].lower():
             cc.append(a)
-    return send_print_pack_files(built, to_address=rec["to"], db_path=db_path,
-                                 cc_address=", ".join(cc) or None, for_course=True)
+    return send_print_pack_files(built, to_address=rec["to"], db_path=db_path, files=files(),
+                                 cc_address=", ".join(cc) or None, for_course=True,
+                                 updated=updated)
 
 
 def _esc(v) -> str:
@@ -616,9 +647,23 @@ def split_print_pack(built: dict, only=None) -> list[tuple[str, bytes]]:
     return out
 
 
+def _unprintable(built: dict) -> str | None:
+    """Kerry 2026-10-20, after TPC got a Scorecards PDF that was the "These
+    cards can't print yet" page: "This is NOT good!!!" A pack whose scorecards
+    carry a gap (or failed to render) is never mailed; the gap page is for a
+    manager's screen, never an attachment to a course. (Staff copies still
+    carry it: it tells a manager what to fix.)"""
+    sc = built.get("scorecards") or {}
+    if sc.get("error"):
+        return f"scorecards did not render: {sc['error']}"
+    if sc.get("gaps"):
+        return "scorecards have gaps, nothing sent: " + "; ".join(sc["gaps"])[:400]
+    return None
+
+
 def send_print_pack_files(built: dict, to_address: str | None = None, db_path=None,
                           files: list | None = None, cc_address: str | None = None,
-                          for_course: bool = False) -> dict:
+                          for_course: bool = False, updated: bool = False) -> dict:
     """Mail every report of a built pack as its OWN PDF attachment, one
     email. Does not touch the evening-before pack's sent hash. ``files``
     ([(name, bytes)]) sends those instead of splitting a bound pack."""
@@ -632,7 +677,16 @@ def send_print_pack_files(built: dict, to_address: str | None = None, db_path=No
         return {"sent": False, "why": "mail credentials or recipient not set", "files": listing}
     ev = built["event"]
     rows = "".join(f"<li>{_esc(f)}</li>" for f, _ in files)
-    if for_course:
+    if for_course and updated:
+        # an after-lock change (Kerry #2139): only the sheets that changed
+        html = (f'<p style="margin:0 0 1em;">Hello,</p>'
+                f'<p style="margin:0 0 1em;">Our pairings for The Golf Fellowship\'s event at '
+                f'{_esc(ev.get("course") or "your course")} on {_esc(ev.get("event_date"))} changed. '
+                f'Attached are the UPDATED sheets only; they replace the same sheets we sent earlier. '
+                f'Everything else stays as sent. Could you please reprint these for us?</p>'
+                f'<ul style="margin:0 0 1em;">{rows}</ul>'
+                f'<p style="margin:0 0 1em;">Thank you!<br>The Golf Fellowship</p>')
+    elif for_course:
         html = (f'<p style="margin:0 0 1em;">Hello,</p>'
                 f'<p style="margin:0 0 1em;">Attached are the print files for The Golf Fellowship\'s '
                 f'event at {_esc(ev.get("course") or "your course")} on {_esc(ev.get("event_date"))}, '
@@ -646,7 +700,8 @@ def send_print_pack_files(built: dict, to_address: str | None = None, db_path=No
     ok = send_mail_graph(tenant_id=creds["AZURE_TENANT_ID"], client_id=creds["AZURE_CLIENT_ID"],
                          client_secret=creds["AZURE_CLIENT_SECRET"],
                          from_address=creds["EMAIL_ADDRESS"], to_address=to_address,
-                         subject=(f"The Golf Fellowship print files — {ev.get('course') or ''} — {ev.get('event_date')}"
+                         subject=((("UPDATED " if updated else "") +
+                                   f"The Golf Fellowship print files — {ev.get('course') or ''} — {ev.get('event_date')}")
                                   if for_course else
                                   f"Print files — {ev.get('item_name')} — {ev.get('event_date')}"),
                          html_body=html, cc_address=cc_address or None,
@@ -674,8 +729,49 @@ def send_event_print_pack(built: dict, to_address: str | None = None,
                          attachments=[(built["filename"], built["pdf"], "application/pdf")])
     if ok:
         db.set_app_setting(f"print_pack_sent:{ev['id']}", built["sha"], db_path=db_path)
+        try:
+            db.set_app_setting(f"print_pack_sent_seats:{ev['id']}", json.dumps(
+                {"seats": seat_signature(built), "parts": built.get("part_shas") or {}}),
+                db_path=db_path)
+        except Exception:
+            logger.exception("print pack: could not record the seat signature for %s", ev.get("id"))
     return {"sent": bool(ok), "to": to_address, "sha": built["sha"],
             "filename": built["filename"], "bytes": len(built["pdf"])}
+
+
+# Parts a handicap (or the blind it brings or removes) can change. Kerry
+# 2026-10-20: "If a handicap comes in later, just update it on the tracker and
+# remove the blind. That's not reason to resend the print pack or even just
+# his affected printouts."
+HANDICAP_PARTS = ("starter-sheet", "scorecards", "cart-signs")
+
+
+def seat_signature(built: dict) -> str:
+    """Who sits where on which tee, blinds left out: the part of a sheet a
+    handicap can never change."""
+    rows = []
+    for g in ((built.get("pack") or {}).get("groups") or []):
+        for p in g.get("players") or []:
+            rows.append((str(g.get("holes")), g.get("group_num"), g.get("slot_label"),
+                         p.get("cart_pos"), p.get("customer_id") or (p.get("name") or "").strip().lower(),
+                         p.get("tee_choice")))
+    rows.sort(key=lambda r: tuple(str(x) for x in r))
+    return hashlib.sha256(json.dumps(rows, default=str).encode()).hexdigest()[:16]
+
+
+def _handicap_only_change(event_id: int, built: dict, db_path=None) -> bool:
+    """True when the seats are what was last sent and every part that changed
+    is one a handicap or its blind touches."""
+    from email_parser import database as db
+    try:
+        prev = json.loads(db.get_app_setting(f"print_pack_sent_seats:{event_id}", db_path=db_path) or "{}")
+    except (TypeError, ValueError):
+        return False
+    if not prev.get("seats") or prev["seats"] != seat_signature(built):
+        return False
+    now, before = built.get("part_shas") or {}, prev.get("parts") or {}
+    changed = {sl for sl in set(now) | set(before) if now.get(sl) != before.get(sl)}
+    return bool(changed) and changed <= set(HANDICAP_PARTS)
 
 
 def print_packs_due(db_path=None) -> list[dict]:
@@ -695,6 +791,19 @@ def send_due_print_packs(render, static_dir: str, db_path=None) -> list[dict]:
     from email_parser import database as db
     out = []
     for ev in print_packs_due(db_path):
+        # Kerry 2026-10-20: "Neither should have come because there are course
+        # contacts at both courses, so the only print packs that should have
+        # gone were theirs at noon with managers CCd." An event whose course
+        # has a TGF contact gets its files only through Course Files (To the
+        # course, CC the managers); this morning pack is for the rest.
+        try:
+            _contact = course_contact_for_event(ev, db_path=db_path)
+        except Exception:
+            _contact = None
+        if _contact:
+            out.append({"event_id": ev["id"], "sent": False,
+                        "why": f"course contact on file ({_contact}): Course Files go to the course"})
+            continue
         built = build_event_print_pack(render, ev["id"], static_dir, db_path=db_path)
         if not built or built.get("error"):
             out.append({"event_id": ev["id"], "sent": False,
@@ -703,6 +812,10 @@ def send_due_print_packs(render, static_dir: str, db_path=None) -> list[dict]:
         last = db.get_app_setting(f"print_pack_sent:{ev['id']}", db_path=db_path)
         if last == built["sha"]:
             out.append({"event_id": ev["id"], "sent": False, "why": "unchanged since last send"})
+            continue
+        if _handicap_only_change(ev["id"], built, db_path=db_path):
+            out.append({"event_id": ev["id"], "sent": False,
+                        "why": "only handicaps / blinds changed: Tracker updated, no resend (Kerry 10/20)"})
             continue
         res = send_event_print_pack(built, db_path=db_path)
         res["event_id"] = ev["id"]

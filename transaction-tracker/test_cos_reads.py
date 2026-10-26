@@ -14,13 +14,18 @@ def _db():
         c.execute("INSERT INTO events (id, item_name, event_date) VALUES (10, 's9.1 X', '2026-09-01')")
         c.execute("INSERT INTO events (id, item_name, event_date) VALUES (11, 's9.2 Y', '2026-09-08')")
         c.execute("INSERT INTO events (id, item_name, event_date) VALUES (12, 's9.3 Z', '2099-01-01')")
+        c.execute("INSERT INTO events (id, item_name, event_date) VALUES (13, 's9.4 W', '2026-10-13')")
+        c.execute("INSERT INTO events (id, item_name, event_date) VALUES (14, 's9.5 V', '2026-05-05')")
         rows = [  # event, a, b, rode, source
             (10, 1, 2, 1, "gg_teesheet"), (10, 1, 3, 0, "gg_teesheet"), (10, 2, 3, 0, "gg_teesheet"),
             (11, 1, 3, 0, "gg_teesheet"), (11, 1, 4, 0, "gg_teesheet"),   # Ann solo cart on 11
             (11, 2, 4, 1, "app"),                                         # app row: a plan, never counted
             (12, 1, 2, 1, "gg_teesheet"),                                 # not played yet
+            (13, 1, 2, 0, "entry"), (13, 1, 3, 0, "entry"),               # entry era: Ann solo cart
+            (14, 1, 4, 1, "tee_sheet"),                                   # hand-loaded sheet: rode Di
         ]
-        dates = {10: "2026-09-01", 11: "2026-09-08", 12: "2099-01-01"}
+        dates = {10: "2026-09-01", 11: "2026-09-08", 12: "2099-01-01", 13: "2026-10-13",
+                 14: "2026-05-05"}
         names = {1: "Ann A", 2: "Bob B", 3: "Cy C", 4: "Di D"}
         for e, a, b, rode, src in rows:
             c.execute("INSERT INTO pairing_history (player_a, player_b, event_id, event_date, customer_a_id, "
@@ -33,11 +38,20 @@ def _db():
 def test_customer_view_partners_and_solo_cart():
     r = cr.pairing_history_view(customer_id=1, db_path=_db())
     by = {p["customer_id"]: p for p in r["partners"]}
-    assert by[3]["played_with"] == 2 and by[2]["played_with"] == 1 and by[2]["rode_with"] == 1
-    assert r["rounds_with_pairs"] == 2
+    assert by[3]["played_with"] == 3 and by[2]["played_with"] == 2 and by[2]["rode_with"] == 1
+    assert r["rounds_with_pairs"] == 4
     cart = {c["event_id"]: c for c in r["cart_record"]}
     assert cart[10]["rode_with"] == "Bob B" and not cart[10]["solo_cart"]
-    assert cart[11]["solo_cart"] and r["solo_carts"] == 1
+    assert cart[11]["solo_cart"]
+
+
+def test_cart_record_counts_our_own_rounds():
+    # GG Retirement audit A2/A3 (Kerry 10/19: "Definitely need to be counting our own")
+    r = cr.pairing_history_view(customer_id=1, db_path=_db())
+    cart = {c["event_id"]: c for c in r["cart_record"]}
+    assert 13 in cart and cart[13]["solo_cart"]                 # entry-era event, solo
+    assert cart[14]["rode_with"] == "Di D"                       # hand-loaded tee sheet
+    assert r["solo_carts"] == 2
 
 
 def test_app_rows_and_future_dates_not_counted():

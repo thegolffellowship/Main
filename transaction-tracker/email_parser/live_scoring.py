@@ -981,12 +981,23 @@ def _team_blind_members(cards: list[dict], teams: dict, blinds: list,
 
 
 def game_team_net(cards: list[dict], cfg: dict,
-                  blinds: list | None = None) -> dict:
-    """Team Net — foursomes, one best NET ball per hole vs par. `blinds`
-    (from `blind_draws`) complete short teams and stand in for N/H seats."""
+                  blinds: list | None = None, balls: int | None = None) -> dict:
+    """Team Net — foursomes, the best N NET balls per hole vs par. `blinds`
+    (from `blind_draws`) complete short teams and stand in for N/H seats.
+
+    N is the event's ball count (`event_team_net_dial`: Best 1 / 2 / 3 /
+    4, Kerry 2026-09-16 and 10/19 "TEAM Net 2 and 3 ball options ...
+    adding cumulative of the two best or three best net scores"). Each
+    hole scores the SUM of the N lowest net-vs-par balls, so ``vs_par``
+    is already measured against N x par. A hole with fewer balls posted
+    than N counts the balls it has. ``balls`` None/1 is the old Best 1."""
     gc = cfg["games"]["team_net"]
+    try:
+        n_balls = max(1, int(balls or gc.get("balls") or 1))
+    except (TypeError, ValueError):
+        n_balls = 1
     out = {"game": "team_net", "label": gc["label"], "teams": [],
-           "warnings": []}
+           "balls": n_balls, "warnings": []}
     teams: dict = {}
     for c in cards:
         if c.get("team") is None:
@@ -1011,7 +1022,7 @@ def game_team_net(cards: list[dict], cfg: dict,
         hole_rows, total, thru = [], 0, 0
         hole_numbers = sorted({h["hole"] for c in members for h in c["holes"]})
         for hole in hole_numbers:
-            best, best_by = None, None
+            balls_here: list = []          # (net_vs_par, name)
             par = None
             for c in members:
                 if c.get("blind_holes") is not None and hole not in c["blind_holes"]:
@@ -1027,16 +1038,22 @@ def game_team_net(cards: list[dict], cfg: dict,
                               if h["par"] is not None else None)
                 if net_vs_par is None:
                     continue
-                if best is None or net_vs_par < best:
-                    best, best_by = net_vs_par, c["name"]
-            if best is None:
+                balls_here.append((net_vs_par, c["name"]))
+            if not balls_here:
                 hole_rows.append({"hole": hole, "par": par, "best": None,
-                                  "by": None})
+                                  "by": None, "counted": []})
                 continue
+            balls_here.sort(key=lambda x: x[0])
+            k = min(n_balls, len(balls_here))
+            best = sum(x[0] for x in balls_here[:k])
+            cut = balls_here[k - 1][0]
             total += best
             thru += 1
             hole_rows.append({"hole": hole, "par": par, "best": best,
-                              "by": best_by})
+                              "by": balls_here[0][1],
+                              # every ball that counted; a tie at the
+                              # cutoff names all the tied balls
+                              "counted": [nm for v, nm in balls_here if v <= cut]})
         out["teams"].append({
             "team": team_num,
             "members": [c["name"] for c in members],
@@ -1504,7 +1521,10 @@ def compute_leaderboard(state: dict, formulas: dict,
             "individual_gross": game_individual(
                 cards, cfg, holes_key, "gross",
                 pins=pins.get("individual_gross")),
-            "team_net": game_team_net(cards, cfg, blinds=state.get("blinds")),
+            "team_net": game_team_net(
+                cards, cfg, blinds=state.get("blinds"),
+                balls=(state.get("team_balls")
+                       or (state.get("meta") or {}).get("team_balls"))),
             "skins": game_skins(cards, cfg, holes_key,
                                 pins=pins.get("skins"),
                                 variant_name=(state.get("variant_pins")

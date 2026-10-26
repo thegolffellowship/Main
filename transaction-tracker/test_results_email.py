@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from email_parser import database as db  # noqa: E402
 from email_parser import results_email as rx  # noqa: E402
 from email_parser import event_day_email as ede  # noqa: E402
+from email_parser import invitations as inv  # noqa: E402
 from email_parser.handicap_calc import ruled_dots  # noqa: E402
 
 FAILURES = []
@@ -103,6 +104,12 @@ ids = {p["customer_id"] for p in a["people"]}
 check("players and the chapter's members, with an address", ids == {18, 298, 50}, a)
 check("another chapter's member is left out", 60 not in ids, ids)
 check("no email is counted, not sent", a["counts"]["excluded"]["no_email"] == 1, a["counts"])
+db.set_app_setting(inv.OPTOUT_KEY, json.dumps([298, 50]), tmp)
+a = rx.audience(3307, db_path=tmp)
+ids = {p["customer_id"] for p in a["people"]}
+check("an invitation opt-out who PLAYED still gets the results (Kerry 10/21)", 298 in ids, ids)
+check("an invitation opt-out who did not play gets none", 50 not in ids and a["counts"]["excluded"]["opted_out"] == 1, a["counts"])
+db.set_app_setting(inv.OPTOUT_KEY, "[]", tmp)
 
 print("\nPreview goes to staff or a manager's own address only")
 check("a member's address is refused", rx._preview_allowed(["dan@example.com"], db_path=tmp) == ["dan@example.com"])

@@ -7719,6 +7719,10 @@
                 // scoring link and where every card stands. Admin only in
                 // the dry run.
                 html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
+                // APPROVE from here after editing (Kerry 10/19: "takes me to
+                // the PAIRINGS view in the EVENT. Then it would ALSO need an
+                // APPROVE button"). Opens the review page for the saved sheet.
+                html += `<a class="pairings-action-btn" href="/events/${ev.id}/approve-pairings" style="background:#E87C3E;color:#fff;text-decoration:none;" title="Review the saved sheet and approve it: the tee-times email goes out">&#x2713; Approve</a>`;
             }
         }
         html += '</div>'; // .pairings-actions
@@ -8152,7 +8156,7 @@
                             title="BLIND — ${escapeHtml(bl.name || '')}'s card plays for this team. Nobody is in the cart. Click to redraw, remove, or seat a real player here."
                             data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
                             <span class="pairing-cart-dot" style="background:#bbb;"></span>
-                            <span class="pairing-player-name">BLIND &middot; ${escapeHtml(bl.name || '')}${bl.pending ? ' <em style="color:var(--text-muted,#6B7280);font-size:0.85em;">saving\u2026</em>' : ''}</span></div>`;
+                            <span class="pairing-player-name">BLIND &middot; ${escapeHtml(bl.name || '')}${bl.year_count ? ` <span title="times a blind this calendar year" style="color:var(--text-muted,#6B7280);">(${bl.year_count})</span>` : ''}${bl.pending ? ' <em style="color:var(--text-muted,#6B7280);font-size:0.85em;">saving\u2026</em>' : ''}</span></div>`;
                         continue;
                     }
                     html += `<div class="pairing-empty-slot" title="Open spot — click to pick a player from the roster or add a BLIND, or select a player/cart pair first and click here"
@@ -8316,7 +8320,7 @@
                 .forEach(b => {
                     html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND — ${escapeHtml(b.name || '')}'s card plays for this team.">`
                         + '<span class="pairing-cart-dot" style="background:#bbb;"></span>'
-                        + `<span class="pairing-player-name">BLIND &middot; ${escapeHtml(b.name || '')}</span>`
+                        + `<span class="pairing-player-name">BLIND &middot; ${escapeHtml(b.name || '')}${b.year_count ? ` <span title="times a blind this calendar year" style="color:var(--text-muted,#6B7280);">(${b.year_count})</span>` : ''}</span>`
                         + '</div>';
                 });
 
@@ -9168,8 +9172,10 @@
                 const skinsFlights = (gGross.skinsFlights && gGross.skinsFlights !== "NO_EVENT") ? parseInt(gGross.skinsFlights) : 1;
                 const skinsMwpVal = numVal(gGross.skinsTotal) / skinsFlights;
                 grossMWP += skinsMwpVal;
-                const halfNetNote = grossPC < 8
-                    ? ` <span style="color:var(--text-muted);font-size:0.85em;font-weight:400;" title="½-net pop allocation rule pending ratification — see mailbox game-results-wiring">manual — ½-net rule pending</span>` : "";
+                // ½ Net Skins is ratified and computed (v2.571.27); the old
+                // "manual — rule pending" note reached the players' Event
+                // Info email (Kerry 10/19), so it is gone.
+                const halfNetNote = "";
                 html += `<tr><td><strong>${skinsLabel}</strong>${halfNetNote}</td><td>${fmt$(gGross.skinsTotal) || "—"}</td><td>${fmt$(skinsMwpVal)}</td><td>${skinsFlights}</td>${empty4}</tr>`;
                 if (grossPC >= 8) {
                     html += `<tr class="games-row-sub games-winner-row" style="display:none;"><td class="games-indent" colspan="${C}"><span class="game-det" data-event="${escapeHtml(ev.item_name)}" data-game="skins" data-flights="${skinsFlights}" data-pot="${numVal(gGross.skinsTotal)}"></span></td></tr>`;

@@ -57,8 +57,8 @@ db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
 print("1. Who approves")
 check("San Antonio's prompt goes to Kerry's TGF address",
       pa.manager_for("San Antonio", DB)["email"] == "kerry@thegolffellowship.com")
-check("Austin's goes to Robert's own email (his customer row)",
-      pa.manager_for("Austin", DB)["email"] == "robert@example.test", pa.manager_for("Austin", DB))
+check("Austin's goes to Robert's TGF address, not his personal one (Kerry 10/19)",
+      pa.manager_for("Austin", DB)["email"] == "robert@thegolffellowship.com", pa.manager_for("Austin", DB))
 check("admin may approve anything", pa.may_approve("admin", None, "Austin") is None)
 check("the Austin manager may approve Austin", pa.may_approve("manager", "Austin", "Austin") is None)
 check("…but not San Antonio", pa.may_approve("manager", "Austin", "San Antonio") is not None)
@@ -69,16 +69,16 @@ mon_5_05 = datetime(2026, 10, 19, 17, 5)
 SENT.clear()
 r = pa.prompt_check(mon_5_05, DB)
 check("Monday 5:05 PM: one prompt per event, to its manager",
-      sorted(s["to_address"] for s in SENT) == ["kerry@thegolffellowship.com", "robert@example.test"], r)
-p = next((s for s in SENT if s["to_address"] == "robert@example.test"), {})
+      sorted(s["to_address"] for s in SENT) == ["kerry@thegolffellowship.com", "robert@thegolffellowship.com"], r)
+p = next((s for s in SENT if s["to_address"] == "robert@thegolffellowship.com"), {})
 check("…naming the event, the player count and the review link (login)",
       "a9.60 AUS TUESDAY" in p.get("subject", "") and "2 players" in p.get("html_body", "")
       and f"/events/{AUS}/approve-pairings" in p.get("html_body", "")
       and "log in" in p.get("html_body", ""), p.get("html_body", "")[:400])
 check("…with the groups and a sample player email",
-      "Ann Able" in p.get("html_body", "") and "Sample player email" in p.get("html_body", ""))
+      "Ann Able" in p.get("html_body", "") and "7:00 AM Event Info email" in p.get("html_body", "") and "Edit pairings" in p.get("html_body", ""))
 check("no player was emailed by the prompt",
-      not any(s["to_address"].endswith("@example.test") and s["to_address"] != "robert@example.test" for s in SENT))
+      not any(s["to_address"].endswith("@example.test") for s in SENT))
 SENT.clear()
 pa.prompt_check(mon_5_05 + timedelta(minutes=15), DB)
 check("the same sheet is never prompted twice", not SENT)
@@ -90,7 +90,7 @@ check("a changed sheet waits out the hour before a fresh prompt",
       not SENT and "hour" in (r2["events"][AUS].get("skipped") or ""), r2["events"].get(AUS))
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
 pa.prompt_check(mon_5_05 + timedelta(minutes=80), DB)
-check("…then re-prompts for the new sheet", [s["to_address"] for s in SENT] == ["robert@example.test"])
+check("…then re-prompts for the new sheet", [s["to_address"] for s in SENT] == ["robert@thegolffellowship.com"])
 
 print("3. Approve")
 fp = pa.sheet_fingerprint(AUS, DB)
@@ -102,29 +102,19 @@ check("an old sheet's approval is refused (409, with the new fingerprint)",
       r.get("code") == 409 and r.get("fingerprint") == fp and not SENT, r)
 r = pa.approve_and_send(AUS, fp, role="manager", session_chapter="Austin",
                         approved_by="manager (Austin)", db_path=DB)
-check("Robert's approval emails both players",
-      r.get("counts", {}).get("sent") == 2
-      and sorted(s["to_address"] for s in SENT) == ["ann@example.test", "bob@example.test"], r.get("counts"))
+check("Robert's approval signs off the sheet and emails NO player tonight (Kerry 10/19)",
+      r.get("status") == "approved" and not SENT and pa.emails_sent(AUS, DB) == 0, r)
 check("…and records who approved which sheet",
       pa.event_state(AUS, DB).get("approved_fp") == fp
       and pa.event_state(AUS, DB).get("approved_by") == "manager (Austin)")
 SENT.clear()
-r = pa.approve_and_send(AUS, fp, role="admin", session_chapter=None, approved_by="admin", db_path=DB)
-check("a second approval sends nothing twice", r.get("counts", {}).get("sent") == 0 and not SENT, r.get("counts"))
-db.save_event_pairings(AUS, SHEET, db_path=DB)
+check("an approved sheet is never prompted again, even on a resend (Kerry 10/19)",
+      "already approved" in (pa.send_prompt(AUS, DB).get("skipped") or "") and not SENT)
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
-SENT.clear()
-r = pa.prompt_check(mon_5_05 + timedelta(hours=3), DB)
-check("once the emails went, no more prompts", not any(s["to_address"] == "robert@example.test" for s in SENT)
-      and "already sent" in (r["events"][AUS].get("skipped") or ""), r["events"].get(AUS))
-db.set_app_setting(ede.APPROVAL_KEY, "", db_path=DB)
-r = pa.approve_and_send(SA, pa.sheet_fingerprint(SA, DB), role="admin", session_chapter=None,
-                        approved_by="admin", db_path=DB)
-check("unapproved wording: approving the sheet still sends nothing", "refused" in r, r)
 db.set_app_setting(pa.DIAL, "0", db_path=DB)
 check("dial off: no prompts", pa.prompt_check(mon_5_05, DB) == {"status": "off"})
 
-print("3b. 7:00 PM auto-send (Kerry 10/19)")
+print("3b. 7 PM locks, 7 AM sends the Event Info email (Kerry 10/19)")
 db.set_app_setting(pa.DIAL, "1", db_path=DB)
 db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
 E_APP, E_AUTO = 9311, 9312
@@ -141,25 +131,23 @@ with db._connect(DB) as conn:
     conn.commit()
 for eid in (E_APP, E_AUTO):
     db.save_event_pairings(eid, SHEET, db_path=DB)
-mon26_6pm = datetime(2026, 10, 26, 18, 0)
 SENT.clear()
-check("6:00 PM the day before: nothing auto-sends", pa.auto_send_check(mon26_6pm, DB).get("status") == "not yet")
-r = pa.approve_and_send(E_APP, pa.sheet_fingerprint(E_APP, DB), role="admin", session_chapter=None,
-                        approved_by="admin", db_path=DB)
-n_app = len(SENT)
-check("Approve before 7 sends at that moment", n_app >= 2 and pa.emails_sent(E_APP, DB) >= 2, (n_app, r))
-SENT.clear()
+check("6:00 PM the day before: nothing happens", pa.auto_send_check(datetime(2026, 10, 26, 18, 0), DB).get("status") == "not yet")
+pa.approve_and_send(E_APP, pa.sheet_fingerprint(E_APP, DB), role="admin", session_chapter=None,
+                    approved_by="admin", db_path=DB)
 r = pa.auto_send_check(datetime(2026, 10, 26, 19, 0), DB)
-check("7:00 PM: the approved event is NOT sent again",
-      "approved" in (r["events"].get(E_APP, {}).get("skipped") or "") , r["events"].get(E_APP))
-check("7:00 PM: the event nobody approved is sent now",
-      pa.emails_sent(E_AUTO, DB) >= 2 and pa.event_state(E_AUTO, DB).get("approved_by", "").startswith("auto 7 PM"),
-      r["events"].get(E_AUTO))
-check("7:00 PM sent exactly the unapproved event's two players", len(SENT) == 2, len(SENT))
+check("7:00 PM: the approved sheet stays as approved", "approved" in (r["events"].get(E_APP, {}).get("skipped") or ""), r["events"].get(E_APP))
+check("7:00 PM: the unapproved sheet is auto-approved, no email",
+      r["events"].get(E_AUTO, {}).get("status") == "auto-approved"
+      and pa.event_state(E_AUTO, DB).get("approved_by", "").startswith("auto 7 PM"), r["events"].get(E_AUTO))
+check("7 PM sends no player email at all", not SENT and pa.emails_sent(E_APP, DB) == 0 and pa.emails_sent(E_AUTO, DB) == 0, len(SENT))
+check("6:45 AM event day: not yet", pa.auto_send_check(datetime(2026, 10, 27, 6, 45), DB).get("status") == "not yet")
+r = pa.auto_send_check(datetime(2026, 10, 27, 7, 0), DB)
+check("7:00 AM: both events' players get the Event Info email",
+      pa.emails_sent(E_APP, DB) >= 2 and pa.emails_sent(E_AUTO, DB) >= 2, r)
 SENT.clear()
-r = pa.auto_send_check(datetime(2026, 10, 26, 19, 15), DB)
-check("7:15 PM: nothing resends", not SENT, r)
-# A failed 7 PM send emails Kerry and retries hourly (Kerry 10/19)
+r = pa.auto_send_check(datetime(2026, 10, 27, 7, 15), DB)
+check("7:15 AM: nothing resends", not SENT, r)
 E_FAIL = 9313
 with db._connect(DB) as conn:
     conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, "
@@ -174,16 +162,15 @@ with db._connect(DB) as conn:
 db.save_event_pairings(E_FAIL, SHEET, db_path=DB)
 db.set_app_setting(ede.APPROVAL_KEY, "", db_path=DB)        # wording unapproved -> send refused
 SENT.clear()
-r = pa.auto_send_check(datetime(2026, 10, 26, 19, 30), DB)
-check("a failed 7 PM send emails Kerry",
+r = pa.auto_send_check(datetime(2026, 10, 27, 7, 30), DB)
+check("a failed 7 AM send emails Kerry",
       "error" in r["events"].get(E_FAIL, {}) and any("FAILED" in x.get("subject", "") and
       x.get("to_address") == "kerry@thegolffellowship.com" for x in SENT), (r["events"].get(E_FAIL), [x.get("subject") for x in SENT]))
-SENT.clear()
-r = pa.auto_send_check(datetime(2026, 10, 26, 19, 45), DB)
+r = pa.auto_send_check(datetime(2026, 10, 27, 7, 45), DB)
 check("…and does not retry inside the hour", "hourly" in (r["events"].get(E_FAIL, {}).get("skipped") or ""), r["events"].get(E_FAIL))
 db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
 db.set_app_setting(pa.AUTO_DIAL, "off", db_path=DB)
-check("dial off: auto-send stops", pa.auto_send_check(datetime(2026, 10, 26, 19, 30), DB) == {"status": "off"})
+check("dial off: auto-send stops", pa.auto_send_check(datetime(2026, 10, 27, 7, 30), DB) == {"status": "off"})
 
 print("4. The routes: log in first")
 os.environ.setdefault("SECRET_KEY", "test-secret")
@@ -199,8 +186,17 @@ check("a San Antonio manager cannot open an Austin approval", cl.get(f"/events/{
 with cl.session_transaction() as s:
     s["chapter"] = "Austin"
 page = cl.get(f"/events/{AUS}/approve-pairings")
-check("the Austin manager sees the review with the emails-sent state",
-      page.status_code == 200 and b"Player emails sent" in page.data, page.status_code)
+check("the Austin manager sees the review with the approved state",
+      page.status_code == 200 and b"Event Info emails go to" in page.data, page.status_code)
+
+with cl.session_transaction() as s:
+    s["role"] = "admin"; s.pop("chapter", None)
+_fp = pa.sheet_fingerprint(SA, DB)
+cl.get(f"/events/{SA}/approve-pairings?approve=stale")
+check("a stale one-tap link approves nothing", pa.event_state(SA, DB).get("approved_fp") != _fp)
+page = cl.get(f"/events/{SA}/approve-pairings?approve={_fp}")
+check("the email's one-tap Approve approves the sheet (Kerry 10/19)",
+      page.status_code == 200 and pa.event_state(SA, DB).get("approved_fp") == _fp, page.status_code)
 
 try: os.unlink(DB)
 except OSError: pass
