@@ -90,7 +90,13 @@ def build(event_id: int, db_path=None, preview_to_name: str | None = None) -> di
     def _names(rows):
         return sorted({(x.get("name") or "").strip() for x in rows if (x.get("name") or "").strip()})
     reg = _names([x for x in roster if not x.get("rsvp_only")])
-    rsvp = [n for n in _names([x for x in roster if x.get("rsvp_only")]) if n not in reg]
+    # RSVP-only "I'm in" players, minus known mail scanners (CoS #2372, as
+    # the deadline emails do; an unconfirmed scanner tap is already dropped
+    # at tap time by invitations.scanner_check).
+    from email_parser.invitations import known_scanner
+    rsvp_rows = [x for x in roster if x.get("rsvp_only")
+                 and not (x.get("customer_id") and known_scanner(int(x["customer_id"]), db_path=db_path))]
+    rsvp = [n for n in _names(rsvp_rows) if n not in reg]
     names = reg + rsvp
     held = []
     if not rec.get("ok"):
