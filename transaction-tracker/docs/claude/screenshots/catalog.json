@@ -658,11 +658,11 @@
    "area": "Live scoring",
    "audience": "member",
    "status": "current",
-   "version": "branch tb5-no-show-2 (not deployed)",
+   "version": "v2.603.0 (not deployed)",
    "taken": "2026-10-26",
    "folder": "no-show-2026-10-26",
    "source_doc": "docs/claude/score-entry.md (No-show)",
-   "notes": "Kerry 9/30 (#1021) and 10/26: the red Player missing button, Who's missing?, the answers (now with Left the course), off the card with its Rule 15 blind, + Player for a late arrival or another player, the NOT PLAYED holes, the make-up question after the regular holes, and the TGF-branded course notice with player-count totals (and its UPDATED version). Rendered from the real score page and card on a throwaway round; nothing is saved or sent.",
+   "notes": "Kerry 9/30 (#1021) and 10/26: the red Player missing button, Who's missing?, tap everyone who is missing at once, the answers (now with Left the course), off the card with its Rule 15 blind, + Player for a late arrival or another player, the NOT PLAYED holes, the make-up question after the regular holes, and the TGF-branded course notice with player-count totals (and its UPDATED version). Rendered from the real score page and card on a throwaway round; nothing is saved or sent.",
    "watch": [
     "templates/score_entry.html",
     "email_parser/no_show_notice.py",
@@ -687,7 +687,7 @@
     },
     {
      "file": "2-whos-missing.png",
-     "caption": "Who's missing? The card's players, never another card's",
+     "caption": "Who's missing? Tap everyone who isn't here (the card's players, never another card's)",
      "shots": {
       "mobile": "2-whos-missing.png",
       "tablet": "2-whos-missing.tablet.png",
@@ -695,6 +695,18 @@
      },
      "capture": {
       "render": "no_show_who"
+     }
+    },
+    {
+     "file": "2b-two-missing.png",
+     "caption": "Two players tapped: Next (2 missing), then one question per player, in turn (Kerry 10/26)",
+     "shots": {
+      "mobile": "2b-two-missing.png",
+      "tablet": "2b-two-missing.tablet.png",
+      "desktop": "2b-two-missing.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_multi"
      }
     },
     {
@@ -806,7 +818,7 @@
      }
     }
    ],
-   "watch_hash": "9d9a09aad9104802"
+   "watch_hash": "de0c997a372fc36f"
   },
   {
    "id": "score-entry-match-pickup",
@@ -1926,7 +1938,7 @@
    "watch": [
     "templates/score_entry.html"
    ],
-   "watch_hash": "330cbdfe89ebba2b"
+   "watch_hash": "cf64c5fb80dd9345"
   },
   {
    "id": "member-teesheet",

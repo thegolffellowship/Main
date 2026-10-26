@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.603.0";
+window.TGF_VERSION = "2.603.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.603.1",
+    date: "2026-10-26",
+    title: "Player missing: tap everyone who is missing at once",
+    changes: [
+      "Kerry 10/26: \"What if multiple people are missing? Can I tap all that are missing?\" Who's missing? now lets the scorer tap every player who isn't here (each turns red with a check), then Next (N missing) asks Is <Name> coming? for each in turn (\"1 of 2\", \"2 of 2\"), and the answers are saved one after another with one reload. The back end already handled several absent players on one card (one Rule 15 blind per missing seat). Screens sequence no-show retaken with the new step 2b."
+    ]
+  },
   {
     version: "2.603.0",
     date: "2026-10-26",

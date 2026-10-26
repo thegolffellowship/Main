@@ -1449,3 +1449,8 @@ Kerry 9/30 (ratified, Pairings Spec v1.4 §12.2): "on the first hole there needs
 - **Not built:** the manager's "Move to..." on the Live Scoring page. Holes an absent player DID play before being taken off leave the feed with him (WD is the answer for a player who leaves). The day-after board reads the record, where a short round is not published, so a past board's Team Net shows his slot from the blind's holes only (the money was recorded on the day from the entered cards).
 - **The course notice:** see events.md "Course no-show notice".
 - Screens: sequence `no-show` (11 steps, rendered from the real page and card on a throwaway round, `screens_capture._ns_seed` / `_r_no_show`). Guard `test_no_show.py`.
+
+
+### More than one player missing (Kerry 10/26, v2.603.1)
+
+Kerry: "What if multiple people are missing? Can I tap all that are missing?" Who's missing? is a multi-pick: the scorer taps every player who isn't here, then Next (N missing) asks Is <Name> coming? for each, in turn; the answers post one after another (`/api/score-entry/missing` per player), then one reload. Each absent player gets his own Rule 15 blind (`sync_no_show_blinds`).

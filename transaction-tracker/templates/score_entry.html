@@ -774,7 +774,8 @@
         // Match play pickup prompt + the max-triple notice (Kerry 2026-09-25).
         let draftX = {}, closedGate = false, pinMsg = "";
         let pickupHole = null, pickupKeys = [], pickupAns = {}, maxNote = "";
-        // NO-SHOW: missing = null | "who" | {cid, again}; missAsked = "cid:hole" re-asks shown.
+        // NO-SHOW: missing = null | "who" | {pick: [cid…]} (choosing) | {cid, queue, total, answers, again};
+        // missAsked = "cid:hole" re-asks shown.
         let missing = null;
         // "+ Player" (Kerry 10/26): adding = null | {choices} while the add screen is open.
         let adding = null;
@@ -1829,16 +1830,26 @@
         function missingScreen() {
             const n = missing && missing.cid != null ? missing.cid : null;
             if (n == null) {
+                // MORE THAN ONE MISSING (Kerry 10/26: "What if multiple people are
+                // missing? Can I tap all that are missing?"): tap everyone who
+                // isn't here, then one question per player, in turn.
+                const pick = (missing && missing.pick) || [];
                 const ps = card.players.filter((p) => p.customer_id !== who && !isAbsent(p.customer_id)
                     && !(card.teams || []).some((t) => t.customer_id_a === p.customer_id || t.customer_id_b === p.customer_id));
                 return `<div class="se-eyebrow">${Number.isInteger(hole) ? "Hole " + hole + " · " : ""}Player missing</div>
-                    <h1 class="se-h1">Who's missing?</h1><div class="se-gap"></div>
-                    <div class="se-stack">${ps.map((p) => `<button type="button" class="se-pill line" data-act="mwho" data-cid="${p.customer_id}">${esc(p.display_name)}</button>`).join("")}
-                      <button type="button" class="se-pill dark" data-act="mcancel">Everyone's here</button></div>`;
+                    <h1 class="se-h1">Who's missing?</h1>
+                    <div class="se-copy">Tap everyone who isn't here.</div><div class="se-gap"></div>
+                    <div class="se-stack">${ps.map((p) => { const on = pick.includes(p.customer_id);
+                        return `<button type="button" class="se-pill ${on ? "miss" : "line"}" data-act="mwho" data-cid="${p.customer_id}" aria-pressed="${on}">${on ? "&#10003; " : ""}${esc(p.display_name)}</button>`; }).join("")}
+                      ${pick.length
+                        ? `<button type="button" class="se-pill go" data-act="mnext">Next (${pick.length} missing)</button>
+                           <button type="button" class="se-pill dark back" data-act="mcancel">Back</button>`
+                        : `<button type="button" class="se-pill dark" data-act="mcancel">Everyone's here</button>`}</div>`;
             }
             const nm = byId(n).display_name || (noShowOf(n) || {}).name || "";
             const ns = noShowOf(n), left = Math.max(0, (card.no_show_after_holes || 3) - ((ns && ns.holes_asked) || 0));
-            return `<div class="se-eyebrow">${Number.isInteger(hole) ? "Hole " + hole + " · " : ""}Player missing</div>
+            const of = missing.total > 1 ? ` (${missing.total - (missing.queue || []).length} of ${missing.total})` : "";
+            return `<div class="se-eyebrow">${Number.isInteger(hole) ? "Hole " + hole + " · " : ""}Player missing${of}</div>
                 <h1 class="se-h1">Is ${esc(first(nm) || nm)} coming?</h1><div class="se-gap"></div>
                 <div class="se-stack">
                   <button type="button" class="se-pill go" data-act="mans" data-a="late">Running late, keep him on the card</button>
@@ -2465,13 +2476,35 @@
             if (act === "turn") { turnNext = null; render(); return; }
             if (act === "missing") { commitDraft(); missing = "who"; render(); return; }
             if (act === "mcancel") { missing = null; render(); return; }
-            if (act === "mwho") { missing = {cid: Number(b.dataset.cid), again: false}; render(); return; }
+            if (act === "mwho") {
+                const c = Number(b.dataset.cid), pick = ((missing && missing.pick) || []).slice();
+                const i = pick.indexOf(c);
+                if (i >= 0) pick.splice(i, 1); else pick.push(c);
+                missing = {pick}; render(); return;
+            }
+            if (act === "mnext") {
+                const pick = ((missing && missing.pick) || []).slice();
+                if (!pick.length) { missing = null; render(); return; }
+                missing = {cid: pick[0], queue: pick.slice(1), total: pick.length, answers: [], again: false};
+                render(); return;
+            }
             if (act === "mans") {
-                const cid = missing && missing.cid;
+                const m = missing || {};
+                const answers = (m.answers || []).concat(m.cid != null ? [{customer_id: m.cid, answer: b.dataset.a}] : []);
+                if ((m.queue || []).length) {
+                    missing = {cid: m.queue[0], queue: m.queue.slice(1), total: m.total, answers, again: m.again};
+                    render(); return;
+                }
                 missing = null;
-                if (cid != null) post("/api/score-entry/missing", {customer_id: cid, answer: b.dataset.a,
-                                      hole: Number.isInteger(hole) ? hole : null, who});
-                else render();
+                if (!answers.length) { render(); return; }
+                // One answer per player, sent in turn, then one reload.
+                const h = Number.isInteger(hole) ? hole : null;
+                busy = true;
+                answers.reduce((pr, a) => pr.then(() => api("/api/score-entry/missing",
+                        {customer_id: a.customer_id, answer: a.answer, hole: h, who})
+                    .then(({j}) => { if (j && j.error) errMsg = j.error; })), Promise.resolve())
+                    .then(() => { busy = false; return load(); })
+                    .catch(() => { busy = false; errMsg = "No signal. Try again in a moment."; render(); });
                 return;
             }
             if (act === "unmiss") { post("/api/score-entry/missing", {customer_id: Number(b.dataset.cid), answer: "present",
