@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.589.0";
+window.TGF_VERSION = "2.590.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.590.0",
+    date: "2026-10-26",
+    title: "Same-night admin report: one email to Kerry with a PAYMENTS link once every event that day is closed",
+    changes: [
+      "Kerry 10/26 (CoS #2329 item 6): \"I like to pay same night as a standard. ... Needs an automated Admin report once all events are completed that would carry a link to PAYMENTS.\" Every 15 minutes from 5:00 PM to 11:45 PM, the Tracker checks every event dated today with the closeout's own test (cards final, card parity, payouts recorded). Once all of them pass, it sends Kerry one email listing each event's players, the payouts recorded and what is still unpaid, with an Open PAYMENTS button that lands on Payouts with the Unpaid queue open (/tgf?view=unpaid, also ?view=refunds).",
+      "It goes once a day and only to a @thegolffellowship.com address (app setting admin_payout_report_to, default Kerry). An event with nobody on its roster never holds it. Every send is logged. Dial admin_payout_report; read-only bridge scoring-admin-payout-report; guard test_admin_payout_report.py. PayPal one-tap batch payouts are not part of this (CFO plan #2338)."
+    ]
+  },
   {
     version: "2.589.0",
     date: "2026-10-26",

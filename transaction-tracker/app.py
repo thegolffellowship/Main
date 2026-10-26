@@ -2444,6 +2444,28 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # SAME-NIGHT ADMIN PAYOUT REPORT (Kerry 2026-10-26, CoS #2329 item 6):
+    # once every event dated today is closed (closeout_final_check final),
+    # one email to Kerry with a link to PAYMENTS. Every 15 min, 5:00 PM to
+    # midnight Central. Dial `admin_payout_report`.
+    # email_parser/admin_payout_report.py.
+    def admin_payout_report_job():
+        from email_parser.admin_payout_report import tick
+        try:
+            res = tick()
+            if res.get("status") in ("sent", "failed", "held"):
+                logger.info("Admin payout report: %s", res)
+        except Exception:
+            logger.exception("Admin payout report failed (non-fatal)")
+    scheduler.add_job(
+        admin_payout_report_job,
+        "cron", hour="17-23", minute="2-59/15",
+        timezone="US/Central",
+        id="admin_payout_report",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # ── PACE OF PLAY (Kerry 2026-10-19 #2092, migration 0037): every morning
     #    at 6:41 Central, rebuild the pace tables out of se_audit
     #    (derived tables, always), then send yesterday's MANAGER PACE REPORT
