@@ -162,6 +162,42 @@ Kerry: "Sign-ups between 5 and 7p. We need something here to automate adding to 
 - No open seat: the player stays Unassigned and one COO item `NO OPEN SEAT: <event>` per person per event (`seat_fill_unseated:<event_id>`). The waitlist is not ruled. Kerry 10/26: this "shouldn't happen based on locks and windows for signing up once we have the shop in the tracker. Right now it is possible based on not being able to control GoDaddy's product availability windows." So the COO item is a GoDaddy-era safety net; the Tracker shop's sign-up windows should close a full event at the lock.
 - Every seat in agent_action_log (`seat_fill`). Dial `seat_fill_auto` (on unless off). Read-only bridge `scoring-seat-fill:<event_id>`. Guard `test_seat_fill.py`.
 
+## Withdrawal fold — the sheet repairs itself after a withdrawal (Kerry 2026-10-26, CoS #2363-#2366)
+
+Kerry, verbatim (relayed by the Chief of Staff):
+- "Yes. In a shotgun, that should be the foursome with the highest hole number and B before A. In a tee time, that should be the first foursome. ... We don't want 4 threesomes on the course if we can help it. That's the key. And we don't want twosomes out there if we can help it, even though we've had those situations."
+- "Only thing is with two players leaving it depends if we've reduced multiples of four or stayed the same. Like if we had 41, and two dipping from the same group left 39. Of course two could leave from a foursome too, leaving only two. We'd want to fill to at least 3. We need to address all the scenarios to code for it in the tracker."
+- On timing: "Yes that way for now. May need to come back to the within an hour of tee time later. Let's see how this works for now."
+
+`email_parser/withdrawal_fold.py`. ONE algorithm, recomputed every run from the saved sheet, per holes set:
+- **A. Target.** N players on the sheet: G = ceil(N/4) groups, T = 4G - N threesomes (0-3), every group 3 or 4.
+- **B. Dissolve** (the field crossed a multiple of 4 downward, more groups than G): the SHORTEST group dissolves. Tie: the group a withdrawal hit (the fold remembers who was on the sheet, `withdrawal_fold_seen:<event_id>`); then, tee times, the time the keep/release rule gives back (weeknight keeps the latest so the earliest goes, weekend the reverse); shotgun, the highest hole, B before A. Its players go one each into the open groups: a group under 3 first (up to 3), then the threesomes in SEAT-FILL order (`seat_fill.fill_order`: tee times latest threesome first; shotgun lowest hole first, B before A); a mover takes the lowest free seat. The dissolved group's own tee time is released (nobody else's time moves; `released_tee_times` then names it). Repeat while groups > G.
+- **C. Repair:** every group under 3 takes one player from each foursome in DONOR order (`donor_order`: shotgun highest hole first, B before A; tee times the first/earliest foursome), the donor's highest seat that is not tied, until it has 3. The donor group keeps its seats (no re-seat), so nobody else in it "moves".
+- **D. Constraints:** never split a partner request (not suppressed), a Match Play pair (`detect_match_play_pairings`) or a guest from the host (`_host_of_map`), when both are in the same group. A tied unit moves whole into a group with room for it, or the next candidate is tried. If nothing works the run changes NOTHING and raises ONE COO item `WITHDRAWAL FOLD BLOCKED: <event>` (not raised again for the same sheet, `withdrawal_fold_raised:<event_id>`).
+- **E.** Seat-fill runs first in the same 15-minute run, then the fold.
+- **F. Notices:** the fold only writes the saved sheet (`save_event_pairings`; a blind on a seat a mover takes is cleared, as seat-fill does). The after-lock job, in the same run, diffs that sheet against what the Event Info carried: UPDATED GROUP to the moved players and both groups, the manager CC'd, changed sheets to the course only inside its window. Before the Event Info goes, the fold rides in the sheet it sends. No second notifier.
+
+The ten cases (guard `test_withdrawal_fold.py`, both shapes): 40->39 one from a foursome: no move. 40->38 same foursome: one donor -> 8F+2T. 40->38 different foursomes: no move. 41 (8F+3T)->40 one from a foursome: the new threesome dissolves into the three -> 10F, one time released. 41->39 two from one threesome: the single joins a threesome -> 9F+1T. 41->39 two from one foursome: the twosome splits into two threesomes -> 9F+1T. 39 (9F+1T)->38 from the threesome: one donor -> 8F+2T. 38 (8F+2T)->36 two from one threesome: the single joins the other -> 9F. 37 (7F+3T)->36 one from a threesome: the twosome splits into the other two -> 9F. 37->35 two from one foursome: the twosome goes into 2 of the 3 threesomes -> 8F+1T.
+
+**Timing (ruled #2366).** Only from the event's lock (`database.event_lock_at`) to first tee.
+1. A group under 3 is repaired at once (C), on the next 15-minute run.
+2. A dissolve (B) waits for 7:00 AM on event day (dial `withdrawal_fold_dissolve_at`, "07:00") so a late add can still take the seat; after that it runs at once.
+3. Nothing within the hour before the first tee (dial `withdrawal_fold_cutoff_min`, 60): the scorer no-show sequence takes over.
+
+**Wiring:** a step inside `after_lock_changes_job` (app.py), right after seat-fill and before the after-lock emails, so a late add and a withdrawal in the same run are seated, folded and announced together (rule E), and the update emails go in the same run rather than 15 minutes later. Dial `withdrawal_fold_auto` (on unless off). Every move and every released time in agent_action_log (`withdrawal_fold`). Read-only bridge `scoring-withdrawal-fold:<event_id>`.
+
+**Rule 17 after the lock.** `remove_player_from_pairings` used to re-deal the whole holes set with the generator whenever a removal freed a group (pairings.md rule 17). After the lock, with the dial on, it now only closes up the player's group and leaves the regroup to the fold (fewest moves, the 7:00 AM wait). Before the lock, or with the dial off, rule 17 runs as before.
+
+**Choices made where the rules were silent (flagged for Kerry):**
+- Before 7:00 AM with a dissolve pending, a short group is still repaired from a foursome at once (the literal ruling), then dissolved at 7:00 AM. 13->12 (4,3,3,2) is 3,3,3,3 overnight (four open seats kept for sale) and 4,4,4 at 7:00 AM: four moves where dissolving at once would take two. If no foursome can repair it (for example 4,3,3,1), the dissolve runs at once instead.
+- The second tie-break for the dissolve (after "the group the withdrawal hit") is the keep/release rule for tee times and the donor order for shotgun. The dissolved group's own time is released; the other groups are not slid onto the kept times (that would move every later group's start).
+- A dissolved group's players fill a group under 3 before a threesome (fewest moves).
+- Match Play: any two players on the sheet's same group who still owe each other a match (pool or bracket) count as a match, confirmed or not.
+- Only partner requests, matches and guest-host are protected; rules 14/16/18 (1st Timer / first year never alone / guest with an Ambassador) are not re-checked by a fold.
+- A fivesome event (`allow_fivesomes`) is skipped.
+- A blocked fold is all or nothing (B may have worked, C not): nothing moves and the manager is asked.
+- No separate "time released" email: the course learns of it from the changed sheets the after-lock job sends inside its window.
+
 ## Same-night admin payout report (Kerry 2026-10-26, CoS #2329 item 6)
 
 Kerry: "I like to pay same night as a standard. ... Needs an automated Admin report once all events are completed that would carry a link to PAYMENTS."

@@ -2572,6 +2572,17 @@ def start_scheduler():
                 logger.info("Seat-fill: %s", _sf["events"])
         except Exception:
             logger.exception("Seat-fill failed (non-fatal)")
+        # WITHDRAWAL FOLD SECOND (Kerry 10/26, CoS #2363-#2366): after the
+        # late adds are seated, a short group is repaired and (from 7:00 AM
+        # event day) a group the field no longer needs is dissolved, so the
+        # update emails below carry both in the same run.
+        try:
+            from email_parser.withdrawal_fold import check as _fold
+            _wf = _fold()
+            if _wf.get("events"):
+                logger.info("Withdrawal fold: %s", _wf["events"])
+        except Exception:
+            logger.exception("Withdrawal fold failed (non-fatal)")
         try:
             res = check(_print_pack_render, app.static_folder)
             ran = {k: v for k, v in (res.get("events") or {}).items()

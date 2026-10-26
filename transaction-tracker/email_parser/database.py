@@ -63290,7 +63290,25 @@ def remove_player_from_pairings(event_id: int, player_name: str,
     # pairings rules/standards." Only on a re-seat (never once the event has
     # started: rule 15b) and only when the roster now fits fewer groups.
     regrouped = []
+    # AFTER THE LOCK the re-deal is the WITHDRAWAL FOLD's (Kerry 10/26, CoS
+    # #2363-#2366): fewest moves, a group dissolves only from 7:00 AM event
+    # day, a short group is repaired from a foursome. Rule 17's whole re-deal
+    # stays for a removal before the lock, or with dial withdrawal_fold_auto off.
+    fold_owns = False
     if reseat:
+        try:
+            from email_parser.withdrawal_fold import _on as _fold_on
+            with _connect(db_path) as _c:
+                _evf = _c.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+            _lk = event_lock_at(dict(_evf), db_path) if _evf else None
+            fold_owns = bool(_lk and now_central() >= _lk and _fold_on(db_path))
+        except Exception:
+            logger.exception("withdrawal fold check failed for event %s (non-fatal)", event_id)
+    if reseat and fold_owns:
+        regrouped = [{"holes": h, "applied": False,
+                      "reason": "after the lock: the withdrawal fold regroups (fewest moves)"}
+                     for h in sorted({h for h, _g, _p in hits})]
+    elif reseat:
         for holes in sorted({h for h, _g, _p in hits}):
             rg = _regroup_after_removal(event_id, holes, cleaned.get(holes) or [],
                                         db_path=db_path)

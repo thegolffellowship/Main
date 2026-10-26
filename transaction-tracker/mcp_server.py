@@ -1861,6 +1861,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-course-files-noon:<event_id>  NOON COURSE FILES, read only (Kerry 10/26): would the event-day noon job send the Course Files now (To the course contact, CC TGF contacts + the chapter manager), or why not (already sent, no pairings, no course contact, within the hour before first tee, a scorecard gap)
       scoring-scoring-window:<event_id>  THE SCORING WINDOW, read only (Kerry 10/26): first tee, saves open (first tee - 60 min), cards final, last score, scoring closes (last score + 15 min once every card is final), closeout start (last score + 15 min)
       scoring-seat-fill:<event_id>  SEAT-FILL, read only (Kerry 10/26): the registered late adds the after-lock job would seat now (tee times: latest threesome first; shotgun: lowest hole first, B before A) and who has no open seat
+      scoring-withdrawal-fold:<event_id>  WITHDRAWAL FOLD, read only (Kerry 10/26, #2363-#2366): what the after-lock job would do now after a withdrawal: a group under 3 takes from a foursome (shotgun highest hole first, B before A; tee times the first foursome), a group the field no longer needs dissolves into the threesomes (from 7:00 AM event day), never splitting a request, match or guest and host; or why it waits / is blocked
       scoring-after-lock:<event_id>  AFTER-LOCK CHANGES, read only (Kerry #2139/#2168): moved / added / removed players, tee and games changes since the Event Info send, the emails the 15-min job would send (manager CC'd) and the changed course sheets
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13). |lateadd|<cid,cid>|<kerry-ok post id>[|confirm] sends the approved message to each late add and "UPDATED GROUP:" + a notice to their groupmates only, same gates (Kerry 10/20)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
@@ -7584,6 +7585,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps({"error": "<event_id>"})
             from email_parser import seat_fill as _sf
             return json.dumps(_sf.run(int(_p[0]), apply=False), indent=2, default=str)
+        if cmd == "scoring-withdrawal-fold":
+            # "<event_id>" — WITHDRAWAL FOLD (Kerry 10/26, CoS #2363-#2366),
+            # READ ONLY: the groups the after-lock job would repair or
+            # dissolve now, every move, the released time, or why it waits
+            # or is blocked. The job applies it itself.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>"})
+            from email_parser import withdrawal_fold as _wf
+            return json.dumps(_wf.run(int(_p[0]), apply=False), indent=2, default=str)
         if cmd == "scoring-after-lock":
             # "<event_id>" — AFTER-LOCK CHANGES (Kerry #2139, #2168), READ
             # ONLY: what changed since the Event Info send and every email
