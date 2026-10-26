@@ -110,6 +110,8 @@ Kerry: "our standard template for those unpaid DOES include the link. We need to
 - **6 AM job:** keeps the `payment_reminder_exclude_events` dial.
 - **Stops at the lock (v2.585.0, Kerry 10/26, CoS #2313):** "Payment Reminders - Those stop at the 5:00p lock for any specific event. So the 4:50p you've been removed email is it for payment reminders for that event." `lock_at(ev)` is 5:00 PM on the event's pairings day (the `pairings_auto_weekdays` lead: Monday for a Tuesday nine, two days ahead for a dialled Saturday, the day before for an undialled weekday). From then on `send()` holds everyone ("past the 5:00 PM lock"), so the Remind tag and Remind All return 409; the 6 AM job skips the event; and the composer refuses the Payment Reminder template for it. Dial `payment_reminder_stop_at_lock` (on unless `off`).
 
+- **The quick out (v2.586.0, Kerry 10/26, CoS #2322/#2324):** "I want you to release the I'm not playing after all button right now." `with_out_button` puts a grey "I'm not playing after all" button under `{pay_button}` for anyone with a customer_id, on every reminder path (the composer adds it per recipient through `vars`) and on the 1:00 PM deadline warning, never the 4:50 PM release. The link is `invitations.make_token(..., "out", src="pay")`: the invitation's Can't make it flow, scanner guard and Thanks page. `record_answer` writes NOT PLAYING and, for `src="pay"`, also the Events page's not-playing mark (`rsvp_deadline._release_mark`), logged `payment_email_out`. Previews and dry runs mint preview links that record nothing. No manager FYI exists for a decline, so none was added.
+
 Guard: `test_payment_reminder.py`.
 
 ## RSVP payment deadline — the lock-day warning and release (v2.583.0, Kerry 2026-10-26)

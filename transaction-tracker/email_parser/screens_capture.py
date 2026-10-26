@@ -161,7 +161,8 @@ def _r_payment(ctx):
 
 def _r_deadline(ctx, kind):
     from email_parser import rsvp_deadline as rd
-    return rd.build(ctx["linked"], {"first_name": ctx["first"]}, kind)["html"]
+    return rd.build(ctx["linked"], {"first_name": ctx["first"], "customer_id": ctx["cid"],
+                                    "preview": True}, kind)["html"]
 
 
 RENDERS = {

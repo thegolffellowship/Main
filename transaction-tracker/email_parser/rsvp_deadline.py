@@ -128,6 +128,8 @@ def build(ev: dict, person: dict, kind: str, db_path=None) -> dict:
     subj_t, body_t = ((WARN_SUBJECT, WARN_BODY) if kind == "warn"
                       else (RELEASE_SUBJECT, RELEASE_BODY))
     v = pr.event_vars(ev, db_path)
+    if kind == "warn":   # the quick out (CoS #2324): the warning, never the release
+        v = pr.with_out_button(v, ev, person.get("customer_id"), person.get("preview", False))
     first = (person.get("first_name") or (person.get("name") or "").split(" ")[0] or "there").strip()
     held = []
     if not v["event_url"]:
@@ -234,7 +236,7 @@ def run(event_id: int, kind: str, confirm: bool = False, db_path=None) -> dict:
     held = []
     msgs = []
     for p in pl["send"]:
-        m = build(ev, p, kind, db_path)
+        m = build(ev, {**p, "preview": confirm is not True}, kind, db_path)
         (held if m["held"] else msgs).append({**p, **({"why": m["held"]} if m["held"] else {"msg": m})})
     out = {**{k: pl[k] for k in ("event_id", "event", "kind", "skip")},
            "send": [{k: x[k] for k in ("customer_id", "name", "email")} for x in msgs],

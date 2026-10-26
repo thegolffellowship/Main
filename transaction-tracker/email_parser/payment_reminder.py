@@ -36,6 +36,7 @@ import os
 logger = logging.getLogger(__name__)
 
 TEMPLATE_NAME = "Payment Reminder"
+OUT_LABEL = "I'm not playing after all"
 STOP_DIAL = "payment_reminder_stop_at_lock"
 LOCK_HOUR = 17
 PAST_LOCK = "past the 5:00 PM lock: payment reminders stop there for this event"
@@ -92,6 +93,44 @@ def event_vars(ev: dict, db_path=None) -> dict:
     }
 
 
+def out_url(ev: dict, customer_id: int, preview: bool = False) -> str:
+    """The signed Can't make it link for the payment emails' quick out (Kerry
+    10/26, CoS #2324: "I want you to release the I'm not playing after all
+    button right now"). Same /rsvp/<token> flow as the invitation, so the
+    scanner guard and the Thanks page come with it; src "pay" also takes a
+    Golf Genius RSVP of theirs off the roster."""
+    import time
+    from datetime import date
+    from email_parser.invitations import make_token, rsvp_url
+    try:
+        d = date.fromisoformat(str(ev.get("event_date") or "")[:10])
+    except ValueError:
+        return ""
+    return rsvp_url(make_token(int(customer_id), int(ev["id"]), "out", d, preview=preview,
+                               sent_at=int(time.time()), src="pay"))
+
+
+def out_button_html(url: str) -> str:
+    """The secondary button under Complete Registration (cell carries the colour)."""
+    if not url:
+        return ""
+    return ('<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" '
+            'style="margin:0 auto 18px;"><tr><td bgcolor="#E5E7EB" style="background:#E5E7EB;'
+            'border-radius:999px;"><a href="%s" style="display:inline-block;background:#E5E7EB;'
+            'color:#1B1B1B;font-weight:700;font-size:15px;line-height:1;padding:12px 24px;'
+            'border-radius:999px;text-decoration:none;font-family:Helvetica,Arial,sans-serif;">'
+            '<span style="color:#1B1B1B;">%s</span></a></td></tr></table>'
+            % (_html.escape(url), _html.escape(OUT_LABEL)))
+
+
+def with_out_button(v: dict, ev: dict, customer_id, preview: bool = False) -> dict:
+    """v with {pay_button} followed by the quick out, when there is a pay
+    button to sit under and a person to answer for."""
+    if customer_id is None or not v.get("pay_button"):
+        return v
+    return {**v, "pay_button": v["pay_button"] + out_button_html(out_url(ev, int(customer_id), preview))}
+
+
 def frame_for(ev: dict, inner: str, db_path=None) -> str:
     """The invitation's house frame around a message body."""
     from email_parser.event_day_email import frame
@@ -145,11 +184,11 @@ def past_lock(ev: dict, now=None, db_path=None) -> bool:
     return lock is not None and (now or now_central()) >= lock
 
 
-def build(ev: dict, person: dict, db_path=None) -> dict:
+def build(ev: dict, person: dict, db_path=None, preview: bool = False) -> dict:
     """{subject, html, held, template_id} for one person on one event."""
     from email_parser.fetcher import normalize_email_html, render_msg_template
     tid, subj_t, body_t = _template(db_path)
-    v = event_vars(ev, db_path)
+    v = with_out_button(event_vars(ev, db_path), ev, person.get("customer_id"), preview)
     first = (person.get("first_name") or (person.get("name") or "").split(" ")[0] or "there").strip()
     v = {**v, "player_name": _html.escape(first)}
     held = []
@@ -259,7 +298,7 @@ def send(event_id: int, people: list, sent_by: str = "manager", force: bool = Fa
             out["already_today"].append({"customer_id": cid, "name": name})
             continue
         msg = build(ev, {"first_name": firsts.get(cid) if cid is not None else None,
-                         "name": name}, db_path)
+                         "name": name, "customer_id": cid}, db_path)
         if msg["held"]:
             out["held"].append({"customer_id": cid, "name": name, "why": msg["held"]})
             continue
@@ -309,4 +348,5 @@ def preview(event_id: int, customer_id: int | None = None, db_path=None) -> dict
         conn.close()
     if not ev:
         return {"error": f"no event {event_id}"}
-    return build(ev, {"first_name": first or "Neal"}, db_path)
+    return build(ev, {"first_name": first or "Neal", "customer_id": customer_id}, db_path,
+                 preview=True)

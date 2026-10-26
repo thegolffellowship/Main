@@ -156,6 +156,27 @@ check("the preview shows the framed reminder with the roster link",
       pv.status_code == 200 and f"/member/results/{EV}" in body and "{" not in body.split("<style")[0][-1:],
       (pv.status_code, body[:200]))
 
+print("8b. The quick out (CoS #2324)")
+import re as _re
+from email_parser import invitations as _inv
+m = pr.preview(EV, 880001, db_path=DB)
+check("the reminder carries I'm not playing after all under Complete Registration",
+      "I&#x27;m not playing after all" in m["html"]
+      and m["html"].index("Complete Registration") < m["html"].index("I&#x27;m not playing after all"))
+_t = _re.findall(r'/rsvp/([^"]+)"', m["html"])
+check("the staff preview's link records nothing", _t and _inv.verify_token(_t[0]).get("p") == 1, _t)
+m2 = pr.build(_inv._event(db.get_connection(DB), EV), {"first_name": "Guest", "customer_id": None}, DB)
+check("no customer card, no button (nothing to answer for)", "not playing after all" not in m2["html"])
+SENT.clear()
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM app_settings WHERE key LIKE 'payment_reminder_sent:%'")
+    conn.commit()
+pr.send(EV, [{"customer_id": 880001, "name": "Ann Test"}], db_path=DB)
+_t = _re.findall(r'/rsvp/([^"]+)"', SENT[-1]["html_body"]) if SENT else []
+_pp = _inv.verify_token(_t[0]) if _t else {}
+check("the sent reminder's link is a real Can't make it from a payment email",
+      _pp.get("a") == "out" and _pp.get("c") == 880001 and _pp.get("k") == "pay" and not _pp.get("p"), _pp)
+
 print("9. Stop at the lock (Kerry 10/26, #2313)")
 from datetime import datetime as _dt
 from email_parser import timezone_utils as _tz
@@ -208,6 +229,12 @@ try:
     _app.send_auto_payment_reminders()
     check("before the lock the job still reminds", [s["to_address"] for s in SENT] == ["ann@example.test"],
           [s["to_address"] for s in SENT])
+    SENT.clear()
+    rv = cl.post("/api/messages/send", json={"template_id": tid, "event_name": "s9.98 REMIND LINKS",
+                                            "audience": "all", "event_url": URL})
+    _ann = [s_ for s_ in SENT if s_["to_address"] == "ann@example.test"]
+    check("the composer's Payment Reminder carries the quick out per person",
+          _ann and "not playing after all" in _ann[0]["html_body"], (rv.status_code, rv.get_json(), len(SENT)))
 finally:
     _tz.now_central = _real_now
 

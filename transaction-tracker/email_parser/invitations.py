@@ -149,7 +149,7 @@ def _secret() -> bytes:
 
 
 def make_token(customer_id: int, event_id: int, action: str, expires: date,
-               preview: bool = False, sent_at: int | None = None) -> str:
+               preview: bool = False, sent_at: int | None = None, src: str = "") -> str:
     """preview=True marks a staff PREVIEW link (Kerry 10/14: tapping the
     preview recorded Todd McConahy's answers). It opens the same pages and
     records nothing."""
@@ -162,6 +162,8 @@ def make_token(customer_id: int, event_id: int, action: str, expires: date,
         payload["p"] = 1
     if sent_at:
         payload["s"] = int(sent_at)     # when the email went out (scanner grace)
+    if src:
+        payload["k"] = src              # "pay": the payment emails' quick out (Kerry 10/26)
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()
                                     ).rstrip(b"=").decode()
     sig = hmac.new(_secret(), b"rsvp." + body.encode(), hashlib.sha256).hexdigest()[:32]
@@ -725,6 +727,18 @@ def record_answer(token: str, db_path=None) -> dict:
         db.log_agent_action("rsvp-link", "event_rsvp", f"event {eid} customer {cid} {RESPONSE[action]}")
     except Exception:
         pass
+    if action == "out" and p.get("k") == "pay":
+        # "I'm not playing after all" on a payment email (Kerry 10/26, CoS
+        # #2324): off the roster by the Events page's own not-playing mark
+        # too, so a Golf Genius RSVP of theirs can't keep them on it and no
+        # further payment email goes for this event. Undo on the Events page.
+        try:
+            from email_parser.rsvp_deadline import _release_mark
+            _release_mark(ev, email, cid, db_path)
+            db.log_agent_action("rsvp-link", "payment_email_out",
+                                f"event {eid} customer {cid} {name}: I'm not playing after all")
+        except Exception:
+            logger.exception("invitations: payment-email out failed for %s", cid)
     ctx_ev = {"name": ev.get("item_name"), "date": ev.get("event_date"),
               "registration_url": (ev.get("registration_url") or "").strip()}
     return {"ok": True, "action": action, "response": RESPONSE[action], "name": name,

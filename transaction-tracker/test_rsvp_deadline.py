@@ -101,6 +101,8 @@ rd.tick(datetime(2099, 10, 26, 16, 50), DB)
 check("4:50 PM releases the warned, unpaid player and emails him",
       [s["to_address"] for s in SENT] == ["chris@example.test"] and "released" in SENT[0]["subject"], SENT)
 names = roster_names()
+check("the release has no quick out (CoS #2324: warning only)",
+      SENT and "not playing after all" not in SENT[0].get("html_body", ""), SENT and SENT[0]["subject"])
 check("the release is CC'd to Kerry", SENT and SENT[0].get("cc_address") == "kerry@thegolffellowship.com", SENT)
 check("he is off the roster before the 5:00 PM pairings run", "Christopher Test" not in names, names)
 check("a player who was never warned is not released", "Late Test" in names, names)
@@ -125,6 +127,45 @@ db.set_app_setting("payment_reminder_exclude_events", f"[{EV}]", db_path=DB)
 SENT.clear()
 rd.tick(datetime(2099, 10, 26, 13, 40), DB)
 check("an excluded event (money collected outside the store) is skipped", SENT == [], SENT)
+
+print("5. The quick out: I'm not playing after all (Kerry 10/26, CoS #2324)")
+import re
+from email_parser import invitations as inv
+from email_parser import payment_reminder as pr
+html_w = w.get("html_body", "")
+check("the warning carries the button under Complete Registration",
+      "I&#x27;m not playing after all" in html_w and html_w.index("Complete Registration")
+      < html_w.index("I&#x27;m not playing after all"), html_w[-600:])
+_tok = re.findall(r'/rsvp/([^"]+)"', html_w)
+_p = inv.verify_token(_tok[0].replace("&amp;", "&")) if _tok else None
+check("its link is a signed Can't make it for this event and person, marked from a payment email",
+      bool(_p) and _p["a"] == "out" and _p["v"] == EV and _p["c"] == 880101 and _p.get("k") == "pay"
+      and not _p.get("p"), _p)
+db.set_app_setting("payment_reminder_exclude_events", "[]", db_path=DB)
+_dry = rd.run(EV, "warn", db_path=DB)
+_dt = re.findall(r'/rsvp/([^"]+)"', (_dry.get("sample") or {}).get("html", ""))
+check("a dry run's sample link is a staff preview (records nothing)",
+      not _dt or inv.verify_token(_dt[0]).get("p") == 1, _dt)
+with db._connect(DB) as conn:   # Quick: a Tracker RSVP AND a Golf Genius RSVP, unpaid
+    conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (880105, 'Quick', 'Test')")
+    conn.execute("INSERT INTO customer_emails (customer_id, email, is_primary) VALUES (880105, 'quick@example.test', 1)")
+    for uid in (f"tracker:{EV}:880105", "gg-quick-1"):
+        conn.execute("INSERT INTO rsvps (email_uid, player_name, player_email, response, matched_event, event_date, "
+                     "customer_id, received_at) VALUES (?, 'Quick Test', 'quick@example.test', 'PLAYING', "
+                     "'s9.29 Silverhorn', '2099-10-27', 880105, '2099-10-20 12:00:00')", (uid,))
+    conn.commit()
+check("before the tap he is on the roster", "Quick Test" in roster_names(), roster_names())
+import time as _time
+tok = inv.make_token(880105, EV, "out", datetime(2099, 10, 27).date(), sent_at=int(_time.time()) - 3600, src="pay")
+res = inv.record_answer(tok, db_path=DB)
+check("the tap records NOT PLAYING", res.get("ok") and res.get("response") == "NOT PLAYING", res)
+check("he is off the roster, his Golf Genius RSVP too", "Quick Test" not in roster_names(), roster_names())
+with db._connect(DB) as conn:
+    o = conn.execute("SELECT status FROM rsvp_email_overrides WHERE player_email = 'quick@example.test'").fetchone()
+check("by the Events page's own not-playing mark (undoable)", o and o[0] == "not_playing", o)
+check("no further payment email reaches him", all(p["customer_id"] != 880105 for p in pr.rsvp_only_people(EV, DB)))
+tok_in = inv.make_token(880105, EV, "out", datetime(2099, 10, 27).date(), sent_at=int(_time.time()) - 3600)
+check("an invitation Can't make it (no src) is unchanged", inv.verify_token(tok_in).get("k") is None)
 
 try:
     os.remove(DB)

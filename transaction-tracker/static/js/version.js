@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.585.0";
+window.TGF_VERSION = "2.586.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.586.0",
+    date: "2026-10-26",
+    title: "I'm not playing after all: a quick out on the payment reminder and the 1:00 PM warning",
+    changes: [
+      "Kerry 10/26 (CoS #2322, #2324): \"On those RSVP payment reminder emails there should also be the option to click an I'm Not Playing After All button. Or something like it as a quick out for them\" ... \"I want you to release the I'm not playing after all button right now.\" Under Complete Registration there is now a grey \"I'm not playing after all\" button on the payment reminder (the 6:00 AM job, Remind, Remind All and the composer's Payment Reminder template) and on the 1:00 PM deadline warning. It is not on the 4:50 PM release.",
+      "A tap is the invitation's own Can't make it: the same signed /rsvp link, the same scanner guard (a tap within two minutes of the send is ignored; known scanners and non-browsers confirm with one button), and the same Thanks page with Changed my mind, the optional reason and Remove me. It records NOT PLAYING and also sets the Events page's not-playing mark, so a Golf Genius RSVP can't keep them on the roster and no further payment email goes for that event. It can be undone on the Events page. A person with no customer card gets no button, and staff previews and dry runs carry preview links that record nothing. Guards test_payment_reminder.py and test_rsvp_deadline.py; the payment reminder, deadline and invitation Screens sets were retaken."
+    ]
+  },
   {
     version: "2.585.0",
     date: "2026-10-26",

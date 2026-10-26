@@ -10382,6 +10382,12 @@ def api_send_messages():
         {"player_name": r.get("customer") or "Player", "email": resolve_email(r)}
         for r in filtered
     ]
+    if _is_pay_reminder and event_info.get("id"):
+        # The quick out under Complete Registration, per person (CoS #2324).
+        for _rcp, _r in zip(recipients, filtered):
+            if _r.get("customer_id") is not None:
+                _rcp["vars"] = {"pay_button": _pr.with_out_button(
+                    event_vars, event_info, _r["customer_id"])["pay_button"]}
 
     # Add extra recipients (manually entered emails not on the player list)
     extra_recipients = data.get("extra_recipients") or []
