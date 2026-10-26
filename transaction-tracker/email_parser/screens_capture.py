@@ -242,6 +242,11 @@ def capture_all(out_for, base_url: str, only: str = "", db_path=None) -> dict:
                             else:
                                 page.goto(src["url"], wait_until="domcontentloaded", timeout=45000)
                                 page.wait_for_timeout(5000)
+                            page.evaluate("document.fonts.ready")
+                            # The live Tracker's fonts or no picture (Kerry 10/26).
+                            if page.evaluate("[...document.querySelectorAll('link[href*=\"fonts.googleapis\"]')].length > 0"
+                                             " && !document.fonts.check('700 16px Bitter')"):
+                                raise RuntimeError("Bitter did not load")
                             name = f"{base}.png" if dev == "mobile" else f"{base}.{dev}.png"
                             page.screenshot(path=str(folder / name), full_page=(email and dev == "mobile"))
                             done.append(f"{s['id']}/{name}")

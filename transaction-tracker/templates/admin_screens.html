@@ -112,7 +112,7 @@
         .scr-lb-bar { display:flex; justify-content:space-between; align-items:center; gap:10px; color:#fff; padding:10px 14px; font-size:.9rem; }
         .scr-lb-bar button { background:rgba(255,255,255,.15); color:#fff; border:0; border-radius:8px; padding:6px 12px; cursor:pointer; font:inherit; }
         .scr-lb-img { flex:1; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:0 12px 16px; }
-        .scr-lb-img img { max-width:100%; height:auto; background:#fff; }
+        .scr-lb-img img { max-width:100%; height:auto; background:#fff; box-shadow:0 4px 24px rgba(0,0,0,.4); }
         @media (max-width: 820px) {
             .scr-wrap { grid-template-columns: 1fr; }
             .scr-side { position:static; max-height:none; }
@@ -413,7 +413,18 @@
         list = list || lbList();
         LB = (LB + list.length) % list.length;
         const st = list[LB];
-        document.getElementById("lb-img").src = srcOf(SEL, st);
+        // ACTUAL SIZE (Kerry 10/26: "Make preview enlargements actual screen
+        // size"): a phone shot is taken at 2x, so it shows at half its pixel
+        // width (a 390 px phone), tablet and desktop at 1:1; never wider than
+        // the window.
+        const img = document.getElementById("lb-img");
+        img.style.width = "";
+        img.onload = () => {
+            const w = img.naturalWidth;
+            const css = (DEV === "mobile" && w > 600) ? w / 2 : w;
+            img.style.width = Math.min(css, window.innerWidth - 24) + "px";
+        };
+        img.src = srcOf(SEL, st);
         document.getElementById("lb-cap").textContent = `${LB + 1} of ${list.length} · ${st.caption} · ${DEV_WORD[DEV] || DEV}`;
     }
     document.getElementById("lb-prev").onclick = () => { LB--; showLb(); };
