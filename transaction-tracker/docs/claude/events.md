@@ -3996,3 +3996,13 @@ notifications to manager when we have that capability."
 - Read-only bridge `scoring-after-lock:<event_id>` shows what the job would send.
 - Not built: push notifications to the manager (waits for push in the app).
 - Guard `test_after_lock.py`.
+
+
+### Tee times: the open-spots version (Kerry 10/26, CoS #2386/#2387, v2.602.3)
+
+Kerry: "Why would there be a spots still open register box sent to those that are already paid and seated? The point is to fill our open spots." On the mockup: "That works. Send it to build and deploy."
+
+- Four versions go at the same moment: player (seated, no Register box), open spots, course, manager.
+- OPEN SPOTS (`teetimes_email.OPEN`, `_open_seats`, `_open_message`): only while the saved sheet has open seats (seats short of a full group; a blind seat counts as open). To the invited audience (dial `teetimes_spots_audience`), minus anyone seated, anyone who said Can't make it, opt-outs and known mail scanners. Subject "N spots open at <course> tomorrow, <start>", orange box with count / course / date / holes / start / Register (scanner-filtered `/rsvp/` link), the sheet with "Open spot" rows, the approved footer and Stop event invitations. Stamp `teetimes_open_spots_approved` = `open_spots_hash()`. Key `open:<customer_id>`, under the same claim guard.
+- Manager line: "This went to the players and the course at <time>", the time it actually went.
+- Claim guard (v2.602.2): every message is claimed (`teetimes_claim:<event>:<key>`) before it is sent, so the approval and the job can never both send it.

@@ -257,13 +257,27 @@ check("dial off: the unpaid I'm-in gets nothing", not any(x["customer_id"] == LE
 db.set_app_setting(tt.SPOTS_DIAL, "rsvp_in", db_path=DB)
 b = tt.build(EV, db_path=DB)
 lee = [x for x in b["messages"] if x["customer_id"] == LEAD[0]]
-check("dial rsvp_in: the unpaid I'm-in gets the sheet WITH the box",
-      len(lee) == 1 and lee[0]["spots_box"] and "There are 3 spots still open" in lee[0]["html"]
-      and "/rsvp/" in lee[0]["html"], lee and lee[0]["text"])
+check("dial rsvp_in: the unpaid I'm-in gets the OPEN-SPOTS email (Kerry 10/26, CoS #2387)",
+      len(lee) == 1 and lee[0]["version"] == "open_spots" and "3 spots open" in lee[0]["html"]
+      and "/rsvp/" in lee[0]["html"] and lee[0]["subject"].startswith("3 spots open at TEST LINKS tomorrow")
+      and "Open spot" in lee[0]["html"] and "Stop event invitations" in lee[0]["html"],
+      lee and (lee[0]["subject"], lee[0]["text"]))
+check("…the open seats listed equal the open seats on the sheet (1 + 2)",
+      lee and lee[0]["html"].count(">Open spot<") == 3, lee and lee[0]["html"].count(">Open spot<"))
+check("…its stamp is the hash of the approved words in code",
+      tt.approval_state(DB)["open_spots"]["template_hash"] == tt.open_spots_hash())
 check("…the Register link goes through the scanner filter (/rsvp/<token>, not the shop URL)",
       lee and "shop.example.test" not in lee[0]["html"])
 check("…and registered players still never see it",
       all(not x["spots_box"] for x in b["messages"] if x["version"] == "player" and x["customer_id"] != LEAD[0]))
+# Someone already seated never gets the open-spots email.
+_g2 = {"9": [GROUPS["9"][0], {**GROUPS["9"][1], "players": GROUPS["9"][1]["players"]
+                              + [{"name": "Lee Lead", "cart_pos": 3, "customer_id": LEAD[0]}]}]}
+db.save_event_pairings(EV, _g2, db_path=DB)
+b = tt.build(EV, db_path=DB)
+check("a seated invitee gets no open-spots email",
+      not any(x["customer_id"] == LEAD[0] and x["version"] == "open_spots" for x in b["messages"]))
+db.save_event_pairings(EV, GROUPS, db_path=DB)
 # Full field: no box for anyone.
 with db._connect(DB) as conn:
     for cid in (880106, 880107, 880108):
@@ -272,6 +286,14 @@ with db._connect(DB) as conn:
                      "order_date, order_id, email_uid, merchant) VALUES (?, ?, 's9.27 TEST LINKS', ?, '9', "
                      "'active', '2026-10-20', ?, ?, 'GoDaddy')", (f"X P{cid}", cid, EV, f"R{cid}", f"manual-{cid}"))
     conn.commit()
+db.save_event_pairings(EV, {"9": [
+    {"group_num": 1, "slot_label": "3:40 PM", "players": [
+        {"name": n, "cart_pos": i + 1, "customer_id": c} for i, (c, n) in enumerate(
+            [(880101, "Ann Able"), (880102, "Bob Baker"), (880103, "Cal Cole"), (880106, "X P880106")])]},
+    {"group_num": 2, "slot_label": "3:50 PM", "players": [
+        {"name": n, "cart_pos": i + 1, "customer_id": c} for i, (c, n) in enumerate(
+            [(880104, "Dee Dunn"), (880105, "Eve East"), (880107, "X P880107"), (880108, "X P880108")])]}]},
+    db_path=DB)
 b = tt.build(EV, db_path=DB)
 check("event full (8): spots 0 and no spots-box message",
       b["spots_left"] == 0 and not any(x.get("spots_box") for x in b["messages"]), b["spots_left"])
