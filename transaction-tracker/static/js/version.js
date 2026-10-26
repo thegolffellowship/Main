@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.600.0";
+window.TGF_VERSION = "2.601.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.601.0",
+    date: "2026-10-26",
+    title: "Withdrawal fold: after the lock, a withdrawal regroups the sheet so nobody plays in a twosome",
+    changes: [
+      "Kerry 10/26 (CoS #2363-#2366): \"We don't want 4 threesomes on the course if we can help it. That's the key. And we don't want twosomes out there if we can help it.\" email_parser/withdrawal_fold.py runs inside the after-lock job right after seat-fill: groups = ceil(N/4); a group left under 3 takes one player from a foursome at once (shotgun the highest hole, B before A; tee times the first foursome); when the field drops to a multiple of 4 the short group dissolves into the threesomes in seat-fill order and its tee time is released, waiting until 7:00 AM event day so a late add can still fill it. Nothing moves before the lock or inside the hour before the first tee. Partner requests, matches and guest-with-host are never split; a blocked case changes nothing and raises one COO item. The existing after-lock emails tell moved players, both groups, the manager and the course. Dial withdrawal_fold_auto; read-only bridge scoring-withdrawal-fold. Guard test_withdrawal_fold.py (the CoS's ten cases, tee times and shotgun).",
+      "After the lock, removing a player (credit, WD or the Remove button) no longer re-deals the whole sheet with the generator; it closes up his group and the fold regroups. Before the lock, or with the dial off, removal works as before."
+    ]
+  },
   {
     version: "2.600.0",
     date: "2026-10-26",
