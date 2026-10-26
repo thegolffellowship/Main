@@ -3501,9 +3501,9 @@
             // One-off events: PAID players get no Remind and no badge
             // (Kerry 2026-09-22) — mobile mirror of the white row.
             if (_ooPaidM && (isRsvpOnly || isGgRsvp)) tag = '';
-            else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
-            else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
-            else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+            else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+            else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
+            else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (txStatus === "refunded") tag = '<span class="status-tag status-tag-refunded">Refunded</span>';
@@ -3883,7 +3883,7 @@
                             <div class="ev-actions-menu">
                                 <button class="ev-menu-item btn-add-player" data-event-name="${escapeHtml(ev.item_name)}">+ Add Player</button>
                                 <button class="ev-menu-item btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}">+ Add Payment</button>
-                                ${mRsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${mRsvpOnlyCount})</button>` : ''}
+                                ${mRsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-id="${ev.id}" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${mRsvpOnlyCount})</button>` : ''}
                                 <div class="ev-menu-divider"></div>
                                 <button class="ev-menu-item btn-message-players" data-event-name="${escapeHtml(ev.item_name)}">Message Players</button>
                                 <button class="ev-menu-item btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}">Audit RSVPs</button>
@@ -9535,7 +9535,7 @@
             <div class="ev-actions-menu">
                 <button class="ev-menu-item btn-add-player" data-event-name="${escapeHtml(ev.item_name)}">+ Add Player</button>
                 <button class="ev-menu-item btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}">+ Add Payment</button>
-                ${rsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${rsvpOnlyCount})</button>` : ''}
+                ${rsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-id="${ev.id}" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${rsvpOnlyCount})</button>` : ''}
                 <div class="ev-menu-divider"></div>
                 <button class="ev-menu-item btn-message-players" data-event-name="${escapeHtml(ev.item_name)}">Message Players</button>
                 <button class="ev-menu-item btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}">Audit RSVPs</button>
@@ -9690,9 +9690,9 @@
                     // and the Remind is removed") — no tag at all, the
                     // row reads like any other paid registration.
                     if (ooPaidRow && (isRsvpOnly || isGgRsvp)) tag = "";
-                    else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
-                    else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
-                    else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+                    else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+                    else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
+                    else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (txStatus === "refunded") tag = '<span class="status-tag status-tag-refunded">Refunded</span>';
@@ -10741,6 +10741,7 @@
 
                 const itemId = tag.dataset.itemId;
                 const email = tag.dataset.customerEmail || "";
+                const customerId = tag.dataset.customerId || "";
                 const isGgRsvp = String(itemId).startsWith("gg-rsvp");
                 const item = isGgRsvp ? null : allItems.find(r => r.id === parseInt(itemId));
                 // Get player name from the adjacent link or parent
@@ -10775,16 +10776,18 @@
                 const remindBtn = document.createElement("button");
                 remindBtn.className = "rsvp-popover-btn";
                 remindBtn.textContent = "Send Reminder";
-                if (email) {
+                if (email || customerId) {
                     remindBtn.addEventListener("click", async (ev2) => {
                         ev2.stopPropagation();
                         pop.remove();
-                        if (!confirm(`Send payment reminder to ${playerName} (${email})?`)) return;
+                        if (!confirm(`Send payment reminder to ${playerName}${email ? ` (${email})` : ""}?`)) return;
                         try {
                             const resp = await fetch("/api/events/send-reminder", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ to_email: email, player_name: playerName, event_name: eventName })
+                                body: JSON.stringify({ event_id: eventId, event_name: eventName,
+                                    customer_id: customerId ? parseInt(customerId) : null,
+                                    to_email: email, player_name: playerName })
                             });
                             const result = await resp.json();
                             if (resp.ok) alert("Reminder sent!");
@@ -11287,11 +11290,16 @@
                     const resp = await fetch("/api/events/send-reminder-all", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ event_name: eventName }),
+                        body: JSON.stringify({ event_id: btn.dataset.eventId ? parseInt(btn.dataset.eventId) : null,
+                                               event_name: eventName }),
                     });
                     const data = await resp.json();
                     if (!resp.ok) throw new Error(data.error || "Failed");
-                    alert(`Reminders sent: ${data.sent} succeeded, ${data.failed} failed (${data.total} total)`);
+                    let msg = `Reminders sent: ${data.sent} succeeded, ${data.failed} failed (${data.total} total)`;
+                    if (data.already_today_count) msg += `\n${data.already_today_count} already reminded today`;
+                    if (data.no_email_count) msg += `\n${data.no_email_count} with no email on file`;
+                    if (data.held_count) msg += `\n${data.held_count} held: ` + [...new Set(data.held.flatMap(h => h.why))].join("; ");
+                    alert(msg);
                 } catch (err) {
                     alert("Failed: " + err.message);
                 }

@@ -95,6 +95,22 @@ Center texts and the Message Players `{event_url}` variable both read it.
 
 Test: `test_event_links.py`.
 
+## Payment reminder — one email everywhere (v2.581.0, Kerry 2026-10-26)
+
+Kerry: "our standard template for those unpaid DOES include the link. We need to match these up" ... "go with mockup 3" ... a link to who's registered, "but not in a button".
+
+`email_parser/payment_reminder.py` builds THE payment reminder. Four places use it: the Remind tag (`/api/events/send-reminder`), Remind All (`/api/events/send-reminder-all`), the every-other-day 6 AM job (`send_auto_payment_reminders`) and the Messages composer when it sends the "Payment Reminder" template (its preview too). Never write another copy of the body.
+
+- **Words:** the "Payment Reminder" message template (Messages page). The system seed and upgrade in database.py carry mockup 3. The variables are `{player_name}`, `{event_place}`, `{event_date_long}`, `{pay_button}`, `{roster_link}`, `{manager_name}` and `{manager_phone}`.
+- **Frame:** the invitation house frame (`event_day_email.frame`), with the masthead title "<Day> at <place>". The "<Day> at" is dropped when the place already has "@" in it.
+- **Roster link:** `{roster_link}` is a plain text link (not a button) to `/member/results/<event id>`.
+- **Holds:** a blank or expired registration link, a missing manager name or phone, or a leftover `{tag}` HOLDS the email. The Remind routes return 409 with the reason.
+- **Who:** `rsvp_only_people(event_id)` is everyone `_event_roster_rows` marks `rsvp_only`. That covers the shop's RSVP-only rows and the invitation / GG RSVPs. A row with no customer card sends by its email.
+- **Once a day:** each person gets it at most once per event per day. The app setting `payment_reminder_sent:<event id>` maps a customer id (or an email) to the date it went. `force` overrides this, from the Remind tag only. Every send is logged in message_log with event_id and customer_id.
+- **6 AM job:** keeps the `payment_reminder_exclude_events` dial.
+
+Guard: `test_payment_reminder.py`.
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)

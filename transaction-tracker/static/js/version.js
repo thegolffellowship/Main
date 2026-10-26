@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.580.2";
+window.TGF_VERSION = "2.581.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.581.0",
+    date: "2026-10-26",
+    title: "One payment reminder everywhere, with the registration link",
+    changes: [
+      "Kerry 10/26: \"our standard template for those unpaid DOES include the link. We need to match these up\" ... \"go with mockup 3\" ... \"Let's also provide a link to see who's currently registered. but not in a button\". The Remind tag, Remind All and the every-other-day 6 AM job each carried their own old body with no registration link. Now all three, and the Messages composer when it sends the Payment Reminder template, use one builder (email_parser/payment_reminder.py). The words are the Payment Reminder template, the frame is the invitation's dark masthead, there's a Complete Registration button, and a plain \"See who's registered so far\" link goes to the member results page. A blank or expired link, a missing manager or a leftover {tag} holds the email instead of sending it. Each person gets it at most once per event per day, and every send is logged against the event and customer.",
+      "Remind All now reaches everyone the Events page shows as RSVP-only: the shop's RSVP-only rows and the invitation / Golf Genius RSVPs. Before, it only reached shop rows. The 6 AM job keeps the payment_reminder_exclude_events dial. The masthead drops \"Saturday at\" when the event name already names the place (\"2026 Fall Championship @ Kissing Tree\"). Guard test_payment_reminder.py."
+    ]
+  },
   {
     version: "2.580.2",
     date: "2026-10-26",

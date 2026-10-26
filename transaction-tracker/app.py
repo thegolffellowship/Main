@@ -2513,19 +2513,12 @@ def prune_processed_emails(days=90):
 
 
 def send_auto_payment_reminders():
-    """Send payment reminders to all RSVP-only/gg_rsvp players for upcoming events."""
-    tenant_id = os.getenv("AZURE_TENANT_ID")
-    client_id = os.getenv("AZURE_CLIENT_ID")
-    client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    from_address = os.getenv("EMAIL_ADDRESS")
-    if not all([tenant_id, client_id, client_secret, from_address]):
-        logger.warning("Auto reminders: email credentials not configured, skipping")
-        return
+    """Every-other-day 6 AM: the payment reminder (email_parser.payment_reminder,
+    the same email as the Remind tag and Remind All) to everyone the Events
+    page shows as RSVP-only for each upcoming event."""
+    from email_parser import payment_reminder
 
     today = today_central_str()
-    events = get_all_events()
-    items = get_all_items()
-
     # payment_reminder_exclude_events dial: JSON list of event ids whose
     # RSVP rows must NEVER get auto payment reminders. Needed for events
     # whose money is collected OUTSIDE the store (Lone Star Cup: Venmo
@@ -2539,57 +2532,27 @@ def send_auto_payment_reminders():
     except Exception:
         _excluded = set()
 
-    total_sent = 0
-    total_failed = 0
-
-    for ev in events:
+    totals = {"sent": 0, "failed": 0, "held": 0}
+    for ev in get_all_events():
         event_date = ev.get("event_date") or ""
-        # Skip past events
         if event_date and event_date < today:
             continue
-        if ev.get("id") in _excluded:
+        if ev.get("id") in _excluded or not ev.get("item_name"):
             continue
-        event_name = ev.get("item_name") or ""
-        if not event_name:
+        people = payment_reminder.rsvp_only_people(ev["id"])
+        if not people:
             continue
+        res = payment_reminder.send(ev["id"], people, sent_by="auto")
+        if res.get("error"):
+            logger.warning("Auto reminders: %s", res["error"])
+            return
+        for k in totals:
+            totals[k] += len(res.get(k) or [])
+        if res.get("held"):
+            logger.warning("Auto reminders held for %s: %s", ev.get("item_name"), res["held"])
 
-        # Find RSVP-only / gg_rsvp players for this event (case-insensitive)
-        rsvp_players = [
-            i for i in items
-            if (i.get("item_name") or "").lower() == event_name.lower()
-            and (i.get("transaction_status") or "active") in ("rsvp_only", "gg_rsvp")
-        ]
-        if not rsvp_players:
-            continue
-
-        for player in rsvp_players:
-            to_email = _resolve_player_email(player)
-            if not to_email:
-                continue
-            player_name = player.get("customer") or "Player"
-            subject = f"Payment Reminder — {event_name}"
-            html_body = (
-                f"<p>Hi {player_name},</p>"
-                f"<p>This is a friendly reminder that we have you down for "
-                f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-                f"<p>Please complete your registration at your earliest convenience.</p>"
-                f"<p>Thanks,<br>The Golf Fellowship</p>"
-            )
-            try:
-                ok = send_mail_graph(
-                    tenant_id=tenant_id, client_id=client_id,
-                    client_secret=client_secret, from_address=from_address,
-                    to_address=to_email, subject=subject, html_body=html_body,
-                )
-                if ok:
-                    total_sent += 1
-                else:
-                    total_failed += 1
-            except Exception:
-                logger.exception("Auto reminder failed for %s", to_email)
-                total_failed += 1
-
-    logger.info("Auto payment reminders: %d sent, %d failed", total_sent, total_failed)
+    logger.info("Auto payment reminders: %d sent, %d failed, %d held",
+                totals["sent"], totals["failed"], totals["held"])
 
 
 # ---------------------------------------------------------------------------
@@ -9918,109 +9881,85 @@ def api_upgrade_rsvp():
     return jsonify({"error": "Item not found or not in RSVP-only state."}), 400
 
 
+def _reminder_event_id(data: dict):
+    """The event a Remind call is about: event_id, else the event_name."""
+    if data.get("event_id") not in (None, ""):
+        try:
+            return int(data["event_id"])
+        except (TypeError, ValueError):
+            return None
+    name = (data.get("event_name") or "").strip().lower()
+    for ev in get_all_events() if name else []:
+        if (ev.get("item_name") or "").strip().lower() == name:
+            return int(ev["id"])
+    return None
+
+
+def _reminder_reply(res: dict):
+    """One JSON reply shape for both Remind routes."""
+    if res.get("error"):
+        return jsonify(res), 500 if "credentials" in res["error"] else 404
+    sent, failed = len(res["sent"]), len(res["failed"])
+    total = sent + failed + len(res["held"]) + len(res["no_email"]) + len(res["already_today"])
+    body = {**res, "sent": sent, "failed": failed, "total": total,
+            "held_count": len(res["held"]), "already_today_count": len(res["already_today"]),
+            "no_email_count": len(res["no_email"])}
+    if sent == 0:
+        if res["held"]:
+            why = "; ".join(sorted({w for h in res["held"] for w in h["why"]}))
+            return jsonify({**body, "error": f"Held, not sent: {why}"}), 409
+        if res["already_today"] and not failed:
+            return jsonify({**body, "error": "Already reminded today"}), 409
+        if res["no_email"] and not failed:
+            return jsonify({**body, "error": "No email address on file"}), 400
+        return jsonify({**body, "error": "Reminder email failed to send"}), 500
+    body["status"] = "ok" if not (failed or res["held"]) else "partial"
+    return jsonify(body)
+
+
 @app.route("/api/events/send-reminder", methods=["POST"])
 @require_role("manager")
 def api_send_reminder():
-    """Send a payment reminder email to an RSVP-only player."""
+    """The payment reminder (email_parser.payment_reminder) to ONE RSVP-only
+    player: {event_id | event_name, customer_id | to_email, player_name}."""
+    from email_parser import payment_reminder
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON body required"}), 400
-    to_email = (data.get("to_email") or "").strip()
-    player_name = data.get("player_name", "Player")
-    event_name = data.get("event_name", "the upcoming event")
-    if not to_email:
-        return jsonify({"error": "to_email is required"}), 400
-
-    tenant_id = os.getenv("AZURE_TENANT_ID")
-    client_id = os.getenv("AZURE_CLIENT_ID")
-    client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    from_address = os.getenv("EMAIL_ADDRESS")
-    if not all([tenant_id, client_id, client_secret, from_address]):
-        return jsonify({"error": "Email credentials not configured"}), 500
-
-    subject = f"Payment Reminder — {event_name}"
-    html_body = (
-        f"<p>Hi {player_name},</p>"
-        f"<p>This is a friendly reminder that we have you down for "
-        f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-        f"<p>Please complete your registration at your earliest convenience.</p>"
-        f"<p>Thanks,<br>The Golf Fellowship</p>"
-    )
-
-    ok = send_mail_graph(
-        tenant_id=tenant_id,
-        client_id=client_id,
-        client_secret=client_secret,
-        from_address=from_address,
-        to_address=to_email,
-        subject=subject,
-        html_body=html_body,
-    )
-    if ok:
-        return jsonify({"status": "ok", "message": f"Reminder sent to {to_email}"})
-    return jsonify({"error": "Failed to send reminder email"}), 500
+    event_id = _reminder_event_id(data)
+    if event_id is None:
+        return jsonify({"error": "event not found"}), 404
+    cid = data.get("customer_id")
+    try:
+        cid = int(cid) if cid not in (None, "") else None
+    except (TypeError, ValueError):
+        cid = None
+    email = (data.get("to_email") or "").strip()
+    if cid is None and not email:
+        return jsonify({"error": "customer_id or to_email is required"}), 400
+    person = {"customer_id": cid, "email": email, "name": data.get("player_name") or ""}
+    res = payment_reminder.send(event_id, [person], sent_by=session.get("role", "manager"),
+                                force=bool(data.get("force")))
+    return _reminder_reply(res)
 
 
 @app.route("/api/events/send-reminder-all", methods=["POST"])
 @require_role("manager")
 def api_send_reminder_all():
-    """Send payment reminder emails to ALL RSVP-only players for an event."""
+    """The payment reminder to EVERYONE the Events page shows as RSVP-only
+    for an event (shop RSVP-only rows and invitation / Golf Genius RSVPs)."""
+    from email_parser import payment_reminder
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON body required"}), 400
-    event_name = (data.get("event_name") or "").strip()
-    if not event_name:
-        return jsonify({"error": "event_name is required"}), 400
-
-    tenant_id = os.getenv("AZURE_TENANT_ID")
-    client_id = os.getenv("AZURE_CLIENT_ID")
-    client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    from_address = os.getenv("EMAIL_ADDRESS")
-    if not all([tenant_id, client_id, client_secret, from_address]):
-        return jsonify({"error": "Email credentials not configured"}), 500
-
-    # Find all RSVP-only players for this event with email addresses (case-insensitive)
-    items = get_all_items()
-    rsvp_players = [
-        i for i in items
-        if (i.get("item_name") or "").lower() == event_name.lower()
-        and (i.get("transaction_status") or "active") == "rsvp_only"
-    ]
-
-    if not rsvp_players:
+    event_id = _reminder_event_id(data)
+    if event_id is None:
+        return jsonify({"error": "event not found"}), 404
+    people = payment_reminder.rsvp_only_people(event_id)
+    if not people:
         return jsonify({"error": "No RSVP-only players found for this event"}), 404
-
-    sent = 0
-    failed = 0
-    skipped_no_email = 0
-    for player in rsvp_players:
-        to_email = _resolve_player_email(player)
-        if not to_email:
-            skipped_no_email += 1
-            continue
-        player_name = player.get("customer") or "Player"
-        subject = f"Payment Reminder — {event_name}"
-        html_body = (
-            f"<p>Hi {player_name},</p>"
-            f"<p>This is a friendly reminder that we have you down for "
-            f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-            f"<p>Please complete your registration at your earliest convenience.</p>"
-            f"<p>Thanks,<br>The Golf Fellowship</p>"
-        )
-        ok = send_mail_graph(
-            tenant_id=tenant_id, client_id=client_id,
-            client_secret=client_secret, from_address=from_address,
-            to_address=to_email, subject=subject, html_body=html_body,
-        )
-        if ok:
-            sent += 1
-        else:
-            failed += 1
-
-    if sent == 0:
-        return jsonify({"error": "All reminder emails failed to send", "sent": sent, "failed": failed, "total": len(rsvp_players)}), 500
-    status = "ok" if failed == 0 else "partial"
-    return jsonify({"status": status, "sent": sent, "failed": failed, "total": len(rsvp_players)})
+    res = payment_reminder.send(event_id, people, sent_by=session.get("role", "manager"))
+    return _reminder_reply(res)
 
 
 # ---------------------------------------------------------------------------
@@ -10159,6 +10098,16 @@ def api_send_messages():
         # chapter (Kerry 2026-09-09). Blank = the send below refuses.
         "fellowship_spot": (event_info.get("fellowship_spot") or "").strip(),
     }
+    # The payment reminder's words (event place, long date, the plain
+    # "who's registered" link) so the template sends the same here as
+    # from the Remind tag (email_parser.payment_reminder).
+    _is_pay_reminder = bool(template_id) and (
+        (tpl.get("name") or "").strip().lower() == "payment reminder")
+    if event_info.get("id"):
+        from email_parser import payment_reminder as _pr
+        _pv = _pr.event_vars(event_info)
+        for _k in ("event_place", "event_date_long", "roster_link"):
+            event_vars[_k] = _pv[_k]
     event_status = (event_info.get("status") or "active")
 
     # Boundary check: a template that ASKS for the manager's name or cell
@@ -10377,11 +10326,15 @@ def api_send_messages():
     if not recipients:
         return jsonify({"error": "No recipients found matching the audience filter", "sent": 0, "failed": 0}), 404
 
-    # Send with throttle
+    # Send with throttle. The payment reminder goes out in the invitation
+    # house frame, as it does from the Remind tag.
+    _send_body = body_tpl
+    if _is_pay_reminder and event_info.get("id"):
+        _send_body = _pr.frame_for(event_info, body_tpl)
     result = send_bulk_emails(
         recipients=recipients,
         subject_template=subject_tpl,
-        body_template=body_tpl,
+        body_template=_send_body,
         event_vars=event_vars,
     )
 
@@ -10459,10 +10412,30 @@ def api_preview_message():
         'sent with a payment button)</p>')
     variables["fellowship_spot"] = (data.get("fellowship_spot") or "").strip() \
         or "(no fellowship spot set for this event)"
+    # The payment reminder's variables, from the real event when the
+    # composer names one, and its house frame (email_parser.payment_reminder).
+    _ev = None
+    _ename = (data.get("event_name") or "").strip().lower()
+    if _ename:
+        _ev = next((e for e in get_all_events()
+                    if (e.get("item_name") or "").strip().lower() == _ename), None)
+    variables["event_place"] = variables["event_name"]
+    variables["event_date_long"] = variables["event_date"]
+    variables["roster_link"] = ('<a href="#" style="color:#2563eb;text-decoration:underline;">'
+                                "See who's registered so far</a>")
+    if _ev:
+        from email_parser import payment_reminder as _pr
+        _pv = _pr.event_vars(_ev)
+        for _k in ("event_place", "event_date_long", "roster_link"):
+            variables[_k] = _pv[_k]
+    html_out = render_msg_template(body_tpl, variables)
+    if (_ev and template_id and tpl
+            and (tpl.get("name") or "").strip().lower() == "payment reminder"):
+        html_out = _pr.frame_for(_ev, html_out)
 
     return jsonify({
         "subject": render_msg_template(subject_tpl, variables),
-        "html_body": render_msg_template(body_tpl, variables),
+        "html_body": html_out,
     })
 
 

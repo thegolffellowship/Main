@@ -87,7 +87,11 @@ def frame_for(ev: dict, inner: str, db_path=None) -> str:
     from email_parser.event_day_email import frame
     from email_parser.invitations import _context, _display_name
     ctx = _context(ev, db_path)
-    return frame(inner, (ctx["chapter"] or "").upper(), f"{ctx['day']} at {_display_name(ev)}")
+    place = _display_name(ev)
+    # "2026 Fall Championship @ Kissing Tree" already names the place;
+    # "Saturday at" only reads right in front of a plain course name.
+    title = place if "@" in place else f"{ctx['day']} at {place}"
+    return frame(inner, (ctx["chapter"] or "").upper(), title)
 
 
 def _template(db_path=None) -> tuple:
@@ -151,18 +155,24 @@ def rsvp_only_people(event_id: int, db_path=None) -> list:
         conn.close()
     out, seen = [], set()
     for r in rows:
-        cid = r.get("customer_id")
-        if not r.get("rsvp_only") or cid is None or int(cid) in seen:
+        if not r.get("rsvp_only"):
             continue
-        seen.add(int(cid))
-        out.append({"customer_id": int(cid), "name": r.get("name") or r.get("customer") or ""})
+        cid = r.get("customer_id")
+        email = (r.get("customer_email") or "").strip()
+        key = int(cid) if cid is not None else email.lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append({"customer_id": int(cid) if cid is not None else None, "email": email,
+                    "name": r.get("name") or r.get("customer") or ""})
     return out
 
 
 def send(event_id: int, people: list, sent_by: str = "manager", force: bool = False,
          db_path=None) -> dict:
-    """Send the reminder to each person (by customer_id). Once per person per
-    event per day unless force. Returns what happened to each."""
+    """Send the reminder to each person (by customer_id, or by `email` for an
+    RSVP with no customer card). Once per person per event per day unless
+    force. Returns what happened to each."""
     from email_parser import database as db
     from email_parser.fetcher import send_mail_graph
     from email_parser.invitations import _event, _send_email
@@ -192,18 +202,21 @@ def send(event_id: int, people: list, sent_by: str = "manager", force: bool = Fa
     for p in people:
         cid = p.get("customer_id")
         name = p.get("name") or ""
-        if cid is None:
-            out["no_email"].append({"name": name, "why": "no customer_id"})
-            continue
-        cid = int(cid)
-        to = emails.get(cid)
+        if cid is not None:
+            cid = int(cid)
+            to = emails.get(cid) or (p.get("email") or "").strip()
+            key = str(cid)
+        else:
+            to = (p.get("email") or "").strip()
+            key = to.lower()
         if not to:
             out["no_email"].append({"customer_id": cid, "name": name})
             continue
-        if not force and sent_map.get(str(cid)) == today:
+        if not force and sent_map.get(key) == today:
             out["already_today"].append({"customer_id": cid, "name": name})
             continue
-        msg = build(ev, {"first_name": firsts.get(cid), "name": name}, db_path)
+        msg = build(ev, {"first_name": firsts.get(cid) if cid is not None else None,
+                         "name": name}, db_path)
         if msg["held"]:
             out["held"].append({"customer_id": cid, "name": name, "why": msg["held"]})
             continue
@@ -225,7 +238,7 @@ def send(event_id: int, people: list, sent_by: str = "manager", force: bool = Fa
         except Exception:
             logger.exception("payment reminder: could not log the send")
         if ok:
-            sent_map[str(cid)] = today
+            sent_map[key] = today
             out["sent"].append({"customer_id": cid, "name": name})
         else:
             out["failed"].append({"customer_id": cid, "name": name})
