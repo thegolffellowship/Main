@@ -2227,6 +2227,8 @@ Kerry, verbatim: "1st Timers have additional rules to First Year members. You gr
 
 ### 17 — a reseat that frees a group re-deals the short groups
 
+*(Since the withdrawal fold, Kerry 10/26: before the lock only, or with dial `withdrawal_fold_auto` off. After the lock the fold regroups with the fewest moves; see "After the lock: the withdrawal fold".)*
+
 - **Where.** `remove_player_from_pairings` calls `_regroup_after_removal` when it re-seats (before the start only; rule 15b is unchanged) and the field now fits fewer groups: ceil(n / 4), or n / 5 on a fivesome event. For example, 20 players need 5 groups, not 6.
 - **What moves (Kerry 2026-10-12: "When a reseat happens, only locked groups and partner requests should persist").**
   - The whole holes set is dealt again by the generator under every rule.
@@ -2442,6 +2444,16 @@ use as a test case because of there being 3 threesomes required."
   (`smalls_lead`, Kerry 2026-07-21) already sends threesomes to the earliest
   tee times; the 10/19 sheet and a fresh preview both had them first. Kerry
   10/19: "3somes go first on tee times." Nothing changed.
+
+## After the lock: the withdrawal fold (Kerry 2026-10-26, CoS #2363-#2366)
+
+After the lock the sheet is never re-dealt (event-timeline.md §3: "REDISTRIBUTE with the fewest moves"). A withdrawal is folded by `email_parser/withdrawal_fold.py`, a step of the 15-minute after-lock job right after seat-fill:
+- G = ceil(N/4). A group under 3 takes one player from each foursome in DONOR order (shotgun highest hole first, B before A; tee times the first foursome) at once.
+- More groups than G: from 7:00 AM event day the shortest group (the one the withdrawal hit on a tie) dissolves one each into the threesomes in seat-fill order, and its time is released.
+- A partner request, a Match Play pair or a guest and host in one group never split; if every candidate is blocked nothing moves and one COO item is raised.
+- Nothing inside the hour before the first tee.
+- Rule 17 (`_regroup_after_removal`, the generator re-deal after a removal) now runs only before the lock or with dial `withdrawal_fold_auto` off.
+Full rules, Kerry's words, the ten cases and the open choices: events.md "Withdrawal fold". Guard `test_withdrawal_fold.py`.
 
 ## Unused tee times: which to keep (Kerry 2026-10-26)
 
