@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.581.0";
+window.TGF_VERSION = "2.582.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.582.0",
+    date: "2026-10-26",
+    title: "Screens: every standard screen and sequence on one page, with comments to the Librarian",
+    changes: [
+      "Kerry 10/26: \"I want to be able to go to a page and select whatever I want to look at to review standard screenshot layouts and sequences\" ... \"managed by the Librarian\" ... comments that go \"to the librarian who would submit back to the Front Desk or Chief of Staff\". The new Admin › Screens page (/admin/screens) is admin only. Dial screens_viewer_role=manager opens it to managers later.",
+      "It lists every catalogued sequence by area (member emails and pages, leaderboard, live scoring, Lone Star Cup, manager and admin). You can filter by status (current, built not live, mockup, superseded, reference) and search. Each sequence shows its screens in order with captions, phone, desktop and email views, and a full-size viewer with arrow keys. The catalogue is docs/claude/screenshots/catalog.json, owned by the Librarian: 15 sequences and 125 screens, including today's invitation, payment reminder and events leaderboard sets, saved for good.",
+      "A comment, on the whole sequence or one screen, marked Improve, Submit for review or Note, becomes a mailbox post to the Librarian (topic screens, cc Front Desk). The Librarian's replies show in the same thread. A comment is never a Kerry OK for anything. Guard test_screens.py; standing rule in CLAUDE.md: retake a sequence in the same commit as a change to its look."
+    ]
+  },
   {
     version: "2.581.0",
     date: "2026-10-26",

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Screens</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <style>
+        /* SCREENS, admin only (Kerry 2026-10-26): the Librarian's catalogue of
+           screenshot sequences (docs/claude/screenshots/catalog.json). A
+           comment is a mailbox post to the Librarian (email_parser/screens.py). */
+        .scr-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:4px 0 12px; }
+        .scr-head h2 { font-family:'Bitter',serif; font-size:1.5rem; margin:0; }
+        .scr-sub { color:var(--text-muted,#6B7280); font-size:.85rem; }
+        .scr-wrap { display:grid; grid-template-columns: 300px 1fr; gap:16px; align-items:start; }
+        .scr-side { background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:12px; padding:10px;
+                    position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto; }
+        .scr-search { width:100%; padding:8px 10px; border:1px solid var(--border,#E5E7EB); border-radius:8px;
+                      font-size:.95rem; box-sizing:border-box; }
+        .scr-chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+        .scr-chip { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:3px 9px;
+                    border-radius:999px; border:1px solid var(--border,#E5E7EB); background:#fff; cursor:pointer; color:#374151; }
+        .scr-chip.on { background:#1B1B1B; color:#fff; border-color:#1B1B1B; }
+        .scr-area { font-size:.7rem; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+                    color:var(--text-muted,#6B7280); margin:12px 4px 4px; }
+        .scr-item { display:block; width:100%; text-align:left; background:none; border:0; border-radius:8px;
+                    padding:8px; cursor:pointer; font:inherit; color:inherit; }
+        .scr-item:hover { background:#F3F4F6; }
+        .scr-item.on { background:#FFF4EC; box-shadow:inset 3px 0 0 #E8803A; }
+        .scr-item-t { font-weight:600; font-size:.92rem; line-height:1.25; }
+        .scr-item-m { font-size:.75rem; color:var(--text-muted,#6B7280); margin-top:2px; display:flex; gap:6px; flex-wrap:wrap; }
+        .st { font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:1px 7px; border-radius:999px; }
+        .st-current { background:#DCFCE7; color:#15803D; }
+        .st-built { background:#DBEAFE; color:#1D4ED8; }
+        .st-mockup { background:#F3E8FF; color:#7E22CE; }
+        .st-superseded { background:#F3F4F6; color:#6B7280; }
+        .st-reference { background:#FEF3C7; color:#92400E; }
+        .st-missing { background:#FEE2E2; color:#B91C1C; }
+        .scr-main { min-width:0; }
+        .scr-card { background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+        .scr-title { font-family:'Bitter',serif; font-weight:700; font-size:1.3rem; margin:0 0 4px; }
+        .scr-meta { font-size:.85rem; color:var(--text-muted,#6B7280); display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        .scr-notes { margin:8px 0 0; font-size:.9rem; }
+        .scr-views { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+        .scr-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:14px; }
+        .scr-step { background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+        .scr-step.superseded { opacity:.75; }
+        .scr-thumb { display:flex; align-items:flex-start; width:100%; background:#F3F4F6; border:0; padding:0; cursor:zoom-in; height:300px; overflow:hidden; }
+        .scr-thumb img { width:100%; height:auto; display:block; }
+        .scr-thumb.pdf { display:flex; align-items:center; justify-content:center; font-weight:700; color:#6B7280; cursor:pointer; }
+        .scr-cap { padding:8px 10px 10px; font-size:.86rem; line-height:1.3; flex:1; }
+        .scr-cap .n { font-weight:700; color:#E8803A; margin-right:4px; }
+        .scr-cap .row { display:flex; justify-content:space-between; gap:6px; align-items:center; margin-top:6px; }
+        .scr-cap .lnk { background:none; border:0; color:#2563EB; cursor:pointer; padding:0; font-size:.8rem; }
+        .scr-thread { display:grid; gap:10px; margin:10px 0; }
+        .scr-post { border:1px solid var(--border,#E5E7EB); border-radius:10px; padding:8px 10px; background:#F9FAFB; }
+        .scr-post.lib { background:#FFF; border-left:3px solid #E8803A; }
+        .scr-post-h { font-size:.75rem; color:var(--text-muted,#6B7280); margin-bottom:4px; }
+        .scr-post-b { white-space:pre-wrap; font-size:.88rem; }
+        .scr-form { display:grid; gap:8px; }
+        .scr-form .row { display:flex; gap:8px; flex-wrap:wrap; }
+        .scr-form select, .scr-form textarea { padding:8px 10px; border:1px solid var(--border,#E5E7EB); border-radius:8px; font:inherit; font-size:.92rem; }
+        .scr-form select { flex:1 1 180px; min-width:0; }
+        .scr-form textarea { width:100%; min-height:90px; box-sizing:border-box; resize:vertical; }
+        .scr-msg { font-size:.85rem; margin:0; }
+        .scr-loose li { font-size:.82rem; word-break:break-all; }
+        .scr-lb { position:fixed; inset:0; background:rgba(0,0,0,.88); display:none; z-index:1000; flex-direction:column; }
+        .scr-lb.on { display:flex; }
+        .scr-lb-bar { display:flex; justify-content:space-between; align-items:center; gap:10px; color:#fff; padding:10px 14px; font-size:.9rem; }
+        .scr-lb-bar button { background:rgba(255,255,255,.15); color:#fff; border:0; border-radius:8px; padding:6px 12px; cursor:pointer; font:inherit; }
+        .scr-lb-img { flex:1; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:0 12px 16px; }
+        .scr-lb-img img { max-width:100%; height:auto; background:#fff; }
+        @media (max-width: 820px) {
+            .scr-wrap { grid-template-columns: 1fr; }
+            .scr-side { position:static; max-height:none; }
+            .scr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; }
+            .scr-thumb { height:220px; }
+        }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Screens' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% endif %}
+    <main>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/admin/health">Health</a>
+            <a href="/spotlight">Spotlight</a>
+            <a href="/admin/gg-history">GG History</a>
+            <a href="/admin/test-center">Test Center</a>
+            <a href="/admin/lsc-teams">Cup Teams</a>
+            <a href="/admin/advisors">Advisors</a>
+            <a href="/admin/screens" class="active">Screens</a>
+        </nav>
+        <div class="scr-head"><h2>Screens</h2>
+            <span class="scr-sub">Standard screens and sequences, kept by the Librarian. Tap a picture to see it full size. A comment goes to the Librarian.</span></div>
+        <div class="scr-wrap">
+            <aside class="scr-side">
+                <input class="scr-search" id="scr-q" placeholder="Search screens" autocomplete="off">
+                <div class="scr-chips" id="scr-status"></div>
+                <div id="scr-list"><p style="color:var(--text-muted);">Loading&hellip;</p></div>
+            </aside>
+            <section class="scr-main" id="scr-main"></section>
+        </div>
+    </main>
+    <div class="scr-lb" id="scr-lb" role="dialog" aria-modal="true">
+        <div class="scr-lb-bar">
+            <button type="button" id="lb-prev">&larr; Prev</button>
+            <span id="lb-cap"></span>
+            <span><button type="button" id="lb-next">Next &rarr;</button> <button type="button" id="lb-close">Close</button></span>
+        </div>
+        <div class="scr-lb-img"><img id="lb-img" alt=""></div>
+    </div>
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+    const STATUS_WORD = {current: "Current", built: "Built, not live", mockup: "Mockup", superseded: "Superseded", reference: "Reference"};
+    let CAT = null, SEL = null, VIEW = "all", STATUS = "all", LB = 0;
+    const fileUrl = (seq, st) => `/admin/screens/file/${encodeURIComponent(seq.folder)}/${encodeURIComponent(st.file)}`;
+    const chip = (s) => `<span class="st st-${esc(s)}">${esc(STATUS_WORD[s] || s)}</span>`;
+
+    async function load() {
+        const r = await fetch("/api/screens");
+        CAT = await r.json();
+        if (!r.ok) { document.getElementById("scr-list").innerHTML = `<p>${esc(CAT.error || "Could not load.")}</p>`; return; }
+        const statuses = ["all", ...new Set(CAT.sequences.map(s => s.status))];
+        document.getElementById("scr-status").innerHTML = statuses.map(s =>
+            `<button type="button" class="scr-chip${s === STATUS ? " on" : ""}" data-s="${esc(s)}">${esc(s === "all" ? "All" : (STATUS_WORD[s] || s))}</button>`).join("");
+        document.querySelectorAll("#scr-status .scr-chip").forEach(b => b.onclick = () => { STATUS = b.dataset.s; load(); });
+        const want = decodeURIComponent((location.hash || "").slice(1));
+        renderList();
+        pick(CAT.sequences.find(s => s.id === (SEL ? SEL.id : want)) || CAT.sequences[0]);
+    }
+
+    function renderList() {
+        const q = document.getElementById("scr-q").value.trim().toLowerCase();
+        const areas = CAT.areas.length ? CAT.areas : [...new Set(CAT.sequences.map(s => s.area))];
+        let html = "";
+        for (const a of areas) {
+            const rows = CAT.sequences.filter(s => s.area === a
+                && (STATUS === "all" || s.status === STATUS)
+                && (!q || (s.title + " " + (s.notes || "") + " " + s.steps.map(x => x.caption).join(" ")).toLowerCase().includes(q)));
+            if (!rows.length) continue;
+            html += `<div class="scr-area">${esc(a)}</div>` + rows.map(s => {
+                const n = (CAT.comment_counts || {})[s.id] || 0;
+                return `<button type="button" class="scr-item${SEL && SEL.id === s.id ? " on" : ""}" data-id="${esc(s.id)}">
+                    <div class="scr-item-t">${esc(s.title)}</div>
+                    <div class="scr-item-m">${chip(s.status)}<span>${s.steps.length} screens</span>${n ? `<span>${n} comment${n === 1 ? "" : "s"}</span>` : ""}</div></button>`;
+            }).join("");
+        }
+        if (CAT.not_catalogued && CAT.not_catalogued.length) {
+            html += `<div class="scr-area">Not catalogued</div><ul class="scr-loose">` +
+                CAT.not_catalogued.map(l => `<li>${esc(l.folder)}: ${l.files.length} file${l.files.length === 1 ? "" : "s"}</li>`).join("") + `</ul>`;
+        }
+        document.getElementById("scr-list").innerHTML = html || "<p>No screens match.</p>";
+        document.querySelectorAll("#scr-list .scr-item").forEach(b => b.onclick = () => {
+            pick(CAT.sequences.find(s => s.id === b.dataset.id));
+            if (window.innerWidth <= 820) document.getElementById("scr-main").scrollIntoView({behavior: "smooth"});
+        });
+    }
+
+    function steps() {
+        return SEL.steps.filter(st => VIEW === "all" || st.view === VIEW);
+    }
+
+    function pick(seq) {
+        if (!seq) { document.getElementById("scr-main").innerHTML = ""; return; }
+        SEL = seq; history.replaceState(null, "", "#" + encodeURIComponent(seq.id));
+        renderList();
+        const views = ["all", ...new Set(seq.steps.map(s => s.view))];
+        if (!views.includes(VIEW)) VIEW = "all";
+        const list = steps();
+        document.getElementById("scr-main").innerHTML = `
+            <div class="scr-card">
+                <h3 class="scr-title">${esc(seq.title)}</h3>
+                <div class="scr-meta">${chip(seq.status)}${seq.version ? `<span>${esc(seq.version)}</span>` : ""}<span>Taken ${esc(seq.taken || "?")}</span>${seq.audience ? `<span>Seen by: ${esc(seq.audience)}</span>` : ""}${seq.source_doc ? `<span>Doc: ${esc(seq.source_doc)}</span>` : ""}</div>
+                ${seq.notes ? `<p class="scr-notes">${esc(seq.notes)}</p>` : ""}
+                ${views.length > 2 ? `<div class="scr-views">${views.map(v => `<button type="button" class="scr-chip${v === VIEW ? " on" : ""}" data-v="${esc(v)}">${esc(v === "all" ? "All views" : v)}</button>`).join("")}</div>` : ""}
+            </div>
+            <div class="scr-grid">${list.map((st, i) => {
+                const state = st.missing ? "missing" : (st.state || "");
+                const thumb = st.kind === "pdf"
+                    ? `<a class="scr-thumb pdf" href="${fileUrl(seq, st)}" target="_blank" rel="noopener">PDF</a>`
+                    : `<button type="button" class="scr-thumb" data-i="${i}"><img loading="lazy" src="${fileUrl(seq, st)}" alt="${esc(st.caption)}"></button>`;
+                return `<div class="scr-step${st.state === "superseded" ? " superseded" : ""}">${thumb}
+                    <div class="scr-cap"><span class="n">${i + 1}</span>${esc(st.caption)}
+                    <div class="row"><span>${state ? chip(state === "missing" ? "missing" : state) : `<span class="scr-sub">${esc(st.view)}</span>`}</span>
+                    <button type="button" class="lnk" data-c="${esc(st.file)}">Comment</button></div></div></div>`;
+            }).join("")}</div>
+            <div class="scr-card" style="margin-top:14px;">
+                <h3 class="scr-title" style="font-size:1.05rem;">Comments to the Librarian</h3>
+                <div class="scr-thread" id="scr-thread"><p class="scr-sub">Loading&hellip;</p></div>
+                <form class="scr-form" id="scr-form">
+                    <div class="row">
+                        <select name="kind">${(CAT.kinds || ["Note"]).map(k => `<option>${esc(k)}</option>`).join("")}</select>
+                        <select name="step"><option value="">The whole sequence</option>${seq.steps.map((st, i) => `<option value="${esc(st.file)}">${i + 1}. ${esc(st.caption)}</option>`).join("")}</select>
+                    </div>
+                    <textarea name="text" maxlength="4000" placeholder="What should change, or what should be reviewed?"></textarea>
+                    <div class="row"><button class="btn btn-primary" type="submit">Send to the Librarian</button></div>
+                    <p class="scr-msg" id="scr-msg"></p>
+                </form>
+            </div>`;
+        document.querySelectorAll(".scr-views .scr-chip").forEach(b => b.onclick = () => { VIEW = b.dataset.v; pick(SEL); });
+        document.querySelectorAll(".scr-thumb[data-i]").forEach(b => b.onclick = () => openLb(parseInt(b.dataset.i)));
+        document.querySelectorAll(".scr-cap .lnk").forEach(b => b.onclick = () => {
+            const f = document.getElementById("scr-form");
+            f.step.value = b.dataset.c; f.text.focus(); f.scrollIntoView({behavior: "smooth", block: "center"});
+        });
+        document.getElementById("scr-form").onsubmit = send;
+        loadThread();
+    }
+
+    async function loadThread() {
+        const box = document.getElementById("scr-thread");
+        const r = await fetch(`/api/screens/${encodeURIComponent(SEL.id)}/comments`);
+        const d = await r.json();
+        const rows = d.comments || [];
+        box.innerHTML = rows.length ? rows.map(p => {
+            const lib = p.author !== "screens-page";
+            const body = (p.body || "").split("\n");
+            const kind = (body.find(l => l.startsWith("KIND:")) || "").slice(5).trim();
+            const step = (body.find(l => l.startsWith("STEP:")) || "").slice(5).trim();
+            // the post's header lines (TO/CC/FROM/KIND/SEQUENCE/STEP) are for
+            // the mailbox; the page shows the words
+            const head = /^(TO|CC|FROM|KIND|SEQUENCE|STEP|RE):/;
+            const from = (body.find(l => l.startsWith("FROM:")) || "").slice(5).trim().split(/[ ,(]/)[0];
+            const text = body.filter(l => !head.test(l)).join("\n").trim()
+                .split("\n\nA review note from the Screens page")[0].replace(/^A review note from the Screens page[\s\S]*$/, "");
+            const t = new Date(String(p.created_at).replace(" ", "T") + "Z");
+            const when = isNaN(t) ? p.created_at : t.toLocaleString("en-US", {timeZone: "America/Chicago", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit"}) + " CT";
+            return `<div class="scr-post${lib ? " lib" : ""}"><div class="scr-post-h">#${p.id} · ${esc(lib ? (from || p.author) : "You")} · ${esc(when)}${kind ? " · " + esc(kind) : ""}${step ? " · " + esc(step) : ""}</div>
+                <div class="scr-post-b">${esc(text)}</div></div>`;
+        }).join("") : `<p class="scr-sub">No comments yet.</p>`;
+    }
+
+    async function send(e) {
+        e.preventDefault();
+        const f = e.target, msg = document.getElementById("scr-msg");
+        const text = f.text.value.trim();
+        if (!text) { msg.textContent = "Write a comment first."; return; }
+        f.querySelector("button").disabled = true;
+        const r = await fetch(`/api/screens/${encodeURIComponent(SEL.id)}/comments`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({kind: f.kind.value, step: f.step.value, text})});
+        const d = await r.json();
+        f.querySelector("button").disabled = false;
+        if (!r.ok) { msg.textContent = d.error || "Could not send."; return; }
+        msg.textContent = `Sent to the Librarian as mailbox post #${d.post.id}.`;
+        f.text.value = "";
+        CAT.comment_counts[SEL.id] = (CAT.comment_counts[SEL.id] || 0) + 1;
+        renderList(); loadThread();
+    }
+
+    function openLb(i) {
+        const list = steps().filter(st => st.kind !== "pdf");
+        const all = steps();
+        const st = all[i]; if (!st) return;
+        LB = list.indexOf(st);
+        showLb(list);
+        document.getElementById("scr-lb").classList.add("on");
+    }
+    function showLb(list) {
+        list = list || steps().filter(st => st.kind !== "pdf");
+        LB = (LB + list.length) % list.length;
+        const st = list[LB];
+        document.getElementById("lb-img").src = fileUrl(SEL, st);
+        document.getElementById("lb-cap").textContent = `${LB + 1} of ${list.length} · ${st.caption}`;
+    }
+    document.getElementById("lb-prev").onclick = () => { LB--; showLb(); };
+    document.getElementById("lb-next").onclick = () => { LB++; showLb(); };
+    document.getElementById("lb-close").onclick = () => document.getElementById("scr-lb").classList.remove("on");
+    document.addEventListener("keydown", e => {
+        if (!document.getElementById("scr-lb").classList.contains("on")) return;
+        if (e.key === "Escape") document.getElementById("lb-close").click();
+        if (e.key === "ArrowLeft") document.getElementById("lb-prev").click();
+        if (e.key === "ArrowRight") document.getElementById("lb-next").click();
+    });
+    document.getElementById("scr-q").addEventListener("input", renderList);
+    load();
+    </script>
+</body>
+</html>

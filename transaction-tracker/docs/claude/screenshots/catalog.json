@@ -1,0 +1,828 @@
+{
+ "_about": "The Screens catalogue (Kerry 2026-10-26). Owned by the Librarian. Each sequence is one folder under docs/claude/screenshots/; steps show in order. status: current = what members/managers see now; built = on a branch, not live; mockup = a proposal; superseded = kept for history; reference = taken at build time, may have moved on. A step's own state overrides the sequence's. The /admin/screens page reads this file; files in a folder but not listed here show as Not catalogued.",
+ "areas": [
+  "Member emails & pages",
+  "Leaderboard",
+  "Live scoring",
+  "Lone Star Cup",
+  "Manager & admin"
+ ],
+ "sequences": [
+  {
+   "id": "invitations",
+   "title": "Event invitation, from the email to the answer",
+   "area": "Member emails & pages",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.580.2",
+   "taken": "2026-10-26",
+   "folder": "invitations-2026-10-26",
+   "source_doc": "docs/claude/events.md (Tracker event invitations + RSVPs)",
+   "notes": "Kerry 10/26: Remove me moved to a small link reading \"Remove me from ALL event invitations\". Buttons carry a bgcolor cell so Outlook keeps their colour.",
+   "steps": [
+    {
+     "file": "1-invite-email.png",
+     "caption": "The 7 AM invitation email",
+     "view": "email"
+    },
+    {
+     "file": "2-last-call-email.png",
+     "caption": "Last call email (sent the morning of the event)",
+     "view": "email"
+    },
+    {
+     "file": "3-one-more-tap.png",
+     "caption": "One more tap: shown to a known mail scanner or a non-browser opening I'm in",
+     "view": "phone"
+    },
+    {
+     "file": "4-cant-make-it-thanks.png",
+     "caption": "Can't make it: thanks page, with the small Remove me link",
+     "view": "phone"
+    },
+    {
+     "file": "4-old-cant-make-it-thanks.png",
+     "caption": "Before v2.579.3: Remove me was a big grey button",
+     "view": "phone",
+     "state": "superseded"
+    },
+    {
+     "file": "5-reason-thanks.png",
+     "caption": "After they tap a reason",
+     "view": "phone"
+    },
+    {
+     "file": "6-remove-me-confirm.png",
+     "caption": "Remove me: the confirm page",
+     "view": "phone"
+    },
+    {
+     "file": "7-remove-me-done.png",
+     "caption": "Remove me: done",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "payment-reminder",
+   "title": "Payment reminder email",
+   "area": "Member emails & pages",
+   "audience": "member",
+   "status": "built",
+   "version": "v2.581.0 (built, not live)",
+   "taken": "2026-10-26",
+   "folder": "payment-reminder-2026-10-26",
+   "source_doc": "docs/claude/events.md (Payment reminder)",
+   "notes": "One email for the Remind tag, Remind All, the 6 AM job and the composer. Kerry chose mockup 3 and asked for a plain roster link.",
+   "steps": [
+    {
+     "file": "1-reminder-email.png",
+     "caption": "The reminder as built (v2.581.0)",
+     "view": "email"
+    },
+    {
+     "file": "mockup-3.png",
+     "caption": "Mockup 3, the one Kerry picked",
+     "view": "email",
+     "state": "mockup"
+    },
+    {
+     "file": "old-1-remind-tag-email.png",
+     "caption": "Before: what the Remind tag sent (no link)",
+     "view": "email",
+     "state": "superseded"
+    },
+    {
+     "file": "old-2-template-email.png",
+     "caption": "Before: the Messages template version",
+     "view": "email",
+     "state": "superseded"
+    }
+   ]
+  },
+  {
+   "id": "events-leaderboard-batch1",
+   "title": "Events leaderboard, batch 1",
+   "area": "Leaderboard",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.576.0+",
+   "taken": "2026-10-21",
+   "folder": "events-leaderboard-batch1",
+   "source_doc": "static/js/version.js v2.576.0",
+   "notes": "L = the build before deploy, PROD = live, UP = the Upcoming section.",
+   "steps": [
+    {
+     "file": "L_desk_list.png",
+     "caption": "Desktop: the month list",
+     "view": "desktop"
+    },
+    {
+     "file": "L_desk_team.png",
+     "caption": "Desktop: an open event on the TEAM tab, one team expanded",
+     "view": "desktop"
+    },
+    {
+     "file": "L_phone_list.png",
+     "caption": "Phone: the month list",
+     "view": "phone"
+    },
+    {
+     "file": "L_phone_sheet.png",
+     "caption": "Phone: the how-it-works sheet",
+     "view": "phone"
+    },
+    {
+     "file": "L_phone_team.png",
+     "caption": "Phone: TEAM tab",
+     "view": "phone"
+    },
+    {
+     "file": "PROD_phone_team.png",
+     "caption": "Phone: TEAM tab, live",
+     "view": "phone"
+    },
+    {
+     "file": "UP_desk.png",
+     "caption": "Desktop: Upcoming events with one open",
+     "view": "desktop"
+    },
+    {
+     "file": "UP_phone.png",
+     "caption": "Phone: Upcoming events with one open",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "leaderboard-review-2026-10-19",
+   "title": "Leaderboard review, 10/19",
+   "area": "Leaderboard",
+   "audience": "member",
+   "status": "superseded",
+   "version": "v2.571.24",
+   "taken": "2026-10-19",
+   "folder": "leaderboard-review-2026-10-19",
+   "source_doc": "docs/claude/handoff-2026-10-19-leaderboard-review.md",
+   "steps": [
+    {
+     "file": "event-board-net-fullpage.png",
+     "caption": "Event board net fullpage",
+     "view": "phone"
+    },
+    {
+     "file": "event-board-overall-phone.png",
+     "caption": "Event board overall phone",
+     "view": "phone"
+    },
+    {
+     "file": "how-to-read-modal-phone.png",
+     "caption": "How to read modal phone",
+     "view": "phone"
+    },
+    {
+     "file": "lsc-skins-phone.png",
+     "caption": "Lsc skins phone",
+     "view": "phone"
+    },
+    {
+     "file": "season-contests-monthly-phone.png",
+     "caption": "Season contests monthly phone",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-9",
+   "title": "Live scoring on the phone, 9 holes",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "reference",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-join.png",
+     "caption": "Join",
+     "view": "phone"
+    },
+    {
+     "file": "2-hole.png",
+     "caption": "Hole",
+     "view": "phone"
+    },
+    {
+     "file": "3-ctp.png",
+     "caption": "Ctp",
+     "view": "phone"
+    },
+    {
+     "file": "4-second-phone.png",
+     "caption": "Second phone",
+     "view": "phone"
+    },
+    {
+     "file": "5-weak-signal.png",
+     "caption": "Weak signal",
+     "view": "phone"
+    },
+    {
+     "file": "6-sign.png",
+     "caption": "Sign",
+     "view": "phone"
+    },
+    {
+     "file": "6b-every-hole-in.png",
+     "caption": "Every hole in",
+     "view": "phone"
+    },
+    {
+     "file": "7-keeper-done.png",
+     "caption": "Keeper done",
+     "view": "phone"
+    },
+    {
+     "file": "8-cart-sign-qr.png",
+     "caption": "Cart sign qr",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-18",
+   "title": "Live scoring, 18 holes and shotgun on 10",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "reference",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25-18h",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-join.png",
+     "caption": "Join",
+     "view": "phone"
+    },
+    {
+     "file": "2-hole-14-back-nine.png",
+     "caption": "Hole 14 back nine",
+     "view": "phone"
+    },
+    {
+     "file": "3-the-turn.png",
+     "caption": "The turn",
+     "view": "phone"
+    },
+    {
+     "file": "4-ctp-hole-16.png",
+     "caption": "Ctp hole 16",
+     "view": "phone"
+    },
+    {
+     "file": "5-sign-your-card-out-in-total.png",
+     "caption": "Sign your card out in total",
+     "view": "phone"
+    },
+    {
+     "file": "5b-every-hole-in.png",
+     "caption": "Every hole in",
+     "view": "phone"
+    },
+    {
+     "file": "6-scorekeeper-finish.png",
+     "caption": "Scorekeeper finish",
+     "view": "phone"
+    },
+    {
+     "file": "7-shotgun-start-hole-10.png",
+     "caption": "Shotgun start hole 10",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-card-check",
+   "title": "Live scoring: checking and signing the card",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "reference",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25-card-check",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-check-front.png",
+     "caption": "Check front",
+     "view": "phone"
+    },
+    {
+     "file": "2-check-front-tap-a-number.png",
+     "caption": "Check front tap a number",
+     "view": "phone"
+    },
+    {
+     "file": "3-check-front-changed-and-help.png",
+     "caption": "Check front changed and help",
+     "view": "phone"
+    },
+    {
+     "file": "4-check-back.png",
+     "caption": "Check back",
+     "view": "phone"
+    },
+    {
+     "file": "5-photo-me-note.png",
+     "caption": "Photo me note",
+     "view": "phone"
+    },
+    {
+     "file": "6-photo-taken.png",
+     "caption": "Photo taken",
+     "view": "phone"
+    },
+    {
+     "file": "7-submitted.png",
+     "caption": "Submitted",
+     "view": "phone"
+    },
+    {
+     "file": "8-mark-signed-for-him.png",
+     "caption": "Mark signed for him",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-flag",
+   "title": "Live scoring: flagging a problem",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "reference",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25-flag",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-join.png",
+     "caption": "Join",
+     "view": "phone"
+    },
+    {
+     "file": "2-hole.png",
+     "caption": "Hole",
+     "view": "phone"
+    },
+    {
+     "file": "3-ctp.png",
+     "caption": "Ctp",
+     "view": "phone"
+    },
+    {
+     "file": "4-second-phone.png",
+     "caption": "Second phone",
+     "view": "phone"
+    },
+    {
+     "file": "5-weak-signal.png",
+     "caption": "Weak signal",
+     "view": "phone"
+    },
+    {
+     "file": "6-sign.png",
+     "caption": "Sign",
+     "view": "phone"
+    },
+    {
+     "file": "6b-every-hole-in.png",
+     "caption": "Every hole in",
+     "view": "phone"
+    },
+    {
+     "file": "6c-sign-tap-hole.png",
+     "caption": "Sign tap hole",
+     "view": "phone"
+    },
+    {
+     "file": "6d-sign-somethings-wrong.png",
+     "caption": "Sign somethings wrong",
+     "view": "phone"
+    },
+    {
+     "file": "7-keeper-done.png",
+     "caption": "Keeper done",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-match-pickup",
+   "title": "Live scoring: match play and picked-up balls",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "reference",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25-match-pickup",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-hole-match-tags-and-max-notice.png",
+     "caption": "Hole match tags and max notice",
+     "view": "phone"
+    },
+    {
+     "file": "2-ball-in-hole-or-picked-up.png",
+     "caption": "Ball in hole or picked up",
+     "view": "phone"
+    },
+    {
+     "file": "3-picked-up-chosen-with-help.png",
+     "caption": "Picked up chosen with help",
+     "view": "phone"
+    },
+    {
+     "file": "4-check-card-ringed-pickup.png",
+     "caption": "Check card ringed pickup",
+     "view": "phone"
+    },
+    {
+     "file": "5-hole-9-match-standing.png",
+     "caption": "Hole 9 match standing",
+     "view": "phone"
+    },
+    {
+     "file": "6-the-turn-holes-under-names.png",
+     "caption": "The turn holes under names",
+     "view": "phone"
+    },
+    {
+     "file": "7-check-card-back-same-columns.png",
+     "caption": "Check card back same columns",
+     "view": "phone"
+    },
+    {
+     "file": "8-your-card-my-row-and-flag-to-fix.png",
+     "caption": "Your card my row and flag to fix",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-cup",
+   "title": "Live scoring: Lone Star Cup formats",
+   "area": "Lone Star Cup",
+   "audience": "member",
+   "status": "reference",
+   "taken": "2026-09-26",
+   "folder": "score-entry-2026-09-26-cup",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-foursomes-one-row-per-team-and-X.png",
+     "caption": "Foursomes one row per team and x",
+     "view": "phone"
+    },
+    {
+     "file": "2-austin-leads-banner-in-austin-colour.png",
+     "caption": "Austin leads banner in austin colour",
+     "view": "phone"
+    },
+    {
+     "file": "3-san-antonio-leads-banner-in-sa-colour.png",
+     "caption": "San antonio leads banner in sa colour",
+     "view": "phone"
+    },
+    {
+     "file": "4-check-card-X-and-won-in-team-colour.png",
+     "caption": "Check card x and won in team colour",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-admin",
+   "title": "Live scoring: admin page and cart sign",
+   "area": "Manager & admin",
+   "audience": "admin",
+   "status": "reference",
+   "taken": "2026-09-26",
+   "folder": "score-entry-2026-09-26-admin",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "cart-sign.png",
+     "caption": "Cart sign",
+     "view": "desktop"
+    },
+    {
+     "file": "live-scoring-page.png",
+     "caption": "Live scoring page",
+     "view": "desktop"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-manager-panel",
+   "title": "Live scoring: the manager panel",
+   "area": "Manager & admin",
+   "audience": "manager",
+   "status": "reference",
+   "taken": "2026-09-28",
+   "folder": "score-entry-2026-09-28-manager-panel",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-desktop.png",
+     "caption": "Desktop",
+     "view": "desktop"
+    },
+    {
+     "file": "2-phone.png",
+     "caption": "Phone",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "score-entry-pairings-panel",
+   "title": "Live scoring: the pairings panel",
+   "area": "Manager & admin",
+   "audience": "manager",
+   "status": "reference",
+   "taken": "2026-09-28",
+   "folder": "score-entry-2026-09-28-pairings-panel",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-desktop-before-seed.png",
+     "caption": "Desktop, before seeding",
+     "view": "desktop"
+    },
+    {
+     "file": "2-desktop-seeded-qr.png",
+     "caption": "Desktop, seeded with QR",
+     "view": "desktop"
+    },
+    {
+     "file": "3-phone-seeded.png",
+     "caption": "Phone seeded",
+     "view": "phone"
+    },
+    {
+     "file": "4-phone-closed.png",
+     "caption": "Phone closed",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "lsc-preview",
+   "title": "Lone Star Cup: splash, landing, draw, board and cart signs",
+   "area": "Lone Star Cup",
+   "audience": "member",
+   "status": "reference",
+   "taken": "2026-10-08",
+   "folder": "lsc-preview",
+   "source_doc": "docs/claude/lone-star-cup-board.md",
+   "steps": [
+    {
+     "file": "00-landing-held.png",
+     "caption": "Landing held",
+     "view": "phone"
+    },
+    {
+     "file": "00-landing.png",
+     "caption": "Landing",
+     "view": "phone"
+    },
+    {
+     "file": "00-preview-shell-folded.png",
+     "caption": "Preview shell folded",
+     "view": "phone"
+    },
+    {
+     "file": "00-preview-shell.png",
+     "caption": "Preview shell",
+     "view": "phone"
+    },
+    {
+     "file": "00-splash.png",
+     "caption": "Splash",
+     "view": "phone"
+    },
+    {
+     "file": "01-landing.png",
+     "caption": "Landing",
+     "view": "phone"
+    },
+    {
+     "file": "01-who.png",
+     "caption": "Who",
+     "view": "phone"
+    },
+    {
+     "file": "02-fb.png",
+     "caption": "Fb",
+     "view": "phone"
+    },
+    {
+     "file": "02-held.png",
+     "caption": "Held",
+     "view": "phone"
+    },
+    {
+     "file": "03-fs.png",
+     "caption": "Fs",
+     "view": "phone"
+    },
+    {
+     "file": "04-s.png",
+     "caption": "S",
+     "view": "phone"
+    },
+    {
+     "file": "05-qr.png",
+     "caption": "Qr",
+     "view": "phone"
+    },
+    {
+     "file": "06-who.png",
+     "caption": "Who",
+     "view": "phone"
+    },
+    {
+     "file": "07-held.png",
+     "caption": "Held",
+     "view": "phone"
+    },
+    {
+     "file": "08-board.png",
+     "caption": "Board",
+     "view": "phone"
+    },
+    {
+     "file": "09-open.png",
+     "caption": "Open",
+     "view": "phone"
+    },
+    {
+     "file": "10-info-foursomes.png",
+     "caption": "Info foursomes",
+     "view": "phone"
+    },
+    {
+     "file": "10-info-schedule.png",
+     "caption": "Info schedule",
+     "view": "phone"
+    },
+    {
+     "file": "10-info-teams.png",
+     "caption": "Info teams",
+     "view": "phone"
+    },
+    {
+     "file": "20-draw-start.png",
+     "caption": "Draw start",
+     "view": "phone"
+    },
+    {
+     "file": "21-draw-four-landed.png",
+     "caption": "Draw four landed",
+     "view": "phone"
+    },
+    {
+     "file": "22-draw-singles.png",
+     "caption": "Draw singles",
+     "view": "phone"
+    },
+    {
+     "file": "30-cart-sign-sat-am.png",
+     "caption": "Cart sign sat am",
+     "view": "phone"
+    },
+    {
+     "file": "30-cart-sign-sun.png",
+     "caption": "Cart sign sun",
+     "view": "phone"
+    },
+    {
+     "file": "40-skins-pane.png",
+     "caption": "Skins pane",
+     "view": "phone"
+    },
+    {
+     "file": "50-logo-cart-sign.png",
+     "caption": "Logo cart sign",
+     "view": "phone"
+    },
+    {
+     "file": "51-logo-event-info.png",
+     "caption": "Logo event info",
+     "view": "phone"
+    },
+    {
+     "file": "52-logo-splash.png",
+     "caption": "Logo splash",
+     "view": "phone"
+    },
+    {
+     "file": "53-splash-shimmer-a.png",
+     "caption": "Splash shimmer a",
+     "view": "phone"
+    },
+    {
+     "file": "53-splash-shimmer-b.png",
+     "caption": "Splash shimmer b",
+     "view": "phone"
+    },
+    {
+     "file": "chapman-hole4.png",
+     "caption": "Chapman hole4",
+     "view": "phone"
+    },
+    {
+     "file": "chapman-match-open.png",
+     "caption": "Chapman match open",
+     "view": "phone"
+    },
+    {
+     "file": "cup-board-follow.png",
+     "caption": "Cup board follow",
+     "view": "phone"
+    },
+    {
+     "file": "cup-cart-signs-sat-am.pdf",
+     "caption": "Cup cart signs sat am",
+     "view": "phone"
+    },
+    {
+     "file": "cup-cart-signs-sun.pdf",
+     "caption": "Cup cart signs sun",
+     "view": "phone"
+    },
+    {
+     "file": "fourball-hole4.png",
+     "caption": "Fourball hole4",
+     "view": "phone"
+    },
+    {
+     "file": "fourball-match-open.png",
+     "caption": "Fourball match open",
+     "view": "phone"
+    },
+    {
+     "file": "singles-hole4.png",
+     "caption": "Singles hole4",
+     "view": "phone"
+    },
+    {
+     "file": "singles-match-open.png",
+     "caption": "Singles match open",
+     "view": "phone"
+    }
+   ]
+  },
+  {
+   "id": "cup-day2",
+   "title": "Lone Star Cup, day 2 board",
+   "area": "Lone Star Cup",
+   "audience": "member",
+   "status": "reference",
+   "taken": "2026-10-07",
+   "folder": "cup-2026-10-07-d2",
+   "source_doc": "docs/claude/lone-star-cup-board.md",
+   "steps": [
+    {
+     "file": "00-landing.png",
+     "caption": "Landing",
+     "view": "phone"
+    },
+    {
+     "file": "chapman-hole4.png",
+     "caption": "Chapman hole4",
+     "view": "phone"
+    },
+    {
+     "file": "cup-board-follow.png",
+     "caption": "Cup board follow",
+     "view": "phone"
+    },
+    {
+     "file": "fourball-hole4.png",
+     "caption": "Fourball hole4",
+     "view": "phone"
+    },
+    {
+     "file": "fourball-match-open.png",
+     "caption": "Fourball match open",
+     "view": "phone"
+    },
+    {
+     "file": "singles-hole4.png",
+     "caption": "Singles hole4",
+     "view": "phone"
+    }
+   ]
+  }
+ ]
+}

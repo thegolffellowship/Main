@@ -14936,6 +14936,64 @@ def advisor_link(token):
     return redirect("/concepts")
 
 
+# ---------------------------------------------------------------------------
+# SCREENS — the Librarian's screenshot library (Kerry 2026-10-26)
+# ---------------------------------------------------------------------------
+
+def _screens_allowed() -> bool:
+    from email_parser import screens as _scr
+    need = _scr.viewer_role()
+    return _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK.get(need, 99)
+
+
+@app.route("/admin/screens")
+def admin_screens_page():
+    """Every catalogued screenshot sequence, with comments to the Librarian."""
+    if not _screens_allowed():
+        if _wants_page(request) and not session.get("role"):
+            return render_template("login_gate.html"), 401
+        return redirect("/events")
+    return render_template("admin_screens.html")
+
+
+@app.route("/admin/screens/file/<path:rel>")
+def admin_screens_file(rel):
+    from email_parser import screens as _scr
+    if not _screens_allowed():
+        return jsonify({"error": "Admin access required."}), 403
+    p = _scr.safe_file(rel)
+    if not p:
+        return jsonify({"error": "not found"}), 404
+    return send_file(str(p), max_age=3600)
+
+
+@app.route("/api/screens", methods=["GET"])
+def api_screens():
+    from email_parser import screens as _scr
+    if not _screens_allowed():
+        return jsonify({"error": "Admin access required."}), 403
+    cat = _scr.catalog()
+    cat["comment_counts"] = _scr.counts()
+    cat["kinds"] = list(_scr.KINDS)
+    return jsonify(cat)
+
+
+@app.route("/api/screens/<seq_id>/comments", methods=["GET", "POST"])
+def api_screens_comments(seq_id):
+    from email_parser import screens as _scr
+    if not _screens_allowed():
+        return jsonify({"error": "Admin access required."}), 403
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        res = _scr.add_comment(seq_id, data.get("kind") or "Note", data.get("text") or "",
+                               step_file=data.get("step") or "",
+                               who=session.get("role") or "admin")
+        if res.get("error"):
+            return jsonify(res), 400
+        return jsonify({"status": "ok", "post": res})
+    return jsonify({"comments": _scr.thread(seq_id)})
+
+
 @app.route("/admin/advisors")
 def admin_advisors_page():
     if session.get("role") != "admin":
