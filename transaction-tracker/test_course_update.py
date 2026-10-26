@@ -36,6 +36,12 @@ with db._connect(DB) as conn:
             conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, transaction_status, "
                          "order_date, order_id, email_uid, merchant) VALUES (?, ?, ?, ?, '9', 'active', '2099-12-01', ?, ?, "
                          "'GoDaddy')", (f"{fn} Test", cid, name, eid, f"R{cid}", f"manual-{cid}"))
+    # One RSVP-only player on the Tuesday nine (no order row): $0 rsvp_only item.
+    conn.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) "
+                 "VALUES (897999, 'Cal', 'Rsvp', 'active_member')")
+    conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, transaction_status, "
+                 "order_date, order_id, email_uid, merchant) VALUES ('Cal Rsvp', 897999, 's9.98 COURSE UPDATE', ?, "
+                 "'9', 'rsvp_only', '2099-12-01', 'RSVP1', 'manual-rsvp1', 'GoDaddy')", (EV,))
     conn.commit()
 pp.course_recipients_for_event = lambda ev, db_path=None: {
     "ok": True, "to": "pro@course.test", "to_name": "Pat Pro", "cc": ["shop@course.test"], "course_id": 1}
@@ -48,7 +54,11 @@ check("to the primary contact, CC the other contacts and the manager",
       b["to"] == "pro@course.test" and "shop@course.test" in b["cc"] and len(b["cc"]) >= 2, (b["to"], b["cc"]))
 check("the registered list, the live link and the lock notice",
       "Ann Test" in b["html"] and "Bob Test" in b["html"] and f"/member/teesheet/{EV}" in b["html"]
-      and "5:00 PM Monday" in b["html"] and b["players"] == 2, b["html"][-700:])
+      and "5:00 PM Monday" in b["html"] and b["registered"] == 2, b["html"][-700:])
+check("Registered and RSVP Only both shown, total is the full number expected (Kerry 10/26)",
+      b["rsvp_only"] == 1 and b["players"] == 3 and "Registered (2)" in b["html"]
+      and "RSVP Only (1)" in b["html"] and "Cal Rsvp" in b["html"] and "(3 players)" in b["subject"],
+      (b["registered"], b["rsvp_only"], b["subject"]))
 check("greets the contact by first name", "Hi Pat," in b["html"])
 check("nothing held", b["held"] == [], b["held"])
 

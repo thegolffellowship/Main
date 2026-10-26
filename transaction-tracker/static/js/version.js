@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.601.0";
+window.TGF_VERSION = "2.602.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.602.0",
+    date: "2026-10-26",
+    title: "The course update shows Registered and RSVP Only, so the course sees the full number expected",
+    changes: [
+      "Kerry 10/26: \"the email needs to also show Registered & RSVP Only, so they can see the full number we're expecting like 22 not 18 for Saturday.\" The noon-before-the-lock course update now reads the whole pairings roster (_event_roster_rows): the subject and first line give the total expected, with the registered and RSVP-only counts, and the body lists the two groups under their own headings. The wording changed, so its stamp moves to the new hash (13f9bc2e40de4984), set on Kerry's word above when this deploys. Guard test_course_update.py."
+    ]
+  },
   {
     version: "2.601.0",
     date: "2026-10-26",

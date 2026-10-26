@@ -32,10 +32,12 @@ SENT_KEY = "course_update_sent"
 SEND_HOUR = 12
 SEND_UNTIL_HOUR = 15
 
-SUBJECT = "TGF {day}: who's registered so far ({n} players)"
+# Kerry 10/26: "the email needs to also show Registered & RSVP Only, so
+# they can see the full number we're expecting like 22 not 18 for Saturday."
+SUBJECT = "TGF {day}: who's coming so far ({n} players)"
 BODY = ("<p>Hi {first_name},</p>"
-        "<p>Here's who's registered for <strong>{day}, {date_long}</strong> at {course} so far "
-        "({n} players):</p>{roster}"
+        "<p>Here's who we're expecting for <strong>{day}, {date_long}</strong> at {course} so far: "
+        "<strong>{n} players</strong> ({n_reg} registered, {n_rsvp} RSVP only).</p>{roster}"
         "<p>You can follow along live here: {link}</p>"
         "<p>We lock our foursome counts at <strong>5:00 PM {lock_day}</strong>. Please allow us "
         "room to grow until then.</p>"
@@ -81,11 +83,15 @@ def build(event_id: int, db_path=None, preview_to_name: str | None = None) -> di
         if not r:
             return {"error": f"no event {event_id}"}
         ev = dict(r)
-        roster = [x for x in db._event_roster_rows(conn, int(event_id)) if not x.get("rsvp_only")]
+        roster = db._event_roster_rows(conn, int(event_id))
     ctx = _context(ev, db_path)
     rec = course_recipients_for_event(ev, db_path)
     lock = db.event_lock_at(ev, db_path)
-    names = sorted({(x.get("name") or "").strip() for x in roster if (x.get("name") or "").strip()})
+    def _names(rows):
+        return sorted({(x.get("name") or "").strip() for x in rows if (x.get("name") or "").strip()})
+    reg = _names([x for x in roster if not x.get("rsvp_only")])
+    rsvp = [n for n in _names([x for x in roster if x.get("rsvp_only")]) if n not in reg]
+    names = reg + rsvp
     held = []
     if not rec.get("ok"):
         held.append(rec.get("why") or "no course contact")
@@ -101,8 +107,8 @@ def build(event_id: int, db_path=None, preview_to_name: str | None = None) -> di
     vals = {"first_name": _html.escape(first or "there"), "day": _html.escape(ctx["day"]),
             "date_long": _html.escape(ctx["date_long"]),
             "course": _html.escape(_display_name(ev) or ev.get("course") or ""),
-            "n": len(names),
-            "roster": "<ul>" + "".join(f"<li>{_html.escape(n)}</li>" for n in names) + "</ul>",
+            "n": len(names), "n_reg": len(reg), "n_rsvp": len(rsvp),
+            "roster": _roster_html(reg, rsvp),
             "link": f'<a href="{_html.escape(link)}" style="color:#2563eb;">{_html.escape(link)}</a>',
             "lock_day": (lock.strftime("%A") if lock else ""),
             "manager_name": _html.escape(mgr)}
@@ -116,9 +122,21 @@ def build(event_id: int, db_path=None, preview_to_name: str | None = None) -> di
         cc.append(m)
     return {"event_id": int(event_id), "event": ev.get("item_name"), "to": rec.get("to"), "cc": cc,
             "subject": subject, "held": held, "players": len(names),
+            "registered": len(reg), "rsvp_only": len(rsvp),
             "send_at": (send_at(ev, db_path).isoformat() if send_at(ev, db_path) else None),
             "html": frame(inner, (ctx.get("chapter") or "").upper(), f"{ctx['day']} at {vals['course']}"),
             **approval_state(db_path)}
+
+
+def _roster_html(reg: list, rsvp: list) -> str:
+    """Two headed lists: Registered (paid) and RSVP Only (said they're in,
+    not registered yet)."""
+    def block(title, names):
+        if not names:
+            return ""
+        return (f'<p style="margin:12px 0 4px;"><strong>{_html.escape(title)} ({len(names)})</strong></p><ul>'
+                + "".join(f"<li>{_html.escape(n)}</li>" for n in names) + "</ul>")
+    return block("Registered", reg) + block("RSVP Only", rsvp)
 
 
 def _sent(db_path=None) -> dict:
