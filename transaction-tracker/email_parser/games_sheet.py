@@ -25,6 +25,8 @@ from __future__ import annotations
 import logging
 import re
 
+from email_parser.timezone_utils import clock12
+
 logger = logging.getLogger(__name__)
 
 # Kerry 2026-09-29, verbatim where quoted: "Add 'Winners split pot' on the
@@ -259,7 +261,7 @@ def build_games_sheet(event_id: int, games: dict | None = None, db_path=None) ->
         "meta": " · ".join(x for x in (_fmt_date(ev.get("event_date")),
                                         (ev.get("item_name") or "").split(" ")[0], nine) if x),
         "start_type": "SHOTGUN" if start_type.startswith("shotgun") else "TEE TIMES",
-        "start_time": pev.get("start_clock") or ev.get("start_time") or "",
+        "start_time": pev.get("start_clock") or clock12(ev.get("start_time")) or "",
         "file_stub": pev.get("file_stub") or db.print_file_stub(ev),
     }
 

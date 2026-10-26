@@ -182,13 +182,13 @@
         const markChip = e => {
             const m = e.mark || "none";
             const label = m === "none" ? "unmarked" : m
-                + (m === "sent" && e.sent_at ? ` ${e.sent_at}` : "");
+                + (m === "sent" && e.sent_at ? ` ${(window.tgfTime12 || (s => s))(e.sent_at)}` : "");
             // open/click chips (Kerry 2026-08-06): from the latest REAL
             // send's tracking pixel + tagged links. Opens are a floor —
             // image-blocking clients never report one.
             let track = "";
-            if (e.open_count) track += `<span class="sc-chip opened" title="First opened ${esc(e.opened_at || "")}">opened${e.open_count > 1 ? " ×" + e.open_count : ""}</span>`;
-            if (e.click_count) track += `<span class="sc-chip clicked" title="First clicked ${esc(e.clicked_at || "")}">clicked${e.click_count > 1 ? " ×" + e.click_count : ""}</span>`;
+            if (e.open_count) track += `<span class="sc-chip opened" title="First opened ${esc((window.tgfTime12 || (s => s))(e.opened_at || ""))}">opened${e.open_count > 1 ? " ×" + e.open_count : ""}</span>`;
+            if (e.click_count) track += `<span class="sc-chip clicked" title="First clicked ${esc((window.tgfTime12 || (s => s))(e.clicked_at || ""))}">clicked${e.click_count > 1 ? " ×" + e.click_count : ""}</span>`;
             return `<span class="sc-chip ${m}">${esc(label)}</span>` + track
                 + (e.mark_note ? `<div style="font-size:11px;color:#6B7280;">${esc(e.mark_note)}</div>` : "");
         };

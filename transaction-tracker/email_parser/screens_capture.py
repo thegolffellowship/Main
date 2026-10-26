@@ -332,7 +332,7 @@ def _deployed_version() -> str:
 
 def _now_label() -> str:
     from email_parser.timezone_utils import now_central
-    return now_central().strftime("%Y-%m-%d %H:%M CT")
+    return now_central().strftime("%Y-%m-%d %-I:%M %p CT")
 
 
 def live_meta() -> dict:
