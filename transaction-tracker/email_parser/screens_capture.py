@@ -330,10 +330,12 @@ def capture_all(out_for, base_url: str, only: str = "", db_path=None, demo: dict
         done = []
         with sync_playwright() as pw:
             # A sandbox reaches the web (the Tracker's /static, Google Fonts)
-            # only through its HTTPS proxy; production sets none.
+            # only through its HTTPS proxy; production sets none. The demo
+            # pages are served locally and must skip it.
             _px = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
             browser = pw.chromium.launch(executable_path=exe, headless=False,
-                                         proxy={"server": _px} if _px else None,
+                                         proxy=({"server": _px, "bypass": "localhost,127.0.0.1"}
+                                                if _px else None),
                                          args=["--headless=new", "--no-sandbox", "--disable-gpu",
                                                "--disable-dev-shm-usage"])
             try:

@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.599.0";
+window.TGF_VERSION = "2.600.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.600.0",
+    date: "2026-10-26",
+    title: "Player missing on the phone: absent players come off the card, and the course is told",
+    changes: [
+      "Kerry 9/30 (#1021), built 10/26 with his ruling \"Both should be at 3\": every hole screen has a red-outlined Player missing button above Save & Go. Who's missing? then Is <Name> coming? with three answers: Running late, keep him on the card; No, take him off this card; Don't know yet. Don't know yet asks again each hole and takes him off after 3 asks, or once his group has scored 3 holes and he has none. + Player puts him back. Only the phone keeping score can answer, for its own players. Answers are stored by customer_id in se_no_shows (migration 0040), touched only by score_entry.py.",
+      "An absent player's blank holes no longer hold his group's card from going final, and he is left out of the entered scores (no net/gross, MVP, points or handicap round); his holes are never filled with par. Save leaves a late player's hole blank instead of entering par.",
+      "Once a no-show's group has played 3 holes, one email per event goes to the course contact, manager CC'd: \"No-shows today at <course>: <names>\" (email_parser/no_show_notice.py, dial no_show_course_notice, every 5 minutes on event day, read-only bridge scoring-no-show-notice). Not yet built: the per-hole blind for a short team (item 4) and Move to another card (item 5). Guard test_no_show.py; screens sequence no-show.",
+      "Screens: the sandbox capture now skips the HTTPS proxy for the locally served demo pages, which had come back as the proxy's error page."
+    ]
+  },
   {
     version: "2.599.0",
     date: "2026-10-26",
