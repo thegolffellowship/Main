@@ -176,7 +176,7 @@
                         <button class="caq-btn" data-act="up">↑</button>
                         <button class="caq-btn" data-act="down">↓</button>
                     </div>
-                    <div class="caq-meta">#${it.id} · created ${esc(String(it.created_at || "").slice(0, 10))} · updated ${esc(String(it.updated_at || "").slice(0, 16))}</div>
+                    <div class="caq-meta">#${it.id} · created ${esc(String(it.created_at || "").slice(0, 10))} · updated ${esc((window.tgfTime12 || (s => s))(String(it.updated_at || "").slice(0, 16)))}</div>
                 </div>
             </div>`;
         }

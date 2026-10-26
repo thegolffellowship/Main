@@ -11998,7 +11998,7 @@
             : "";
         cont.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin:0.4rem 0 0.6rem;">${nav}
-                ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml(prMonthlyData.fetched_at)}</span>` : ""}
+                ${prMonthlyData.fetched_at && !compact ? `<span style="font-size:0.7rem;color:var(--text-muted);" title="Snapshot time — auto-refreshes daily; Refresh pulls live">as of ${escapeHtml((window.tgfTime12 || (s => s))(prMonthlyData.fetched_at))}</span>` : ""}
             </div>${statusChip}${monthPlaque}
             <table class="enrollment-table${compact ? " pr-compact" : ""}">
                 <thead><tr>

@@ -14,6 +14,8 @@
    FIRST and without defer so window.fetch is wrapped before any page
    script runs — every request on every page lights the top bar. #}
 <script src="/static/js/loading.js"></script>
+{# 12-hour times everywhere a person reads one (Kerry 2026-10-26, CoS #2325) #}
+<script src="/static/js/time12.js?v={{ app_version }}"></script>
 {# ↓ ↑ Enter in every typeahead (Kerry 2026-09-23) #}
 <script src="/static/js/typeahead-keys.js?v={{ app_version }}"></script>
 {% if member_mode %}

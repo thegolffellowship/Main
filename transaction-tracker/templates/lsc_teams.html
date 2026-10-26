@@ -464,7 +464,7 @@
                 // Staff-only breadcrumb (frozen_at is stripped from
                 // member payloads): the page is serving the hardened
                 // final-roster snapshot, not the live projection.
-                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Final roster snapshot (frozen ${escapeHtml(d.frozen_at)}) &mdash; deposits stay live; ask Claude to re-freeze after a roster change (scoring-lsc-freeze).</p>`
+                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Final roster snapshot (frozen ${escapeHtml((window.tgfTime12 || (s => s))(d.frozen_at))}) &mdash; deposits stay live; ask Claude to re-freeze after a roster change (scoring-lsc-freeze).</p>`
                 : "");
             // chevron fold: tap a seat row to reveal how they qualified
             box.querySelectorAll(".lsc-seat.has-earn").forEach(el =>

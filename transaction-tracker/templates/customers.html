@@ -1843,7 +1843,7 @@
         const derivedStatus = deriveStatus(customer.items, customer.roles, customer.current_player_status, customer.membershipTerm, customer.status_name);
         const lapsed = isMembershipLapsed(customer.membershipTerm);
         const statusNote = lapsed && !['FORMER','expired_member','inactive'].includes(customer.current_player_status)
-            ? ` <span style="color:var(--text-muted); font-size:0.72rem; font-style:italic;">(membership term lapsed ${customer.membershipTerm.expires_at})</span>`
+            ? ` <span style="color:var(--text-muted); font-size:0.72rem; font-style:italic;">(membership term lapsed ${(window.tgfTime12 || (s => s))(customer.membershipTerm.expires_at)})</span>`
             : '';
         // Append historical 1st Timer note when the person was once a 1st Timer
         // but is now active — makes it clear they can't use 1st Timer pricing again.
@@ -2036,7 +2036,7 @@
                           `<button type="button" class="cust-delete-membership-btn" data-term-id="${t.id}" data-customer-id="${cid}" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.7rem;padding:0.05rem 0.3rem;">✕</button>`
                         : '';
                     return `<div style="display:flex;align-items:center;gap:0.4rem;padding:0.25rem 0;border-bottom:1px dashed var(--border);font-size:0.78rem;flex-wrap:wrap;">
-                        <span><strong>${escapeHtml(t.started_at || '')}</strong> → ${escapeHtml(t.expires_at || '')}</span>
+                        <span><strong>${escapeHtml((window.tgfTime12 || (s => s))(t.started_at || ''))}</strong> → ${escapeHtml((window.tgfTime12 || (s => s))(t.expires_at || ''))}</span>
                         ${_membershipStatusBadge(t)}
                         ${_formatRosterChoice(t)}
                         <span style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;">${escapeHtml(t.source || '')}</span>

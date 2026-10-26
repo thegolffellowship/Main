@@ -1078,7 +1078,7 @@
             // keeps the original wording.
             const fuTitle = l.outreach_at
                 ? `48-hour follow-up — reached out ${fmtNoteTime(l.outreach_at)}. Clears when they respond.`
-                : `Follow up ${l.follow_up_at}`;
+                : `Follow up ${(window.tgfTime12 || (s => s))(l.follow_up_at)}`;
             const fuChip = l.follow_up_at
                 ? `<span class="ld-fu${fuDue(l) ? " due" : ""}" title="${esc(fuTitle)}">⏰ ${fmtFu(l.follow_up_at)}</span>` : "";
             const dotCls = late ? "ld-dot-r" : l.status === "touched" ? "ld-dot-g"
@@ -1474,7 +1474,7 @@
             const d = await r.json().catch(() => ({}));
             if (!r.ok || d.error) throw new Error(d.error || "Send failed");
             if (msg) {
-                msg.textContent = `Sent. Follow-up ${d.follow_up_at || "armed"}.`;
+                msg.textContent = `Sent. Follow-up ${d.follow_up_at ? (window.tgfTime12 || (s => s))(d.follow_up_at) : "armed"}.`;
                 msg.className = "ld-emmsg ok";
             }
             // The job is done — put the menu away rather than leaving it
@@ -1605,7 +1605,7 @@
         const f = b.funnel || {};
         const c = b.cost || {};
         const isCamp = b.id != null;
-        const spendNote = b.spend_source === "meta" ? `Meta insights · fetched ${esc((b.insights_fetched_at || "").slice(0, 16))} UTC`
+        const spendNote = b.spend_source === "meta" ? `Meta insights · fetched ${esc((window.tgfTime12 || (s => s))((b.insights_fetched_at || "").slice(0, 16)))} UTC`
             : b.spend_source === "manual" ? "manual spend (META_ACCESS_TOKEN not set) — tap Set spend to update"
             : b.spend_source === "sum" ? "sum of campaign spend"
             : "no spend recorded — Set spend to unlock CPL / CPP / CPMem";

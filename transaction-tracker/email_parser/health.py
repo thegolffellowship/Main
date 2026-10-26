@@ -256,7 +256,7 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         except Exception:
             pass
     report = {
-        "generated_at": now_central().strftime("%Y-%m-%d %H:%M"),
+        "generated_at": now_central().strftime("%Y-%m-%d %-I:%M %p"),
         "window_days": days,
         "summary": summary,
         "slow": slow[:40],

@@ -2948,7 +2948,7 @@
                     if (owed > 0) {
                         const si = (balanceDueSendMap[ev.item_name] || {})[String(r.id)];
                         const sent = !!(si && si.status === 'sent');
-                        const tipDate = sent && si.sent_at ? ` (last sent ${si.sent_at}, ${si.count}x)` : '';
+                        const tipDate = sent && si.sent_at ? ` (last sent ${(window.tgfTime12 || (s => s))(si.sent_at)}, ${si.count}x)` : '';
                         items.push({cls: 'btn-venmo-email', label: sent ? 'Remind' : 'Send Venmo Email',
                             attrs: `data-item-id="${r.id}"`,
                             title: sent ? `Send another reminder${tipDate}` : 'Preview & send Venmo balance-due email'});
@@ -6090,7 +6090,7 @@
                         ok = true;
                         // The response IS the board as it now reads.
                         if (Array.isArray(data.games)) flightsBoards[ev.id] = data;
-                        showToast(act === "freeze" ? `Flights FROZEN${data.freeze && data.freeze.taken_at_local ? " " + data.freeze.taken_at_local : ""} — the selection is the record; pots keep recomputing until settlement` : act === "settle" ? "Flights SETTLED — the record is stored with the delta since the freeze" : "Board back to LIVE — the snapshot is voided but kept", "success");
+                        showToast(act === "freeze" ? `Flights FROZEN${data.freeze && data.freeze.taken_at_local ? " " + (window.tgfTime12 || (s => s))(data.freeze.taken_at_local) : ""} — the selection is the record; pots keep recomputing until settlement` : act === "settle" ? "Flights SETTLED — the record is stored with the delta since the freeze" : "Board back to LIVE — the snapshot is voided but kept", "success");
                     }
                 } catch (err) {
                     showToast(`Could not ${act}: ${err && err.message || err}`, "error");
@@ -6277,7 +6277,7 @@
         </div>`;
         if (board.freeze) {
             html += `<div style="width:0;min-width:100%;box-sizing:border-box;font-size:0.74rem;color:#78350f;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:0.35rem 0.6rem;margin:0.35rem 0 0;">
-                Frozen ${escapeHtml(board.freeze.taken_at_local || board.freeze.taken_at || "")} by ${escapeHtml(board.freeze.taken_by || "")}${board.freeze.note ? ` &mdash; ${escapeHtml(board.freeze.note)}` : ""}.
+                Frozen ${escapeHtml((window.tgfTime12 || (s => s))(board.freeze.taken_at_local || board.freeze.taken_at || ""))} by ${escapeHtml(board.freeze.taken_by || "")}${board.freeze.note ? ` &mdash; ${escapeHtml(board.freeze.note)}` : ""}.
                 ${board.settled ? ` Settled ${escapeHtml(board.settled.taken_at_local || board.settled.taken_at || "")} by ${escapeHtml(board.settled.taken_by || "")} &mdash; this board is the record and no longer recomputes.` : " Selection is locked; pots and places keep recomputing from actual buyers until the closeout settles the board (automatic, the night of the event)."}
             </div>`;
         }
@@ -7195,7 +7195,7 @@
         if (state.autosaveError) return `Auto-save failed (${state.autosaveError}) — click Save`;
         if (state.isDirty) return 'Auto-saves in a moment';
         const t = state.lastSavedAt instanceof Date ? state.lastSavedAt : null;
-        return t ? `Saved ${t.getHours() % 12 || 12}:${String(t.getMinutes()).padStart(2, '0')}` : 'Saved';
+        return t ? `Saved ${t.getHours() % 12 || 12}:${String(t.getMinutes()).padStart(2, '0')} ${t.getHours() >= 12 ? 'PM' : 'AM'}` : 'Saved';
     }
     function paintPairingsSaveStamp(ev, state) {
         document.querySelectorAll(`.pair-save-stamp[data-ev-id="${ev.id}"]`).forEach(el => {
@@ -16100,7 +16100,7 @@
         const [label, color, hint] = REG_URL_STATE_LABELS[state] || REG_URL_STATE_LABELS.missing;
         let html = `<span style="display:inline-block; padding:0.05rem 0.45rem; border-radius:999px; font-weight:700; font-size:0.68rem; color:#fff; background:${color};">${label}</span> <span style="color:var(--text-muted);">${hint}</span>`;
         if (ev.registration_url_checked_at && state !== "expired") {
-            html += ` <span style="color:var(--text-muted);">Checked ${escapeHtml(String(ev.registration_url_checked_at).slice(0, 16))} UTC.</span>`;
+            html += ` <span style="color:var(--text-muted);">Checked ${escapeHtml((window.tgfTime12 || (s => s))(String(ev.registration_url_checked_at).slice(0, 16)))} UTC.</span>`;
         }
         if (!ev.registration_url && ev.registration_url_suggested) {
             html += `<div style="margin-top:0.25rem;">Suggested: <code style="font-size:0.72rem;">${escapeHtml(ev.registration_url_suggested)}</code> <button type="button" class="btn btn-secondary" id="edit-event-registration_url-use" style="font-size:0.7rem; padding:0.1rem 0.45rem;">Use</button></div>`;
@@ -16218,7 +16218,7 @@
         const editSpot = document.getElementById("edit-event-fellowship_spot");
         if (editSpot) editSpot.value = ev.fellowship_spot || "";
         const editLock = document.getElementById("edit-event-lock_override");
-        if (editLock) editLock.value = (ev.lock_override || "").replace(" ", "T").slice(0, 16);
+        if (editLock) editLock.value = (ev.lock_override || "").replace(" ", "T").slice(0, 16);  // 24h-ok: datetime-local input value
         const editKeep = document.getElementById("edit-event-tee_keep");
         if (editKeep) editKeep.value = ev.tee_keep || "";
 
@@ -16394,8 +16394,8 @@
         }
         const lockEl = document.getElementById("edit-event-lock_override");
         if (lockEl) {
-            const lockVal = (lockEl.value || "").replace("T", " ").slice(0, 16);
-            if (lockVal !== (ev.lock_override || "").slice(0, 16)) changes.lock_override = lockVal;
+            const lockVal = (lockEl.value || "").replace("T", " ").slice(0, 16);  // 24h-ok: stored value
+            if (lockVal !== (ev.lock_override || "").slice(0, 16)) changes.lock_override = lockVal;  // 24h-ok: stored value
         }
         const keepEl = document.getElementById("edit-event-tee_keep");
         if (keepEl && keepEl.value !== (ev.tee_keep || "")) changes.tee_keep = keepEl.value;
