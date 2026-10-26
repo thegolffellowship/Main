@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.588.0";
+window.TGF_VERSION = "2.589.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.589.0",
+    date: "2026-10-26",
+    title: "Seat-fill: a paid late add is seated automatically, by the ruled rule",
+    changes: [
+      "Kerry 10/26 (CoS #2308): \"Sign-ups between 5 and 7p. We need something here to automate adding to groups ... We've got to get to the point of zero manager reliance. The show must go on.\" From an event's 5:00 PM lock until its first tee, every 15 minutes, anyone who has registered and paid but has no seat on the saved pairings is seated by Kerry's 10/20 rule: tee times fill the latest threesome first, then earlier; a shotgun fills the lowest hole first, B before A. The late add takes the open seat and any blind drawn for it is cleared.",
+      "It runs as the first step of the after-lock job (Kerry, #2331: \"tracker side automation ... placing newly registered players into groups\" comes before the updates), so the existing emails follow on their own: before the 6:00 AM Event Info the seat rides in the sheet the manager approves and the Event Info carries; after it, the player gets their email, the group gets UPDATED GROUP, and the course gets that group's sheets inside its window. RSVP-only players are never seated. When no group has an open seat the player stays in Unassigned and one COO item says so. Dial seat_fill_auto; read-only bridge scoring-seat-fill; guard test_seat_fill.py."
+    ]
+  },
   {
     version: "2.588.0",
     date: "2026-10-26",

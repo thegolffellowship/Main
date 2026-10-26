@@ -2473,6 +2473,15 @@ def start_scheduler():
     # change, only the changed sheets to the course. Dial `after_lock_auto`.
     def after_lock_changes_job():
         from email_parser.after_lock import check
+        # SEAT-FILL FIRST (Kerry 10/26, CoS #2331 C): a late add is seated by
+        # the ruled rule before the update emails below are worked out.
+        try:
+            from email_parser.seat_fill import check as _seat_fill
+            _sf = _seat_fill()
+            if _sf.get("events"):
+                logger.info("Seat-fill: %s", _sf["events"])
+        except Exception:
+            logger.exception("Seat-fill failed (non-fatal)")
         try:
             res = check(_print_pack_render, app.static_folder)
             ran = {k: v for k, v in (res.get("events") or {}).items()

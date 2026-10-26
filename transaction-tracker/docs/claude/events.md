@@ -132,6 +132,19 @@ Kerry: "I want the last 'warning' email to go out ... at 1:00p to let him know w
 - **Guard:** `test_rsvp_deadline.py`.
 - **Still open:** text messages (Twilio), and auto-seating someone who pays after lock (seat-fill, #2310).
 
+## Seat-fill — late adds seat themselves (v2.589.0, Kerry 2026-10-26)
+
+Kerry: "Sign-ups between 5 and 7p. We need something here to automate adding to groups ... We've got to get to the point of zero manager reliance. The show must go on." (CoS #2308, #2331 C, #2333; sized in #2310.)
+
+`email_parser/seat_fill.py`. From an event's 5:00 PM lock (`payment_reminder.lock_at`) until its first tee, the FIRST step of the 15-minute `after_lock_changes` job seats every registered (paid) roster player who has no seat on the saved sheet, by the ruled rule (event-timeline.md, Kerry 10/20):
+- tee times: the latest threesome first, then earlier (highest group number first);
+- shotgun: the lowest hole first; on one hole, B before A (3A, 4B, 4A).
+- A group is open below 4 players. The late add takes the lowest free cart seat, and a blind drawn for that seat is cleared (`set_event_blind(..., None)`).
+- Never seated: RSVP-only players (#2310). Requests after the lock are ignored (ruled 10/20).
+- It saves through `save_event_pairings`, so the existing emails follow: before the Event Info send the seat rides in the draft sheet and the 6:00 AM Event Info; after it, the after-lock job's own update emails (player, UPDATED GROUP, course sheets inside the course window).
+- No open seat: the player stays Unassigned and one COO item `NO OPEN SEAT: <event>` per person per event (`seat_fill_unseated:<event_id>`). The waitlist is not ruled.
+- Every seat in agent_action_log (`seat_fill`). Dial `seat_fill_auto` (on unless off). Read-only bridge `scoring-seat-fill:<event_id>`. Guard `test_seat_fill.py`.
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)
