@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.592.0";
+window.TGF_VERSION = "2.593.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.593.0",
+    date: "2026-10-26",
+    title: "Noon Course Files run by the Tracker, with the manager copied",
+    changes: [
+      "Kerry 10/26 (CoS #2321, #2329 item 3): \"Event ops - Absolutely should be on Tracker side. Not an agent routine\" and \"CC Course Files to Manager too at the Tue noon job.\" On event day, from 12:00 PM (every 15 minutes until 2:45 PM), the Tracker sends each event's Course Files (Starter Sheet, Cart Signs, Scorecards, Proximity, Rules of Play) to the course's primary contact, with the other contacts, the pack recipients and the chapter manager copied. Once per event; a send already made from the button counts. A scorecard gap holds the send and emails the manager the reason instead; the next run sends once it's fixed. No course contact on file: the morning manager pack covers it as before. Not within the hour before the first tee. Dial course_files_noon_auto; read-only bridge scoring-course-files-noon; guard test_course_files_noon.py."
+    ]
+  },
   {
     version: "2.592.0",
     date: "2026-10-26",

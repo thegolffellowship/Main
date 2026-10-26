@@ -2547,6 +2547,31 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # NOON COURSE FILES (Kerry 2026-10-26, CoS #2321/#2329-3/#2331 item 4:
+    # "Event ops - Absolutely should be on Tracker side. Not an agent
+    # routine" / "CC Course Files to Manager too"). Event day, every 15 min
+    # 12:00-2:45 PM Central, once per event, manager CC'd; a gap holds the
+    # send and tells the manager. Dial `course_files_noon_auto`.
+    # email_parser/course_files_noon.py.
+    def course_files_noon_job():
+        from email_parser.course_files_noon import check
+        try:
+            res = check(_print_pack_render, app.static_folder)
+            ran = {k: v for k, v in (res.get("events") or {}).items()
+                   if v.get("status") in ("sent", "failed", "held", "error") or v.get("error")}
+            if ran:
+                logger.info("Noon Course Files: %s", ran)
+        except Exception:
+            logger.exception("Noon Course Files failed (non-fatal)")
+    scheduler.add_job(
+        course_files_noon_job,
+        "cron", hour="12-14", minute="0-59/15",
+        timezone="US/Central",
+        id="course_files_noon",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # 7:00 PM TEE-TIMES EMAIL, three versions (CMO #2076/#2101): player,
     # course contact, manager, for tomorrow's events with saved pairings.
     # BESIDE the pairing auto-send above, not instead of it. Does nothing
