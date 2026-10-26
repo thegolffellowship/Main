@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.598.0";
+window.TGF_VERSION = "2.599.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.599.0",
+    date: "2026-10-26",
+    title: "Screens retake live scoring, the member tee sheet and the Cup from the code",
+    changes: [
+      "Kerry 10/26: \"want updated screens to be automated to mirror with what's live.\" A new demo recipe seeds one made-up event on a throwaway database (fake players 990001-990008) and serves the Tracker's own pages in a separate process with every credential stripped, so pages that need an event, a round or a signed link now retake themselves after each deploy and nightly: score-entry-live (join, pick your name, hole screen, scorer's board), member-teesheet and lone-star-cup-live. Recipes can tap elements before the picture.",
+      "member-pages step 1 now shows the member Leaderboard (/member/results); it had been a second copy of Spotlight because /member redirects there. A failed or partial production capture now writes agent_action_log screens_capture_failed. Sequences that are not automated (back-end pages and reports carry member data; mockups) say why on the Screens page, and the old score-entry and 2026 Cup sets are archived, not deleted. Guard test_screens.py section 6."
+    ]
+  },
   {
     version: "2.598.0",
     date: "2026-10-26",
