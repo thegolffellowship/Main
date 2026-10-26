@@ -135,6 +135,9 @@ os.environ.setdefault("ADMIN_PIN", "4242")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
     import app as _app
 cl = _app.app.test_client()
+# A person's phone (Kerry 10/26 fingerprint guard): browser UA + language.
+cl.environ_base.update({"HTTP_USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+                        "HTTP_ACCEPT_LANGUAGE": "en-US,en;q=0.9"})
 from datetime import date
 tok_in = inv.make_token(770001, EV, "in", date(2026, 12, 15))
 rg = cl.get(f"/rsvp/{tok_in}")
@@ -310,6 +313,7 @@ def _np(cid):
     with db._connect(DB) as conn:
         return conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
                             (f"tracker:{EV}:{cid}",)).fetchone()[0]
+db.set_app_setting(inv.SCANNER_KNOWN_DIAL, "99", db_path=DB)   # these taps test the grace/burst rules alone
 now_ = int(_time.time())
 fresh = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), sent_at=now_) for a in inv.ACTIONS}
 cl.post(f"/rsvp/{fresh['out']}", headers={"X-Requested-With": "fetch"})
@@ -335,6 +339,43 @@ cl.post(f"/rsvp/{old['unsub']}")
 check("…but Remove me right after Can't make it still works (a person does that)",
       770003 in inv._opted_out(DB))
 db.set_app_setting(inv.OPTOUT_KEY, json.dumps(sorted(inv._opted_out(DB) - {770003})), db_path=DB)
+db.set_app_setting(inv.SCANNER_KNOWN_DIAL, "", db_path=DB)
+print("6h. Kerry 10/26: known scanners and non-browser taps confirm with one button (Logan Billeaud)")
+def _pl_rows(cid):
+    with db._connect(DB) as conn:
+        return conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
+                            (f"tracker:{EV}:{cid}",)).fetchone()[0]
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE customer_id = 770004"); conn.commit()
+_old4 = {a: inv.make_token(770004, EV, a, date(2026, 12, 15), sent_at=int(_time.time()) - 600) for a in inv.ACTIONS}
+_bot = cl.get(f"/rsvp/{_old4['in']}", headers={"User-Agent": "Mozilla/5.0 (compatible; Mimecast URL Protect)"})
+_bp = _bot.get_data(as_text=True)
+check("a scanner user agent: I'm in records nothing and asks for one tap",
+      _bot.status_code == 200 and "One more tap" in _bp and "fetch(" not in _bp and _pl_rows(770004) == 0, _bp[:300])
+_nolang = cl.get(f"/rsvp/{_old4['in']}", headers={"Accept-Language": ""})
+check("no Accept-Language counts as not a browser", _nolang.status_code == 200 and _pl_rows(770004) == 0)
+_yes = cl.post(f"/rsvp/{_old4['in']}")
+check("...the button records PLAYING and goes on to registration",
+      _yes.status_code == 302 and _yes.headers["Location"] == "https://shop.example.test/e" and _pl_rows(770004) == 1,
+      (_yes.status_code, _yes.headers.get("Location"), _pl_rows(770004)))
+check("after two catches the person is a known scanner", inv.known_scanner(770004, DB))
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE customer_id = 770004"); conn.commit()
+_known = cl.get(f"/rsvp/{_old4['in']}")
+check("a known scanner's tap from a real browser still needs the button",
+      _known.status_code == 200 and "One more tap" in _known.get_data(as_text=True) and _pl_rows(770004) == 0)
+_out = cl.get(f"/rsvp/{_old4['out']}").get_data(as_text=True)
+check("...and their Can't make it asks too instead of saving itself",
+      "Confirm: I can't make it" in _out and "fetch(location.href" not in _out, _out[:300])
+db.set_app_setting(inv.SCANNER_GUARD_DIAL, "off", db_path=DB)
+_off = cl.get(f"/rsvp/{_old4['in']}")
+check("dial invite_scanner_guard=off restores the one-tap I'm in", _off.status_code == 302 and _pl_rows(770004) == 1)
+db.set_app_setting(inv.SCANNER_GUARD_DIAL, "", db_path=DB)
+with db._connect(DB) as conn:
+    _taps = conn.execute("SELECT COUNT(*) FROM agent_action_log WHERE action_type = 'event_invite_tap' "
+                         "AND description LIKE '% customer 770004 %ua=%'").fetchone()[0]
+    conn.execute("DELETE FROM rsvps WHERE customer_id = 770004"); conn.commit()
+check("every bare link open is logged with its fingerprint", _taps >= 4, _taps)
 db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), "{}", db_path=DB)
 print("6e. Kerry 10/14: preview buttons record nothing")
 with db._connect(DB) as conn:

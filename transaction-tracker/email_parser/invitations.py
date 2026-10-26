@@ -574,6 +574,99 @@ def _scanner_ignored(p: dict, action: str, db_path=None) -> str | None:
     return why
 
 
+# KNOWN SCANNERS + TAP FINGERPRINT (Kerry 10/26: "Anyway to guard against
+# those email scanner false positives?" ... "Yes, build 1 and 2 now", after
+# Logan Billeaud's work filter tapped I'm in ~4 minutes after each send, past
+# the 2-minute grace). A tap from (1) someone whose email has been caught as
+# a scanner SCANNER_KNOWN_AFTER times, or (2) a request that does not look
+# like a person's browser, records nothing by itself: the page asks for one
+# button tap, which scanners do not make. Everyone else is unchanged.
+SCANNER_GUARD_DIAL = "invite_scanner_guard"          # 'off' turns 1 + 2 off
+SCANNER_KNOWN_DIAL = "invite_scanner_known_after"    # default 2
+SCANNER_KNOWN_AFTER = 2
+SCANNER_UA_DIAL = "invite_scanner_ua_tokens"         # comma list, replaces the default
+SCANNER_UA_TOKENS = ("bot", "crawler", "spider", "python", "curl", "wget", "go-http",
+                     "java/", "okhttp", "headless", "phantomjs", "mimecast", "proofpoint",
+                     "barracuda", "symantec", "forcepoint", "trendmicro", "safelinks",
+                     "microsoft office", "ms-office", "bingpreview", "preview",
+                     "scanner", "urldefense", "linkprotect")
+
+
+def _guard_on(db_path=None) -> bool:
+    return (_setting(SCANNER_GUARD_DIAL, db_path) or "").strip().lower() != "off"
+
+
+def tap_fingerprint(client: dict | None, db_path=None) -> str | None:
+    """Why this request does not look like a person, or None. `client` is
+    {ua, lang, ip} from the request headers."""
+    if not client:
+        return None
+    ua = (client.get("ua") or "").strip().lower()
+    if not ua:
+        return "no user agent"
+    raw = (_setting(SCANNER_UA_DIAL, db_path) or "").strip()
+    toks = [t.strip().lower() for t in raw.split(",") if t.strip()] if raw else SCANNER_UA_TOKENS
+    for t in toks:
+        if t in ua:
+            return f"user agent '{t}'"
+    if not (client.get("lang") or "").strip():
+        return "no Accept-Language"
+    return None
+
+
+def known_scanner(cid: int, db_path=None) -> bool:
+    """Has this person's email been caught as a scanner before?"""
+    from email_parser import database as db
+    try:
+        n = int((_setting(SCANNER_KNOWN_DIAL, db_path) or "").strip() or SCANNER_KNOWN_AFTER)
+    except ValueError:
+        n = SCANNER_KNOWN_AFTER
+    conn = db.get_connection(db_path)
+    try:
+        r = conn.execute(
+            "SELECT COUNT(*) FROM agent_action_log WHERE agent_name = 'rsvp-link' "
+            "AND action_type IN ('event_invite_scanner_ignored', 'event_invite_scanner_suspect') "
+            "AND description LIKE ?", (f"event % customer {int(cid)} %",)).fetchone()
+    finally:
+        conn.close()
+    return bool(r and r[0] >= n)
+
+
+def log_tap(token: str, client: dict | None, db_path=None) -> None:
+    """Every bare link open, with its fingerprint (for spotting scanners)."""
+    from email_parser import database as db
+    p = verify_token(token)
+    if not p or p.get("p"):
+        return
+    c = client or {}
+    try:
+        db.log_agent_action("rsvp-link", "event_invite_tap",
+                            f"event {int(p['v'])} customer {int(p['c'])} {p['a']} | "
+                            f"ua={(c.get('ua') or '')[:160]} | lang={(c.get('lang') or '')[:40]} | "
+                            f"ip={(c.get('ip') or '')[:60]}")
+    except Exception:
+        pass
+
+
+def needs_confirm(token: str, client: dict | None, db_path=None) -> str | None:
+    """Why this tap must be confirmed with a button (a known scanner or a
+    non-browser fingerprint), or None. Logs the suspect once per tap."""
+    from email_parser import database as db
+    p = verify_token(token)
+    if not p or p.get("p") or p.get("a") not in ("in", "out") or not _guard_on(db_path):
+        return None
+    why = tap_fingerprint(client, db_path)
+    if not why and known_scanner(int(p["c"]), db_path):
+        why = "known scanner"
+    if why:
+        try:
+            db.log_agent_action("rsvp-link", "event_invite_scanner_suspect",
+                                f"event {int(p['v'])} customer {int(p['c'])} {p['a']} ({why})")
+        except Exception:
+            pass
+    return why
+
+
 def record_answer(token: str, db_path=None) -> dict:
     """POST side of the link. Records I'm in / Can't make it as a Tracker
     rsvps row (one per event + person, the latest answer wins), or the
@@ -800,7 +893,7 @@ def clicks_to_rsvps(event_id: int, apply: bool = False, db_path=None) -> dict:
     return out
 
 
-def click_in(token: str, db_path=None) -> dict:
+def click_in(token: str, db_path=None, client: dict | None = None) -> dict:
     """GET of an I'm in link. With a registration link on the event, the
     player goes straight there; the tap is noted AND recorded as a PLAYING
     RSVP (Kerry 10/17), even if they never pay. Mail-scanner taps (the grace
@@ -823,6 +916,11 @@ def click_in(token: str, db_path=None) -> dict:
     why = _scanner_ignored(p, "in", db_path)
     if why:
         return {"ok": True, "redirect": url, "ignored": why}
+    sus = needs_confirm(token, client, db_path)
+    if sus:
+        # Known scanner / not a browser: record nothing; the page asks for
+        # one tap, whose POST records PLAYING and goes on to registration.
+        return {"ok": False, "confirm": sus, "redirect": url}
     key = CLICKS_KEY.format(event_id=int(p["v"]))
     try:
         clicks = json.loads(_setting(key, db_path) or "{}")

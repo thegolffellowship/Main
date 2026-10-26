@@ -5267,17 +5267,31 @@ def public_event_rsvp(token):
     import html as _h
     from email_parser import invitations as _inv
     res = {}
+    _client = {"ua": request.headers.get("User-Agent", ""),
+               "lang": request.headers.get("Accept-Language", ""),
+               "ip": (request.headers.get("X-Forwarded-For", "") or request.remote_addr or "")}
+    confirm_why = None
     if request.method == "POST":
         res = _inv.record_answer(token)
         if not res.get("ok"):
             return _public_page("RSVP link", f"<h2>{_h.escape(res['error'])}</h2>"), 400
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify({"ok": True})
+        # The one-tap confirm of a guarded I'm in (Kerry 10/26): on to registration.
+        _reg = ((res.get("event") or {}).get("registration_url") or "").strip()
+        if res.get("action") == "in" and _reg and not res.get("ignored") and not res.get("preview"):
+            return redirect(_reg)
     else:
+        _inv.log_tap(token, _client)
         # "go straight to the event registration page if they click I'm In"
-        _go = _inv.click_in(token)
+        _go = _inv.click_in(token, client=_client)
         if _go.get("ok"):
             return redirect(_go["redirect"])
+        confirm_why = _go.get("confirm")
+        if not confirm_why:
+            # Can't make it from a known scanner or a non-browser: a button,
+            # not the self-saving script (Kerry 10/26).
+            confirm_why = _inv.needs_confirm(token, _client)
     info = _inv.describe_token(token)
     if not info.get("ok"):
         return _public_page("RSVP link", f"<h2>{_h.escape(info['error'])}</h2>"), 400
@@ -5307,6 +5321,17 @@ def public_event_rsvp(token):
                 f"<form method='post'><button type='submit' style='{btn}border:0;"
                 "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
         return _public_page("Invitations", body)
+    if confirm_why and not done and info["action"] in ("in", "out"):
+        # KNOWN SCANNER / NOT A BROWSER (Kerry 10/26): nothing is recorded
+        # until this button is tapped; scanners open links, they do not tap.
+        _q = ("One more tap and you're in" if info["action"] == "in"
+              else "Can't make it?")
+        _b = ("Yes, I'm in" if info["action"] == "in" else "Confirm: I can't make it")
+        body = (f"<h2>{_q}</h2><p>{_h.escape(info['course'])}, {_h.escape(info['date_long'])}.</p>"
+                f"<form method='post'><button type='submit' style='{btn}border:0;"
+                f"background:{'#15803D' if info['action'] == 'in' else '#1B1B1B'};color:#fff;"
+                f"cursor:pointer'>{_b}</button></form>")
+        return _public_page("RSVP", body)
     if info["action"] == "in":           # no registration link on the event
         body = (f"<h2>You're in. Thanks!</h2><p>{_h.escape(info['course'])}, "
                 f"{_h.escape(info['date_long'])}. {_h.escape(info['start_sentence'])}</p>" + record)

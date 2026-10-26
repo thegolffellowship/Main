@@ -189,6 +189,16 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   Research behind it (CAN-SPAM, Gmail/Yahoo/Outlook bulk rules, why no
   RFC 8058 header through Graph): mailbox #1792/#1793. Footer postal address:
   on HOLD for Kerry's virtual mailbox (#1795).
+- **Known scanners + tap fingerprint (Kerry 10/26, v2.580.1, after Logan
+  Billeaud's work filter tapped I'm in ~4 minutes after each send).** Every
+  bare link open is logged (`event_invite_tap`: ua, language, ip). An I'm in
+  or Can't make it from (1) someone caught as a scanner `invite_scanner_known_after`
+  (2) times, or (2) a request with no browser user agent, a scanner token in
+  it (`invite_scanner_ua_tokens`) or no Accept-Language records NOTHING by
+  itself: the page asks for one button tap (`event_invite_scanner_suspect`),
+  whose POST records the answer (I'm in then goes on to registration).
+  `invite_scanner_guard=off` turns both off. `0|unplay|...` takes back what
+  slipped through before.
 - **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
   tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.
 - **Schedule** (Kerry), 7:00 AM Central, `schedule(event_date)`: weekday event
