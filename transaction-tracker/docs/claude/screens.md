@@ -33,6 +33,15 @@ Kerry: "I want to be able to go to a page and select whatever I want to look at 
 - **HTML/CSS tab:** shows the exact source the demo serves, with Copy and Download .html, so Claude Design and the CA can take a screen straight into their work.
 - **Status `needed`:** a screen we should have and don't yet. Reports and Back-end pages start as `needed` entries. Back-end pages must be shot against the test database, or with member details covered, because they show money and contact details.
 
+## Screens stay current by themselves (v2.584.0, Kerry 10/26: "an absolute requirement")
+
+- **Recipes:** a step's `capture` is `{"url": "/member/..."}` (a public page) or `{"render": "<name>"}` (`email_parser/screens_capture.RENDERS`). A render is HTML from the SAME builder that sends or serves it (`invitations.build_message`, `payment_reminder.preview`, `rsvp_deadline.build`, the `/rsvp/<token>` routes on preview tokens, `app._rsvp_confirm_page`), so a capture can never drift from the live code.
+- **Production:** job `screens_capture_deploy` runs 10 minutes after each boot (once per deployed version, app setting `screens_capture_version`), and job `screens_capture_nightly` runs at 3:37 AM. Both take every recipe on desktop, tablet and mobile into `<data dir>/screens_live/<sequence id>/`. The page shows these first ("Auto-captured ... on vX") and the repo copy otherwise.
+  - Renders use the next upcoming event and the staff preview person. With nothing upcoming, renders wait; production never writes a demo event.
+- **The repo, enforced:** each sequence with recipes lists `watch` (files, or `path::function` for one function in app.py) and carries `watch_hash`. `test_screens.py` FAILS when the watched code changed and the hash did not. The fix is `python3 tools/screens_refresh.py <sequence>`: it retakes the recipes from the code on a throwaway database and stamps the new hash. Use `--hash-only` when no recipe can show the change.
+  - In a sandbox without Python Playwright it runs through `tools/screens_capture.js` (Node Playwright).
+- **Without a recipe:** the leaderboard sets, the mockups and the score-entry and Cup sets are by-hand captures. The page says so. Adding a recipe is the Librarian / UI-UX lane's work list.
+
 ## Comments go to the Librarian, through the mailbox
 
 A comment on the page is a mailbox post:

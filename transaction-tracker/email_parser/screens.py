@@ -21,6 +21,7 @@ would submit back to the Front Desk or Chief of Staff".
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -30,6 +31,11 @@ CATALOG = ROOT / "catalog.json"
 # A sequence's "base" says which folder its pictures live under, so pictures
 # already in use elsewhere are catalogued where they are, never copied.
 BASES = {"screenshots": ROOT, "static": _APP / "static" / "img", "mockups": _APP / "docs" / "claude" / "mockups"}
+
+
+def _bases() -> dict:
+    from email_parser.screens_capture import live_root
+    return {**BASES, "live": live_root()}
 TOPIC = "screens"
 AUTHOR = "screens-page"
 ROLE_DIAL = "screens_viewer_role"
@@ -90,6 +96,27 @@ def catalog(root: Path = ROOT) -> dict:
             if extra:
                 loose.append({"folder": d.name, "files": extra,
                               "has_sequence": d.name in listed})
+    # Production's own captures (screens_capture.capture_live) win over the
+    # repo copy: base "live", folder = the sequence id.
+    try:
+        from email_parser.screens_capture import live_root, live_meta
+        lr = live_root()
+        if root == ROOT and lr.is_dir():
+            for s in cat.get("sequences", []):
+                for st in s.get("steps", []):
+                    if not st.get("capture"):
+                        continue
+                    b = os.path.splitext(st["file"])[0]
+                    live = {}
+                    for d in ("mobile", "tablet", "desktop"):
+                        n = f"{b}.png" if d == "mobile" else f"{b}.{d}.png"
+                        if (lr / s["id"] / n).is_file():
+                            live[d] = f"{s['id']}/{n}"
+                    if live:
+                        st["live"] = live
+            cat["live_meta"] = live_meta()
+    except Exception:
+        pass
     cat["not_catalogued"] = loose
     cat.setdefault("devices", list(DEVICES))
     return cat
@@ -98,9 +125,10 @@ def catalog(root: Path = ROOT) -> dict:
 def safe_file(rel: str, root: Path = ROOT, base: str = "") -> Path | None:
     """A picture path inside its base folder with an allowed extension, else None."""
     if base:
-        if base not in BASES:
+        bases = _bases()
+        if base not in bases:
             return None
-        root = BASES[base]
+        root = bases[base]
     try:
         p = (root / rel).resolve()
         p.relative_to(root.resolve())

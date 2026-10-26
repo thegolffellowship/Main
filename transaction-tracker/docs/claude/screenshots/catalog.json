@@ -30,6 +30,9 @@
       "mobile": "1-invite-email.png",
       "tablet": "1-invite-email.tablet.png",
       "desktop": "1-invite-email.desktop.png"
+     },
+     "capture": {
+      "render": "invitation_email"
      }
     },
     {
@@ -39,6 +42,9 @@
       "mobile": "2-last-call-email.png",
       "tablet": "2-last-call-email.tablet.png",
       "desktop": "2-last-call-email.desktop.png"
+     },
+     "capture": {
+      "render": "lastcall_email"
      }
     },
     {
@@ -48,6 +54,9 @@
       "mobile": "3-one-more-tap.png",
       "tablet": "3-one-more-tap.tablet.png",
       "desktop": "3-one-more-tap.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_one_more_tap"
      }
     },
     {
@@ -57,6 +66,9 @@
       "mobile": "4-cant-make-it-thanks.png",
       "tablet": "4-cant-make-it-thanks.tablet.png",
       "desktop": "4-cant-make-it-thanks.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_cant_make_it"
      }
     },
     {
@@ -76,6 +88,9 @@
       "mobile": "5-reason-thanks.png",
       "tablet": "5-reason-thanks.tablet.png",
       "desktop": "5-reason-thanks.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_reason_thanks"
      }
     },
     {
@@ -85,6 +100,9 @@
       "mobile": "6-remove-me-confirm.png",
       "tablet": "6-remove-me-confirm.tablet.png",
       "desktop": "6-remove-me-confirm.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_remove_confirm"
      }
     },
     {
@@ -94,6 +112,9 @@
       "mobile": "7-remove-me-done.png",
       "tablet": "7-remove-me-done.tablet.png",
       "desktop": "7-remove-me-done.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_remove_done"
      }
     }
    ],
@@ -103,7 +124,16 @@
      "url": "/admin/screens/demo/invitation",
      "note": "Preview links: tapping I'm in or Can't make it opens the real pages and records nothing."
     }
-   ]
+   ],
+   "watch": [
+    "email_parser/invitations.py",
+    "email_parser/event_day_email.py",
+    "app.py::public_event_rsvp",
+    "app.py::public_event_rsvp_reason",
+    "app.py::_public_page",
+    "app.py::_rsvp_confirm_page"
+   ],
+   "watch_hash": "935a72f6199f3db1"
   },
   {
    "id": "payment-reminder",
@@ -124,6 +154,9 @@
       "mobile": "1-reminder-email.png",
       "tablet": "1-reminder-email.tablet.png",
       "desktop": "1-reminder-email.desktop.png"
+     },
+     "capture": {
+      "render": "payment_reminder"
      }
     },
     {
@@ -163,7 +196,13 @@
      "url": "/admin/screens/demo/payment-reminder",
      "note": "Rendered only; nothing is sent."
     }
-   ]
+   ],
+   "watch": [
+    "email_parser/payment_reminder.py",
+    "email_parser/event_day_email.py",
+    "email_parser/event_links.py"
+   ],
+   "watch_hash": "9ee27c6f274f54dc"
   },
   {
    "id": "rsvp-deadline",
@@ -184,6 +223,9 @@
       "mobile": "1-warning-1pm.png",
       "tablet": "1-warning-1pm.tablet.png",
       "desktop": "1-warning-1pm.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_deadline_warn"
      }
     },
     {
@@ -193,9 +235,18 @@
       "mobile": "2-released-450pm.png",
       "tablet": "2-released-450pm.tablet.png",
       "desktop": "2-released-450pm.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_deadline_release"
      }
     }
-   ]
+   ],
+   "watch": [
+    "email_parser/rsvp_deadline.py",
+    "email_parser/payment_reminder.py",
+    "email_parser/event_day_email.py"
+   ],
+   "watch_hash": "2592432991aff349"
   },
   {
    "id": "events-leaderboard-batch1",
@@ -1163,6 +1214,9 @@
       "mobile": "1-leaderboard.png",
       "tablet": "1-leaderboard.tablet.png",
       "desktop": "1-leaderboard.desktop.png"
+     },
+     "capture": {
+      "url": "/member"
      }
     },
     {
@@ -1172,6 +1226,9 @@
       "mobile": "2-season-contests.png",
       "tablet": "2-season-contests.tablet.png",
       "desktop": "2-season-contests.desktop.png"
+     },
+     "capture": {
+      "url": "/member/contests"
      }
     },
     {
@@ -1181,6 +1238,9 @@
       "mobile": "3-handicaps.png",
       "tablet": "3-handicaps.tablet.png",
       "desktop": "3-handicaps.desktop.png"
+     },
+     "capture": {
+      "url": "/member/handicaps"
      }
     },
     {
@@ -1190,6 +1250,9 @@
       "mobile": "4-spotlight.png",
       "tablet": "4-spotlight.tablet.png",
       "desktop": "4-spotlight.desktop.png"
+     },
+     "capture": {
+      "url": "/member/spotlight?player=18"
      }
     },
     {
@@ -1199,9 +1262,19 @@
       "mobile": "5-live-scoring-guide.png",
       "tablet": "5-live-scoring-guide.tablet.png",
       "desktop": "5-live-scoring-guide.desktop.png"
+     },
+     "capture": {
+      "url": "/member/live-scoring"
      }
     }
-   ]
+   ],
+   "watch": [
+    "templates/contests.html",
+    "templates/handicaps.html",
+    "templates/spotlight.html",
+    "templates/live_scoring_guide.html"
+   ],
+   "watch_hash": "42e34c5a2fddab63"
   },
   {
    "id": "live-scoring-guide-pictures",

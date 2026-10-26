@@ -1688,6 +1688,15 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # SCREENS STAY CURRENT (Kerry 2026-10-26: "an absolute requirement"):
+    # recapture every catalogued recipe 10 minutes after a deploy (once per
+    # version) and nightly at 3:37 AM. email_parser/screens_capture.py.
+    from datetime import datetime as _dt, timedelta as _td
+    scheduler.add_job(screens_capture_job, "date", run_date=_dt.now() + _td(minutes=10),
+                      id="screens_capture_deploy", replace_existing=True)
+    scheduler.add_job(screens_capture_job, "cron", hour=3, minute=37, timezone="US/Central",
+                      kwargs={"force": True}, id="screens_capture_nightly", replace_existing=True)
+
     # RSVP PAYMENT DEADLINE (Kerry 2026-10-26, CoS #2307 item 4): on an
     # event's lock day, the 1:00 PM warning to unpaid RSVP-only players and
     # the 4:50 PM release before the 5:00 PM pairings run.
@@ -5301,14 +5310,7 @@ def public_event_rsvp(token):
     if confirm_why and not done and info["action"] in ("in", "out"):
         # KNOWN SCANNER / NOT A BROWSER (Kerry 10/26): nothing is recorded
         # until this button is tapped; scanners open links, they do not tap.
-        _q = ("One more tap and you're in" if info["action"] == "in"
-              else "Can't make it?")
-        _b = ("Yes, I'm in" if info["action"] == "in" else "Confirm: I can't make it")
-        body = (f"<h2>{_q}</h2><p>{_h.escape(info['course'])}, {_h.escape(info['date_long'])}.</p>"
-                f"<form method='post'><button type='submit' style='{btn}border:0;"
-                f"background:{'#15803D' if info['action'] == 'in' else '#1B1B1B'};color:#fff;"
-                f"cursor:pointer'>{_b}</button></form>")
-        return _public_page("RSVP", body)
+        return _rsvp_confirm_page(info)
     if info["action"] == "in":           # no registration link on the event
         body = (f"<h2>You're in. Thanks!</h2><p>{_h.escape(info['course'])}, "
                 f"{_h.escape(info['date_long'])}. {_h.escape(info['start_sentence'])}</p>" + record)
@@ -5340,6 +5342,23 @@ def api_invitation_declines():
     from email_parser import invitations as _inv
     y = request.args.get("year", "")
     return jsonify(_inv.season_decline_report(int(y) if y.isdigit() else None))
+
+
+def _rsvp_confirm_page(info: dict) -> str:
+    """The one-tap confirm a known scanner or a non-browser gets (Kerry
+    10/26). Its own function so Screens captures this exact page
+    (email_parser/screens_capture.py) without a way around the guard."""
+    import html as _h
+    btn = ("display:inline-block;border-radius:999px;padding:12px 22px;margin:6px 6px 0 0;"
+           "font:bold 16px Georgia,serif;text-decoration:none;")
+    _q = ("One more tap and you're in" if info["action"] == "in"
+          else "Can't make it?")
+    _b = ("Yes, I'm in" if info["action"] == "in" else "Confirm: I can't make it")
+    body = (f"<h2>{_q}</h2><p>{_h.escape(info['course'])}, {_h.escape(info['date_long'])}.</p>"
+            f"<form method='post'><button type='submit' style='{btn}border:0;"
+            f"background:{'#15803D' if info['action'] == 'in' else '#1B1B1B'};color:#fff;"
+            f"cursor:pointer'>{_b}</button></form>")
+    return _public_page("RSVP", body)
 
 
 @app.route("/rsvp/<token>/reason", methods=["POST"])
@@ -6514,6 +6533,16 @@ def send_due_print_packs_job():
             logger.info("print packs: %s", res)
     except Exception:
         logger.exception("print pack routine failed")
+
+
+def screens_capture_job(force: bool = False):
+    from email_parser.screens_capture import capture_live
+    try:
+        res = capture_live(force=force)
+        logger.info("screens capture: %s", {k: (len(v) if isinstance(v, list) else v)
+                                              for k, v in res.items()})
+    except Exception:
+        logger.exception("screens capture failed")
 
 
 def rsvp_deadline_job():

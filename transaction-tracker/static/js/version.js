@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.583.0";
+window.TGF_VERSION = "2.584.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.584.0",
+    date: "2026-10-26",
+    title: "Screens update themselves: captured from the live code after every deploy, and enforced in the tests",
+    changes: [
+      "Kerry 10/26: \"When we make an update to anything, the screenshots are set to update too, correct? If not, that's an absolute requirement.\" They weren't, until now. Each catalogued screen can carry a recipe: a public page URL, or a render from the same code that sends or serves it (the invitation and last call, the RSVP pages, the payment reminder, the deadline warning and release). Production retakes every recipe on desktop, tablet and mobile ten minutes after each deploy and every night at 3:37 AM, and Screens shows those first with the time and version.",
+      "In the repo, each sequence lists the code it shows. test_screens.py now FAILS when that code changes and its screenshots were not retaken. tools/screens_refresh.py retakes them from the code on a throwaway database and stamps the new hash. Production never invents a demo event. The one-more-tap page moved into its own function (app._rsvp_confirm_page) so it can be captured without any way around the scanner guard. Today's invitation, reminder, deadline and member-page sets were all retaken this way (45 screenshots)."
+    ]
+  },
   {
     version: "2.583.0",
     date: "2026-10-26",

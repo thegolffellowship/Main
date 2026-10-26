@@ -35,6 +35,21 @@ check("every status is a known one", all(s["status"] in ("current", "built", "mo
                                          for s in cat["sequences"]))
 check("nothing on disk is left uncatalogued", cat["not_catalogued"] == [], cat["not_catalogued"])
 
+print("1b. Screenshots stay current (Kerry 10/26: an absolute requirement)")
+from email_parser import screens_capture as sc
+stale = [x["id"] for x in cat["sequences"] if x.get("watch") and x.get("watch_hash") != sc.watch_hash(x["watch"])]
+check("every sequence's screenshots match the code they show (else run: python3 tools/screens_refresh.py <id>)",
+      not stale, stale)
+nowatch = [x["id"] for x in cat["sequences"] if any(st.get("capture") for st in x["steps"]) and not x.get("watch")]
+check("every sequence with capture recipes watches its source files", not nowatch, nowatch)
+bad = [(x["id"], st["file"]) for x in cat["sequences"] for st in x["steps"]
+       if st.get("capture", {}).get("render") and st["capture"]["render"] not in sc.RENDERS]
+check("every render recipe names a real builder", not bad, bad)
+
+n_before = len(db.get_all_events(db_path=DB))
+check("in production, no upcoming event means no render and NO demo event written",
+      sc._context(DB) is None and len(db.get_all_events(db_path=DB)) == n_before)
+
 print("2. Paths")
 s0 = cat["sequences"][0]
 check("a catalogued file resolves", scr.safe_file(f"{s0['folder']}/{s0['steps'][0]['file']}") is not None)

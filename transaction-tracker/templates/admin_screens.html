@@ -178,6 +178,11 @@
     const fileUrl = (seq, f) => `/admin/screens/file/${encodeURIComponent(seq.base || "screenshots")}/`
         + [seq.folder, f].filter(Boolean).map(x => x.split("/").map(encodeURIComponent).join("/")).join("/");
     const isPdf = (f) => /\.pdf$/i.test(f || "");
+    // Production's own capture of this device wins (auto-captured after each
+    // deploy and nightly, email_parser/screens_capture.py).
+    const liveOf = (st) => (st.live || {})[DEV] || null;
+    const srcOf = (seq, st) => liveOf(st) ? `/admin/screens/file/live/${liveOf(st).split("/").map(encodeURIComponent).join("/")}`
+                                          : fileUrl(seq, shotOf(st));
     const chip = (s) => `<span class="st st-${esc(s)}">${esc(STATUS_WORD[s] || s)}</span>`;
 
     async function load() {
@@ -252,6 +257,9 @@
                 <h3 class="scr-title">${esc(seq.title)}</h3>
                 <div class="scr-meta">${chip(seq.status)}${seq.version ? `<span>${esc(seq.version)}</span>` : ""}<span>Taken ${esc(seq.taken || "?")}</span>${seq.audience ? `<span>Seen by: ${esc(seq.audience)}</span>` : ""}${seq.source_doc ? `<span>Doc: ${esc(seq.source_doc)}</span>` : ""}</div>
                 ${seq.notes ? `<p class="scr-notes">${esc(seq.notes)}</p>` : ""}
+                ${seq.steps.some(st => st.capture) ? `<p class="scr-note" style="margin:6px 0 0;">${seq.steps.some(st => st.live)
+                    ? `Auto-captured from the live code${CAT.live_meta && CAT.live_meta.at ? ` ${esc(CAT.live_meta.at)}${CAT.live_meta.version ? " on v" + esc(CAT.live_meta.version) : ""}` : ""}.`
+                    : "Retaken from the code on every change (tools/screens_refresh.py); production recaptures after each deploy."}</p>` : `<p class="scr-note" style="margin:6px 0 0;">Taken by hand; no capture recipe yet.</p>`}
                 ${(seq.demo || []).length ? `<div class="scr-demo-btns"><span class="lbl">Try it</span>${seq.demo.map((d, i) =>
                     `<button type="button" data-demo="${i}" class="${DEMO && DEMO.seq === seq.id && DEMO.i === i ? "on" : ""}">${esc(d.label)}</button>`).join("")}</div>` : ""}
                 <div class="scr-dev" role="group" aria-label="Device">${(CAT.devices || ["desktop", "tablet", "mobile"]).map(d => {
@@ -270,7 +278,7 @@
                     ? `<div class="scr-none">No ${esc((DEV_WORD[DEV] || DEV).toLowerCase())} screenshot yet${other ? `<button type="button" data-show="${other}">Show ${esc(DEV_WORD[other].toLowerCase())}</button>` : ""}</div>`
                     : isPdf(f)
                     ? `<a class="scr-thumb pdf" href="${fileUrl(seq, f)}" target="_blank" rel="noopener">PDF</a>`
-                    : `<button type="button" class="scr-thumb" data-i="${i}"><img loading="lazy" src="${fileUrl(seq, f)}" alt="${esc(st.caption)}"></button>`;
+                    : `<button type="button" class="scr-thumb" data-i="${i}"><img loading="lazy" src="${srcOf(seq, st)}" alt="${esc(st.caption)}"></button>`;
                 return `<div class="scr-step${st.state === "superseded" ? " superseded" : ""}">${thumb}
                     <div class="scr-cap"><span class="n">${i + 1}</span>${esc(st.caption)}
                     <div class="row"><span>${state ? chip(state) : ""}</span>
@@ -405,7 +413,7 @@
         list = list || lbList();
         LB = (LB + list.length) % list.length;
         const st = list[LB];
-        document.getElementById("lb-img").src = fileUrl(SEL, shotOf(st));
+        document.getElementById("lb-img").src = srcOf(SEL, st);
         document.getElementById("lb-cap").textContent = `${LB + 1} of ${list.length} · ${st.caption} · ${DEV_WORD[DEV] || DEV}`;
     }
     document.getElementById("lb-prev").onclick = () => { LB--; showLb(); };
