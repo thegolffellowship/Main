@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.582.0";
+window.TGF_VERSION = "2.582.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.582.1",
+    date: "2026-10-26",
+    title: "Screens: collapsible sections in the left column",
+    changes: [
+      "Kerry 10/26: \"Make each section collapsable in the nav column on the left. Way too many to scroll thru\". Each area is now a header with a chevron and its count. Only the section you are in starts open, and the page remembers which ones you opened on this browser. Expand all and Collapse all sit at the top, and a search or a status filter opens every section with a match. The payment reminder sequence is marked Current now that v2.581.0 is live."
+    ]
+  },
   {
     version: "2.582.0",
     date: "2026-10-26",
