@@ -18,7 +18,15 @@ From the last score of an event night to the members' results email the next mor
 - one record of what happened;
 - nothing that waits on Kerry unless he chooses to step in.
 
-## 2. The no-push window (RULED, Kerry, CoS #2307 item 1)
+## 2. When closeout starts (RULED, Kerry, Monday 10/26, CoS #2329 item 5)
+
+Kerry: *"I thought I changed it to 15 minutes after last score."*
+- **Closeout starts 15 minutes after the last score of the event.** That's the moment the last card goes final.
+- Closeout means: money recorded and verified, flights, pairings, handicaps, points, recap.
+- Until the Tracker starts it by itself (build queue item 6, #2331), Event Ops' check-in is the trigger, with the 9:08 PM run as the backstop.
+- **The no-push window still closes one hour after the last score** (§2a), not when closeout starts.
+
+## 2a. The no-push window (RULED, Kerry, CoS #2307 item 1)
 
 - **From one hour before the first tee time or shotgun of ANY event that day, until one hour after the last score of ANY event that day:** no lane pushes or deploys to main.
   - Example, Tue 10/27: Teravista's first tee is 4:08 PM, so the window opens at **3:08 PM**. It closes one hour after the last score of Silverhorn or Teravista, whichever is later.
@@ -39,7 +47,7 @@ From the last score of an event night to the members' results email the next mor
 | 3 | **Entered cards publish** into the scoring record. | Tracker | on publish |
 | 4 | **Money recorded** as PENDING payout rows once every card is final. **One writer** (CoS #1797). It holds on: card parity, a manual payout row, an unconfirmed CTP takeover, or a hold by Event Ops or Kerry. Each hold raises one COO item. | Tracker | auto_payouts job, every minute |
 | 5 | **CTP takeover confirm or reject** (a claim that unseats another group's player). | Kerry or the manager, on Live Scoring | as it happens |
-| 6 | **Verify**: recorded rows = the preview, row for row and in total; cross-check against GAMES, FLIGHTS, pairings and the board. Event Ops **never records, edits or deletes a payout row**; a mismatch is reported to Kerry with the fix. | Event Ops | the check-in after the last card is final (today a clock check-in; event-driven later) |
+| 6 | **Verify**: recorded rows = the preview, row for row and in total; cross-check against GAMES, FLIGHTS, pairings and the board. Event Ops **never records, edits or deletes a payout row**; a mismatch is reported to Kerry with the fix. | Event Ops | 15 minutes after the event's last score (§2); today a clock check-in, the Tracker later |
 | 7 | **Flights settled.** | Event Ops | same |
 | 8 | **Pairing history** written (feeds future pairings). | Event Ops | same |
 | 9 | **Handicap rounds posted**; the handicap recap goes to the managers. No per-player handicap card emails (#1799-4). | Event Ops (preview, then apply) | same |
@@ -47,7 +55,7 @@ From the last score of an event night to the members' results email the next mor
 | 11 | **Pace** (once 0037 is live): group pace and slowest holes for the manager report. | Tracker | nightly rebuild |
 | 12 | **Recap** in the house style, both chapters in one file, plus Word files. | Event Ops | after verification |
 | 13 | **Closeout digest** on the mailbox (TO: front-desk, CC kerry). It covers, per chapter: done, verified, held, open. | Event Ops | after 6–12 |
-| 14 | **WINDOW CLOSED.** | Front Desk | §2 |
+| 14 | **WINDOW CLOSED.** | Front Desk | §2a |
 | 15 | **Recap published** (pushed to main). | Event Ops, on the deploy rule in force | after 14 |
 | 16 | **Staff recap drafts**: SA to Kerry; Austin to Robert, CC Kerry. | Event Ops | after 15 |
 | 17 | **Results email** planned (must hold nothing), spot-checked, then **scheduled for 6:00 AM** (Kerry #1778). | Event Ops schedules; the Tracker sends | after 15 |
@@ -88,6 +96,6 @@ From `closeout-process-2026-10-20.md` §6:
 
 ## 7. Questions for Kerry (one at a time)
 
-1. Ratify §2–§4 as the standard?
+1. Ratify §2–§4 (including §2a) as the standard?
 2. Keep the 9:00 PM backstop and the 5:30 AM catch-up once closeout starts from the event? (Recommend yes.)
 3. Should the Tracker post WINDOW OPEN / CLOSED itself, from the event times and the last score?

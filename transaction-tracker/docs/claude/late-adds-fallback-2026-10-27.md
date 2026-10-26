@@ -24,7 +24,7 @@ Seat-fill (the automatic version) is ruled but NOT built; Tracker Build sized it
 | Day | Times |
 |---|---|
 | Mon | 5:20 PM, 6:45 PM, 8:30 PM, 11:30 PM |
-| Tue | 6:40 AM, 10:30 AM, 2:30 PM, 3:50 PM (last chance before Teravista's 4:08 first tee) |
+| Tue | 6:40 AM, 10:30 AM, 2:30 PM, 3:00 PM (the last one: nobody is seated after 3:08 PM, one hour before Teravista's first tee, so no course sheet goes during the window Kerry closed, #2329-4) |
 
 At each check-in, for each event:
 1. **Compare roster and seats.** Read the roster (`get_event_registrations`) and the saved sheet (`get_event_pairings`). Anyone registered and not seated is a late add.
@@ -46,8 +46,8 @@ Kerry or the manager can still place someone by hand on the PAIRINGS page (Move,
 | **5:00–7:00 PM Mon, paid** | Event Ops check-in at **5:20 or 6:45 PM**, into the draft sheet | the **tee-times email** goes on approval or at **7:00 PM**, whichever comes first, with them on it; the **7:00 AM Event Info** on Tuesday | the draft sheet changed, so the manager's review prompt re-sends (at most hourly). Groupmates see the 4th in the tee-times email and Event Info | the **course tee-times email** at approval/7 PM carries the updated sheet |
 | **7:00 PM–midnight Mon, paid** | Event Ops check-in at **8:30 or 11:30 PM** | the **tee-times job** runs every 15 minutes from 7 PM to midnight and sends once per person, so they get their own tee-times email within 15 minutes of being seated; then **7:00 AM Event Info** | groupmates already had their tee-times email (old group). Tuesday's **7:00 AM Event Info** shows them the 4th | the course had the 7 PM sheet; the **noon Course Files** carry the new one |
 | **Midnight–7:00 AM Tue, paid** | Event Ops check-in at **6:40 AM** | **7:00 AM Event Info** with their group | same: 7:00 AM Event Info shows the 4th | noon Course Files |
-| **7:00 AM–first tee Tue, paid** | Event Ops check-in at **10:30 AM, 2:30 PM or 3:50 PM** | the **after-lock job** (every 15 minutes, baseline = the 7 AM Event Info send): the player gets the Event Info, marked "UPDATED GROUP" | everyone in that group gets it with a notice naming who joined; the **manager is CC'd** | if the Course Files have gone, the course gets **only the changed sheets** (that group's scorecard and cart sign), CC the manager and Kerry; before noon, the noon Course Files carry it |
-| **After first tee** | not seated (the sheet is frozen) | none | n/a | the manager decides at the course |
+| **7:00 AM–first tee Tue, paid** | Event Ops check-in at **10:30 AM, 2:30 PM or 3:00 PM** | the **after-lock job** (every 15 minutes, baseline = the 7 AM Event Info send): the player gets the Event Info, marked "UPDATED GROUP" | everyone in that group gets it with a notice naming who joined; the **manager is CC'd** | if the Course Files have gone, the course gets **only the changed sheets** (that group's scorecard and cart sign), CC the manager and Kerry; before noon, the noon Course Files carry it |
+| **After 3:08 PM Tue** (one hour before first tee) | not seated by Event Ops; the manager decides at the course | none | n/a | the manager decides at the course |
 
 A first-timer, guest or new member placed as a late add:
 - their group's notice carries Kerry's welcome line;
@@ -58,4 +58,4 @@ A first-timer, guest or new member placed as a late add:
 - **More late adds than open seats** (Silverhorn 1, Teravista 2 at lock): no waitlist or new-group rule exists. They stay Unassigned and Event Ops posts to Kerry and the manager.
 - **A paid late add asking to play with someone:** ignored after lock (ruled). A manager may still do it by hand.
 - **RSVP-only after 4:50 PM:** not seated. Payment reminders stop at the lock (Kerry #2313; the stop-at-lock guard is Tracker Build 5's, for Kerry's Deploy tonight).
-- **Tomorrow's no-push window** (new rule #2307-1): Teravista 3:08 PM until one hour after the last score of either event. Seating is a data change, not a deploy, so the 2:30 and 3:50 PM check-ins still run.
+- **Tomorrow's no-push window** (new rule #2307-1): Teravista 3:08 PM until one hour after the last score of either event. Seating is a data change, not a deploy, so the 2:30 and 3:00 PM check-ins still run. There is no 3:50 PM check-in: Kerry ruled course sheets stop one hour before first tee (#2329-4), and the 15-minute job has no course-only switch until Tracker Build 5's item 0c ships.
