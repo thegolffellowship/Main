@@ -259,7 +259,7 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
         f"<p>The pairings for <b>{_e(ev['name'])}</b> ({_e(ev['date'])}, {_e(ev['course'])}) are ready. "
         f"Please review and approve them. When you approve, the tee-times email goes to the players, "
         f"the course and you (at 7:00 PM if nobody approves); "
-        f"their full Event Info email goes at {EVENT_INFO_HOUR}:00 AM on event day: "
+        f"their full Event Info email goes at {info_time()} on event day: "
         f"<b>{c.get('ready', 0)} players</b>"
         + (f", {c.get('held')} held" if c.get("held") else "") + ".</p>"
         # One tap approves (Kerry 10/19: "This should show two buttons:
@@ -277,7 +277,7 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
         f"<p style=\"color:#6B7280;font-size:13px;\">You'll be asked to log in to the Tracker.</p>"
         + _flags_html(rv)
         + "<p><b>The groups:</b></p>" + _groups_html(rv["groups"])
-        + (f'<hr style="border:0;border-top:2px solid #E87C3E"><p><b>Sample: the 7:00 AM Event Info email</b> (not tonight\'s tee-times email) '
+        + (f'<hr style="border:0;border-top:2px solid #E87C3E"><p><b>Sample: the {info_time()} Event Info email</b> (not tonight\'s tee-times email) '
            f"(to {_e(sample['name'])}):</p>" + sample["html"] if sample else ""))
     subject = f"Pairings ready to approve: {ev['name']}"
     creds = _creds()
@@ -347,7 +347,27 @@ def prompt_check(now=None, db_path=None) -> dict:
 # Approve
 # ---------------------------------------------------------------------------
 
-EVENT_INFO_HOUR = 7       # the personal Event Info email, morning of (Kerry 10/19)
+EVENT_INFO_HOUR = 6       # default; the personal Event Info email, morning of
+INFO_HOUR_DIAL = "event_info_hour"
+
+
+def info_hour(db_path=None) -> int:
+    """The hour (Central) the Event Info email goes on event day. Kerry 10/26
+    (CoS #2307 item 3, #2331 B): "Move event info email to 6:00am." Dial
+    event_info_hour (5-11), default 6. It was 7 (Kerry 10/19)."""
+    from email_parser.database import get_app_setting
+    try:
+        h = int((get_app_setting(INFO_HOUR_DIAL, db_path=db_path) or "").strip())
+        return h if 5 <= h <= 11 else EVENT_INFO_HOUR
+    except (ValueError, TypeError):
+        return EVENT_INFO_HOUR
+    except Exception:
+        return EVENT_INFO_HOUR
+
+
+def info_time(db_path=None) -> str:
+    """"6:00 AM": the Event Info time as people read it (12-hour, #2325)."""
+    return f"{info_hour(db_path)}:00 AM"
 
 
 def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
@@ -378,7 +398,7 @@ def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
         try:
             db.log_agent_action("pairings-approval", "approve_pairings",
                                 f"{r['item_name']}: sheet {cur} approved by {approved_by}; "
-                                f"Event Info emails go at {EVENT_INFO_HOUR}:00 AM",
+                                f"Event Info emails go at {info_time()}",
                                 db_path=db_path)
         except Exception:
             pass
@@ -393,7 +413,7 @@ def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
             logger.exception("tee-times send on approval failed for %s", event_id)
             tt = {"error": str(exc)}
         return {"status": "approved", "fingerprint": cur, "teetimes": tt,
-                "sends_at": f"{EVENT_INFO_HOUR}:00 AM on the event day",
+                "sends_at": f"{info_time()} on the event day",
                 "counts": {"approved": 1, "ready": (rv.get("counts") or {}).get("ready", 0),
                            "held": (rv.get("counts") or {}).get("held", 0)}}
     try:
@@ -429,11 +449,11 @@ def render_page(rv: dict) -> str:
         action = '<div class="warn">No pairings are saved for this event yet.</div>'
     else:
         appr = (f'<div class="done">Approved by {_e(st.get("approved_by"))}. Event Info emails go to '
-                f'{c.get("ready", 0)} players at {EVENT_INFO_HOUR}:00 AM.</div>'
+                f'{c.get("ready", 0)} players at {info_time()}.</div>'
                 if st.get("approved_fp") == rv["fingerprint"] else "")
         action = appr or (f'<button id="go" data-fp="{_e(rv["fingerprint"])}">Approve pairings</button>'
                           f'<div style="color:#6B7280;font-size:13px;margin-top:6px;">Players get their full Event Info '
-                          f'email at {EVENT_INFO_HOUR}:00 AM on event day ({c.get("ready", 0)} ready).</div>'
+                          f'email at {info_time()} on event day ({c.get("ready", 0)} ready).</div>'
                           '<div id="msg"></div>')
     sample = rv["sample"]
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -461,13 +481,13 @@ button[disabled] {{ opacity:.6; }}
 {_flags_html(rv)}
 <h3>The groups</h3>
 {_groups_html(rv["groups"])}
-{(SAMPLE_HEAD + '<div class="sample">' + sample["html"] + '</div>') if sample else ""}
+{(SAMPLE_HEAD.replace('7:00 AM', info_time()) + '<div class="sample">' + sample["html"] + '</div>') if sample else ""}
 </main>
 <script>
 (function () {{
   var b = document.getElementById("go"); if (!b) return;
   b.addEventListener("click", function () {{
-    if (!confirm("Approve these pairings? Players get their Event Info email at 7:00 AM.")) return;
+    if (!confirm("Approve these pairings? Players get their Event Info email at {info_time()}.")) return;
     b.disabled = true; b.textContent = "Approving\\u2026";
     fetch("/api/events/{int(ev['id'])}/approve-pairings", {{method: "POST", headers: {{"Content-Type": "application/json"}},
       body: JSON.stringify({{fingerprint: b.getAttribute("data-fp")}})}})
@@ -478,7 +498,7 @@ button[disabled] {{ opacity:.6; }}
         if (!r.ok || d.error || d.refused) {{ m.textContent = "Not sent: " + (d.error || d.refused); b.disabled = false; b.textContent = "Try again"; return; }}
         var k = d.counts || {{}};
         m.innerHTML = d.status === "approved"
-          ? '<div class="done">Approved. Event Info emails go to ' + (k.ready || 0) + ' players at ' + (d.sends_at || "7:00 AM") + '.</div>'
+          ? '<div class="done">Approved. Event Info emails go to ' + (k.ready || 0) + ' players at ' + (d.sends_at || "{info_time()}") + '.</div>'
           : '<div class="done">Approved. Sent ' + (k.sent || 0) + ", already sent before " + (k.skipped || 0) + ", failed " + (k.failed || 0) + ".</div>";
         b.style.display = "none";
       }}).catch(function (e) {{ b.disabled = false; b.textContent = "Try again"; document.getElementById("msg").textContent = String(e); }});
@@ -518,7 +538,7 @@ def auto_send_check(now=None, db_path=None) -> dict:
         now = now_central()
     today = now.date()
     lock_day = (today + timedelta(days=1)).isoformat() if now.hour >= AUTO_HOUR else None
-    send_day = today.isoformat() if EVENT_INFO_HOUR <= now.hour < 12 else None
+    send_day = today.isoformat() if info_hour(db_path) <= now.hour < 12 else None
     days = [d for d in (lock_day, send_day) if d]
     if not days:
         return {"status": "not yet"}
@@ -549,7 +569,7 @@ def auto_send_check(now=None, db_path=None) -> dict:
                 else:
                     _put(eid, db_path, approved_fp=fp, approved_by="auto 7 PM (no manager approval)",
                          approved_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
-                    out[eid] = {"status": "auto-approved", "sends_at": f"{EVENT_INFO_HOUR}:00 AM"}
+                    out[eid] = {"status": "auto-approved", "sends_at": info_time(db_path)}
                 continue
             # event day, 7 AM to noon: the Event Info send
             last_fail = st.get("auto_failed_at")
@@ -562,7 +582,7 @@ def auto_send_check(now=None, db_path=None) -> dict:
                     pass
             if st.get("approved_fp") != fp:
                 _put(eid, db_path, approved_fp=fp,
-                     approved_by=(st.get("approved_by") or "auto 7 AM") + " (sheet as of 7 AM)",
+                     approved_by=(st.get("approved_by") or f"auto {info_time(db_path)}") + f" (sheet as of {info_time(db_path)})",
                      approved_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
             res = send_event_day_emails(eid, confirm=True, db_path=db_path)
             if res.get("counts"):
@@ -592,8 +612,8 @@ def _alert_failure(event_id: int, why: str, db_path=None) -> None:
         creds = _creds()
         if creds:
             _graph_send(creds, DEFAULT_MANAGER_EMAIL["tgf"],
-                        f"7 AM Event Info send FAILED: {name}",
-                        f"<p>The 7 AM Event Info email for <b>{_e(name)}</b> did not go out.</p>"
+                        f"{info_time(db_path)} Event Info send FAILED: {name}",
+                        f"<p>The {info_time(db_path)} Event Info email for <b>{_e(name)}</b> did not go out.</p>"
                                   f"<p>Reason: {_e(why)}</p><p>The Tracker tries again every hour. "
                                   f"Reply here if you want it sent by hand.</p>")
         db.log_agent_action("pairings-approval", "auto_send_failed", f"{name}: {why}", db_path=db_path)

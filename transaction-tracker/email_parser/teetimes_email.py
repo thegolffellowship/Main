@@ -294,6 +294,10 @@ def _render(version: str, tpl: dict, values: dict) -> tuple[str, str, list]:
     used = set(_TAG_RE.findall(tpl["subject"] + html_body))
     subject = html_to_text(render_msg_template(tpl["subject"], values))
     body = normalize_email_html(render_msg_template(html_body, values))
+    # The Event Info time follows its dial (Kerry 10/26: "Move event info
+    # email to 6:00am"); the stamped template keeps its words and hash.
+    from email_parser.pairings_approval import info_time
+    body = body.replace("at 7:00 AM tomorrow", f"at {info_time()} tomorrow")
     return subject, body, _guard(subject, body, used, values)
 
 
@@ -449,7 +453,9 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
                 vals = {**common, "first_name": _e((c[0] if c else "") or "there"),
                         "spots_block": box}
                 s, b, why = _render("player", tpl_p, vals)
-                b = b.replace(EVENT_INFO_LINE, NONREG_LINE)
+                from email_parser.pairings_approval import info_time as _it
+                b = b.replace(EVENT_INFO_LINE.replace("7:00 AM", _it()),
+                              NONREG_LINE.replace("7:00 AM", _it()))
                 if not link:
                     why = why + ["blank: {registration_link} (the event has no registration link)"]
                 add("player", key, cid, full, email, (s, b, why), extra={"spots_box": True})

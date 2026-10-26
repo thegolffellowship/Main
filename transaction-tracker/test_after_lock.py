@@ -116,7 +116,9 @@ base = al._get(al.STATE_KEY.format(EV), DB)
 check("the send recorded the sheet", base and set(base["players"]) >= {"880001", "880004", "880007"}, base)
 check("…with group, start, tee and games", base["players"]["880001"]["games"] == ["NET"]
       and base["players"]["880002"]["games"] == ["GROSS", "NET"] and base["players"]["880001"]["tee"], base["players"]["880001"])
-check("no change: nothing to send", al.run_event(EV, confirm=True, db_path=DB).get("status") == "no change")
+from datetime import datetime as _dtm
+_MORNING = _dtm(2026, 10, 13, 6, 0)   # before the 8:00 AM shotgun's one-hour course cutoff
+check("no change: nothing to send", al.run_event(EV, confirm=True, db_path=DB, at=_MORNING).get("status") == "no change")
 
 def save(groups):
     db.save_event_pairings(EV, {"9": groups}, db_path=DB)
@@ -130,9 +132,9 @@ G2 = [{"name": "Eli Eno", "cart_pos": 1, "customer_id": 880005},
 print("2. A moved player (Dee 1A -> 1B)")
 save([{"group_num": 1, "slot_label": "1A", "players": G1}, {"group_num": 2, "slot_label": "1B", "players": G2}])
 SENT.clear()
-dry = al.run_event(EV, confirm=False, db_path=DB)
+dry = al.run_event(EV, confirm=False, db_path=DB, at=_MORNING)
 check("dry run: Dee is the one moved", dry["diff"]["moved"] == ["880004"] and dry.get("dry_run") and not SENT, dry.get("diff"))
-r = al.run_event(EV, confirm=True, db_path=DB)
+r = al.run_event(EV, confirm=True, db_path=DB, at=_MORNING)
 to = {s["to_address"]: s for s in SENT}
 check("Dee and both groups are mailed (Eli has no email)",
       sorted(to) == sorted(["dee@example.test", "ann@example.test", "bob@example.test", "cal@example.test", "gus@example.test"]),
@@ -146,7 +148,7 @@ check("her old group hears she left, her new group that she joined",
       and "Dee Dunn</strong> joins your group" in to["gus@example.test"]["html_body"])
 check("no course send before the Course Files went", "not sent yet" in r["course"]["status"], r["course"])
 n = len(SENT)
-r = al.run_event(EV, confirm=True, db_path=DB)
+r = al.run_event(EV, confirm=True, db_path=DB, at=_MORNING)
 check("the same change never sends twice", len(SENT) == n and r.get("status") == "no change", r)
 
 print("3. A tee change (Ann) and a games change (Cal)")
@@ -155,7 +157,7 @@ with db._connect(DB) as conn:
     conn.execute("UPDATE items SET side_games = 'NET' WHERE customer_id = 880003 AND event_id = ?", (EV,))
     conn.commit()
 SENT.clear()
-r = al.run_event(EV, confirm=True, db_path=DB)
+r = al.run_event(EV, confirm=True, db_path=DB, at=_MORNING)
 to = {s["to_address"]: s for s in SENT}
 check("only Ann and Cal are mailed", sorted(to) == ["ann@example.test", "cal@example.test"], sorted(to))
 check("Ann: UPDATED TEES, manager CC'd", to["ann@example.test"]["subject"].startswith("UPDATED TEES: ")
@@ -168,7 +170,7 @@ print("4. An added player (Fay, on the roster, now seated)")
 save([{"group_num": 1, "slot_label": "1A", "players": G1 + [{"name": "Fay Fox", "cart_pos": 4, "customer_id": 880006}]},
       {"group_num": 2, "slot_label": "1B", "players": G2}])
 SENT.clear()
-r = al.run_event(EV, confirm=True, db_path=DB)
+r = al.run_event(EV, confirm=True, db_path=DB, at=_MORNING)
 to = {s["to_address"]: s for s in SENT}
 check("Fay and her new group are mailed", sorted(to) == ["ann@example.test", "bob@example.test", "cal@example.test", "fay@example.test"], sorted(to))
 check("Fay is welcomed in, the group hears she joins", "You're in!" in to["fay@example.test"]["html_body"]
@@ -202,6 +204,19 @@ check("after the first tee it stops", al.check(now=datetime(2026, 10, 13, 8, 5),
 db.set_app_setting(al.DIAL, "off", db_path=DB)
 check("dial off: nothing runs", al.check(now=datetime(2026, 10, 13, 7, 30), db_path=DB)["status"] == "off")
 db.set_app_setting(al.DIAL, "", db_path=DB)
+
+print("6b. No course sheets during play (Kerry 10/26, CoS #2329 item 4)")
+_ev = {"event_date": "2026-10-13", "start_type": "Shotgun", "start_time": "08:00", "id": EV}
+with db._connect(DB) as conn:
+    _ev = dict(conn.execute("SELECT * FROM events WHERE id = ?", (EV,)).fetchone())
+check("6:59 AM: the course may still get changed sheets", not al.course_cutoff_passed(_ev, datetime(2026, 10, 13, 6, 59), DB))
+check("7:00 AM (one hour before the 8:00 shotgun): the course gets no more sheets",
+      al.course_cutoff_passed(_ev, datetime(2026, 10, 13, 7, 0), DB))
+db.set_app_setting(al.COURSE_CUTOFF_DIAL, "30", db_path=DB)
+check("dial after_lock_course_cutoff_min=30 moves it to 7:30 AM",
+      not al.course_cutoff_passed(_ev, datetime(2026, 10, 13, 7, 20), DB)
+      and al.course_cutoff_passed(_ev, datetime(2026, 10, 13, 7, 30), DB))
+db.set_app_setting(al.COURSE_CUTOFF_DIAL, "", db_path=DB)
 
 print("7. Wiring")
 _a = open("app.py", encoding="utf-8").read()

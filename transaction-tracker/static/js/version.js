@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.586.0";
+window.TGF_VERSION = "2.587.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.587.0",
+    date: "2026-10-26",
+    title: "Event Info at 6:00 AM, and no changed sheets to the course in the hour before the first tee",
+    changes: [
+      "Kerry 10/26 (CoS #2307 item 3, #2331 B): \"Move event info email to 6:00am.\" The event-day Event Info email now goes at 6:00 AM instead of 7:00 AM. The hour is a dial (event_info_hour, default 6), and everything that names it follows the dial: the evening tee-times email (\"Your full Event Info email ... comes at 6:00 AM tomorrow\"), the manager's approve prompt and page, and Kerry's failure alert. The tee-times template keeps its stamped words, and the time is filled in when it is sent, so its wording stamp still holds.",
+      "Kerry 10/26 (CoS #2329 item 4): \"Changed sheets for the course shouldn't be going to them during play. That should be in the window between Noon and 1 hour prior.\" The after-lock job still sends a moved, added or removed player's update emails until the first tee, but from one hour before the first tee or shotgun it sends the course nothing. Dial after_lock_course_cutoff_min (default 60). The no-show notice to the course after about 3 holes is not built yet; it waits on Event Ops' scorer no-show sequence. Guards test_pairings_approval.py, test_teetimes_email.py and test_after_lock.py."
+    ]
+  },
   {
     version: "2.586.0",
     date: "2026-10-26",

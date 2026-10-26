@@ -76,7 +76,7 @@ check("…naming the event, the player count and the review link (login)",
       and f"/events/{AUS}/approve-pairings" in p.get("html_body", "")
       and "log in" in p.get("html_body", ""), p.get("html_body", "")[:400])
 check("…with the groups and a sample player email",
-      "Ann Able" in p.get("html_body", "") and "7:00 AM Event Info email" in p.get("html_body", "") and "Edit pairings" in p.get("html_body", ""))
+      "Ann Able" in p.get("html_body", "") and "6:00 AM Event Info email" in p.get("html_body", "") and "Edit pairings" in p.get("html_body", ""))
 check("no player was emailed by the prompt",
       not any(s["to_address"].endswith("@example.test") for s in SENT))
 SENT.clear()
@@ -141,7 +141,12 @@ check("7:00 PM: the unapproved sheet is auto-approved, no email",
       r["events"].get(E_AUTO, {}).get("status") == "auto-approved"
       and pa.event_state(E_AUTO, DB).get("approved_by", "").startswith("auto 7 PM"), r["events"].get(E_AUTO))
 check("7 PM sends no player email at all", not SENT and pa.emails_sent(E_APP, DB) == 0 and pa.emails_sent(E_AUTO, DB) == 0, len(SENT))
-check("6:45 AM event day: not yet", pa.auto_send_check(datetime(2026, 10, 27, 6, 45), DB).get("status") == "not yet")
+check("5:45 AM event day: not yet (Event Info is 6:00 AM, Kerry 10/26)",
+      pa.auto_send_check(datetime(2026, 10, 27, 5, 45), DB).get("status") == "not yet")
+check("the Event Info hour is 6 by default", pa.info_hour(DB) == 6 and pa.info_time(DB) == "6:00 AM")
+db.set_app_setting("event_info_hour", "7", db_path=DB)
+check("dial event_info_hour=7: 6:45 AM is not yet", pa.auto_send_check(datetime(2026, 10, 27, 6, 45), DB).get("status") == "not yet")
+db.set_app_setting("event_info_hour", "", db_path=DB)
 r = pa.auto_send_check(datetime(2026, 10, 27, 7, 0), DB)
 check("7:00 AM: both events' players get the Event Info email",
       pa.emails_sent(E_APP, DB) >= 2 and pa.emails_sent(E_AUTO, DB) >= 2, r)

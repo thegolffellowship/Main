@@ -123,6 +123,8 @@ check("tee sheet: header, cart pairs together, preliminary line, member tee shee
       "Test Links GC" in m["html"] and "Ann Able &amp; Bob Baker" in m["html"]
       and tt.PRELIM_LINE in m["html"] and f"/member/teesheet/{EV}" in m["html"]
       and "First tee 3:40 PM" in m["html"], m["text"][:400])
+check("the Event Info line says 6:00 AM (Kerry 10/26), never 7:00 AM",
+      "comes at 6:00 AM tomorrow" in m["html"] and "7:00 AM" not in m["html"], m["text"][-300:])
 check("no money, phone numbers or emails in the tee sheet",
       "$" not in m["text"] and "@" not in m["text"].replace(m["email"], ""), m["text"])
 check("no registered player sees the spots box", all(not x["spots_box"] for x in by(b, "player"))
