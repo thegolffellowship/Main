@@ -10,7 +10,8 @@ fails when a sequence's watched files change and this was not run.
 
 Renders run on a throwaway database with a demo event (never production);
 URL recipes load the live public pages from PUBLIC_BASE_URL (default the
-Railway site).
+Railway site); demo recipes run tools/screens_demo.py (the Tracker's own
+pages on a throwaway database with made-up people, no credentials).
 """
 import io, json, os, sys, tempfile, contextlib, logging
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +39,13 @@ for sid in ids:
     if not hash_only and any(st.get("capture") for st in seq["steps"]):
         res = sc.capture_all(lambda s: os.path.join(HERE, "docs/claude/screenshots", s["folder"]),
                              _base_url(), only=sid)
+        # Demo recipes: the Tracker's own pages served from a throwaway
+        # database by tools/screens_demo.py in its own process.
+        dres = sc.capture_demos("", live=False, only=sid)
+        res["captured"] = list(res.get("captured") or []) + list(dres.get("captured") or [])
+        res["errors"] = list(res.get("errors") or []) + list(dres.get("errors") or [])
+        if dres.get("error"):
+            res["errors"].append({"error": f"demo runner: {dres['error']}"})
         print(sid, json.dumps({k: (len(v) if isinstance(v, list) else v) for k, v in res.items()}))
         for e in res.get("errors") or []:
             print("  error:", e)

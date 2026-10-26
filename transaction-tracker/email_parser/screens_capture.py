@@ -5,7 +5,17 @@ that's an absolute requirement.").
 A catalogued step may carry a `capture` recipe (catalog.json):
 - {"url": "/member/handicaps"}  a public page, loaded from the site itself;
 - {"render": "<name>"}           HTML from the SAME code that sends it
-                                  (RENDERS below), never a copy.
+                                  (RENDERS below), never a copy;
+- {"demo": "<scenario>", "path": "/member/score?t={t}"}  a live page served
+                                  by the Tracker's own code from a THROWAWAY
+                                  database with demo people
+                                  (tools/screens_demo.py, run as its own
+                                  process with every credential stripped),
+                                  for pages that need an event, a round or a
+                                  link: score entry, the member tee sheet.
+                                  Never production data.
+Any recipe may add "click": [css selectors] (each first match is tapped, in
+order, before the picture) and "wait" (ms after the clicks).
 `capture_all()` takes every recipe on desktop / tablet / mobile with
 headless Chromium (print_pack._chromium_executable) and writes
 `<name>.png` / `<name>.tablet.png` / `<name>.desktop.png` into a folder:
@@ -193,17 +203,25 @@ def recipes(cat: dict | None = None, only: str = "") -> list:
             for st in s.get("steps", []) if st.get("capture")]
 
 
-def capture_all(out_for, base_url: str, only: str = "", db_path=None) -> dict:
-    """Take every recipe on three devices. out_for(sequence) -> folder."""
+def capture_all(out_for, base_url: str, only: str = "", db_path=None, demo: dict | None = None) -> dict:
+    """Take every recipe on three devices. out_for(sequence) -> folder.
+    `demo` = {"base": local server, "vars": {...}} runs ONLY the demo
+    recipes (tools/screens_demo.py); without it demo recipes are left for
+    that runner."""
     from email_parser.print_pack import _chromium_executable
     import concurrent.futures
     exe = _chromium_executable()
-    todo = recipes(only=only)
+    todo = [(s, st) for s, st in recipes(only=only) if bool(demo) == ("demo" in st["capture"])]
     ctx = _context(db_path) if any("render" in st["capture"] for _, st in todo) else None
     jobs, errors = [], []
     for s, st in todo:
         cap = st["capture"]
+        acts = {"click": list(cap.get("click") or []), "wait": int(cap.get("wait") or 2500)}
         try:
+            if "demo" in cap:
+                path = cap.get("path", "/").format(**(demo.get("vars") or {}))
+                jobs.append((s, st, {"url": demo["base"].rstrip("/") + path, "_out": str(out_for(s)), **acts}, False))
+                continue
             if "render" in cap and ctx is None:
                 errors.append({"sequence": s["id"], "step": st["file"], "error": "no upcoming event to render"})
                 continue
@@ -212,7 +230,7 @@ def capture_all(out_for, base_url: str, only: str = "", db_path=None) -> dict:
                 html = re.sub(r"""(["'(])/static/""", r"\1" + base_url.rstrip("/") + "/static/", html)
                 jobs.append((s, st, {"html": html, "_out": str(out_for(s))}, cap["render"] in EMAIL_RENDERS))
             elif "url" in cap:
-                jobs.append((s, st, {"url": base_url.rstrip("/") + cap["url"], "_out": str(out_for(s))}, False))
+                jobs.append((s, st, {"url": base_url.rstrip("/") + cap["url"], "_out": str(out_for(s)), **acts}, False))
         except Exception as e:
             logger.exception("screens capture: render failed for %s/%s", s["id"], st["file"])
             errors.append({"sequence": s["id"], "step": st["file"], "error": f"{type(e).__name__}: {e}"})
@@ -243,6 +261,9 @@ def capture_all(out_for, base_url: str, only: str = "", db_path=None) -> dict:
                             else:
                                 page.goto(src["url"], wait_until="domcontentloaded", timeout=45000)
                                 page.wait_for_timeout(5000)
+                                for sel in src.get("click") or []:
+                                    page.locator(sel).first.click(timeout=8000)
+                                    page.wait_for_timeout(src.get("wait") or 2500)
                             page.evaluate("document.fonts.ready")
                             # The live Tracker's fonts or no picture (Kerry 10/26).
                             if page.evaluate("[...document.querySelectorAll('link[href*=\"fonts.googleapis\"]')].length > 0"
@@ -259,9 +280,14 @@ def capture_all(out_for, base_url: str, only: str = "", db_path=None) -> dict:
             finally:
                 browser.close()
         return done
+    if not jobs:
+        return {"captured": [], "errors": errors}
     try:
         import playwright.sync_api  # noqa: F401  (production has it; print_pack uses it)
+        node = not exe
     except ImportError:
+        node = True
+    if node:
         done = _run_node(jobs, errors)
         return {"captured": done, "errors": errors}
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
@@ -287,6 +313,7 @@ def _run_node(jobs, errors) -> list:
             flat.append({"w": w, "h": h, "scale": scale, "mobile": dev == "mobile" and not email,
                          "full": bool(email and dev == "mobile"), "url": src.get("url"),
                          "html_file": str(html_file) if html_file else None,
+                         "click": src.get("click") or [], "wait": src.get("wait") or 2500,
                          "path": str(folder / name), "name": f"{s['id']}/{name}"})
     jf = tmp / "jobs.json"
     jf.write_text(json.dumps(flat))
@@ -310,7 +337,16 @@ def capture_live(force: bool = False, db_path=None) -> dict:
     if not force and ver and db.get_app_setting(VERSION_KEY, db_path=db_path) == ver:
         return {"skipped": f"already captured for v{ver}"}
     root = live_root()
-    res = capture_all(lambda s: root / s["id"], _base_url(), db_path=db_path)
+    try:
+        res = capture_all(lambda s: root / s["id"], _base_url(), db_path=db_path)
+        dres = capture_demos(str(root), live=True)
+        res["captured"] = list(res.get("captured") or []) + list(dres.get("captured") or [])
+        res["errors"] = list(res.get("errors") or []) + list(dres.get("errors") or [])
+        if dres.get("error"):
+            res["errors"].append({"error": f"demo runner: {dres['error']}"})
+    except Exception as e:
+        logger.exception("screens capture failed")
+        res = {"error": f"{type(e).__name__}: {str(e)[:300]}", "captured": [], "errors": []}
     if not res.get("error"):
         meta = {"version": ver, "at": _now_label(), "errors": res["errors"]}
         root.mkdir(parents=True, exist_ok=True)
@@ -318,8 +354,53 @@ def capture_live(force: bool = False, db_path=None) -> dict:
         if ver:
             db.set_app_setting(VERSION_KEY, ver, db_path=db_path)
         db.log_agent_action("screens-capture", "screens_capture",
-                            f"v{ver}: {len(res['captured'])} shots, {len(res['errors'])} errors")
+                            f"v{ver}: {len(res['captured'])} shots, {len(res['errors'])} errors", db_path=db_path)
+    # A missed or partial capture must show where the lanes look (Kerry 10/26:
+    # screens mirror what's live); before this a failure logged nothing.
+    if res.get("error") or res.get("errors"):
+        first = res.get("error") or json.dumps((res.get("errors") or [{}])[0])[:300]
+        try:
+            db.log_agent_action("screens-capture", "screens_capture_failed",
+                                f"v{ver}: {'FAILED' if res.get('error') else 'partial'}, "
+                                f"{len(res.get('errors') or [])} errors; first: {first}", db_path=db_path)
+        except Exception:
+            logger.exception("screens capture: could not log the failure")
     return res
+
+
+# Credentials a demo runner must never hold: it runs the Tracker's code on a
+# throwaway database, and nothing in it may reach mail, money or a member.
+_SECRET_PREFIXES = ("AZURE_", "EMAIL_", "ANTHROPIC", "HUBSPOT", "BREVO", "META_", "TWILIO",
+                    "LITESTREAM", "PAYPAL", "STRIPE", "GODADDY", "RAILWAY", "OPENAI", "MCP_",
+                    "COO_EMAIL", "RSVP_EMAIL", "VENMO", "GG_", "GOLF_GENIUS")
+
+
+def capture_demos(out_root: str, live: bool, only: str = "", timeout: int = 900) -> dict:
+    """Run tools/screens_demo.py as its OWN process on a throwaway database
+    with every credential stripped. live=True writes <out_root>/<sequence>/
+    (production's screens_live); live=False writes each sequence's repo
+    folder (out_root ignored)."""
+    import subprocess, sys, tempfile
+    if not any("demo" in st["capture"] for _, st in recipes(only=only)):
+        return {"captured": [], "errors": []}
+    env = {k: v for k, v in os.environ.items()
+           if not k.upper().startswith(_SECRET_PREFIXES)
+           and not k.upper().endswith(("_PIN", "_TOKEN", "_KEY", "_SECRET", "PASSWORD"))}
+    env["SECRET_KEY"] = os.urandom(16).hex()
+    env["DATABASE_PATH"] = tempfile.mktemp(prefix="screens-demo-", suffix=".db")
+    env["SCREENS_DEMO"] = "1"
+    env.pop("_SCHEDULER_STARTED_PID", None)
+    args = [sys.executable, str(REPO / "tools/screens_demo.py")]
+    args += (["--live", out_root] if live else ["--repo"]) + ([only] if only else [])
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=env, cwd=str(REPO))
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}", "captured": [], "errors": []}
+    try:
+        return json.loads(r.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {"error": f"demo runner exited {r.returncode}: {(r.stderr or '')[-300:]}",
+                "captured": [], "errors": []}
 
 
 def _deployed_version() -> str:

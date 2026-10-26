@@ -253,12 +253,12 @@
    "title": "Events leaderboard, batch 1",
    "area": "Leaderboard",
    "audience": "member",
-   "status": "current",
+   "status": "archived",
    "version": "v2.576.0+",
    "taken": "2026-10-21",
    "folder": "events-leaderboard-batch1",
    "source_doc": "static/js/version.js v2.576.0",
-   "notes": "L = the build before deploy, PROD = live, UP = the Upcoming section.",
+   "notes": "L = the build before deploy, PROD = live, UP = the Upcoming section. Archived 2026-10-26: shows screens no longer live; the current pictures are member-pages (steps 1 and 6), retaken after every deploy.",
    "steps": [
     {
      "file": "L_phone_list.png",
@@ -352,14 +352,15 @@
       "mobile": "season-contests-monthly-phone.png"
      }
     }
-   ]
+   ],
+   "automation": "not automated: superseded"
   },
   {
    "id": "score-entry-9",
    "title": "Live scoring on the phone, 9 holes",
    "area": "Live scoring",
    "audience": "member",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-25",
    "folder": "score-entry-2026-09-25",
    "source_doc": "docs/claude/score-entry.md",
@@ -427,14 +428,15 @@
       "any": "8-cart-sign-qr.png"
      }
     }
-   ]
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
   },
   {
    "id": "score-entry-18",
    "title": "Live scoring, 18 holes and shotgun on 10",
    "area": "Live scoring",
    "audience": "member",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-25",
    "folder": "score-entry-2026-09-25-18h",
    "source_doc": "docs/claude/score-entry.md",
@@ -495,14 +497,15 @@
       "mobile": "7-shotgun-start-hole-10.png"
      }
     }
-   ]
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
   },
   {
    "id": "score-entry-card-check",
    "title": "Live scoring: checking and signing the card",
    "area": "Live scoring",
    "audience": "member",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-25",
    "folder": "score-entry-2026-09-25-card-check",
    "source_doc": "docs/claude/score-entry.md",
@@ -563,14 +566,15 @@
       "mobile": "8-mark-signed-for-him.png"
      }
     }
-   ]
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
   },
   {
    "id": "score-entry-flag",
    "title": "Live scoring: flagging a problem",
    "area": "Live scoring",
    "audience": "member",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-25",
    "folder": "score-entry-2026-09-25-flag",
    "source_doc": "docs/claude/score-entry.md",
@@ -645,14 +649,15 @@
       "mobile": "7-keeper-done.png"
      }
     }
-   ]
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
   },
   {
    "id": "score-entry-match-pickup",
    "title": "Live scoring: match play and picked-up balls",
    "area": "Live scoring",
    "audience": "member",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-25",
    "folder": "score-entry-2026-09-25-match-pickup",
    "source_doc": "docs/claude/score-entry.md",
@@ -713,14 +718,15 @@
       "mobile": "8-your-card-my-row-and-flag-to-fix.png"
      }
     }
-   ]
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
   },
   {
    "id": "score-entry-cup",
    "title": "Live scoring: Lone Star Cup formats",
    "area": "Lone Star Cup",
    "audience": "member",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-26",
    "folder": "score-entry-2026-09-26-cup",
    "source_doc": "docs/claude/score-entry.md",
@@ -753,14 +759,15 @@
       "mobile": "4-check-card-X-and-won-in-team-colour.png"
      }
     }
-   ]
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are lone-star-cup-live; the 2026 Cup is over."
   },
   {
    "id": "score-entry-admin",
    "title": "Live scoring: admin page and cart sign",
    "area": "Back-end pages",
    "audience": "admin",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-26",
    "folder": "score-entry-2026-09-26-admin",
    "source_doc": "docs/claude/score-entry.md",
@@ -779,14 +786,15 @@
       "desktop": "live-scoring-page.png"
      }
     }
-   ]
+   ],
+   "notes": "Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed. Archived 2026-10-26: older than the live panels."
   },
   {
    "id": "score-entry-manager-panel",
    "title": "Live scoring: the manager panel",
    "area": "Back-end pages",
    "audience": "manager",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-28",
    "folder": "score-entry-2026-09-28-manager-panel",
    "source_doc": "docs/claude/score-entry.md",
@@ -799,14 +807,15 @@
       "desktop": "1-desktop.png"
      }
     }
-   ]
+   ],
+   "notes": "Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed. Archived 2026-10-26: older than the live panels."
   },
   {
    "id": "score-entry-pairings-panel",
    "title": "Live scoring: the pairings panel",
    "area": "Back-end pages",
    "audience": "manager",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-09-28",
    "folder": "score-entry-2026-09-28-pairings-panel",
    "source_doc": "docs/claude/score-entry.md",
@@ -833,14 +842,15 @@
       "mobile": "4-phone-closed.png"
      }
     }
-   ]
+   ],
+   "notes": "Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed. Archived 2026-10-26: older than the live panels."
   },
   {
    "id": "lsc-preview",
    "title": "Lone Star Cup: splash, landing, draw, board and cart signs",
    "area": "Lone Star Cup",
    "audience": "member",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-10-08",
    "folder": "lsc-preview",
    "source_doc": "docs/claude/lone-star-cup-board.md",
@@ -1118,14 +1128,15 @@
       "mobile": "singles-match-open.png"
      }
     }
-   ]
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are lone-star-cup-live; the 2026 Cup is over."
   },
   {
    "id": "cup-day2",
    "title": "Lone Star Cup, day 2 board",
    "area": "Lone Star Cup",
    "audience": "member",
-   "status": "reference",
+   "status": "archived",
    "taken": "2026-10-07",
    "folder": "cup-2026-10-07-d2",
    "source_doc": "docs/claude/lone-star-cup-board.md",
@@ -1172,7 +1183,8 @@
       "mobile": "singles-hole4.png"
      }
     }
-   ]
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are lone-star-cup-live; the 2026 Cup is over."
   },
   {
    "id": "member-pages",
@@ -1187,7 +1199,7 @@
    "demo": [
     {
      "label": "Leaderboard",
-     "url": "/member"
+     "url": "/member/results"
     },
     {
      "label": "Season contests",
@@ -1209,14 +1221,14 @@
    "steps": [
     {
      "file": "1-leaderboard.png",
-     "caption": "Leaderboard (events)",
+     "caption": "Leaderboard (events), the month list",
      "shots": {
       "mobile": "1-leaderboard.png",
       "tablet": "1-leaderboard.tablet.png",
       "desktop": "1-leaderboard.desktop.png"
      },
      "capture": {
-      "url": "/member"
+      "url": "/member/results"
      }
     },
     {
@@ -1266,6 +1278,22 @@
      "capture": {
       "url": "/member/live-scoring"
      }
+    },
+    {
+     "file": "6-leaderboard-event-open.png",
+     "caption": "Leaderboard, the latest event opened",
+     "shots": {
+      "mobile": "6-leaderboard-event-open.png",
+      "tablet": "6-leaderboard-event-open.tablet.png",
+      "desktop": "6-leaderboard-event-open.desktop.png"
+     },
+     "capture": {
+      "url": "/member/results",
+      "click": [
+       "details.evlb-ev > summary"
+      ],
+      "wait": 3500
+     }
     }
    ],
    "watch": [
@@ -1286,7 +1314,7 @@
    "base": "static",
    "folder": "live-scoring",
    "source_doc": "templates/live_scoring_guide.html",
-   "notes": "In use: these pictures are the member guide (/member/live-scoring) and the 10/13 how-to email. They live in static/img/live-scoring; the catalogue points at them, it does not copy them.",
+   "notes": "In use: these pictures are the member guide (/member/live-scoring) and the 10/13 how-to email. They live in static/img/live-scoring; the catalogue points at them, it does not copy them. Not automated on purpose: these files ARE the guide, curated one full iPhone screen each; score-entry-live retakes the same screens from the code after every deploy for comparison.",
    "demo": [
     {
      "label": "Guide page",
@@ -1385,7 +1413,8 @@
       "mobile": "10-sign.jpg"
      }
     }
-   ]
+   ],
+   "automation": "not automated: the guide's own pictures"
   },
   {
    "id": "mockups-card-check",
@@ -1432,7 +1461,8 @@
       "mobile": "card-check-D.png"
      }
     }
-   ]
+   ],
+   "automation": "not automated: mockup"
   },
   {
    "id": "mockups-leaderboard",
@@ -1494,7 +1524,8 @@
       "mobile": "leaderboard-team-names.png"
      }
     }
-   ]
+   ],
+   "automation": "not automated: mockup"
   },
   {
    "id": "report-manager-event",
@@ -1504,7 +1535,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
   },
   {
    "id": "report-daily-digest",
@@ -1514,7 +1546,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
   },
   {
    "id": "report-event-day",
@@ -1524,7 +1557,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
   },
   {
    "id": "report-pairings-approval",
@@ -1534,7 +1568,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
   },
   {
    "id": "report-membership",
@@ -1544,7 +1579,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
   },
   {
    "id": "report-starter-sheet",
@@ -1554,7 +1590,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
   },
   {
    "id": "report-finance",
@@ -1564,7 +1601,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
   },
   {
    "id": "be-events",
@@ -1574,7 +1612,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
   },
   {
    "id": "be-messages",
@@ -1584,7 +1623,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
   },
   {
    "id": "be-customers",
@@ -1594,7 +1634,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
   },
   {
    "id": "be-transactions",
@@ -1604,7 +1645,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
   },
   {
    "id": "be-accounting",
@@ -1614,7 +1656,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
   },
   {
    "id": "be-pairings",
@@ -1624,7 +1667,8 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered."
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
   },
   {
    "id": "be-test-center",
@@ -1634,14 +1678,192 @@
    "status": "needed",
    "folder": "",
    "steps": [],
-   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered.",
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
    "demo": [
     {
      "label": "Test Center",
      "url": "/admin/test-center",
      "note": "Practice rounds write only to test tables."
     }
-   ]
+   ],
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "score-entry-live",
+   "title": "Live scoring on the phone, from the code",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "current",
+   "version": "retaken every deploy",
+   "taken": "2026-10-26",
+   "folder": "score-entry-live",
+   "source_doc": "docs/claude/score-entry.md",
+   "notes": "A demo event on a throwaway database (made-up people, never production), served by the Tracker's own code (tools/screens_demo.py).",
+   "demo": [
+    {
+     "label": "Live scoring guide",
+     "url": "/member/live-scoring"
+    }
+   ],
+   "steps": [
+    {
+     "file": "1-join.png",
+     "caption": "The group link opened",
+     "shots": {
+      "mobile": "1-join.png",
+      "tablet": "1-join.tablet.png",
+      "desktop": "1-join.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/score?t={t}"
+     }
+    },
+    {
+     "file": "2-who-are-you.png",
+     "caption": "Score this group: pick your name",
+     "shots": {
+      "mobile": "2-who-are-you.png",
+      "tablet": "2-who-are-you.tablet.png",
+      "desktop": "2-who-are-you.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/score?t={t}",
+      "click": [
+       "[data-act=\"gate-score\"]"
+      ]
+     }
+    },
+    {
+     "file": "3-hole.png",
+     "caption": "The hole screen",
+     "shots": {
+      "mobile": "3-hole.png",
+      "tablet": "3-hole.tablet.png",
+      "desktop": "3-hole.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/score?t={t}",
+      "click": [
+       "[data-act=\"gate-score\"]",
+       "[data-act=\"pick\"]"
+      ],
+      "wait": 3500
+     }
+    },
+    {
+     "file": "4-board.png",
+     "caption": "The scorer's leaderboard",
+     "shots": {
+      "mobile": "4-board.png",
+      "tablet": "4-board.tablet.png",
+      "desktop": "4-board.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/score/board?t={t}"
+     }
+    }
+   ],
+   "watch": [
+    "templates/score_entry.html"
+   ],
+   "watch_hash": "a79edc072a426401"
+  },
+  {
+   "id": "member-teesheet",
+   "title": "Member tee sheet",
+   "area": "Member pages",
+   "audience": "member",
+   "status": "current",
+   "version": "retaken every deploy",
+   "taken": "2026-10-26",
+   "folder": "member-teesheet",
+   "source_doc": "docs/claude/events.md",
+   "notes": "The public tee sheet the event-day email links to, for a demo event on a throwaway database.",
+   "steps": [
+    {
+     "file": "1-teesheet.png",
+     "caption": "The tee sheet",
+     "shots": {
+      "mobile": "1-teesheet.png",
+      "tablet": "1-teesheet.tablet.png",
+      "desktop": "1-teesheet.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/teesheet/{event}"
+     }
+    }
+   ],
+   "watch": [
+    "email_parser/member_teesheet.py"
+   ],
+   "watch_hash": "05bc17305797a63c"
+  },
+  {
+   "id": "lone-star-cup-live",
+   "title": "Lone Star Cup member pages, live",
+   "area": "Lone Star Cup",
+   "audience": "member",
+   "status": "current",
+   "version": "retaken every deploy",
+   "taken": "2026-10-26",
+   "folder": "lone-star-cup-live",
+   "source_doc": "docs/claude/lone-star-cup-board.md",
+   "notes": "The Cup pages as members see them on the live site.",
+   "demo": [
+    {
+     "label": "The Cup",
+     "url": "/member/lonestarcup"
+    }
+   ],
+   "steps": [
+    {
+     "file": "1-cup.png",
+     "caption": "The Cup board",
+     "shots": {
+      "mobile": "1-cup.png",
+      "tablet": "1-cup.tablet.png",
+      "desktop": "1-cup.desktop.png"
+     },
+     "capture": {
+      "url": "/member/lonestarcup"
+     }
+    },
+    {
+     "file": "2-info.png",
+     "caption": "Event info: schedule, teams, formats",
+     "shots": {
+      "mobile": "2-info.png",
+      "tablet": "2-info.tablet.png",
+      "desktop": "2-info.desktop.png"
+     },
+     "capture": {
+      "url": "/member/lonestarcup/info"
+     }
+    },
+    {
+     "file": "3-draw.png",
+     "caption": "The draw",
+     "shots": {
+      "mobile": "3-draw.png",
+      "tablet": "3-draw.tablet.png",
+      "desktop": "3-draw.desktop.png"
+     },
+     "capture": {
+      "url": "/member/cup-draw"
+     }
+    }
+   ],
+   "watch": [
+    "templates/lsc_info.html",
+    "templates/_lsc_info_body.html",
+    "templates/cup_draw.html"
+   ],
+   "watch_hash": "9ebc70dad4f77f9c"
   }
  ],
  "devices": [

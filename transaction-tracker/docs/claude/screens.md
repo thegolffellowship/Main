@@ -31,6 +31,7 @@ Kerry: "I want to be able to go to a page and select whatever I want to look at 
   - the Test Center, which writes only to test tables.
   Never add a demo that can send, pay or write a real row.
 - **HTML/CSS tab:** shows the exact source the demo serves, with Copy and Download .html, so Claude Design and the CA can take a screen straight into their work.
+- **Status `archived`:** a by-hand folder that no longer shows a live screen; kept for the record (below).
 - **Status `needed`:** a screen we should have and don't yet. Reports and Back-end pages start as `needed` entries. Back-end pages must be shot against the test database, or with member details covered, because they show money and contact details.
 
 ## Screens stay current by themselves (v2.584.0, Kerry 10/26: "an absolute requirement")
@@ -40,7 +41,19 @@ Kerry: "I want to be able to go to a page and select whatever I want to look at 
   - Renders use the next upcoming event and the staff preview person. With nothing upcoming, renders wait; production never writes a demo event.
 - **The repo, enforced:** each sequence with recipes lists `watch` (files, or `path::function` for one function in app.py) and carries `watch_hash`. `test_screens.py` FAILS when the watched code changed and the hash did not. The fix is `python3 tools/screens_refresh.py <sequence>`: it retakes the recipes from the code on a throwaway database and stamps the new hash. Use `--hash-only` when no recipe can show the change.
   - In a sandbox without Python Playwright it runs through `tools/screens_capture.js` (Node Playwright).
-- **Without a recipe:** the leaderboard sets, the mockups and the score-entry and Cup sets are by-hand captures. The page says so. Adding a recipe is the Librarian / UI-UX lane's work list.
+- **Demo recipes** (Kerry 10/26: "want updated screens to be automated to mirror with what's live"): `{"demo": "event", "path": "/member/score?t={t}"}` is a page that needs an event, a round or a link. `screens_capture.capture_demos` starts `tools/screens_demo.py` as its OWN process:
+  - on a throwaway database (`DATABASE_PATH` a fresh temp file, `SCREENS_DEMO=1`; the runner refuses to start otherwise);
+  - with every credential stripped (mail, Azure, Anthropic, Brevo, HubSpot, Meta, Twilio, payments, Railway, MCP, Golf Genius, and anything ending `_PIN`, `_TOKEN`, `_KEY`, `_SECRET`) and its own session key, so nothing in it can reach mail, money or a member;
+  - it seeds one event dated today ("s9.99 Demo Links", eight made-up people with ids 990001-990008, two foursomes, a live-scoring round) and serves the Tracker's own app on 127.0.0.1. Path variables: `{event}`, `{t}` (group 1's signed link), `{t2}` (group 2's).
+  Production runs it after every deploy and nightly beside the other recipes; `screens_refresh.py` runs it for the repo. Never production data.
+- **Clicks:** any recipe may add `"click": [css selectors]` (the first match of each is tapped in order before the picture) and `"wait"` (ms after each click). Example: the Leaderboard with the latest event opened clicks `details.evlb-ev > summary`; the hole screen clicks `[data-act="gate-score"]` then `[data-act="pick"]`.
+- **A missed capture is visible:** a failed or partial production capture writes `agent_action_log` `screens_capture_failed` ("FAILED" or "partial", the error count and the first error). Before 10/26 a failure logged nothing.
+- **Automated (10/26):** invitations, payment-reminder (the built email), rsvp-deadline, member-pages (Leaderboard list and an opened event, Season Contests, Handicaps, Spotlight, the live scoring guide page), lone-star-cup-live (board, info, draw), score-entry-live (join, pick your name, hole, scorer's board, from the demo) and member-teesheet (from the demo).
+- **Not automated, and why** (each sequence's `automation` field, shown on the page):
+  - back-end pages (`be-*`) and reports (`report-*`): "not automated: PII". They show member names, emails and money, are never captured from production, and the demo runner has no signed-in admin session yet;
+  - live-scoring-guide-pictures: these files ARE the guide's pictures, curated one full iPhone screen each; score-entry-live retakes the same screens from the code for comparison;
+  - mockups (`mockups-*`) and leaderboard-review-2026-10-19: not live screens.
+- **Status `archived`:** a hand-taken folder that shows screens no longer live. It is kept, never deleted, and its notes name the sequence that replaced it (the 9/25-9/28 score-entry sets, the Cup sets after the 2026 Cup, events-leaderboard-batch1).
 
 ## Comments go to the Librarian, through the mailbox
 
