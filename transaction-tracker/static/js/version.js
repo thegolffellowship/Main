@@ -13,6 +13,14 @@ window.TGF_CHANGELOG = [
     ]
   },
   {
+    version: "2.602.2",
+    date: "2026-10-26",
+    title: "Fix: tee-times emails went twice when a manager approved",
+    changes: [
+      "On 10/26 at 5:16 PM every Silverhorn tee-times email (players, course and manager) went twice. Kerry approved the sheet, the approval sent the emails, and the every-few-minutes job, which also sends an approved sheet at once from 5:00 PM, ran at the same moment; both read an empty sent list. Each message is now claimed atomically before it is sent (app setting teetimes_claim:<event>:<key>, inserted only if absent), so exactly one sender sends it; a failed send gives the claim back for the next run. Guard test_teetimes_email.py runs two senders at once and fails without the claim."
+    ]
+  },
+  {
     version: "2.602.1",
     date: "2026-10-26",
     title: "Course update leaves known mail scanners out of RSVP Only",
