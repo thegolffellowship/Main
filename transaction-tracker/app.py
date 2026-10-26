@@ -2461,6 +2461,27 @@ def start_scheduler():
                 logger.info("Admin payout report: %s", res)
         except Exception:
             logger.exception("Admin payout report failed (non-fatal)")
+    # THE SCORING WINDOW + CLOSEOUT START (Kerry 10/26, CoS #2307 item 6,
+    # #2329 item 5): every 5 min, record each of today's events closing (all
+    # cards final, last score + 15 min) and post the closeout start signal
+    # (last score + 15 min) once per event. email_parser/scoring_window.py.
+    def scoring_window_job():
+        from email_parser.scoring_window import tick
+        try:
+            res = tick()
+            if res.get("events"):
+                logger.info("Scoring window: %s", res["events"])
+        except Exception:
+            logger.exception("Scoring window failed (non-fatal)")
+    scheduler.add_job(
+        scoring_window_job,
+        "cron", hour="7-23", minute="*/5",
+        timezone="US/Central",
+        id="scoring_window",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.add_job(
         admin_payout_report_job,
         "cron", hour="17-23", minute="2-59/15",
@@ -13003,6 +13024,19 @@ def api_se_write():
     gid, err = _se_group_from_request(body)
     if err:
         return err
+    if not _se_is_admin():
+        # THE SCORING WINDOW (Kerry 10/26): saves open one hour before the
+        # first tee and close 15 minutes after the last score once every card
+        # is final. A refused batch stays in the phone's queue (non-200) and
+        # goes once the window opens. Fails open (scoring_window.entry_open).
+        from email_parser.scoring_window import entry_open
+        from email_parser.score_entry import event_of
+        try:
+            _ok, _why = entry_open(event_of("group", gid))
+        except Exception:
+            _ok, _why = True, None
+        if not _ok:
+            return jsonify({"error": _why, "window": "closed" if "closed" in (_why or "") else "not_open"}), 409
     by = body.get("entered_by")
     res = write_scores(gid, str(body.get("device_id") or ""), int(by) if by else None,
                        list(body.get("ops") or []))

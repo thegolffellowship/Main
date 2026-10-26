@@ -167,6 +167,10 @@ Kerry: "I like to pay same night as a standard. ... Needs an automated Admin rep
 - **Guard:** `test_admin_payout_report.py`.
 - **Not built:** PayPal one-tap batch payouts (CFO plan, Board timing, #2338).
 
+## Live scoring window and closeout start (Kerry 2026-10-26)
+
+Player score saves open one hour before the first tee and close 15 minutes after the last score once every card is final; the closeout start signal (mailbox topic `closeout`) goes 15 minutes after the last score. `email_parser/scoring_window.py`; full rules in score-entry.md "The scoring window and the closeout start".
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)
