@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.597.0";
+window.TGF_VERSION = "2.598.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.598.0",
+    date: "2026-10-26",
+    title: "Every time people read is 12-hour with AM/PM",
+    changes: [
+      "Kerry 10/26: \"All times should show AM/PM\" (CoS #2325: \"Please don't use Military Time\"). One shared helper on each side (clock12 / stamp12 in timezone_utils, window.tgfTime12 in static/js/time12.js) and every page, email and print sheet that showed a 24-hour time now uses it: the printed scorecards' stamp (also moved from UTC to Central), the Screens capture label, the health page and daily digest, the Games & Payouts start time, and times on the Lone Star Cup teams, Snapshot Center, Contests, Customers, CA Queue, Duplicate Detective, Health, Leads, Events and score-entry admin pages. Stored stamps, logs and cron strings are unchanged. Guard test_twelve_hour_times.py fails on a new person-facing 24-hour time."
+    ]
+  },
   {
     version: "2.597.0",
     date: "2026-10-26",
