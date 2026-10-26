@@ -31,7 +31,7 @@ missing = [(s["id"], st["file"], st["missing"]) for s in cat["sequences"] for st
 check("every catalogued file is on disk", not missing, missing[:5])
 check("every sequence has an area the page lists",
       all(s["area"] in cat["areas"] for s in cat["sequences"]))
-check("every status is a known one", all(s["status"] in ("current", "built", "mockup", "superseded", "reference", "needed")
+check("every status is a known one", all(s["status"] in ("current", "built", "mockup", "superseded", "reference", "archived", "needed")
                                          for s in cat["sequences"]))
 check("nothing on disk is left uncatalogued", cat["not_catalogued"] == [], cat["not_catalogued"])
 
@@ -143,6 +143,72 @@ with cl.session_transaction() as s_:
 check("a demo needs the Screens role", cl.get("/admin/screens/demo/invitation").status_code == 403)
 with cl.session_transaction() as s_:
     s_["role"] = "admin"
+
+print("6. A missed capture is visible; the demo runner holds no credentials (Kerry 10/26)")
+import subprocess as _sp, shutil as _sh
+def _failed_rows():
+    with db._connect(DB) as conn:
+        return [r[0] for r in conn.execute("SELECT description FROM agent_action_log "
+                                           "WHERE action_type = 'screens_capture_failed' ORDER BY id")]
+_ca, _cd = sc.capture_all, sc.capture_demos
+sc.capture_demos = lambda *a, **k: {"captured": [], "errors": []}
+sc.capture_all = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no Chromium"))
+r6 = sc.capture_live(force=True, db_path=DB)
+check("a capture that blows up returns the error", "no Chromium" in (r6.get("error") or ""), r6)
+check("and writes screens_capture_failed", any("FAILED" in d and "no Chromium" in d for d in _failed_rows()),
+      _failed_rows())
+sc.capture_all = lambda *a, **k: {"captured": ["x/1.png"], "errors": [{"name": "x/2.png", "error": "Bitter did not load"}]}
+sc.capture_live(force=True, db_path=DB)
+check("a partial capture writes screens_capture_failed too", any("partial" in d and "Bitter" in d for d in _failed_rows()),
+      _failed_rows())
+n_fail = len(_failed_rows())
+sc.capture_all = lambda *a, **k: {"captured": ["x/1.png"], "errors": []}
+sc.capture_live(force=True, db_path=DB)
+check("a clean capture writes no failure", len(_failed_rows()) == n_fail)
+sc.capture_all, sc.capture_demos = _ca, _cd
+_sh.rmtree(sc.live_root(), ignore_errors=True)
+check("the live capture runs the demo recipes too",
+      'capture_demos(str(root), live=True)' in open("email_parser/screens_capture.py").read())
+
+seen = {}
+_run = _sp.run
+def _fake_run(args, **kw):
+    seen["args"], seen["env"] = args, kw.get("env") or {}
+    return _sp.CompletedProcess(args, 0, stdout='{"captured": [], "errors": []}\n', stderr="")
+for k, v in (("AZURE_CLIENT_SECRET", "s"), ("EMAIL_ADDRESS", "a@b.c"), ("ADMIN_PIN", "1"), ("BREVO_API_KEY", "k"),
+             ("HUBSPOT_TOKEN", "t"), ("STRIPE_SECRET", "x")):
+    os.environ[k] = v
+_sp.run = _fake_run
+try:
+    rd6 = sc.capture_demos("", live=False)
+finally:
+    _sp.run = _run
+env6 = seen.get("env") or {}
+check("capture_demos runs tools/screens_demo.py in its own process",
+      seen.get("args") and seen["args"][1].endswith("tools/screens_demo.py") and rd6 == {"captured": [], "errors": []},
+      seen.get("args"))
+check("on a throwaway database, never this one", env6.get("DATABASE_PATH", "").endswith(".db")
+      and env6.get("DATABASE_PATH") != DB and env6.get("SCREENS_DEMO") == "1")
+check("with no mail, money, PIN or API credential", not [k for k in env6 if k in (
+      "AZURE_CLIENT_SECRET", "EMAIL_ADDRESS", "ADMIN_PIN", "BREVO_API_KEY", "HUBSPOT_TOKEN", "STRIPE_SECRET")],
+      [k for k in env6 if "PIN" in k or "SECRET" in k or "TOKEN" in k])
+check("and its own session key", env6.get("SECRET_KEY") and env6["SECRET_KEY"] != os.environ.get("SECRET_KEY"))
+bare = {k: v for k, v in os.environ.items() if k not in ("SCREENS_DEMO",)}
+bare["DATABASE_PATH"] = DB
+rr6 = _sp.run([sys.executable, "tools/screens_demo.py", "--repo"], env=bare, capture_output=True, text=True, timeout=60)
+check("the demo runner refuses to start outside capture_demos", rr6.returncode != 0 and "throwaway" in rr6.stderr,
+      rr6.stderr[-200:])
+known = {"event", "t", "t2"}
+import string as _string
+bad6 = [(x["id"], st["file"]) for x in cat["sequences"] for st in x["steps"] if "demo" in (st.get("capture") or {})
+        and {f for _, f, _, _ in _string.Formatter().parse(st["capture"].get("path", "")) if f} - known]
+check("every demo recipe names only what the demo seeds (event, t, t2)", not bad6, bad6)
+demo_seqs = [x["id"] for x in cat["sequences"] if any("demo" in (st.get("capture") or {}) for st in x["steps"])]
+check("live scoring and the member tee sheet are taken from the demo",
+      {"score-entry-live", "member-teesheet"} <= set(demo_seqs), demo_seqs)
+manual = [x["id"] for x in cat["sequences"] if x["status"] == "current" and x["steps"]
+          and not any(st.get("capture") for st in x["steps"]) and not x.get("automation")]
+check("every current sequence is automated or says why not", not manual, manual)
 
 try:
     os.remove(DB)

@@ -50,6 +50,7 @@
         .st-mockup { background:#F3E8FF; color:#7E22CE; }
         .st-superseded { background:#F3F4F6; color:#6B7280; }
         .st-reference { background:#FEF3C7; color:#92400E; }
+        .st-archived { background:#F3F4F6; color:#6B7280; }
         .st-missing { background:#FEE2E2; color:#B91C1C; }
         .st-needed { background:#FFE4E6; color:#9F1239; }
         .scr-demo-btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; align-items:center; }
@@ -165,7 +166,7 @@
     <script src="/static/js/auth.js"></script>
     <script>
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-    const STATUS_WORD = {current: "Current", built: "Built, not live", mockup: "Mockup", superseded: "Superseded", reference: "Reference", needed: "Not shot yet", missing: "File missing"};
+    const STATUS_WORD = {current: "Current", built: "Built, not live", mockup: "Mockup", superseded: "Superseded", reference: "Reference", archived: "Archived", needed: "Not shot yet", missing: "File missing"};
     const DEV_W = {desktop: 1280, tablet: 820, mobile: 390}, DEV_H = {desktop: 800, tablet: 1100, mobile: 760};
     let DEMO = null, DEMO_TAB = "live";
     let CAT = null, SEL = null, STATUS = "all", LB = 0;
@@ -255,7 +256,7 @@
         document.getElementById("scr-main").innerHTML = `
             <div class="scr-card">
                 <h3 class="scr-title">${esc(seq.title)}</h3>
-                <div class="scr-meta">${chip(seq.status)}${seq.version ? `<span>${esc(seq.version)}</span>` : ""}<span>Taken ${esc(seq.taken || "?")}</span>${seq.audience ? `<span>Seen by: ${esc(seq.audience)}</span>` : ""}${seq.source_doc ? `<span>Doc: ${esc(seq.source_doc)}</span>` : ""}</div>
+                <div class="scr-meta">${chip(seq.status)}${seq.version ? `<span>${esc(seq.version)}</span>` : ""}<span>Taken ${esc(seq.taken || "?")}</span>${seq.audience ? `<span>Seen by: ${esc(seq.audience)}</span>` : ""}${seq.source_doc ? `<span>Doc: ${esc(seq.source_doc)}</span>` : ""}${seq.automation ? `<span>${esc(seq.automation)}</span>` : ""}</div>
                 ${seq.notes ? `<p class="scr-notes">${esc(seq.notes)}</p>` : ""}
                 ${seq.steps.some(st => st.capture) ? `<p class="scr-note" style="margin:6px 0 0;">${seq.steps.some(st => st.live)
                     ? `Auto-captured from the live code${CAT.live_meta && CAT.live_meta.at ? ` ${esc(CAT.live_meta.at)}${CAT.live_meta.version ? " on v" + esc(CAT.live_meta.version) : ""}` : ""}.`
