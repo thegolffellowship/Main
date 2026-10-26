@@ -1858,6 +1858,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]  the 7 PM TEE-TIMES EMAIL, three versions (player / course contact / manager, CMO #2101): dry build = per-recipient ready / held with reasons, wording hashes, stamps (teetimes_<version>_approved) and dials (teetimes_email_auto, teetimes_spots_audience); |preview mails ONE combined preview to STAFF only. No send bridge: only the 7 PM job sends
       scoring-course-update:<event_id>[|preview[|<staff addr>]]  THE COURSE UPDATE BEFORE THE LOCK (Kerry 10/26): who it would go to, held reasons, wording hash; |preview mails ONE sample to STAFF only. The job sends only with dial course_update_auto=on and stamp course_update_approved
       scoring-course-files-noon:<event_id>  NOON COURSE FILES, read only (Kerry 10/26): would the event-day noon job send the Course Files now (To the course contact, CC TGF contacts + the chapter manager), or why not (already sent, no pairings, no course contact, within the hour before first tee, a scorecard gap)
+      scoring-scoring-window:<event_id>  THE SCORING WINDOW, read only (Kerry 10/26): first tee, saves open (first tee - 60 min), cards final, last score, scoring closes (last score + 15 min once every card is final), closeout start (last score + 15 min)
       scoring-seat-fill:<event_id>  SEAT-FILL, read only (Kerry 10/26): the registered late adds the after-lock job would seat now (tee times: latest threesome first; shotgun: lowest hole first, B before A) and who has no open seat
       scoring-after-lock:<event_id>  AFTER-LOCK CHANGES, read only (Kerry #2139/#2168): moved / added / removed players, tee and games changes since the Event Info send, the emails the 15-min job would send (manager CC'd) and the changed course sheets
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13). |lateadd|<cid,cid>|<kerry-ok post id>[|confirm] sends the approved message to each late add and "UPDATED GROUP:" + a notice to their groupmates only, same gates (Kerry 10/20)
@@ -7552,6 +7553,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             from app import _print_pack_render, app as _flask
             return json.dumps(_cfn.run_event(int(_p[0]), _print_pack_render, _flask.static_folder,
                                              confirm=False), indent=2, default=str)
+        if cmd == "scoring-scoring-window":
+            # "<event_id>" — THE SCORING WINDOW (Kerry 10/26), READ ONLY:
+            # first tee, when saves open, cards final, last score, when
+            # scoring closes and when closeout starts.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>"})
+            from email_parser import scoring_window as _sw
+            return json.dumps(_sw.event_state(int(_p[0])), indent=2, default=str)
         if cmd == "scoring-seat-fill":
             # "<event_id>" — SEAT-FILL (Kerry 10/26, CoS #2331 C), READ ONLY:
             # who the after-lock job would seat now, where, and who has no

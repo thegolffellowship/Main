@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.593.0";
+window.TGF_VERSION = "2.594.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.594.0",
+    date: "2026-10-26",
+    title: "Live scoring window and closeout start, built and held OFF until after Tuesday",
+    changes: [
+      "Kerry (CoS #2307 item 6): live scoring on one hour before the first tee or shotgun and off 15 minutes after the last score; Kerry (#2329 item 5): \"I thought I changed it to 15 minutes after last score.\" A scoring window now decides when players' score saves are accepted: from one hour before the first tee (dial live_scoring_on_minutes) until every card is final and the last score is 15 minutes old (dial live_scoring_off_minutes). A save outside it gets a plain message, and the phone keeps it queued. Any open card keeps the event open; a manager Unlock reopens it; admins are never gated; any error lets the save through. The event itself still switches on at 5:00 PM the day before, because the 6:00 AM email's Keep score links, the noon cart-sign and scorecard QR codes and the board all need it.",
+      "Closeout start: when every card is final and the last score is 15 minutes old (dial closeout_start_minutes), a job posts one mailbox line, CLOSEOUT START: <event>, to the Front Desk and Event Ops, once per event; the 9:00 PM run stays the backstop. Both pieces sit behind dial scoring_window_auto, which is OFF for Tuesday 10/27's live rounds and is turned on after Tuesday on Kerry's word. Read-only bridge scoring-scoring-window:<event_id>; guard test_live_scoring_timing.py."
+    ]
+  },
   {
     version: "2.593.0",
     date: "2026-10-26",

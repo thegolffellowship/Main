@@ -977,6 +977,43 @@ the lock dial changes, or its retry time comes.
 Bridge `scoring-auto-payouts[:apply][|<event_id>]`. Guard
 `test_auto_payouts.py`.
 
+## The scoring window and the closeout start (Kerry 2026-10-26)
+
+Kerry (CoS #2307 item 6): live scoring turns on one hour before the first tee
+or shotgun and off 15 minutes after the last score is in, per event. Kerry
+(CoS #2329 item 5): "I thought I changed it to 15 minutes after last score."
+Closeout starts 15 minutes after the last score.
+
+`email_parser/scoring_window.py`. The window gates a player's SAVES only
+(`/api/score-entry/write`, non-admin sessions); it does NOT move
+`score_entry_events`. That switch (`live_scoring_default.py`, from 5:00 PM the
+day before) also puts the Keep score link in the 6:00 AM Event Info email,
+the QR codes on the noon cart signs and scorecards, the entered cards on the
+boards and the publish of closed cards, all of which must exist outside the
+window. So:
+- **Opens** at first tee minus `live_scoring_on_minutes` (default 60; the
+  first tee from `database._evlb_first_tee`). Before it a save answers 409
+  "Scoring opens at 3:08 PM"; the phone keeps the batch in its queue (it
+  only drops ops on a 200) and sends it once the window opens.
+- **Closes** once every card of the event is final (each card already locks
+  15 minutes after its own last score, `se_card_lock_minutes`) and the last
+  score is `live_scoring_off_minutes` old (default 15). After that a save
+  answers 409 "Scoring has closed for this event". A card still open (a blank
+  hole, a no-show) keeps the event open. A manager Unlock reopens the card
+  and therefore the event.
+- **Fails open**: no first tee, no rounds, any error, or dial
+  `scoring_window_auto` = off. Admin sessions are never gated.
+- **Closeout start**: closeout is the Event Ops agent routine (the 9:00 PM run
+  stays the backstop); the Tracker cannot start an agent session. Job
+  `scoring_window` (every 5 minutes, 7:00 AM to 11:55 PM) records
+  `closeout_start:<event_id>`, logs agent_action_log `closeout_start`, and
+  posts ONE mailbox line (topic `closeout`, TO front-desk and Event Ops)
+  "CLOSEOUT START: <event>" once every card is final and the last score is
+  `closeout_start_minutes` old (default 15). The routine reads that post. It
+  also records `se_event_closed:<event_id>` and logs `live_scoring_closed`.
+- Read-only bridge `scoring-scoring-window:<event_id>`. Guard
+  `test_live_scoring_timing.py`.
+
 ## Publishing entered scores (G-0 keystone, CA #786 GO 1)
 
 Kerry's ruling: when a group's card is CLOSED AND SIGNED, its gross scores

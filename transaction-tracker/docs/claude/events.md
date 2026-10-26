@@ -190,6 +190,10 @@ Kerry: "Event ops - Absolutely should be on Tracker side. Not an agent routine" 
 - Logged in message_log (`sent_by` course-files-noon) and agent_action_log (`course_files_noon`, `course_files_noon_held`). Read-only bridge `scoring-course-files-noon:<event_id>`. Guard `test_course_files_noon.py`.
 - Not built: the one-tap "send as is / wait" in the gap email (Event Ops spec); the manager uses the Course Files button.
 
+## Live scoring window and closeout start (Kerry 2026-10-26)
+
+Player score saves open one hour before the first tee and close 15 minutes after the last score once every card is final; the closeout start signal (mailbox topic `closeout`) goes 15 minutes after the last score. `email_parser/scoring_window.py`; full rules in score-entry.md "The scoring window and the closeout start".
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)
