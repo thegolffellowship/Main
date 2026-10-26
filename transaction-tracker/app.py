@@ -2448,6 +2448,28 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # THE COURSE UPDATE BEFORE THE LOCK (Kerry 10/26, CoS #2307 item 2):
+    # noon the day before an event's lock (Sunday noon for a Tuesday nine),
+    # the registered list + live link + the lock notice to the course
+    # contact, manager CC'd. Locked behind dial course_update_auto and
+    # Kerry's wording stamp course_update_approved. email_parser/course_update.py.
+    def course_update_job():
+        from email_parser.course_update import check as _cu
+        try:
+            res = _cu()
+            if res.get("events"):
+                logger.info("Course update: %s", res["events"])
+        except Exception:
+            logger.exception("Course update failed (non-fatal)")
+    scheduler.add_job(
+        course_update_job,
+        "cron", hour="12-14", minute="1-59/15",
+        timezone="US/Central",
+        id="course_update",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # SAME-NIGHT ADMIN PAYOUT REPORT (Kerry 2026-10-26, CoS #2329 item 6):
     # once every event dated today is closed (closeout_final_check final),
     # one email to Kerry with a link to PAYMENTS. Every 15 min, 5:00 PM to

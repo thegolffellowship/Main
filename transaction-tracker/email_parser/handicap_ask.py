@@ -52,6 +52,7 @@ DEFAULT_PREVIEW_TO = "kerry@thegolffellowship.com"
 INTRO_PCT = 0.75
 LOOKAHEAD_DAYS = 21
 REMIND_DAYS_BEFORE = 2
+LOCK_REMIND_MINUTES = 60      # Kerry 10/26 (#2307 item 5): one more at 4:00 PM, an hour before the lock
 TOKEN_DAYS = 60
 SEND_HOURS = (7, 20)          # Central; reminders only by day
 SERVICES = ("TheGrint", "Club handicap", "Golf Genius", "18Birdies", "Other")
@@ -314,12 +315,14 @@ def candidates(today: str | None = None, db_path=None) -> list[dict]:
         conn.close()
 
 
-def plan(today: str | None = None, db_path=None) -> dict:
-    """What the job would send now: first asks and reminders."""
+def plan(today: str | None = None, db_path=None, now: datetime | None = None) -> dict:
+    """What the job would send now: first asks, reminders, and the lock-day
+    reminder (an hour before the event's lock: 4:00 PM for a 5:00 PM lock)."""
+    from email_parser import database as db
     from email_parser.timezone_utils import today_central_str
     today = today or today_central_str()
     state = load_state(db_path)
-    asks, reminders, skipped = [], [], []
+    asks, reminders, skipped, lock_reminders = [], [], [], []
     for c in candidates(today, db_path):
         rec = state.get(str(c["customer_id"])) or {}
         if rec.get("answer"):
@@ -330,13 +333,26 @@ def plan(today: str | None = None, db_path=None) -> dict:
         if not rec.get("sent_at"):
             asks.append(c)
             continue
+        # THE LOCK-DAY REMINDER (Kerry 10/26, CoS #2307 item 5: "an automated
+        # reminder at E-1 4:00 PM to anyone registered without a handicap";
+        # #2341: "I approve today's handicap reminder email."). Same reminder
+        # wording and signed link, once per person per event, in the hour
+        # before that event's lock (database.event_lock_at).
+        if now is not None:
+            ev = _event_row(c["event_id"], db_path)
+            lock = db.event_lock_at(ev, db_path) if ev else None
+            key = f"lock_reminded_{c['event_id']}"
+            if (lock is not None and not rec.get(key)
+                    and lock - timedelta(minutes=LOCK_REMIND_MINUTES) <= now < lock):
+                lock_reminders.append(c)
+                continue
         days_out = (date.fromisoformat(c["event_date"]) - date.fromisoformat(today)).days
         sent_day = str(rec.get("sent_at"))[:10]
         if (not rec.get("reminded_at") and days_out <= REMIND_DAYS_BEFORE
                 and sent_day < today):
             reminders.append(c)
     return {"today": today, "asks": asks, "reminders": reminders, "skipped": skipped,
-            **approval_state(db_path)}
+            "lock_reminders": lock_reminders, **approval_state(db_path)}
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +425,7 @@ def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:
         ev = _event_row(p["event_id"], db_path)
         if not ev:
             continue
-        msg = build_message(p, ev, kind, db_path=db_path)
+        msg = build_message(p, ev, "reminder" if kind == "lock" else kind, db_path=db_path)
         if msg["held"]:
             held.append({"customer_id": p["customer_id"], "why": msg["held"]})
             continue
@@ -423,7 +439,10 @@ def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:
             state = load_state(db_path)
             rec = state.setdefault(str(p["customer_id"]), {})
             rec["event_id"] = p["event_id"]
-            rec["sent_at" if kind == "ask" else "reminded_at"] = _now_iso()
+            if kind == "lock":
+                rec[f"lock_reminded_{p['event_id']}"] = _now_iso()
+            else:
+                rec["sent_at" if kind == "ask" else "reminded_at"] = _now_iso()
             _save_state(state, db_path)
         try:
             db.log_message({"event_name": p.get("event"), "channel": "email",
@@ -446,14 +465,16 @@ def auto_check(now: datetime | None = None, db_path=None, sender=None) -> dict:
     if not approval_state(db_path)["approved"]:
         return {"skipped": "wording not approved"}
     now = now or now_central()
-    pl = plan(now.date().isoformat(), db_path)
+    pl = plan(now.date().isoformat(), db_path, now=now)
     # The first ask goes the moment the registration lands, any hour (Kerry
     # 10/16: "as soon as we get a registration"); a reminder only by day.
     a = _deliver(pl["asks"], "ask", db_path, sender) if pl["asks"] else {}
     by_day = SEND_HOURS[0] <= now.hour < SEND_HOURS[1]
     r = (_deliver(pl["reminders"], "reminder", db_path, sender)
          if pl["reminders"] and by_day else {})
-    return {"asks": a, "reminders": r}
+    lk = (_deliver(pl["lock_reminders"], "lock", db_path, sender)
+          if pl["lock_reminders"] else {})
+    return {"asks": a, "reminders": r, "lock_reminders": lk}
 
 
 def resend(customer_id: int, kerry_ok_post, confirm: bool = False, db_path=None) -> dict:

@@ -122,6 +122,15 @@ Kerry: "I want the last 'warning' email to go out ... at 1:00p to let him know w
 
 - **Which events:** the ones whose lock is today (`database.event_lock_at`, v2.591.0): the event's own `lock_override` when a manager set one, else 5:00 PM on the standard lock day. The warning goes from four hours before the lock (1:00 PM; never before 7:00 AM) and the release in the ten minutes before it (4:50 PM); the job runs every 10 minutes, 7:00 AM to 11:50 PM. Events in `payment_reminder_exclude_events` are skipped.
 
+## Course update before the lock (v2.592.0, Kerry 2026-10-26, CoS #2307 item 2)
+
+Kerry (via CoS): "update to the course contact with the currently registered list, manager CC'd, a live link so they can follow along, and notice that we lock foursome counts at 5:00 PM Monday, so please allow us to grow."
+`email_parser/course_update.py`, job `course_update` (every 15 minutes, noon to 2:45 PM). Noon the day before the event's lock (`event_lock_at`): Sunday noon for a Tuesday nine, Tuesday noon for a Saturday event. To the course's primary TGF contact, CC the other contacts and the chapter manager. The registered list (RSVP-only excluded), the member tee sheet link, "We lock our foursome counts at 5:00 PM <lock day>". Once per event (`course_update_sent`). Held on a blank. Locked behind dial `course_update_auto` (off) AND Kerry's wording stamp `course_update_approved` = `template_hash()`. Bridge `scoring-course-update:<id>[|preview[|<staff addr>]]`. Guard `test_course_update.py`.
+
+## Handicap reminder in the hour before the lock (v2.592.0)
+
+Kerry (CoS #2307 item 5): a reminder at 4:00 PM the day before to anyone registered without a handicap; #2341/#2345: "I approve today's handicap reminder email." `handicap_ask.plan(now=)` adds `lock_reminders`: anyone already asked and not answered gets the approved reminder email again in the hour before their event's lock (`LOCK_REMIND_MINUTES` 60), once per person per event (state `lock_reminded_<event_id>`). Rides the existing dial `handicap_ask_auto` and stamp `handicap_ask_approved`. Guard `test_handicap_ask.py`.
+
 ## Lock days (Kerry 2026-10-26, v2.591.0)
 
 Kerry: "Monday thru Thursday: 1 day before at 5:00p / Friday: 2 days before at 5:00p / Sat/Sunday: 3 days before at 5:00p. These could be overridden by Managers if necessary, or possible Course Contacts within our future TGF Course Connect module."
@@ -150,7 +159,7 @@ Kerry: "Sign-ups between 5 and 7p. We need something here to automate adding to 
 - A group is open below 4 players. The late add takes the lowest free cart seat, and a blind drawn for that seat is cleared (`set_event_blind(..., None)`).
 - Never seated: RSVP-only players (#2310). Requests after the lock are ignored (ruled 10/20).
 - It saves through `save_event_pairings`, so the existing emails follow: before the Event Info send the seat rides in the draft sheet and the 6:00 AM Event Info; after it, the after-lock job's own update emails (player, UPDATED GROUP, course sheets inside the course window).
-- No open seat: the player stays Unassigned and one COO item `NO OPEN SEAT: <event>` per person per event (`seat_fill_unseated:<event_id>`). The waitlist is not ruled.
+- No open seat: the player stays Unassigned and one COO item `NO OPEN SEAT: <event>` per person per event (`seat_fill_unseated:<event_id>`). The waitlist is not ruled. Kerry 10/26: this "shouldn't happen based on locks and windows for signing up once we have the shop in the tracker. Right now it is possible based on not being able to control GoDaddy's product availability windows." So the COO item is a GoDaddy-era safety net; the Tracker shop's sign-up windows should close a full event at the lock.
 - Every seat in agent_action_log (`seat_fill`). Dial `seat_fill_auto` (on unless off). Read-only bridge `scoring-seat-fill:<event_id>`. Guard `test_seat_fill.py`.
 
 ## Same-night admin payout report (Kerry 2026-10-26, CoS #2329 item 6)

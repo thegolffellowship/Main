@@ -1856,6 +1856,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-handicap-ask[:preview|<event_id>[|<staff addr>][|reminder] | :state]  THE HANDICAP ASK (Kerry 10/16): bare = who would be asked / reminded now; preview to STAFF only; member sends only from the job (dial handicap_ask_auto=on + wording stamp handicap_ask_approved)
       scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm] | 0|unplay|<kerry-ok post id>|<cid,cid>[|confirm] (take back Tracker I'm in rows a mail scanner gave, Kerry 10/26)  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
       scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]  the 7 PM TEE-TIMES EMAIL, three versions (player / course contact / manager, CMO #2101): dry build = per-recipient ready / held with reasons, wording hashes, stamps (teetimes_<version>_approved) and dials (teetimes_email_auto, teetimes_spots_audience); |preview mails ONE combined preview to STAFF only. No send bridge: only the 7 PM job sends
+      scoring-course-update:<event_id>[|preview[|<staff addr>]]  THE COURSE UPDATE BEFORE THE LOCK (Kerry 10/26): who it would go to, held reasons, wording hash; |preview mails ONE sample to STAFF only. The job sends only with dial course_update_auto=on and stamp course_update_approved
       scoring-seat-fill:<event_id>  SEAT-FILL, read only (Kerry 10/26): the registered late adds the after-lock job would seat now (tee times: latest threesome first; shotgun: lowest hole first, B before A) and who has no open seat
       scoring-after-lock:<event_id>  AFTER-LOCK CHANGES, read only (Kerry #2139/#2168): moved / added / removed players, tee and games changes since the Event Info send, the emails the 15-min job would send (manager CC'd) and the changed course sheets
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13). |lateadd|<cid,cid>|<kerry-ok post id>[|confirm] sends the approved message to each late add and "UPDATED GROUP:" + a notice to their groupmates only, same gates (Kerry 10/20)
@@ -7524,6 +7525,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if len(_p) > 1 and _p[1]:
                 return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview (there is no send bridge)"})
             return json.dumps(_tte.summarize(_tte.build(int(_p[0]))), indent=2, default=str)
+        if cmd == "scoring-course-update":
+            # "<event_id>[|preview[|<staff addr>]]" (Kerry 10/26, CoS #2307
+            # item 2): the course update before the lock, built (read only)
+            # or one PREVIEW to staff for Kerry's wording stamp.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>[|preview[|<staff addr>]]"})
+            from email_parser import course_update as _cu
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-course-update", arg)
+                return json.dumps(_cu.send_preview(int(_p[0]), _p[2] if len(_p) > 2 else None),
+                                  indent=2, default=str)
+            _b = _cu.build(int(_p[0]))
+            _b.pop("html", None)
+            return json.dumps(_b, indent=2, default=str)
         if cmd == "scoring-seat-fill":
             # "<event_id>" — SEAT-FILL (Kerry 10/26, CoS #2331 C), READ ONLY:
             # who the after-lock job would seat now, where, and who has no

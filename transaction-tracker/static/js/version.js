@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.591.0";
+window.TGF_VERSION = "2.592.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.592.0",
+    date: "2026-10-26",
+    title: "Handicap reminder an hour before the lock, and the course update before the lock (held for Kerry's wording)",
+    changes: [
+      "Kerry 10/26 (CoS #2307 item 5; \"I approve today's handicap reminder email.\"): anyone registered without a handicap who has had the ask and not answered gets the approved reminder email once more in the hour before their event's lock (4:00 PM for a 5:00 PM lock), once per event. Same wording and signed link as the existing reminder, same dial and stamp. Guard test_handicap_ask.py.",
+      "Kerry 10/26 (CoS #2307 item 2): the course update before the lock. At noon the day before an event's lock (Sunday noon for a Tuesday nine, Tuesday noon for a Saturday event), the course contact gets who's registered so far, a live link to follow along, and \"We lock our foursome counts at 5:00 PM <day>. Please allow us room to grow until then.\" The manager is copied. It does not send until Kerry stamps the wording (course_update_approved) and the dial course_update_auto is on; scoring-course-update:<id>|preview mails staff a sample. Guard test_course_update.py.",
+      "Seat-fill's \"no open seat\" alert is now documented as a GoDaddy-era safety net (Kerry: the Tracker shop's sign-up windows will close at the lock)."
+    ]
+  },
   {
     version: "2.591.0",
     date: "2026-10-26",
