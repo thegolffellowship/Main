@@ -1080,6 +1080,7 @@
                     </label>
                     <label title="Where the group meets after this event. Fills {fellowship_spot} in the Fellowship preset; the send refuses while it is blank.">Fellowship spot<input type="text" id="edit-event-fellowship_spot" class="modal-input" placeholder="e.g. Clubhouse (on site), or the restaurant's name"></label>
                     <label title="Kerry 10/26: the standard lock is 5:00 PM the day before (Monday to Thursday events), two days before (Friday), three days before (Saturday, Sunday). Set a date and time here only to change it for this event; clear it to go back to the standard.">Lock (blank = standard)<input type="datetime-local" id="edit-event-lock_override" class="modal-input"></label>
+                    <label title="Kerry 10/26: when an event holds more tee times than its groups need, a weeknight event keeps the LATEST times and gives back the earliest; a weekend event keeps the EARLIEST and gives back the latest. The tee-times email to the course names each released time. Shotguns are not affected.">Unused tee times<select id="edit-event-tee_keep" class="modal-input"><option value="">Default (weeknight: keep latest, weekend: keep earliest)</option><option value="latest">Keep latest</option><option value="earliest">Keep earliest</option></select></label>
                 </div>
                 <!-- Format -->
                 <div style="margin-top:0.75rem;">
@@ -16218,6 +16219,8 @@
         if (editSpot) editSpot.value = ev.fellowship_spot || "";
         const editLock = document.getElementById("edit-event-lock_override");
         if (editLock) editLock.value = (ev.lock_override || "").replace(" ", "T").slice(0, 16);
+        const editKeep = document.getElementById("edit-event-tee_keep");
+        if (editKeep) editKeep.value = ev.tee_keep || "";
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -16394,6 +16397,8 @@
             const lockVal = (lockEl.value || "").replace("T", " ").slice(0, 16);
             if (lockVal !== (ev.lock_override || "").slice(0, 16)) changes.lock_override = lockVal;
         }
+        const keepEl = document.getElementById("edit-event-tee_keep");
+        if (keepEl && keepEl.value !== (ev.tee_keep || "")) changes.tee_keep = keepEl.value;
 
         // Pricing fields — depends on format
         if (isCombo) {

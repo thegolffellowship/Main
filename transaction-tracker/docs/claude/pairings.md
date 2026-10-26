@@ -2442,3 +2442,12 @@ use as a test case because of there being 3 threesomes required."
   (`smalls_lead`, Kerry 2026-07-21) already sends threesomes to the earliest
   tee times; the 10/19 sheet and a fresh preview both had them first. Kerry
   10/19: "3somes go first on tee times." Nothing changed.
+
+## Unused tee times: which to keep (Kerry 2026-10-26)
+
+Kerry (CoS #2331 A / #2332): "If we have more tee times than we need the tee times should save the later times and release the earlier times and let the course know which ones." ... "We do that for 9 hole weeknight events, but with weekend events we keep the earliest times by default and give back the later ones."
+- A TEE-TIME event (not a shotgun) holding more times than its groups need: a weeknight (Monday-Friday) keeps the LATEST times; a weekend (Saturday/Sunday) keeps the EARLIEST.
+- Per event: `events.tee_keep` ('latest' | 'earliest', migration 0039), Edit Event "Unused tee times" (Default / Keep latest / Keep earliest). NULL = the weekday default. `database.tee_keep_mode(ev)` is the one reader.
+- The generator (`generate_event_pairings`) places the groups on `kept_tee_slots(ev, slots, n)` when no seed pins a slot.
+- `released_tee_times(ev)`: the times the event holds and its SAVED sheet does not use. The tee-times email to the course contact names them under the tee sheet: "We're releasing these tee times: 3:40 PM, 3:50 PM." (`teetimes_email.released_block`). It rides inside {tee_sheet}, so the stamped course template and its hash are unchanged.
+- Guard `test_tee_keep.py`.

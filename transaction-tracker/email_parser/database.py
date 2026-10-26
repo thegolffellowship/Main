@@ -31581,8 +31581,16 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
                 "course_surcharge", "per_game_addon",
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
-                "rescheduled_to_event_id", "status_badge", "lock_override"}
+                "rescheduled_to_event_id", "status_badge", "lock_override", "tee_keep"}
     safe = {k: v for k, v in fields.items() if k in allowed}
+    if "tee_keep" in safe:
+        _tk = str(safe["tee_keep"] or "").strip().lower()
+        if _tk in ("latest", "earliest"):
+            safe["tee_keep"] = _tk
+        elif _tk in ("", "default"):
+            safe["tee_keep"] = None
+        else:
+            safe.pop("tee_keep")
     if "lock_override" in safe:
         # A manager's lock for this event, 'YYYY-MM-DD HH:MM' Central; blank
         # puts it back on the standard lock day (event_lock_at).
@@ -62503,6 +62511,59 @@ def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
     return slots
 
 
+def tee_keep_mode(ev: dict) -> str:
+    """Which tee times a tee-time event keeps when it holds more than its
+    groups need (Kerry 2026-10-26, CoS #2331 A / #2332): the event's own
+    tee_keep ('latest' | 'earliest', set on Edit Event) wins; otherwise a
+    weeknight (Monday-Friday) keeps the LATEST times and a weekend
+    (Saturday/Sunday) keeps the EARLIEST."""
+    v = str(ev.get("tee_keep") or "").strip().lower()
+    if v in ("latest", "earliest"):
+        return v
+    try:
+        wd = datetime.strptime(str(ev.get("event_date") or "")[:10], "%Y-%m-%d").weekday()
+    except ValueError:
+        return "latest"
+    return "earliest" if wd >= 5 else "latest"
+
+
+def _is_tee_time_slot(label: str) -> bool:
+    try:
+        datetime.strptime((label or "").strip(), "%I:%M %p")
+        return True
+    except ValueError:
+        return False
+
+
+def kept_tee_slots(ev: dict, slots: list, n: int) -> list:
+    """The n tee times a sheet of n groups uses out of the event's slots, by
+    tee_keep_mode. Shotgun holes and "Group N" labels: the first n."""
+    n = max(0, int(n or 0))
+    if n >= len(slots):
+        return list(slots)
+    if not all(_is_tee_time_slot(x) for x in slots):
+        return list(slots[:n])
+    return list(slots[-n:]) if n and tee_keep_mode(ev) == "latest" else list(slots[:n])
+
+
+def released_tee_times(ev: dict, db_path=None) -> list:
+    """The tee times this event holds and its SAVED sheet does not use, in
+    time order ("let the course know which ones", Kerry 10/26). Empty for a
+    shotgun, an event without a start time, or a sheet using every time."""
+    sheet = get_event_pairings(int(ev["id"]), db_path=db_path) or {}
+    out = []
+    for h in ("9", "18"):
+        groups = [g for g in (sheet.get(h) or []) if g.get("players")]
+        if not groups:
+            continue
+        slots = _pairing_time_slots(ev, h, needed=len(groups))
+        if not slots or not all(_is_tee_time_slot(x) for x in slots):
+            continue
+        used = {(g.get("slot_label") or "").strip() for g in groups}
+        out += [x for x in slots if x not in used and x not in out]
+    return out
+
+
 def _pairing_groups_needed(n_players: int, max_group: int = 4,
                            seeded_slots: int = 0, saved_groups: int = 0) -> int:
     """How many slots a sheet needs: enough for every player at the
@@ -72265,6 +72326,15 @@ def generate_event_pairings(
         # Assign final group_num
         for i, g in enumerate(ordered):
             g["group_num"] = i + 1
+
+        # UNUSED TEE TIMES (Kerry 10/26, CoS #2331 A / #2332): more tee
+        # times than groups -> a weeknight keeps the LATEST times, a weekend
+        # the EARLIEST (or the event's own tee_keep). Only when no seed pins
+        # a group to a slot; shotguns are untouched.
+        if (not is_shotgun and slots and len(slots) > len(ordered) and not seed_map[holes]
+                and all(_is_tee_time_slot(x) for x in slots)):
+            for g, lab in zip(ordered, kept_tee_slots(ev, slots, len(ordered))):
+                g["slot_label"] = lab
 
         # Visual denotation feed: tag each player whose confirmed Match
         # Play opponent landed in the same group (rule 8's PAIRINGS-tab

@@ -305,6 +305,22 @@ def _render(version: str, tpl: dict, values: dict) -> tuple[str, str, list]:
 # Build (nothing is sent)
 # ---------------------------------------------------------------------------
 
+RELEASED_LINE = "We're releasing these tee times: {times}."
+
+
+def released_block(ev: dict, db_path=None) -> str:
+    """One line naming each tee time the event holds and its saved sheet does
+    not use (database.released_tee_times), or "" when none."""
+    from email_parser import database as db
+    try:
+        times = db.released_tee_times(ev, db_path=db_path)
+    except Exception:
+        return ""
+    if not times:
+        return ""
+    return f"<p><strong>{_t(RELEASED_LINE.format(times=', '.join(times)))}</strong></p>"
+
+
 def _sent(event_id: int, db_path=None) -> dict:
     try:
         v = json.loads(_setting(SENT_KEY.format(event_id=int(event_id)), db_path) or "{}")
@@ -478,6 +494,12 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
                          "email": rec["to"], "reason": "template missing"})
         else:
             vals = {**common, "first_name": _e(first), "pack_line": _t(PACK_LINE[wk])}
+            # THE RELEASED TEE TIMES (Kerry 10/26, CoS #2331 A / #2332: "let
+            # the course know which ones"): rendered by code under the tee
+            # sheet, inside {tee_sheet}, so the stamped template and its hash
+            # are unchanged.
+            if common["tee_sheet"]:
+                vals["tee_sheet"] = common["tee_sheet"] + released_block(ev, db_path)
             add("course", key, cid, rec.get("to_name"), rec["to"], _render("course", tpl_c, vals),
                 cc=list(rec.get("cc") or []))
 
