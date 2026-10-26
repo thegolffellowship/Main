@@ -18,12 +18,14 @@ From the last score of an event night to the members' results email the next mor
 - one record of what happened;
 - nothing that waits on Kerry unless he chooses to step in.
 
-## 2. When closeout starts (RULED, Kerry, Monday 10/26, CoS #2329 item 5)
+## 2. Live scoring window and when closeout starts (RULED, universal, Monday 10/26)
 
-Kerry: *"I thought I changed it to 15 minutes after last score."*
-- **Closeout starts 15 minutes after the last score of the event.** That's the moment the last card goes final.
-- Closeout means: money recorded and verified, flights, pairings, handicaps, points, recap.
-- Until the Tracker starts it by itself (build queue item 6, #2331), Event Ops' check-in is the trigger, with the 9:08 PM run as the backstop.
+Kerry, verbatim (CoS #2358): *"No! Live scoring turns on one hour before all events and turns off 15 minutes after last score is entered. That is universal for all events and is based per event."*
+Kerry (CoS #2329 item 5): *"I thought I changed it to 15 minutes after last score."*
+- **Every event, on its own clock:** live scoring turns on one hour before its first tee or shotgun and turns off 15 minutes after its last score is entered. That's also the moment the last card goes final.
+- **Closeout starts at that same moment.** The Tracker posts CLOSEOUT START (dial `scoring_window_auto`, ON permanently, live v2.594.0+, #2359). Closeout means: money recorded and verified, flights, pairings, handicaps, points, recap.
+- **The 9:08 PM run stays as the backstop**, and the 5:30 AM catch-up after it.
+- **Fallback only:** if scoring isn't on a few minutes after an event's open time (Tuesday 10/27: 3:15 PM Teravista, 3:35 PM Silverhorn), Event Ops or Track A turns it on by hand and posts it.
 - **The no-push window still closes one hour after the last score** (§2a), not when closeout starts.
 
 ## 2a. The no-push window (RULED, Kerry, CoS #2307 item 1)
@@ -42,12 +44,12 @@ Kerry: *"I thought I changed it to 15 minutes after last score."*
 
 | # | Step | Owner | Trigger |
 |---|---|---|---|
-| 1 | A card goes **final 15 minutes after its group's last score**. No signature needed. A manager may Unlock it, which reopens it for 15 minutes. | Tracker | auto_payouts job, every minute |
+| 1 | A card goes **final 15 minutes after its group's last score** (live scoring for the event turns off 15 minutes after its last score, §2). No signature needed. A manager may Unlock it, which reopens it for 15 minutes. | Tracker | auto_payouts job, every minute |
 | 2 | **Card parity**: the engine and every saved card agree stroke for stroke. Any difference is a SCORING HOLD: money, points and the results email all stop. | Tracker | every publish |
 | 3 | **Entered cards publish** into the scoring record. | Tracker | on publish |
 | 4 | **Money recorded** as PENDING payout rows once every card is final. **One writer** (CoS #1797). It holds on: card parity, a manual payout row, an unconfirmed CTP takeover, or a hold by Event Ops or Kerry. Each hold raises one COO item. | Tracker | auto_payouts job, every minute |
 | 5 | **CTP takeover confirm or reject** (a claim that unseats another group's player). | Kerry or the manager, on Live Scoring | as it happens |
-| 6 | **Verify**: recorded rows = the preview, row for row and in total; cross-check against GAMES, FLIGHTS, pairings and the board. Event Ops **never records, edits or deletes a payout row**; a mismatch is reported to Kerry with the fix. | Event Ops | 15 minutes after the event's last score (§2); today a clock check-in, the Tracker later |
+| 6 | **Verify**: recorded rows = the preview, row for row and in total; cross-check against GAMES, FLIGHTS, pairings and the board. Event Ops **never records, edits or deletes a payout row**; a mismatch is reported to Kerry with the fix. | Event Ops | the CLOSEOUT START post, 15 minutes after the event's last score (§2) |
 | 7 | **Flights settled.** | Event Ops | same |
 | 8 | **Pairing history** written (feeds future pairings). | Event Ops | same |
 | 9 | **Handicap rounds posted**; the handicap recap goes to the managers. No per-player handicap card emails (#1799-4). | Event Ops (preview, then apply) | same |
@@ -88,7 +90,6 @@ Kerry: *"I thought I changed it to 15 minutes after last score."*
 ## 6. Proposed improvements (not part of the standard until Kerry rules)
 
 From `closeout-process-2026-10-20.md` §6:
-- start the closeout from the event (all cards final + 5 minutes), not a clock check-in;
 - Confirm / Reject links by email for CTP takeovers;
 - recaps in the Library, so publishing one needs no deploy;
 - pairing history and handicaps as Tracker steps;
@@ -97,5 +98,5 @@ From `closeout-process-2026-10-20.md` §6:
 ## 7. Questions for Kerry (one at a time)
 
 1. Ratify §2–§4 (including §2a) as the standard?
-2. Keep the 9:00 PM backstop and the 5:30 AM catch-up once closeout starts from the event? (Recommend yes.)
+2. ~~Keep the 9:00 PM backstop?~~ Answered: yes, the 9:08 PM run stays as backstop (CoS #2357).
 3. Should the Tracker post WINDOW OPEN / CLOSED itself, from the event times and the last score?
