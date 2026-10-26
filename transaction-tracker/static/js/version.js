@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.587.0";
+window.TGF_VERSION = "2.588.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.588.0",
+    date: "2026-10-26",
+    title: "One \"Pairings ready to approve\" email per event, right after the 5:00 PM run",
+    changes: [
+      "Kerry 10/26 (CoS #2329 item 1): \"Just once right after 5:00p pairings generation is fine.\" The manager's approve prompt now goes once per event, at the first check after the 5:00 PM pairings run, and never again: the hourly re-prompt after a sheet change is gone. The old email's Approve link still refuses a changed sheet and opens the review page on the current one, and the 7:00 PM auto-approve is unchanged. Dial pairings_approval_prompt still turns the prompt off. Guard test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.587.0",
     date: "2026-10-26",
