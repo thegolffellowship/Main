@@ -839,6 +839,25 @@ _PACE_DDL = """
         UNIQUE (customer_id, round_id));
     CREATE INDEX IF NOT EXISTS idx_se_player_pace_customer ON se_player_pace (customer_id, counts);
     CREATE INDEX IF NOT EXISTS idx_se_player_pace_round ON se_player_pace (round_id);
+
+    -- NO-SHOW (Kerry 9/30 #1021, Pairings Spec v1.4 12.2; built 10/26): the
+    -- scorer's "Player missing" answer per player per round. Also declared
+    -- in migrations/0040_se_no_shows.sql (CREATE IF NOT EXISTS both places).
+    CREATE TABLE IF NOT EXISTS se_no_shows (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id          INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id          INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        customer_id       INTEGER NOT NULL REFERENCES customers(customer_id),
+        status            TEXT NOT NULL CHECK (status IN ('late', 'unknown', 'absent', 'present')),
+        first_asked_hole  INTEGER,
+        last_asked_hole   INTEGER,
+        holes_asked       INTEGER NOT NULL DEFAULT 0 CHECK (holes_asked >= 0),
+        marked_by         INTEGER REFERENCES customers(customer_id),
+        device_id         TEXT,
+        created_at        TEXT NOT NULL,
+        updated_at        TEXT NOT NULL,
+        UNIQUE (round_id, customer_id));
+    CREATE INDEX IF NOT EXISTS idx_se_no_shows_group ON se_no_shows (group_id);
 """
 
 
@@ -1866,6 +1885,166 @@ def card_is_final(final_at: str | None, now: str | None = None) -> bool:
     return fa is not None and fa <= _parse_utc(now or _now())
 
 
+# ---------------------------------------------------------------------------
+# NO-SHOW: the scorer's "Player missing" (Kerry 2026-09-30, mailbox #1021,
+# ratified; Pairings Spec v1.4 12.2; built 10/26 for 10/27). Kerry 9/30:
+# "on the first hole there needs to be an obvious red player missing button
+# at the bottom. Then that opens up a prompt of who it is. Then follows up
+# with the three answers" ... "It should ask each hole until after 4 holes
+# and then the player is taken off card." Then Kerry 10/26, ruling N for
+# both this and the course notice: "Both should be at 3p" -> 3 holes.
+#
+# An ABSENT player is off the card: his blank holes never hold the card going
+# final, and he is left out of the entered-scores feed (so no individual
+# net/gross, MVP, points or handicap round is made from an incomplete card).
+# Not built (Event Ops items 4-5): the per-hole blind for Team / Cart Net and
+# the manager's / scorer's "Move to...". A player marked absent after he has
+# played holes keeps those holes in the audit but they leave the feed too.
+# ---------------------------------------------------------------------------
+
+NO_SHOW_HOLES_SETTING = "no_show_absent_after_holes"
+NO_SHOW_HOLES_DEFAULT = 3          # Kerry 10/26: "Both should be at 3p" (was 4 on 9/30)
+NO_SHOW_ANSWERS = ("late", "unknown", "absent", "present")
+
+
+def no_show_after_holes(db_path=None, conn=None) -> int:
+    """N. With ``conn`` it reads on that connection (the card read is hot:
+    a second connection per phone poll is not worth it)."""
+    from email_parser.database import get_app_setting
+    try:
+        if conn is not None:
+            r = conn.execute("SELECT value FROM app_settings WHERE key = ?", (NO_SHOW_HOLES_SETTING,)).fetchone()
+            raw = r[0] if r else None
+        else:
+            raw = get_app_setting(NO_SHOW_HOLES_SETTING, db_path)
+        v = int(raw or NO_SHOW_HOLES_DEFAULT)
+    except (TypeError, ValueError):
+        v = NO_SHOW_HOLES_DEFAULT
+    return max(1, v)
+
+
+def _no_show_rows(conn, group_id: int = None, round_id: int = None) -> list:
+    q, a = ("group_id = ?", (group_id,)) if group_id is not None else ("round_id = ?", (round_id,))
+    return [dict(r) for r in conn.execute(
+        f"SELECT * FROM se_no_shows WHERE {q} ORDER BY id", a)]
+
+
+def _no_show_state(conn, rows: list, db_path=None) -> dict:
+    """{customer_id: row + effective} where effective is 'absent' when the
+    scorer said so, or after N holes of "don't know yet" (N asks, or N holes
+    the group has scored while he has none)."""
+    if not rows:
+        return {}
+    n = no_show_after_holes(db_path, conn)
+    out = {}
+    by_group: dict = {}
+    for r in rows:
+        eff = r["status"]
+        if eff == "unknown":
+            gid = r["group_id"]
+            if gid not in by_group:
+                by_group[gid] = conn.execute(
+                    "SELECT COUNT(DISTINCT hole_number) FROM se_hole_scores WHERE group_id = ? "
+                    "AND gross IS NOT NULL", (gid,)).fetchone()[0] or 0
+            mine = conn.execute(
+                "SELECT COUNT(*) FROM se_hole_scores WHERE group_id = ? AND subject_key = ? "
+                "AND gross IS NOT NULL", (gid, f"c:{r['customer_id']}")).fetchone()[0] or 0
+            if (r["holes_asked"] or 0) >= n or (mine == 0 and by_group[gid] >= n):
+                eff = "absent"
+        out[int(r["customer_id"])] = {**r, "effective": eff}
+    return out
+
+
+def absent_ids(conn, group_id: int = None, round_id: int = None, db_path=None) -> set:
+    st = _no_show_state(conn, _no_show_rows(conn, group_id=group_id, round_id=round_id), db_path)
+    return {cid for cid, r in st.items() if r["effective"] == "absent"}
+
+
+def mark_player_missing(group_id: int, device_id: str, customer_id: int, answer: str,
+                        hole=None, entered_by=None, db_path=None) -> dict:
+    """The scorer's answer to "Is <Name> coming?" for a player on HIS card.
+    late / unknown / absent; present puts him back ("+ Player"). Only the
+    phone keeping score for this group may answer, only for its own players
+    (the scorer can't take an active player off another card)."""
+    if answer not in NO_SHOW_ANSWERS:
+        return {"error": "answer must be late, unknown, absent or present"}
+    if not device_id:
+        return {"error": "device_id required"}
+    with _closing(_conn(db_path)) as conn:
+        g = _group_ctx(conn, group_id)
+        if not g:
+            return {"error": "no such group"}
+        lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
+                            (group_id,)).fetchone()
+        if not (lock and lock["device_id"] == device_id):
+            return {"error": "Only the phone keeping score for this group can do that."}
+        p = conn.execute("SELECT display_name FROM se_players WHERE group_id = ? AND customer_id = ?",
+                         (group_id, int(customer_id))).fetchone()
+        if not p:
+            return {"error": "That player isn't on this card."}
+        now = _now()
+        cur = conn.execute("SELECT * FROM se_no_shows WHERE round_id = ? AND customer_id = ?",
+                           (g["round_id"], int(customer_id))).fetchone()
+        h = int(hole) if hole not in (None, "") else None
+        if cur:
+            asked = int(cur["holes_asked"] or 0)
+            if answer == "unknown" and h is not None and h != cur["last_asked_hole"]:
+                asked += 1
+            conn.execute(
+                "UPDATE se_no_shows SET status = ?, last_asked_hole = ?, holes_asked = ?, "
+                "marked_by = ?, device_id = ?, updated_at = ? WHERE id = ?",
+                (answer, h if h is not None else cur["last_asked_hole"], asked, entered_by,
+                 device_id, now, cur["id"]))
+        else:
+            conn.execute(
+                "INSERT INTO se_no_shows (round_id, group_id, customer_id, status, first_asked_hole, "
+                "last_asked_hole, holes_asked, marked_by, device_id, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (g["round_id"], group_id, int(customer_id), answer, h, h,
+                 1 if answer == "unknown" else 0, entered_by, device_id, now, now))
+        conn.execute(
+            "INSERT INTO se_audit (round_id, group_id, kind, customer_id, device_id, result, detail, at) "
+            "VALUES (?, ?, 'no_show', ?, ?, ?, ?, ?)",
+            (g["round_id"], group_id, int(customer_id), device_id, answer,
+             f"hole {h}" if h is not None else None, now))
+        _bump(conn, g["event_id"])
+        conn.commit()
+        st = _no_show_state(conn, _no_show_rows(conn, group_id=group_id), db_path)
+    r = st.get(int(customer_id)) or {}
+    return {"ok": True, "customer_id": int(customer_id), "name": p["display_name"],
+            "status": answer, "effective": r.get("effective", answer)}
+
+
+def _card_no_shows(conn, group_id: int, names: dict, db_path=None) -> list:
+    st = _no_show_state(conn, _no_show_rows(conn, group_id=group_id), db_path)
+    return [{"customer_id": cid, "name": names.get(cid), "status": r["status"],
+             "effective": r["effective"], "holes_asked": r["holes_asked"],
+             "last_asked_hole": r["last_asked_hole"]}
+            for cid, r in st.items() if r["status"] != "present"]
+
+
+def event_no_shows(event_id: int, db_path=None) -> dict:
+    """For the course notice (no_show_notice.py): every round of the event,
+    its players marked absent or still "don't know yet", with how many holes
+    their group has scored. Read only."""
+    out = []
+    with _closing(_conn(db_path)) as conn:
+        for r in conn.execute("SELECT id FROM se_rounds WHERE event_id = ?", (int(event_id),)).fetchall():
+            st = _no_show_state(conn, _no_show_rows(conn, round_id=r["id"]), db_path)
+            for cid, row in st.items():
+                if row["effective"] not in ("absent", "unknown"):
+                    continue
+                nm = conn.execute("SELECT display_name FROM se_players WHERE round_id = ? AND customer_id = ?",
+                                  (r["id"], cid)).fetchone()
+                played = conn.execute(
+                    "SELECT COUNT(DISTINCT hole_number) FROM se_hole_scores WHERE group_id = ? "
+                    "AND gross IS NOT NULL", (row["group_id"],)).fetchone()[0] or 0
+                out.append({"customer_id": cid, "name": nm["display_name"] if nm else None,
+                            "status": row["effective"], "group_id": row["group_id"],
+                            "group_holes_played": played})
+    return {"event_id": int(event_id), "no_shows": out}
+
+
 def _group_card_state(conn, group_id: int, db_path=None) -> dict:
     """{last_score_at, complete, final_at, final} for one group."""
     g = _group_ctx(conn, group_id)
@@ -1873,8 +2052,10 @@ def _group_card_state(conn, group_id: int, db_path=None) -> dict:
         return {"last_score_at": None, "complete": False, "final_at": None, "final": False}
     n = conn.execute("SELECT COUNT(*) FROM se_round_holes WHERE round_id = ?",
                      (g["round_id"],)).fetchone()[0] or int(g["holes"] or 0)
+    _absent = absent_ids(conn, group_id=group_id, db_path=db_path)
     subjects = [f"c:{r[0]}" for r in conn.execute(
-        "SELECT customer_id FROM se_players WHERE group_id = ?", (group_id,))]
+        "SELECT customer_id FROM se_players WHERE group_id = ?", (group_id,))
+        if int(r[0]) not in _absent]
     if not subjects:
         subjects = [f"t:{r[0]}" for r in conn.execute(
             "SELECT id FROM se_teams WHERE group_id = ?", (group_id,))]
@@ -2375,6 +2556,8 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
         extras = _card_extras(conn, g, group_id)
         final_at = _group_final_at(conn, group_id, db_path)
         marks = _marks_by_subject(conn, group_id=group_id)
+        no_shows = _card_no_shows(conn, group_id, names, db_path)
+        ns_after = no_show_after_holes(db_path, conn)
         try:
             match_status = _match_status(conn, g)
         except Exception:                 # a match read must never cost the card
@@ -2406,7 +2589,8 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             "marks": marks, "match_status": match_status, "cup_standings": cup, "matches": {str(k): v for k, v in round_matches(g["round_id"]).items()},
             "lock": _lock_view(lock, device_id, names),
             "final_at": final_at, "final": card_is_final(final_at),
-            "lock_minutes": card_lock_minutes(db_path)}
+            "lock_minutes": card_lock_minutes(db_path),
+            "no_shows": no_shows, "no_show_after_holes": ns_after}
 
 
 def claim_group(group_id: int, device_id: str, customer_id: int | None,
@@ -4228,8 +4412,15 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                                             "ORDER BY group_num", (rid,))]
             marks = _marks_by_subject(conn, round_id=rid)
             players = []
+            # NO-SHOW: an absent player is off the card (see absent_ids).
+            _abs = absent_ids(conn, round_id=rid, db_path=db_path)
+            absent = []
             for p in conn.execute("SELECT * FROM se_players WHERE round_id = ? "
                                   "ORDER BY group_id, COALESCE(seat, 99), id", (rid,)):
+                if int(p["customer_id"]) in _abs:
+                    absent.append({"customer_id": p["customer_id"], "name": p["display_name"],
+                                   "group_id": p["group_id"]})
+                    continue
                 d = by_subject.get(f"c:{p['customer_id']}", {"scores": {}, "last": None})
                 players.append({"customer_id": p["customer_id"], "name": p["display_name"],
                                 "group_id": p["group_id"], "tee": p["tee"],
@@ -4288,7 +4479,7 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                                "course_id": r["course_id"],
                                "course": course, "groups": groups, "players": players,
                                "teams": teams, "signoffs": signed, "card_checks": checks,
-                               "ctp": ctp, "hio": hio})
+                               "ctp": ctp, "hio": hio, "absent": absent})
     return {"event_id": event_id, "official": False, "source": "tgf-entry",
             "version": int(vr["version"]) if vr else 0,
             "as_of": (vr["updated_at"] if vr else None) or _now(),

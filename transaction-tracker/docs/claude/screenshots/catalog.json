@@ -648,6 +648,87 @@
    ]
   },
   {
+   "id": "no-show",
+   "title": "Live scoring: a player missing (no-show)",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "current",
+   "version": "branch tb5-no-show (not deployed)",
+   "taken": "2026-10-26",
+   "folder": "no-show-2026-10-26",
+   "source_doc": "docs/claude/score-entry.md (No-show)",
+   "notes": "Kerry 9/30 (#1021): the red Player missing button at the bottom of every hole screen, Who's missing?, the three answers, off the card with + Player, and the one course notice. Rendered from the real score page and card on a throwaway round; nothing is saved or sent.",
+   "watch": [
+    "templates/score_entry.html",
+    "email_parser/no_show_notice.py",
+    "email_parser/score_entry.py::mark_player_missing",
+    "email_parser/score_entry.py::_card_no_shows"
+   ],
+   "steps": [
+    {
+     "file": "1-hole-screen.png",
+     "caption": "Every hole screen: the red Player missing button above Save & Go",
+     "shots": {
+      "mobile": "1-hole-screen.png",
+      "tablet": "1-hole-screen.tablet.png",
+      "desktop": "1-hole-screen.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_hole"
+     }
+    },
+    {
+     "file": "2-whos-missing.png",
+     "caption": "Who's missing? The card's players, never another card's",
+     "shots": {
+      "mobile": "2-whos-missing.png",
+      "tablet": "2-whos-missing.tablet.png",
+      "desktop": "2-whos-missing.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_who"
+     }
+    },
+    {
+     "file": "3-is-he-coming.png",
+     "caption": "Is Ned coming? The three answers",
+     "shots": {
+      "mobile": "3-is-he-coming.png",
+      "tablet": "3-is-he-coming.tablet.png",
+      "desktop": "3-is-he-coming.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_ask"
+     }
+    },
+    {
+     "file": "4-off-the-card.png",
+     "caption": "Off this card: no row, never holds the card; + Player puts him back",
+     "shots": {
+      "mobile": "4-off-the-card.png",
+      "tablet": "4-off-the-card.tablet.png",
+      "desktop": "4-off-the-card.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_absent"
+     }
+    },
+    {
+     "file": "5-course-notice.png",
+     "caption": "The one course notice after 3 holes, manager CC'd",
+     "shots": {
+      "mobile": "5-course-notice.png",
+      "tablet": "5-course-notice.tablet.png",
+      "desktop": "5-course-notice.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_course_notice"
+     }
+    }
+   ],
+   "watch_hash": "4b36f761655935df"
+  },
+  {
    "id": "score-entry-match-pickup",
    "title": "Live scoring: match play and picked-up balls",
    "area": "Live scoring",

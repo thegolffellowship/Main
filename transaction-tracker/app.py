@@ -2470,6 +2470,27 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # THE COURSE NO-SHOW NOTICE (Kerry 9/30 #1021; Event Ops no-show item 3):
+    # once a scorer's no-show's group has played 3 holes, ONE email per event
+    # to the course contact, manager CC'd, naming every no-show. Dial
+    # no_show_course_notice (on unless off). email_parser/no_show_notice.py.
+    def no_show_notice_job():
+        from email_parser.no_show_notice import check as _ns
+        try:
+            res = _ns()
+            if res.get("events"):
+                logger.info("No-show notice: %s", res["events"])
+        except Exception:
+            logger.exception("No-show notice failed (non-fatal)")
+    scheduler.add_job(
+        no_show_notice_job,
+        "cron", minute="2-59/5",
+        timezone="US/Central",
+        id="no_show_notice",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # SAME-NIGHT ADMIN PAYOUT REPORT (Kerry 2026-10-26, CoS #2329 item 6):
     # once every event dated today is closed (closeout_final_check final),
     # one email to Kerry with a link to PAYMENTS. Every 15 min, 5:00 PM to
@@ -13103,6 +13124,25 @@ def api_se_sign():
     kind = "scorekeeper" if b.get("kind") == "scorekeeper" else "player"
     try:
         res = sign_card(gid, str(b.get("device_id") or ""), int(b["customer_id"]), kind=kind)
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "customer_id is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/missing", methods=["POST"])
+@perf.timed_route("se_missing")
+def api_se_missing():
+    """NO-SHOW (Kerry 9/30 #1021): the scorer's "Player missing" answer for a
+    player on his own card: late / unknown / absent, or present ("+ Player")."""
+    from email_parser.score_entry import mark_player_missing
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    try:
+        res = mark_player_missing(gid, str(b.get("device_id") or ""), int(b["customer_id"]),
+                                  str(b.get("answer") or ""), hole=b.get("hole"),
+                                  entered_by=b.get("who"))
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "customer_id is required"}), 400
     return (jsonify(res), 400) if "error" in res else jsonify(res)
