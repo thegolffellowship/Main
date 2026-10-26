@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.602.2";
+window.TGF_VERSION = "2.602.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.602.3",
+    date: "2026-10-26",
+    title: "Tee times: the open-spots email goes to invitees, not to seated players; the manager line says when it really went",
+    changes: [
+      "Kerry 10/26 (CoS #2386): \"Why would there be a spots still open register box sent to those that are already paid and seated? The point is to fill our open spots.\" and, on the mockup (#2387), \"That works. Send it to build and deploy.\" A fourth tee-times version, open spots, goes at the same moment as the other three and only while the saved sheet has open seats: to invitees who are not on the sheet, have not said Can't make it, have not opted out and are not known mail scanners. Subject \"3 spots open at Silverhorn tomorrow, 4:30 PM shotgun\"; an orange box with the count, course, date, holes, start and a Register button; the live sheet with each empty seat as \"Open spot\"; the approved footer with Stop event invitations. Its words are in code (teetimes_email.OPEN) and its stamp is their hash (teetimes_open_spots_approved). Seated players get their tee times with no Register box. Once per person per event under the same claim guard.",
+      "The manager copy said \"This went to the players and the course at 7:00 PM\" after a 5:16 PM approval (CoS #2386-2). It now names the time the players' or course's email actually went, in 12-hour Central. That line is part of the manager wording's stamp, so the stamp moves with it."
+    ]
+  },
   {
     version: "2.602.2",
     date: "2026-10-26",
