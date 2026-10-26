@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.582.2";
+window.TGF_VERSION = "2.583.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.583.0",
+    date: "2026-10-26",
+    title: "RSVP payment deadline: the 1:00 PM warning and the 4:50 PM release, sent by the Tracker",
+    changes: [
+      "Kerry 10/26: \"I want the last 'warning' email to go out ... at 1:00p ... And then the 5:00p email if he hasn't made payment\" ... \"Those should be automated emails sent thru the tracker based on our RSVP rules\" (CoS #2307 item 4). On an event's lock day (the day the 5:00 PM pairings run builds it: Monday for a Tuesday nine), every unpaid RSVP-only player gets one email from 1:00 PM: pay by 5:00 PM or the spot is released. At 4:50 PM, before the pairings run, anyone still unpaid who was warned is taken off the roster and gets one email saying so, with the registration button in case a seat is open.",
+      "Rules and safeguards. The release is the Events page's own not-playing mark, so nothing is deleted and it can be undone on the page; paying later puts them back as registered. Known mail scanners are never emailed, nobody who RSVPs after the last warning is released, and shop $0 RSVP-only order rows are left for a person (one COO item). Each email goes once per person per event, and every send and release is logged. Dial rsvp_deadline_auto; read-only bridge scoring-rsvp-deadline; guard test_rsvp_deadline.py. Both emails are in Screens on all three devices."
+    ]
+  },
   {
     version: "2.582.2",
     date: "2026-10-26",

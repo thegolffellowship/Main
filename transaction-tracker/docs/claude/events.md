@@ -111,6 +111,23 @@ Kerry: "our standard template for those unpaid DOES include the link. We need to
 
 Guard: `test_payment_reminder.py`.
 
+## RSVP payment deadline — the lock-day warning and release (v2.583.0, Kerry 2026-10-26)
+
+Kerry: "I want the last 'warning' email to go out ... at 1:00p to let him know we haven't received payment, and the implications if not received by 5:00p. And then the 5:00p email if he hasn't made payment" ... "Those should be automated emails sent thru the tracker based on our RSVP rules." (CoS #2307 item 4.)
+
+`email_parser/rsvp_deadline.py`, job `rsvp_deadline` (every 10 minutes, 1:00-4:59 PM Central), dial `rsvp_deadline_auto` (on unless `off`).
+
+- **Which events:** the ones whose groups the 5:00 PM pairings run builds today (`lock_targets`, the same weekday dial and lead as `auto_generate_pairings`): Monday for a Tuesday nine, two days ahead for a dialled Saturday. Events in `payment_reminder_exclude_events` are skipped.
+- **Who:** everyone the Events page shows as RSVP-only (`payment_reminder.rsvp_only_people`), minus known mail scanners (`invitations.known_scanner`) and anyone with no email.
+- **WARN, from 1:00 PM:** one email: pay by 5:00 PM or the spot is released. It uses the payment reminder's frame, variables and holds.
+- **RELEASE, 4:50-4:59 PM, before the pairings run:** anyone still RSVP-only who WAS warned is taken off the roster and gets one email. The roster mark is the Events page's own `rsvp_email_overrides` not_playing, so nothing is deleted and it can be undone on the page. A later registration puts them back as registered.
+  - Someone who RSVPs after the last warning is never released.
+  - A shop $0 RSVP-only order row is never touched. It raises one COO item `RSVP DEADLINE: <event>`.
+- **Once each:** once per person per event per kind (`rsvp_deadline_sent:<event_id>`). Sends are logged in message_log with event_id and customer_id; releases in agent_action_log (`rsvp_deadline_release`).
+- **Read-only bridge:** `scoring-rsvp-deadline:<event_id>|warn|release` shows who would get each email now, with a sample.
+- **Guard:** `test_rsvp_deadline.py`.
+- **Still open:** text messages (Twilio), and auto-seating someone who pays after lock (seat-fill, #2310).
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)

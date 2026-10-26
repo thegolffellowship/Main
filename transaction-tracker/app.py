@@ -1688,6 +1688,20 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # RSVP PAYMENT DEADLINE (Kerry 2026-10-26, CoS #2307 item 4): on an
+    # event's lock day, the 1:00 PM warning to unpaid RSVP-only players and
+    # the 4:50 PM release before the 5:00 PM pairings run.
+    # email_parser/rsvp_deadline.py, dial rsvp_deadline_auto.
+    scheduler.add_job(
+        rsvp_deadline_job,
+        "cron",
+        hour="13-16",
+        minute="*/10",
+        timezone="US/Central",
+        id="rsvp_deadline",
+        replace_existing=True,
+    )
+
     coo_email_to = os.getenv("COO_EMAIL_TO")
     if coo_email_to:
         scheduler.add_job(
@@ -6500,6 +6514,16 @@ def send_due_print_packs_job():
             logger.info("print packs: %s", res)
     except Exception:
         logger.exception("print pack routine failed")
+
+
+def rsvp_deadline_job():
+    from email_parser.rsvp_deadline import tick
+    try:
+        res = tick()
+        if res:
+            logger.info("rsvp deadline: %s", res)
+    except Exception:
+        logger.exception("rsvp deadline failed")
 
 
 def auto_generate_pairings_job():

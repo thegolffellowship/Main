@@ -166,6 +166,38 @@
    ]
   },
   {
+   "id": "rsvp-deadline",
+   "title": "RSVP payment deadline: 1:00 PM warning and 4:50 PM release",
+   "area": "Invitations & member emails",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.583.0",
+   "taken": "2026-10-26",
+   "folder": "rsvp-deadline-2026-10-26",
+   "source_doc": "docs/claude/events.md (RSVP payment deadline)",
+   "notes": "Kerry 10/26: the lock-day warning to unpaid RSVP-only players, and the release email if payment isn't in. Sent by the Tracker (email_parser/rsvp_deadline.py).",
+   "steps": [
+    {
+     "file": "1-warning-1pm.png",
+     "caption": "1:00 PM on the lock day: pay by 5:00 PM or the spot is released",
+     "shots": {
+      "mobile": "1-warning-1pm.png",
+      "tablet": "1-warning-1pm.tablet.png",
+      "desktop": "1-warning-1pm.desktop.png"
+     }
+    },
+    {
+     "file": "2-released-450pm.png",
+     "caption": "4:50 PM, still unpaid: the spot is released",
+     "shots": {
+      "mobile": "2-released-450pm.png",
+      "tablet": "2-released-450pm.tablet.png",
+      "desktop": "2-released-450pm.desktop.png"
+     }
+    }
+   ]
+  },
+  {
    "id": "events-leaderboard-batch1",
    "title": "Events leaderboard, batch 1",
    "area": "Leaderboard",

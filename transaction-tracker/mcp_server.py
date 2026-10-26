@@ -1779,6 +1779,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-rsvp-deadline:<event_id>|warn|release  who the lock-day 1:00 PM warning / 4:50 PM release would reach now, with a sample (read-only)
       scoring-unsubscribes[:<hours>][|refresh]  who unsubscribed (Tracker invitations + Brevo Insider) in the last <hours>, default 24 (read-only toward Brevo)
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
       scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
@@ -4170,6 +4171,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             db.set_app_setting(_k.strip(), _v.strip())
             return json.dumps({"key": _k.strip(), "value": _v.strip(),
                                "saved": True})
+        if cmd == "scoring-rsvp-deadline":
+            # "<event_id>|warn|release" (Kerry 10/26, CoS #2307 item 4): who
+            # the 1:00 PM warning / 4:50 PM release would reach right now,
+            # with a sample. Read-only: the scheduler job sends.
+            from email_parser import rsvp_deadline as _rd
+            _a = [x.strip() for x in (arg or "").split("|")]
+            if len(_a) < 2 or not _a[0].isdigit():
+                return json.dumps({"error": "usage: scoring-rsvp-deadline:<event_id>|warn|release"})
+            return json.dumps(_rd.run(int(_a[0]), _a[1], confirm=False), indent=2, default=str)
         if cmd == "scoring-unsubscribes":
             # "[<hours>][|refresh]" (Kerry 10/23): who unsubscribed from Tracker
             # invitations or the Brevo Insider list in the last <hours>
