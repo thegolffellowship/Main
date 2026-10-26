@@ -205,6 +205,28 @@ check("a player with too few span saves is partial", P[104]["flag_partial"] == 1
 check("a player saved in two groups is regrouped, kept in the larger",
       P[120]["flag_regrouped"] == 1 and P[120]["group_id"] == g6 and P[120]["counts"] == 0, P[120])
 
+print("stray saves (Database #2261): the 10/20 TPC 4:20 PM group")
+_T = {1: "21:32:55", 2: "21:56:27", 3: "22:07:53", 4: "22:22:57", 5: "22:38:47",
+      6: "22:58:51", 7: "23:16:11", 8: "23:29:26", 9: "23:45:22"}
+def _subj(h9):
+    hs = {str(h): {"at": f"2026-10-20T{t}Z", "client_ts": None, "device_id": "phone"} for h, t in _T.items()}
+    hs["9"]["at"] = f"2026-10-20T{h9}Z"
+    return {"holes": hs}
+_g = {"group_id": 1779, "start_hole": 1, "tee_time": "4:20 PM", "takeovers": 0,
+      "customer_ids": [88, 808, 6, 817],
+      "subjects": {"c:88": _subj("21:56:09"), "c:808": _subj("21:56:09"),
+                   "c:6": _subj("23:45:22"), "c:817": _subj("23:45:22")}}
+_r = se._group_pace(_g, list(range(1, 10)), se.pace_dials(), 9)
+check("two hole-9 saves made during hole 2 are strays: 16.6 min over 7 holes, clean",
+      (_r["status"], _r["holes_timed"], _r["seconds_per_hole"], _r["strays"], _r["end_moved"])
+      == ("clean", 7, 999, 2, 0), {k: _r.get(k) for k in ("status", "holes_timed", "seconds_per_hole", "strays", "end_moved")})
+_g2 = {**_g, "subjects": {"c:42": {"holes": {**_subj("23:45:22")["holes"],
+                                              "5": {"at": "2026-10-20T23:40:00Z", "client_ts": None, "device_id": "phone"}}},
+                          "c:6": _subj("23:45:22")}}
+_r2 = se._group_pace(_g2, list(range(1, 10)), se.pace_dials(), 9)
+check("a hole re-saved late drops only that hole (not every hole after it)",
+      _r2["strays"] == 1 and _r2["holes_timed"] == 7, {k: _r2.get(k) for k in ("strays", "holes_timed", "status")})
+
 print("rebuild")
 dry = se.rebuild_pace(rid)
 n_rows = conn.execute("SELECT COUNT(*) FROM se_player_pace").fetchone()[0]

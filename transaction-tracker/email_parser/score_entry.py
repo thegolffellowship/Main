@@ -3707,7 +3707,7 @@ def hole_save_times(round_id: int, db_path=None) -> dict:
 # and rebuilt by rebuild_pace (the only writer). Staff only: nothing here
 # reaches a member payload, and nothing here writes customers.pace_rating.
 # ---------------------------------------------------------------------------
-PACE_METHOD_VERSION = 1
+PACE_METHOD_VERSION = 2  # 2: stray saves dropped (Database #2261, 10/26)
 PACE_METHOD_NOTE = ("Method: first hole to second-to-last; catch-ups spread; "
                     "last hole not used. Flagged groups are shown, not counted.")
 # Code defaults; each is overridable by ONE app_settings key of the same name
@@ -3845,13 +3845,34 @@ def _audit_first_saves(conn, r) -> dict:
             "groups": list(groups.values())}
 
 
+def _in_order(saves: list) -> list:
+    """The longest run of (pos, hole, t, ...) saves, in play order, whose
+    times never go backwards. Ties keep the earlier holes."""
+    n = len(saves)
+    best, prev = [1] * n, [-1] * n
+    for i in range(n):
+        for j in range(i):
+            if saves[j][2] <= saves[i][2] and best[j] + 1 > best[i]:
+                best[i], prev[i] = best[j] + 1, j
+    if not n:
+        return []
+    i = max(range(n), key=lambda k: (best[k], -k))
+    out = []
+    while i >= 0:
+        out.append(saves[i])
+        i = prev[i]
+    return out[::-1]
+
+
 def _group_pace(g: dict, holes: list, dials: dict, n_holes: int) -> dict:
     """Kerry's rule (#2084 §1) for ONE group. Times are epoch seconds."""
     batch_s, clock_s = dials["pace_batch_seconds"], dials["pace_clock_seconds"]
     order = _play_order(holes, g["start_hole"])
     pos = {h: i for i, h in enumerate(order)}
     per_hole, clock_bad, mgr_only = {}, set(), {}
+    strays = 0
     for s in g["subjects"].values():
+        saves = []
         for hk, v in s["holes"].items():
             h = int(hk)
             if h not in pos:
@@ -3859,21 +3880,31 @@ def _group_pace(g: dict, holes: list, dials: dict, n_holes: int) -> dict:
             at, ct = _epoch(v["at"]), _epoch(v["client_ts"])
             if at is None:
                 continue
-            t = at
+            t, bad = at, False
             if ct is not None:
                 if abs(ct - at) <= clock_s:
                     t = ct
                 else:
-                    clock_bad.add(h)
+                    bad = True
+            saves.append((pos[h], h, t, bad, str(v.get("device_id") or "").lower()))
+        # STRAY SAVES (Database #2261, the 10/20 4:20 PM group): a player's
+        # saves must run forward in play order. Keep the longest run that
+        # does, and drop the rest: a hole saved by mistake early (hole 9
+        # during hole 2) or re-saved late (hole 5 fixed after hole 9).
+        kept = _in_order(sorted(saves))
+        strays += len(saves) - len(kept)
+        for _p, h, t, bad, dev in kept:
+            if bad:
+                clock_bad.add(h)
             per_hole.setdefault(h, []).append(t)
-            dev = str(v.get("device_id") or "").lower()
             mgr_only[h] = mgr_only.get(h, True) and dev.startswith(_MANAGER_DEVICE_PREFIXES)
     pts = [(pos[h], _median(per_hole[h]), h) for h in order if h in per_hole]
     out = {"group_id": g["group_id"], "start_hole": g["start_hole"], "tee_time": g["tee_time"],
            "takeovers": g["takeovers"], "customer_ids": list(g["customer_ids"]),
            "holes_timed": 0, "seconds_per_hole": None, "span_seconds": None,
            "start_moved": 0, "end_moved": 0, "batches": 0, "hole_seconds": {},
-           "span_holes": [], "flags": [], "first_hole": pts[0][2] if pts else None,
+           "span_holes": [], "flags": [], "strays": strays,
+           "first_hole": pts[0][2] if pts else None,
            "last_hole": pts[-1][2] if pts else None}
     if not pts:
         out["flags"].append("few_holes")

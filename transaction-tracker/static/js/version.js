@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.579.3";
+window.TGF_VERSION = "2.580.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.580.0",
+    date: "2026-10-26",
+    title: "Pace of play, measured (migration 0037), with stray saves dropped",
+    changes: [
+      "Kerry 10/19 (#2073, #2092): pace is measured per group from the first save of each hole on the phones, and every player in the group carries that number. Migration 0037 adds the derived tables se_group_pace and se_player_pace, rebuilt each morning at 6:41 from se_audit. The manager pace report (fastest first, hole by hole) stays off until dial pace_report_send is on. Pace is suggest-only: nothing writes a player's 1/2/3 pace rating.",
+      "Stray saves (Database #2261, Kerry 10/26 \"work on the pace branch\"): each player's saves must run forward in play order. The longest run that does is kept and the rest are dropped and counted (strays). On 10/20 at TPC, two cards in the 4:20 PM group saved hole 9 during hole 2; that read 16.9 min/hole over 6 holes (adjusted) and now reads 16.6 over 7 (clean). Method version 2. Guard test_pace.py."
+    ]
+  },
   {
     version: "2.579.3",
     date: "2026-10-25",

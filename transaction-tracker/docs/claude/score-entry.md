@@ -749,6 +749,11 @@ entry_split #2103, names not group numbers #2096, suggest only #2100.
   time, else the server time and flag `clock`. Several players saving the
   same hole: the median of their first saves.
 - Holes in PLAY order from `se_groups.start_hole`, wrapping on a shotgun.
+- STRAY SAVES (method v2, Database #2261, Kerry's OK 10/26): before the
+  median, each player's saves must run forward in play order; the longest
+  run that does is kept and the rest dropped (`strays` on the group). The
+  case: 10/20 TPC 4:20 PM, two cards saved hole 9 during hole 2, which
+  read as 16.9 over 6 adjusted instead of 16.6 over 7 clean.
 - A run of gaps under `pace_batch_seconds` (negative gaps included) is a
   catch-up: its holes share the time evenly. Hole 1 saved with hole 2 moves
   the start anchor to the end of that batch; the second-to-last saved with
