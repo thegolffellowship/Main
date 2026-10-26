@@ -4496,12 +4496,18 @@ def init_db(db_path: str | Path | None = None) -> None:
             (
                 "Payment Reminder", "email",
                 "Payment Reminder — {event_name}",
+                # v2.581.0, mockup 3 (Kerry 10/26): the place and date, the
+                # button, a plain link to who's registered, the manager's
+                # line. email_parser/payment_reminder.py frames it.
                 "<p>Hi {player_name},</p>"
                 "<p>This is a friendly reminder that we have you down for "
-                "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+                "<strong>{event_place} on {event_date_long}</strong>, but we haven't "
+                "received your payment yet.</p>"
                 "<p>You can take care of it right here:</p>"
                 "{pay_button}"
-                "<p>Thanks,<br>The Golf Fellowship</p>",
+                "<p>{roster_link}</p>"
+                "<p>Questions? Text {manager_name} at {manager_phone}.</p>"
+                "<p>Thanks,<br>{manager_name}<br>The Golf Fellowship</p>",
                 None,
             ),
             (
@@ -48097,6 +48103,14 @@ _PRIOR_SYSTEM_TEMPLATE_BODIES = {
         "<p>This is a friendly reminder that we have you down for "
         "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
         "<p>Please complete your registration at your earliest convenience.</p>"
+        "<p>Thanks,<br>The Golf Fellowship</p>",
+        # v2.399.0 → v2.581.0 (Kerry 10/26, mockup 3). Verified against
+        # production before this shipped: id 1, 248 chars, this string.
+        "<p>Hi {player_name},</p>"
+        "<p>This is a friendly reminder that we have you down for "
+        "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+        "<p>You can take care of it right here:</p>"
+        "{pay_button}"
         "<p>Thanks,<br>The Golf Fellowship</p>",
     },
     # v2.344.0 → v2.345.0: Kerry trimmed the second paragraph to one line
