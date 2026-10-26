@@ -266,6 +266,28 @@ with db._connect(DB) as conn:
 check("restore puts them back on, clears the no and the reason", done_.get("applied")
       and 770002 not in inv._opted_out(DB) and left == 0
       and all(x["customer_id"] != 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), done_)
+print("6f1. Kerry 10/26: take back an I'm in a mail scanner gave (Logan Billeaud)")
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770001",))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, customer_id) "
+                 "VALUES (?, 'Ann Test', 'PLAYING', '2026-10-26T12:06:00Z', 's9.98 INVITE LINKS', 770001)",
+                 (f"tracker:{EV}:770001",))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, customer_id) "
+                 "VALUES ('gg-keep-1', 'Ann Test', 'PLAYING', '2026-10-01T12:00:00Z', 's9.98 INVITE LINKS', 770001)")
+    conn.commit()
+db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), json.dumps({"770001": "2026-10-26T12:06:00Z"}), db_path=DB)
+check("unplay refuses without Kerry's word", "refused" in inv.remove_playing([770001], 999999, True, db_path=DB))
+_d = inv.remove_playing([770001], kpost, db_path=DB)
+check("unplay dry run lists the Tracker row only", _d.get("dry_run")
+      and [r["email_uid"] for r in _d["playing_rows_removed"]] == [f"tracker:{EV}:770001"], _d)
+_a = inv.remove_playing([770001], kpost, confirm=True, db_path=DB)
+with db._connect(DB) as conn:
+    _left = [r[0] for r in conn.execute("SELECT email_uid FROM rsvps WHERE customer_id = 770001 AND response = 'PLAYING'")]
+check("unplay removes the Tracker PLAYING row and the click, keeps a Golf Genius RSVP",
+      _a.get("applied") and _left == ["gg-keep-1"]
+      and "770001" not in json.loads(db.get_app_setting(inv.CLICKS_KEY.format(event_id=EV), db_path=DB) or "{}"), (_a, _left))
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE email_uid = 'gg-keep-1'"); conn.commit()
 print("6f2. Kerry 10/20: restore with keep_answers leaves the real answers")
 db.set_app_setting(inv.OPTOUT_KEY, json.dumps([770002]), db_path=DB)
 cl.post(f"/rsvp/{inv.make_token(770002, EV, 'out', date(2026, 12, 15))}", headers={"X-Requested-With": "fetch"})

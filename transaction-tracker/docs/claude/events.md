@@ -162,6 +162,7 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   undoes answers a person did not give: back on invitations, their Tracker
   NOT PLAYING rows and decline reasons on upcoming events removed. With
   `|keep-answers` (Kerry 10/20, Lou Schneider: his Can't make it was real,
+  `0|unplay|<post>|<cids>[|confirm]` (Kerry 10/26, Logan Billeaud) takes back Tracker PLAYING rows and noted I'm in clicks that a mail scanner gave past the 2-minute grace; nothing else is touched.
   only the Remove me was a mistake) it only puts them back on invitations
   and leaves every answer and reason as it is.
 - **Scanner filter (Kerry 10/14: "yes on the scanner filter", CoS #1793/#1794).**

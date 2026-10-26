@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.580.0";
+window.TGF_VERSION = "2.580.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.580.1",
+    date: "2026-10-26",
+    title: "Take back an I'm in a mail scanner gave",
+    changes: [
+      "Kerry 10/26: \"Logan Billeaud is falsely being added as RSVP for events ... remove him from his I'm playing RSVPs.\" His work mail filter opens the I'm in link a few minutes after each 7 AM send. Four times it fell inside the 2-minute scanner window and was ignored; three times (10/16, 10/23, 10/25) it fell just outside and was recorded as PLAYING. That put him on rosters as RSVP-only. New bridge scoring-event-invite 0|unplay|<kerry-ok post>|<cid,...>[|confirm] (invitations.remove_playing): dry run by default, needs Kerry's word on the mailbox. It deletes only that person's Tracker PLAYING rows and noted I'm in clicks; registrations, Golf Genius RSVPs and Can't make it answers are never touched. Logged. Guard test_invitations.py."
+    ]
+  },
   {
     version: "2.580.0",
     date: "2026-10-26",

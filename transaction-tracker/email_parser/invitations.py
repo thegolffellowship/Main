@@ -1136,6 +1136,53 @@ def _deliver(ev: dict, pl: dict, db_path=None) -> dict:
     return {"sent": sent, "failed": failed, "held": held}
 
 
+def remove_playing(customer_ids, kerry_ok_post, confirm: bool = False, db_path=None) -> dict:
+    """Take back Tracker I'm in answers a person did not give (Kerry 10/26,
+    Logan Billeaud: "falsely being added as RSVP ... remove him from his I'm
+    playing RSVPs"; a mail scanner tapping I'm in a few minutes after the
+    send). Deletes each person's Tracker PLAYING rows (`tracker:<event>:<cid>`)
+    and their noted I'm in clicks. A registration, a Golf Genius RSVP and any
+    Can't make it are never touched. Kerry's word on the mailbox; dry run
+    unless confirm."""
+    from email_parser import database as db
+    from email_parser.customer_query import _kerry_ok
+    cids = sorted({int(c) for c in customer_ids})
+    if not cids:
+        return {"error": "no customer ids"}
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+        if not ok:
+            return {"refused": f"rule 3b: {why}"}
+        marks = ",".join("?" * len(cids))
+        rows = [dict(r) for r in conn.execute(
+            f"SELECT email_uid, customer_id, matched_event, event_date, received_at FROM rsvps "
+            f"WHERE customer_id IN ({marks}) AND response = 'PLAYING' "
+            f"AND substr(email_uid, 1, 8) = 'tracker:' ORDER BY event_date",
+            tuple(cids)).fetchall()]
+        out = {"authority": why, "customer_ids": cids, "playing_rows_removed": rows}
+        if confirm is not True:
+            return {**out, "dry_run": True}
+        for r in rows:
+            conn.execute("DELETE FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
+                         (r["email_uid"],))
+        conn.commit()
+    finally:
+        conn.close()
+    for eid in {int(r["email_uid"].split(":")[1]) for r in rows}:
+        key = CLICKS_KEY.format(event_id=eid)
+        try:
+            clicks = json.loads(_setting(key, db_path) or "{}")
+            for c in cids:
+                clicks.pop(str(c), None)
+            db.set_app_setting(key, json.dumps(clicks), db_path=db_path)
+        except Exception:
+            logger.exception("invitations: could not drop a noted click")
+    db.log_agent_action("mcp-claude", "event_invite_remove_playing",
+                        f"post {kerry_ok_post}: customers {cids}, {len(rows)} row(s)")
+    return {**out, "applied": True}
+
+
 def restore_answers(customer_ids, kerry_ok_post, confirm: bool = False, keep_answers: bool = False,
                     db_path=None) -> dict:
     """Undo answers that a person did not give (Kerry 10/14: "Yes, restore
