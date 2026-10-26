@@ -257,7 +257,7 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
         f"<p>Hi {_e(mgr['name'] or 'there')},</p>"
         f"<p>The pairings for <b>{_e(ev['name'])}</b> ({_e(ev['date'])}, {_e(ev['course'])}) are ready. "
         f"Please review and approve them. When you approve, the tee-times email goes to the players, "
-        f"the course and you (at 7:00 PM if nobody approves); "
+        f"the course and you (at 7:00 PM the evening before play if nobody approves); "
         f"their full Event Info email goes at {info_time()} on event day: "
         f"<b>{c.get('ready', 0)} players</b>"
         + (f", {c.get('held')} held" if c.get("held") else "") + ".</p>"
@@ -309,8 +309,26 @@ def prompt_check(now=None, db_path=None) -> dict:
     from email_parser import database as db
     if (get_app_setting(DIAL, db_path=db_path) or "").strip().lower() in ("0", "off", "false"):
         return {"status": "off"}
+    # Due = its lock has passed (database.event_lock_at: Kerry 10/26, a
+    # weekend event locks three days before, so its prompt comes then, not
+    # the evening before play), plus the old "tomorrow from 5:00 PM" set.
+    if now is None:
+        from email_parser.timezone_utils import now_central
+        now = now_central()
+    from datetime import timedelta as _td
+    near = set(due_event_ids(now, db_path))
+    due = list(near)
+    with db._connect(db_path) as conn:
+        _rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM events WHERE COALESCE(status, 'active') = 'active' "
+            "AND substr(event_date, 1, 10) >= ? AND substr(event_date, 1, 10) <= ?",
+            (now.date().isoformat(), (now.date() + _td(days=7)).isoformat()))]
+    for _ev in _rows:
+        _lock = db.event_lock_at(_ev, db_path)
+        if _lock is not None and _lock <= now and int(_ev["id"]) not in near:
+            due.append(int(_ev["id"]))
     out = {}
-    for eid in due_event_ids(now, db_path):
+    for eid in due:
         try:
             with db._connect(db_path) as conn:
                 ev = dict(conn.execute("SELECT id, item_name, event_date, status FROM events WHERE id = ?",
@@ -330,7 +348,8 @@ def prompt_check(now=None, db_path=None) -> dict:
             if st.get("prompted_at") or st.get("prompted_fp"):
                 out[eid] = {"skipped": "already prompted once for this event"}
                 continue
-            ensure_live_scoring(eid, db_path=db_path)
+            if eid in near:
+                ensure_live_scoring(eid, db_path=db_path)
             out[eid] = send_prompt(eid, db_path)
         except Exception as exc:
             logger.exception("pairings approval prompt failed for %s", eid)

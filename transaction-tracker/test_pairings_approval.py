@@ -115,6 +115,19 @@ check("an approved sheet is never prompted again, even on a resend (Kerry 10/19)
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
 db.set_app_setting(pa.DIAL, "0", db_path=DB)
 check("dial off: no prompts", pa.prompt_check(mon_5_05, DB) == {"status": "off"})
+db.set_app_setting(pa.DIAL, "", db_path=DB)
+print("2c. A weekend event is prompted at ITS lock, three days before (Kerry 10/26)")
+WE = 9303
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, start_time, course) "
+                 "VALUES (?, 's18.60 SA SATURDAY', '2026-10-24', 'San Antonio', 'active', '18 Holes', 'Tee Times', '08:00', 'Test GC')", (WE,))
+    conn.commit()
+db.save_event_pairings(WE, {"18": SHEET["9"]}, db_path=DB)
+SENT.clear()
+pa.prompt_check(datetime(2026, 10, 21, 16, 55), DB)
+check("Wednesday 4:55 PM: not yet", not pa.event_state(WE, DB).get("prompted_at"))
+r_we = pa.prompt_check(datetime(2026, 10, 21, 17, 5), DB)
+check("Wednesday 5:05 PM: the Saturday event's manager is prompted", bool(pa.event_state(WE, DB).get("prompted_at")), r_we.get("events", {}).get(WE))
 
 print("3b. 7 PM locks, 7 AM sends the Event Info email (Kerry 10/19)")
 db.set_app_setting(pa.DIAL, "1", db_path=DB)

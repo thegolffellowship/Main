@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.595.0";
+window.TGF_VERSION = "2.596.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.596.0",
+    date: "2026-10-26",
+    title: "The \"Pairings ready to approve\" email follows the event's lock (weekend events: three days before)",
+    changes: [
+      "With weekend events now locking three days before (Kerry 10/26), the manager's one approve prompt goes right after that lock: a Saturday event's manager hears Wednesday after 5:00 PM, not Friday evening. Approving early signs off the sheet only; the tee-times email still goes the evening before play and the Event Info at 6:00 AM on event day. The prompt now says \"at 7:00 PM the evening before play if nobody approves\". Guard test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.595.0",
     date: "2026-10-26",
