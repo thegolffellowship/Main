@@ -205,6 +205,39 @@ with db._connect(DB) as conn:
                         "WHERE sent_by LIKE 'teetimes_%' AND sent_by <> 'teetimes_email'").fetchall()
 check("every send logged with event_id and customer_id",
       len(rows) == 6 and all(x[0] == EV and x[1] for x in rows), [tuple(x) for x in rows])
+# 10/26 5:16 PM: the approval and the job delivered the same approved sheet
+# at once and every Silverhorn email went twice. Two senders racing now send
+# each message exactly once.
+import threading, time as _time
+key = tt.SENT_KEY.format(event_id=EV)
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM app_settings WHERE key = ? OR key LIKE ?", (key, f"teetimes_claim:{EV}:%"))
+    conn.commit()
+SENT.clear()
+def slow_send(**kw):
+    _time.sleep(0.05)
+    SENT.append(kw)
+    return True
+fetcher.send_mail_graph = slow_send
+ths = [threading.Thread(target=tt._deliver, args=(EV, DB), kwargs={"now": datetime(2026, 10, 26, 19, 0)})
+       for _ in range(2)]
+[t.start() for t in ths]
+[t.join() for t in ths]
+fetcher.send_mail_graph = fake_send
+to = sorted(s["to_address"] for s in SENT)
+check("two senders at once: each email goes exactly once (10/26 double send)",
+      to == sorted(["ann@example.test", "bob@example.test", "cal@example.test", "eve@example.test",
+                    "kerry@thegolffellowship.com", "chris@course.example.test"]), to)
+check("and the sent map records all six", len(tt._sent(EV, DB)) == 6, tt._sent(EV, DB))
+SENT.clear()
+fetcher.send_mail_graph = lambda **kw: False
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM app_settings WHERE key = ? OR key LIKE ?", (key, f"teetimes_claim:{EV}:%"))
+    conn.commit()
+tt._deliver(EV, DB, now=datetime(2026, 10, 26, 19, 0))
+fetcher.send_mail_graph = fake_send
+tt._deliver(EV, DB, now=datetime(2026, 10, 26, 19, 15))
+check("a failed send gives its claim back, so the next run sends it", len(SENT) == 6, len(SENT))
 # An edit to the wording voids the stamp.
 with db._connect(DB) as conn:
     conn.execute("UPDATE message_templates SET subject = subject || '!' WHERE name = ?", (tt.TEMPLATES["player"],))

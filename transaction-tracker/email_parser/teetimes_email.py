@@ -681,6 +681,34 @@ def send_window_ok(event_date, now: datetime | None = None) -> str | None:
     return None
 
 
+CLAIM_KEY = "teetimes_claim:{event_id}:{key}"
+
+
+def _claim(event_id: int, key: str, db_path=None) -> bool:
+    """Atomically claim one message before it is sent. Two senders can run at
+    once (the manager's approval and the every-5-minute job both deliver an
+    approved sheet); on 10/26 at 5:16 PM both read an empty sent-map and
+    every Silverhorn email went twice. Exactly one caller wins the claim:
+    the row is inserted only if it is not there (app_settings.key is the
+    primary key), and the winner is the one whose insert landed."""
+    from email_parser import database as db
+    ck = CLAIM_KEY.format(event_id=int(event_id), key=key)
+    with db._connect(db_path) as conn:
+        cur = conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
+                           (ck, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return (cur.rowcount or 0) == 1
+
+
+def _release_claim(event_id: int, key: str, db_path=None) -> None:
+    """A failed send gives its claim back so the next run can try again."""
+    from email_parser import database as db
+    with db._connect(db_path) as conn:
+        conn.execute("DELETE FROM app_settings WHERE key = ?",
+                     (CLAIM_KEY.format(event_id=int(event_id), key=key),))
+        conn.commit()
+
+
 def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
     from email_parser import database as db
     from email_parser.event_day_email import _creds
@@ -712,6 +740,8 @@ def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
             continue
         if m["key"] in sent_map:
             continue
+        if not _claim(event_id, m["key"], db_path):
+            continue          # another sender has it (or already sent it)
         ok = False
         try:
             ok = fetcher.send_mail_graph(tenant_id=creds[0], client_id=creds[1], client_secret=creds[2],
@@ -724,8 +754,12 @@ def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
                "email": m["email"]}
         (sent if ok else failed).append(row)
         if ok:
+            # Re-read before writing: the other sender may have added its own.
+            sent_map = _sent(event_id, db_path)
             sent_map[m["key"]] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             db.set_app_setting(key, json.dumps(sent_map, sort_keys=True), db_path=db_path)
+        else:
+            _release_claim(event_id, m["key"], db_path)
         try:
             db.log_message({"event_name": built["event"]["name"], "channel": "email",
                             "recipient_name": m["name"], "recipient_address": m["email"],
