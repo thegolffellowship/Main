@@ -181,6 +181,7 @@ Kerry: "I like to pay same night as a standard. ... Needs an automated Admin rep
 Kerry: "Event ops - Absolutely should be on Tracker side. Not an agent routine" and "CC Course Files to Manager too at the Tue noon job." Before this the noon send to the course was a one-time agent routine per event.
 
 `email_parser/course_files_noon.py`, job `course_files_noon` (every 15 minutes, 12:00 to 2:45 PM Central), dial `course_files_noon_auto` (on unless `off`).
+- **Which day:** event day at noon; a MORNING event (first tee before 1:00 PM, e.g. a Saturday round) at noon the DAY BEFORE (`send_day`), matching the weekend tee-times line "Print packs ... were sent at noon today".
 - **Which events:** active, dated today, with saved pairings.
 - **What and to whom:** the Course Files exactly as the Course Files button sends them (`print_pack.send_course_files`, `COURSE_FILE_PARTS`): To the course's primary TGF contact, CC its other TGF contacts and Kerry's pack recipients, plus the chapter manager (`extra_cc`, `after_lock._manager_cc`).
 - **Once:** skipped when `course_files_sent:<event_id>` exists (a button send or an earlier run); the send records it, so the after-lock job's changed-sheet resends keep working.

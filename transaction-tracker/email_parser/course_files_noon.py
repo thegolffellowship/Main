@@ -17,9 +17,12 @@ added on CC.
   (it sends once the gap is fixed).
 - No course contact on file: nothing new (the morning manager-only pack
   covers it).
+- A MORNING event (first tee before 1:00 PM, e.g. a Saturday round) is sent
+  at noon the DAY BEFORE, as the tee-times email already tells a weekend
+  course ("Print packs ... were sent at noon today"). Everything else goes
+  at noon on event day.
 - Too late: never inside the hour before the first tee
-  (after_lock.course_cutoff_passed, Kerry #2329-4), so a morning event
-  whose first tee is before about 1:00 PM is not sent by this job.
+  (after_lock.course_cutoff_passed, Kerry #2329-4).
 Dial course_files_noon_auto (on unless off). Every send in message_log and
 agent_action_log. Read-only bridge scoring-course-files-noon:<event_id>.
 """
@@ -40,6 +43,24 @@ def _on(db_path=None) -> bool:
     return (db.get_app_setting(DIAL, db_path=db_path) or "").strip().lower() not in ("0", "off", "false")
 
 
+MORNING_BEFORE_HOUR = 13
+
+
+def send_day(ev: dict) -> str:
+    """The date the Course Files go: event day at noon, or the day before
+    for a morning event (first tee before 1:00 PM)."""
+    from datetime import date, timedelta
+    from email_parser import after_lock
+    d = str(ev.get("event_date") or "")[:10]
+    ft = after_lock._first_tee(ev)
+    if ft is not None and ft.hour < MORNING_BEFORE_HOUR:
+        try:
+            return (date.fromisoformat(d) - timedelta(days=1)).isoformat()
+        except ValueError:
+            return d
+    return d
+
+
 def why_not(ev: dict, now, db_path=None) -> str | None:
     """None when this event's Course Files may go now, else why not."""
     from email_parser import database as db
@@ -47,8 +68,8 @@ def why_not(ev: dict, now, db_path=None) -> str | None:
     from email_parser.print_pack import course_recipients_for_event
     if (ev.get("status") or "active") != "active":
         return "not active"
-    if str(ev.get("event_date") or "")[:10] != now.date().isoformat():
-        return "not event day"
+    if send_day(ev) != now.date().isoformat():
+        return "not the Course Files day (event day, or the day before for a morning event)"
     if now.hour < FROM_HOUR:
         return "before noon"
     if after_lock._get(after_lock.COURSE_KEY.format(int(ev["id"])), db_path):
@@ -150,7 +171,7 @@ def _gap_notice(ev: dict, why: str, mgr: str | None, db_path=None) -> dict:
 
 
 def check(render, static_dir, now=None, db_path=None) -> dict:
-    """The job: every event dated today."""
+    """The job: every event dated today or tomorrow whose Course Files day is today."""
     from email_parser import database as db
     if not _on(db_path):
         return {"status": "off"}
@@ -158,9 +179,11 @@ def check(render, static_dir, now=None, db_path=None) -> dict:
         from email_parser.timezone_utils import now_central
         now = now_central()
     with db._connect(db_path) as conn:
+        from datetime import timedelta as _td
         ids = [int(x[0]) for x in conn.execute(
-            "SELECT id FROM events WHERE substr(event_date, 1, 10) = ? "
-            "AND COALESCE(status, 'active') = 'active'", (now.date().isoformat(),)).fetchall()]
+            "SELECT id FROM events WHERE substr(event_date, 1, 10) IN (?, ?) "
+            "AND COALESCE(status, 'active') = 'active'",
+            (now.date().isoformat(), (now.date() + _td(days=1)).isoformat())).fetchall()]
     out = {}
     for eid in ids:
         try:

@@ -67,7 +67,8 @@ R = object()
 
 print("1. When")
 check("11:45 AM event day: not yet", cfn.run_event(EV, R, "", now=datetime(2099, 12, 15, 11, 45), db_path=DB)["why"] == "before noon")
-check("the day before: not event day", cfn.run_event(EV, R, "", now=datetime(2099, 12, 14, 12, 0), db_path=DB)["why"] == "not event day")
+check("the day before: not its day (an afternoon event goes on event day)",
+      cfn.run_event(EV, R, "", now=datetime(2099, 12, 14, 12, 0), db_path=DB)["why"].startswith("not the Course Files day"))
 check("3:30 PM (inside the hour before the 4:30 shotgun): too late",
       cfn.run_event(EV, R, "", now=datetime(2099, 12, 15, 15, 30), db_path=DB)["why"] == "within the hour before the first tee")
 check("no course contact on file: nothing new",
@@ -102,6 +103,11 @@ with db._connect(DB) as conn:
     n_log = conn.execute("SELECT COUNT(*) FROM message_log WHERE sent_by = 'course-files-noon'").fetchone()[0]
     n_act = conn.execute("SELECT COUNT(*) FROM agent_action_log WHERE action_type = 'course_files_noon'").fetchone()[0]
 check("logged in message_log and agent_action_log", n_log == 1 and n_act == 1, (n_log, n_act))
+
+print("3b. A morning event goes at noon the day before")
+check("a 4:30 PM shotgun: event day", cfn.send_day({"event_date": "2099-12-15", "start_type": "Shotgun", "start_time": "16:30", "id": EV}) == "2099-12-15")
+check("an 8:00 AM Saturday round: noon Friday",
+      cfn.send_day({"event_date": "2099-12-19", "start_type": "Tee Times", "start_time": "08:00", "format": "18 Holes", "id": 1}) == "2099-12-18")
 
 print("4. The dial and the wiring")
 db.set_app_setting(cfn.DIAL, "off", db_path=DB)
