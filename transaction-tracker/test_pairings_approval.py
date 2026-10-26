@@ -86,11 +86,13 @@ db.save_event_pairings(AUS, {"9": [{"group_num": 1, "slot_label": "1A", "players
     {"name": "Bob Baker", "cart_pos": 1, "customer_id": 990102},
     {"name": "Ann Able", "cart_pos": 2, "customer_id": 990101}]}]}, db_path=DB)
 r2 = pa.prompt_check(mon_5_05 + timedelta(minutes=20), DB)
-check("a changed sheet waits out the hour before a fresh prompt",
-      not SENT and "hour" in (r2["events"][AUS].get("skipped") or ""), r2["events"].get(AUS))
+check("a changed sheet does not prompt again (Kerry 10/26: \"Just once\")",
+      not SENT and "once" in (r2["events"][AUS].get("skipped") or ""), r2["events"].get(AUS))
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
-pa.prompt_check(mon_5_05 + timedelta(minutes=80), DB)
-check("…then re-prompts for the new sheet", [s["to_address"] for s in SENT] == ["robert@thegolffellowship.com"])
+for _m in (80, 140, 200):
+    pa.prompt_check(mon_5_05 + timedelta(minutes=_m), DB)
+check("…not an hour later, nor at any later tick that evening", not SENT, [s["to_address"] for s in SENT])
+check("the job has no re-prompt timer any more", not hasattr(pa, "REPROMPT_MINUTES"))
 
 print("3. Approve")
 fp = pa.sheet_fingerprint(AUS, DB)

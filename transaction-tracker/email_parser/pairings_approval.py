@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 STATE_KEY = "pairings_approval"
 DIAL = "pairings_approval_prompt"
-REPROMPT_MINUTES = 60
 # Kerry's TGF address for San Antonio and national events; other chapters
 # use the dial's `email`, else the manager's own customer email.
 # A manager's prompt goes to their TGF address, never a personal one (Kerry
@@ -300,7 +299,11 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
 
 
 def prompt_check(now=None, db_path=None) -> dict:
-    """The job: prompt each due event's manager once per sheet."""
+    """The job: prompt each due event's manager ONCE, right after the 5:00 PM
+    pairings run. Kerry 10/26 (CoS #2329 item 1): "Just once right after 5:00p
+    pairings generation is fine." A sheet changed after the prompt does not
+    prompt again; the old email's Approve link refuses a stale sheet and opens
+    the review page on the current one."""
     from email_parser.database import get_app_setting
     from email_parser.live_scoring_default import due_event_ids, ensure_live_scoring, _skip_reason
     from email_parser import database as db
@@ -324,17 +327,9 @@ def prompt_check(now=None, db_path=None) -> dict:
                 out[eid] = {"skipped": "no saved pairings"}
                 continue
             st = event_state(eid, db_path)
-            if st.get("prompted_fp") == fp:
-                out[eid] = {"skipped": "already prompted for this sheet"}
+            if st.get("prompted_at") or st.get("prompted_fp"):
+                out[eid] = {"skipped": "already prompted once for this event"}
                 continue
-            last = st.get("prompted_at")
-            if last:
-                try:
-                    if datetime.utcnow() - datetime.strptime(last, "%Y-%m-%d %H:%M:%S") < timedelta(minutes=REPROMPT_MINUTES):
-                        out[eid] = {"skipped": "sheet changed; re-prompt waits an hour"}
-                        continue
-                except ValueError:
-                    pass
             ensure_live_scoring(eid, db_path=db_path)
             out[eid] = send_prompt(eid, db_path)
         except Exception as exc:

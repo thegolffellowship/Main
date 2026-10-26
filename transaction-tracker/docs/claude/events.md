@@ -3547,8 +3547,11 @@ for now"). The Customer Communications lane owns its content and timing
     for the same due window as Live Scoring) switches Live Scoring on and
     mails the chapter manager (`manager_for`: SA/TGF → kerry@; otherwise the
     dial `email`, else the manager's `customer_id` email) ONE prompt per
-    sheet fingerprint. A changed sheet re-prompts at most hourly; there are
-    no prompts once player emails went.
+    event, right after the 5:00 PM run. Kerry 10/26 (CoS #2329 item 1):
+    "Just once right after 5:00p pairings generation is fine." A sheet
+    changed after the prompt does not prompt again (the old email's Approve
+    link refuses the stale sheet and opens the review page on the current
+    one); there are no prompts once player emails went.
   - `/events/<id>/approve-pairings` (manager login, own chapter; admin any)
     shows groups, hard audit flags, held players, a sample, and the button.
     `POST /api/events/<id>/approve-pairings {fingerprint}` refuses a stale

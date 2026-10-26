@@ -2400,8 +2400,9 @@ def start_scheduler():
     # ── PAIRINGS APPROVAL PROMPT (Kerry 2026-10-13: the manager reviews and
     #    approves the automated pairings, which sends the player emails).
     #    Every 15 min from :05 (so the 5:00 PM auto-generate has saved):
-    #    each due event's chapter manager gets ONE prompt per sheet (a
-    #    changed sheet re-prompts at most hourly; none once emails went).
+    #    each due event's chapter manager gets ONE prompt, right after the
+    #    5:00 PM run, never repeated (Kerry 10/26: "Just once right after
+    #    5:00p pairings generation is fine."); none once emails went.
     #    Dial `pairings_approval_prompt` (0/off stops it).
     #    email_parser/pairings_approval.py.
     def pairings_approval_prompt_job():
