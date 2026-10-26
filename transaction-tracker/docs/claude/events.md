@@ -167,6 +167,19 @@ Kerry: "I like to pay same night as a standard. ... Needs an automated Admin rep
 - **Guard:** `test_admin_payout_report.py`.
 - **Not built:** PayPal one-tap batch payouts (CFO plan, Board timing, #2338).
 
+## Noon Course Files job (Kerry 2026-10-26, CoS #2321, #2329-3, #2331 item 4)
+
+Kerry: "Event ops - Absolutely should be on Tracker side. Not an agent routine" and "CC Course Files to Manager too at the Tue noon job." Before this the noon send to the course was a one-time agent routine per event.
+
+`email_parser/course_files_noon.py`, job `course_files_noon` (every 15 minutes, 12:00 to 2:45 PM Central), dial `course_files_noon_auto` (on unless `off`).
+- **Which events:** active, dated today, with saved pairings.
+- **What and to whom:** the Course Files exactly as the Course Files button sends them (`print_pack.send_course_files`, `COURSE_FILE_PARTS`): To the course's primary TGF contact, CC its other TGF contacts and Kerry's pack recipients, plus the chapter manager (`extra_cc`, `after_lock._manager_cc`).
+- **Once:** skipped when `course_files_sent:<event_id>` exists (a button send or an earlier run); the send records it, so the after-lock job's changed-sheet resends keep working.
+- **A gap** (scorecards that can't print yet, `print_pack._unprintable`): nothing goes to the course; the manager gets one email (Kerry copied, `course_files_noon_gap_sent:<event_id>`) with a link to the event, and the next run sends once the gap is fixed.
+- **Skipped:** no course contact on file (the morning manager-only pack covers it); within the hour before the first tee (`after_lock.course_cutoff_passed`), so a morning event whose first tee is before about 1:00 PM is not sent by this job.
+- Logged in message_log (`sent_by` course-files-noon) and agent_action_log (`course_files_noon`, `course_files_noon_held`). Read-only bridge `scoring-course-files-noon:<event_id>`. Guard `test_course_files_noon.py`.
+- Not built: the one-tap "send as is / wait" in the gap email (Event Ops spec); the manager uses the Course Files button.
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)
