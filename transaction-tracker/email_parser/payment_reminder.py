@@ -17,7 +17,14 @@ composer when it sends this template) build the message here:
   link to the member page that lists who is registered;
 - any blank or leftover {tag} HOLDS the message;
 - once per person per event per day (app setting payment_reminder_sent:<id>),
-  every send logged in message_log with event_id + customer_id.
+  every send logged in message_log with event_id + customer_id;
+- STOPS AT THE LOCK (Kerry 2026-10-26, CoS #2313: "Payment Reminders - Those
+  stop at the 5:00p lock for any specific event. So the 4:50p you've been
+  removed email is it for payment reminders for that event."): from 5:00 PM
+  on the event's lock day (database.pairings_auto_weekdays: Monday for a
+  Tuesday nine; E-1 for an undialled weekday) every path holds, the 6 AM job
+  skips the event, and the composer refuses this template. Dial
+  payment_reminder_stop_at_lock (on unless it reads off).
 """
 from __future__ import annotations
 
@@ -29,6 +36,9 @@ import os
 logger = logging.getLogger(__name__)
 
 TEMPLATE_NAME = "Payment Reminder"
+STOP_DIAL = "payment_reminder_stop_at_lock"
+LOCK_HOUR = 17
+PAST_LOCK = "past the 5:00 PM lock: payment reminders stop there for this event"
 SENT_KEY = "payment_reminder_sent:{event_id}"
 ROSTER_LINK_TEXT = "See who's registered so far"
 
@@ -104,6 +114,35 @@ def _template(db_path=None) -> tuple:
     except Exception:
         logger.exception("payment reminder: could not read the template")
     return None, DEFAULT_SUBJECT, DEFAULT_BODY
+
+
+def lock_at(ev: dict, db_path=None):
+    """When this event's groups are locked: 5:00 PM on its pairings day
+    (the weekday dial's lead; the day before for an undialled weekday).
+    None when the event has no date."""
+    from datetime import date, datetime, time, timedelta
+    from email_parser import database as db
+    try:
+        d = date.fromisoformat(str(ev.get("event_date") or "")[:10])
+    except ValueError:
+        return None
+    lead = db.pairings_auto_weekdays(db_path).get(db._WEEKDAY_NAMES[d.weekday()], 1)
+    return datetime.combine(d - timedelta(days=lead), time(LOCK_HOUR, 0))
+
+
+def past_lock(ev: dict, now=None, db_path=None) -> bool:
+    """True from the event's lock on, unless dial payment_reminder_stop_at_lock
+    reads off."""
+    from email_parser import database as db
+    from email_parser.timezone_utils import now_central
+    try:
+        if (db.get_app_setting(STOP_DIAL, db_path=db_path) or "").strip().lower() in (
+                "off", "0", "false", "no"):
+            return False
+    except Exception:
+        pass
+    lock = lock_at(ev, db_path)
+    return lock is not None and (now or now_central()) >= lock
 
 
 def build(ev: dict, person: dict, db_path=None) -> dict:
@@ -199,6 +238,10 @@ def send(event_id: int, people: list, sent_by: str = "manager", force: bool = Fa
     sent_map = _sent_today(event_id, db_path)
     out = {"event_id": int(event_id), "sent": [], "failed": [], "held": [],
            "no_email": [], "already_today": []}
+    if past_lock(ev, db_path=db_path):
+        out["held"] = [{"customer_id": p.get("customer_id"), "name": p.get("name") or "",
+                        "why": [PAST_LOCK]} for p in people]
+        return out
     for p in people:
         cid = p.get("customer_id")
         name = p.get("name") or ""

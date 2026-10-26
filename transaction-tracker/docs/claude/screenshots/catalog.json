@@ -202,7 +202,7 @@
     "email_parser/event_day_email.py",
     "email_parser/event_links.py"
    ],
-   "watch_hash": "9ee27c6f274f54dc"
+   "watch_hash": "eb900c412d793851"
   },
   {
    "id": "rsvp-deadline",
@@ -246,7 +246,7 @@
     "email_parser/payment_reminder.py",
     "email_parser/event_day_email.py"
    ],
-   "watch_hash": "2592432991aff349"
+   "watch_hash": "d8716fc03dfac911"
   },
   {
    "id": "events-leaderboard-batch1",

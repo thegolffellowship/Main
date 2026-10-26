@@ -108,6 +108,7 @@ Kerry: "our standard template for those unpaid DOES include the link. We need to
 - **Who:** `rsvp_only_people(event_id)` is everyone `_event_roster_rows` marks `rsvp_only`. That covers the shop's RSVP-only rows and the invitation / GG RSVPs. A row with no customer card sends by its email.
 - **Once a day:** each person gets it at most once per event per day. The app setting `payment_reminder_sent:<event id>` maps a customer id (or an email) to the date it went. `force` overrides this, from the Remind tag only. Every send is logged in message_log with event_id and customer_id.
 - **6 AM job:** keeps the `payment_reminder_exclude_events` dial.
+- **Stops at the lock (v2.585.0, Kerry 10/26, CoS #2313):** "Payment Reminders - Those stop at the 5:00p lock for any specific event. So the 4:50p you've been removed email is it for payment reminders for that event." `lock_at(ev)` is 5:00 PM on the event's pairings day (the `pairings_auto_weekdays` lead: Monday for a Tuesday nine, two days ahead for a dialled Saturday, the day before for an undialled weekday). From then on `send()` holds everyone ("past the 5:00 PM lock"), so the Remind tag and Remind All return 409; the 6 AM job skips the event; and the composer refuses the Payment Reminder template for it. Dial `payment_reminder_stop_at_lock` (on unless `off`).
 
 Guard: `test_payment_reminder.py`.
 
@@ -124,6 +125,7 @@ Kerry: "I want the last 'warning' email to go out ... at 1:00p to let him know w
   - Someone who RSVPs after the last warning is never released.
   - A shop $0 RSVP-only order row is never touched. It raises one COO item `RSVP DEADLINE: <event>`.
 - **Once each:** once per person per event per kind (`rsvp_deadline_sent:<event_id>`). Sends are logged in message_log with event_id and customer_id; releases in agent_action_log (`rsvp_deadline_release`).
+- **CC (v2.585.0):** Kerry 10/26: "Can you make the RSVP emails cc me for the after NOON Monday emails?" Every warning and release is CC'd to app setting `rsvp_deadline_cc` (default kerry@thegolffellowship.com; `off` stops it).
 - **Read-only bridge:** `scoring-rsvp-deadline:<event_id>|warn|release` shows who would get each email now, with a sample.
 - **Guard:** `test_rsvp_deadline.py`.
 - **Still open:** text messages (Twilio), and auto-seating someone who pays after lock (seat-fill, #2310).

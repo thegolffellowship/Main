@@ -156,6 +156,61 @@ check("the preview shows the framed reminder with the roster link",
       pv.status_code == 200 and f"/member/results/{EV}" in body and "{" not in body.split("<style")[0][-1:],
       (pv.status_code, body[:200]))
 
+print("9. Stop at the lock (Kerry 10/26, #2313)")
+from datetime import datetime as _dt
+from email_parser import timezone_utils as _tz
+_real_now = _tz.now_central
+db.set_app_setting("payment_reminder_exclude_events", "[]")
+ev_row = {"event_date": "2026-12-15"}  # a Tuesday nine: locks Monday 5:00 PM
+check("a Tuesday nine locks Monday at 5:00 PM", pr.lock_at(ev_row, DB) == _dt(2026, 12, 14, 17, 0),
+      pr.lock_at(ev_row, DB))
+check("a dialled Saturday locks two days ahead",
+      pr.lock_at({"event_date": "2026-12-19"}, DB) == _dt(2026, 12, 17, 17, 0))
+check("an undialled weekday locks the day before",
+      pr.lock_at({"event_date": "2026-12-17"}, DB) == _dt(2026, 12, 16, 17, 0))
+check("4:59 PM on the lock day is not past the lock",
+      not pr.past_lock(ev_row, now=_dt(2026, 12, 14, 16, 59), db_path=DB))
+check("5:00 PM on the lock day is past the lock", pr.past_lock(ev_row, now=_dt(2026, 12, 14, 17, 0), db_path=DB))
+check("event day 6:00 AM is past the lock", pr.past_lock(ev_row, now=_dt(2026, 12, 15, 6, 0), db_path=DB))
+_tz.now_central = lambda: _dt(2026, 12, 15, 6, 0)
+try:
+    with db._connect(DB) as conn:
+        conn.execute("DELETE FROM app_settings WHERE key LIKE 'payment_reminder_sent:%'")
+        conn.commit()
+    SENT.clear()
+    _app.send_auto_payment_reminders()
+    check("the 6 AM job skips an event past its lock", SENT == [], [s["to_address"] for s in SENT])
+    r = pr.send(EV, people, db_path=DB)
+    check("send() holds everyone past the lock and says why",
+          not r["sent"] and r["held"] and r["held"][0]["why"] == [pr.PAST_LOCK] and SENT == [], r)
+    rv = cl.post("/api/events/send-reminder", json={"event_id": EV, "customer_id": 880001})
+    check("the Remind tag refuses past the lock", rv.status_code == 409 and "5:00 PM lock" in rv.get_json()["error"],
+          (rv.status_code, rv.get_json()))
+    rv = cl.post("/api/events/send-reminder-all", json={"event_id": EV})
+    check("Remind All refuses past the lock", rv.status_code == 409 and "5:00 PM lock" in rv.get_json()["error"],
+          (rv.status_code, rv.get_json()))
+    rv = cl.post("/api/messages/send", json={"template_id": tid, "event_name": "s9.98 REMIND LINKS",
+                                            "recipients": [{"name": "Ann Test", "email": "ann@example.test"}],
+                                            "event_url": URL})
+    check("the composer refuses the Payment Reminder template past the lock",
+          rv.status_code == 409 and "5:00 PM lock" in (rv.get_json() or {}).get("error", "") and SENT == [],
+          (rv.status_code, rv.get_json()))
+    db.set_app_setting(pr.STOP_DIAL, "off")
+    _app.send_auto_payment_reminders()
+    check("dial payment_reminder_stop_at_lock=off sends again", [s["to_address"] for s in SENT] == ["ann@example.test"],
+          [s["to_address"] for s in SENT])
+    db.set_app_setting(pr.STOP_DIAL, "")
+    _tz.now_central = lambda: _dt(2026, 12, 14, 16, 0)
+    with db._connect(DB) as conn:
+        conn.execute("DELETE FROM app_settings WHERE key LIKE 'payment_reminder_sent:%'")
+        conn.commit()
+    SENT.clear()
+    _app.send_auto_payment_reminders()
+    check("before the lock the job still reminds", [s["to_address"] for s in SENT] == ["ann@example.test"],
+          [s["to_address"] for s in SENT])
+finally:
+    _tz.now_central = _real_now
+
 try:
     os.remove(DB)
 except OSError:

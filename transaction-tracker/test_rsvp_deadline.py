@@ -82,6 +82,8 @@ w = SENT[0] if SENT else {}
 check("the warning names 5:00 PM and carries the registration button",
       "5:00 PM" in w.get("html_body", "") and URL in w.get("html_body", "") and "Silverhorn" in w.get("subject", ""),
       w.get("subject"))
+check("the warning is CC'd to Kerry (Kerry 10/26)", w.get("cc_address") == "kerry@thegolffellowship.com",
+      w.get("cc_address"))
 rd.tick(datetime(2099, 10, 26, 13, 20), DB)
 check("the next tick does not send it again", len(SENT) == 1)
 check("the roster still has him after the warning", "Christopher Test" in roster_names(), roster_names())
@@ -99,6 +101,7 @@ rd.tick(datetime(2099, 10, 26, 16, 50), DB)
 check("4:50 PM releases the warned, unpaid player and emails him",
       [s["to_address"] for s in SENT] == ["chris@example.test"] and "released" in SENT[0]["subject"], SENT)
 names = roster_names()
+check("the release is CC'd to Kerry", SENT and SENT[0].get("cc_address") == "kerry@thegolffellowship.com", SENT)
 check("he is off the roster before the 5:00 PM pairings run", "Christopher Test" not in names, names)
 check("a player who was never warned is not released", "Late Test" in names, names)
 check("the registered player stays", "Paid Test" in names, names)
@@ -114,6 +117,9 @@ check("nothing after 5:00 PM", rd.tick(datetime(2099, 10, 26, 17, 0), DB) == [])
 print("4. Dials")
 db.set_app_setting("rsvp_deadline_auto", "off", db_path=DB)
 check("the dial turns it off", rd.tick(datetime(2099, 10, 26, 13, 30), DB) == [])
+db.set_app_setting("rsvp_deadline_cc", "off", db_path=DB)
+check("rsvp_deadline_cc=off stops the copy", rd.cc_address(DB) is None)
+db.set_app_setting("rsvp_deadline_cc", "", db_path=DB)
 db.set_app_setting("rsvp_deadline_auto", "on", db_path=DB)
 db.set_app_setting("payment_reminder_exclude_events", f"[{EV}]", db_path=DB)
 SENT.clear()

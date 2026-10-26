@@ -27,6 +27,10 @@ an event in payment_reminder_exclude_events. Once per person per event per
 kind (app setting rsvp_deadline_sent:<event_id>). Every send in message_log
 with event_id + customer_id; every release in agent_action_log.
 Dial rsvp_deadline_auto (on unless it reads off).
+
+Kerry 2026-10-26: "Can you make the RSVP emails cc me for the after NOON
+Monday emails?" Every warning and release is CC'd to app setting
+rsvp_deadline_cc (default Kerry's address; "off" stops it).
 """
 from __future__ import annotations
 
@@ -38,6 +42,8 @@ import os
 logger = logging.getLogger(__name__)
 
 DIAL = "rsvp_deadline_auto"
+CC_KEY = "rsvp_deadline_cc"
+CC_DEFAULT = "kerry@thegolffellowship.com"
 SENT_KEY = "rsvp_deadline_sent:{event_id}"
 WARN_FROM = (13, 0)        # 1:00 PM Central, E-1
 RELEASE_FROM = (16, 50)    # 4:50 PM, before the 5:00 PM pairings run
@@ -77,6 +83,18 @@ def _on(db_path=None) -> bool:
         return (db.get_app_setting(DIAL, db_path=db_path) or "on").strip().lower() != "off"
     except Exception:
         return True
+
+
+def cc_address(db_path=None) -> str | None:
+    """Who is copied on every warning and release (rsvp_deadline_cc)."""
+    from email_parser import database as db
+    try:
+        v = (db.get_app_setting(CC_KEY, db_path=db_path) or "").strip()
+    except Exception:
+        v = ""
+    if v.lower() == "off":
+        return None
+    return v or CC_DEFAULT
 
 
 def _sent(event_id: int, db_path=None) -> dict:
@@ -230,6 +248,7 @@ def run(event_id: int, kind: str, confirm: bool = False, db_path=None) -> dict:
     if not all(creds):
         return {**out, "error": "Email credentials not configured"}
     sent = _sent(event_id, db_path)
+    cc = cc_address(db_path)
     stamp = now_central().strftime("%Y-%m-%d %H:%M")
     done, failed = [], []
     for x in msgs:
@@ -247,7 +266,8 @@ def run(event_id: int, kind: str, confirm: bool = False, db_path=None) -> dict:
         try:
             ok = send_mail_graph(tenant_id=creds[0], client_id=creds[1], client_secret=creds[2],
                                  from_address=creds[3], to_address=x["email"],
-                                 subject=x["msg"]["subject"], html_body=x["msg"]["html"])
+                                 subject=x["msg"]["subject"], html_body=x["msg"]["html"],
+                                 cc_address=cc)
         except Exception:
             logger.exception("rsvp deadline: send failed for %s", x["customer_id"])
         try:

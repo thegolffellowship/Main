@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.584.0";
+window.TGF_VERSION = "2.585.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.585.0",
+    date: "2026-10-26",
+    title: "Payment reminders stop at the 5:00 PM lock, and Kerry is copied on the lock-day warning and release",
+    changes: [
+      "Kerry 10/26 (CoS #2313): \"Payment Reminders - Those stop at the 5:00p lock for any specific event. So the 4:50p you've been removed email is it for payment reminders for that event.\" Until now the every-other-day 6:00 AM job still covered an event on its own day, so a Tuesday morning run could remind someone for that evening's nine. Now every path stops at the event's lock (5:00 PM on its pairings day: Monday for a Tuesday nine, two days ahead for a dialled Saturday). The 6:00 AM job skips the event, the Remind tag and Remind All answer 'past the 5:00 PM lock', and the Messages composer refuses the Payment Reminder template for it. Dial payment_reminder_stop_at_lock (on unless it reads off); guard test_payment_reminder.py.",
+      "Kerry 10/26: \"Can you make the RSVP emails cc me for the after NOON Monday emails?\" The 1:00 PM deadline warning and the 4:50 PM release are now CC'd to kerry@thegolffellowship.com. App setting rsvp_deadline_cc changes the address; off stops the copy. The payment reminder and deadline screenshots were retaken in the same commit (no visible change)."
+    ]
+  },
   {
     version: "2.584.0",
     date: "2026-10-26",

@@ -2562,6 +2562,10 @@ def send_auto_payment_reminders():
             continue
         if ev.get("id") in _excluded or not ev.get("item_name"):
             continue
+        # Kerry 2026-10-26 (#2313): reminders stop at the event's 5:00 PM
+        # lock; the 4:50 PM release email is the last one.
+        if payment_reminder.past_lock(ev):
+            continue
         people = payment_reminder.rsvp_only_people(ev["id"])
         if not people:
             continue
@@ -10170,6 +10174,10 @@ def api_send_messages():
         for _k in ("event_place", "event_date_long", "roster_link"):
             event_vars[_k] = _pv[_k]
     event_status = (event_info.get("status") or "active")
+    if _is_pay_reminder and event_info.get("id"):
+        from email_parser import payment_reminder as _pr
+        if _pr.past_lock(event_info):
+            return jsonify({"error": "Not sent: this event is " + _pr.PAST_LOCK + "."}), 409
 
     # Boundary check: a template that ASKS for the manager's name or cell
     # must not go out with a blank where it should be. Austin ships with
