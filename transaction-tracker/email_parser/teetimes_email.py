@@ -891,6 +891,27 @@ def _release_claim(event_id: int, key: str, db_path=None) -> None:
         conn.commit()
 
 
+def _mark_sent(setting_key: str, msg_key: str, db_path=None) -> None:
+    """Add one message to the sent map as ONE write transaction. Two senders
+    each re-reading and rewriting the whole map lost an entry when their
+    writes crossed (test_teetimes_email, two senders at once): BEGIN
+    IMMEDIATE holds the write lock from the read to the commit."""
+    from email_parser import database as db
+    with db._connect(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        r = conn.execute("SELECT value FROM app_settings WHERE key = ?", (setting_key,)).fetchone()
+        try:
+            cur = json.loads((r[0] if r else None) or "{}")
+            cur = cur if isinstance(cur, dict) else {}
+        except Exception:
+            cur = {}
+        cur[msg_key] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+                     (setting_key, json.dumps(cur, sort_keys=True)))
+        conn.commit()
+
+
 def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
     from email_parser import database as db
     from email_parser.event_day_email import _creds
@@ -936,10 +957,7 @@ def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
                "email": m["email"]}
         (sent if ok else failed).append(row)
         if ok:
-            # Re-read before writing: the other sender may have added its own.
-            sent_map = _sent(event_id, db_path)
-            sent_map[m["key"]] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            db.set_app_setting(key, json.dumps(sent_map, sort_keys=True), db_path=db_path)
+            _mark_sent(key, m["key"], db_path)
         else:
             _release_claim(event_id, m["key"], db_path)
         try:

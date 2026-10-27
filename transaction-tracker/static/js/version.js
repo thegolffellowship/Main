@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.604.2";
+window.TGF_VERSION = "2.604.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.604.3",
+    date: "2026-10-27",
+    title: "Tee-times email: the sent record can no longer lose an entry when two senders cross",
+    changes: [
+      "The claim guard (v2.602.2) already stops a tee-times email going twice. But each sender then re-read and rewrote the whole sent map, so when the manager's approval and the 5-minute job finished at the same moment one entry could be lost (test_teetimes_email's two-senders check failed about one run in four). The email still went once, because the claim stays, but the status read 'ready' for someone already sent. _mark_sent now adds the one entry inside a single write transaction (BEGIN IMMEDIATE). Nothing members see changes."
+    ]
+  },
   {
     version: "2.604.2",
     date: "2026-10-26",
