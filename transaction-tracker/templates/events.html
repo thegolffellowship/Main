@@ -7173,6 +7173,10 @@
             state.lastSavedAt = new Date();
             state.autosaveError = null;
             state.isDirty = state.histIdx !== idxAtSend;   // changed again while saving → still dirty
+            // An approved sheet that was just edited needs approving again (CoS #2393-5).
+            if (state.approval && state.approval.approval === 'approved') {
+                state.approval = Object.assign({}, state.approval, {approval: 'changed', label: 'Changed since approval · Approve again'});
+            }
         } catch (err) {
             state.saving = false;
             if (attempt < 2) {
@@ -7724,7 +7728,16 @@
                 // APPROVE from here after editing (Kerry 10/19: "takes me to
                 // the PAIRINGS view in the EVENT. Then it would ALSO need an
                 // APPROVE button"). Opens the review page for the saved sheet.
-                html += `<a class="pairings-action-btn" href="/events/${ev.id}/approve-pairings" style="background:#E87C3E;color:#fff;text-decoration:none;" title="Review the saved sheet and approve it: the tee-times email goes out">&#x2713; Approve</a>`;
+                // THREE STATES (Kerry 10/26 via CoS #2378/#2393): Approve (orange)
+                // / APPROVED · who · time (green) / Changed since approval ·
+                // Approve again (amber). The time is 12-hour Central.
+                const apv = state.approval || {};
+                const apvStyle = apv.approval === 'approved' ? 'background:#2f7d4a;color:#fff;'
+                    : apv.approval === 'changed' ? 'background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;'
+                    : 'background:#E87C3E;color:#fff;';
+                const apvText = apv.approval === 'approved' || apv.approval === 'changed'
+                    ? escapeHtml(apv.label || '') : '&#x2713; Approve';
+                html += `<a class="pairings-action-btn pairings-approve-btn" data-approval="${escapeHtml(apv.approval || 'none')}" href="/events/${ev.id}/approve-pairings" style="${apvStyle}text-decoration:none;" title="Review the saved sheet and approve it: the tee-times email goes out">${apvText}</a>`;
             }
         }
         html += '</div>'; // .pairings-actions
@@ -8503,6 +8516,7 @@
             state.pairCounts = data.pair_counts || {};
             state.rodeCounts = data.rode_counts || {};
             state.blindPool = data.blind_pool || null;
+            state.approval = data.approval || null;
             state.isDirty = false;
             state.loaded = true;
             seedPairHistory(state);   // undo starts from what was saved

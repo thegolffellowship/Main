@@ -33,6 +33,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,10 @@ def may_approve(role: str | None, session_chapter: str | None, event_chapter: st
 # The review: one read shared by the prompt email and the page
 # ---------------------------------------------------------------------------
 
-def review(event_id: int, db_path=None) -> dict:
+def review(event_id: int, db_path=None, light: bool = False) -> dict:
+    """The review. light=True (the approve PAGE, CoS #2380-2 / #2393-6: it
+    took 20 s on 10/26) skips the pairings audit and the Event Info build;
+    the page fetches those afterwards from /approve-pairings/check."""
     from email_parser import database as db
     from email_parser.event_day_email import build_event_day_emails, approval_state, load_template
     from email_parser import perf
@@ -176,6 +180,14 @@ def review(event_id: int, db_path=None) -> dict:
                                    if (p.get("name") or "").strip()],
                        "blinds": [b.get("name") for b in g.get("blinds") or [] if b.get("name")]})
     flags = []
+    if light:
+        st = event_state(event_id, db_path)
+        return {"event": {"id": int(event_id), "name": ev.get("item_name"), "date": ev.get("event_date"),
+                          "course": ev.get("course"), "chapter": ev.get("chapter")},
+                "fingerprint": sheet_fingerprint(event_id, db_path),
+                "groups": groups, "hard_flags": [], "counts": {}, "held": [], "sample": None,
+                "notes": [], "wording_approved": True, "light": True,
+                "sent": emails_sent(event_id, db_path), "state": st}
     try:
         from email_parser.pairings_audit import event_pairing_audit
         au = event_pairing_audit(int(event_id), db_path=db_path) or {}
@@ -384,9 +396,118 @@ def info_time(db_path=None) -> str:
     return f"{info_hour(db_path)}:00 AM"
 
 
+
+# ---------------------------------------------------------------------------
+# Who approved, when, and what approval sends (Kerry 10/26 via CoS #2378-#2380,
+# #2393: "Ok, I'm good with that plan now.")
+# ---------------------------------------------------------------------------
+
+APPROVED_GREEN = "#2f7d4a"
+
+
+def approver_name(role: str | None, session_chapter: str | None, db_path=None) -> str:
+    """The person's name for "APPROVED · Kerry · 5:14 PM Mon"."""
+    if (role or "").lower() == "admin":
+        return "Kerry"
+    m = manager_for(session_chapter, db_path) if session_chapter else {}
+    n = (m.get("name") or "").strip()
+    return n.split()[0] if n else (role or "Manager").title()
+
+
+def _at12(utc_stamp) -> str:
+    """'2026-10-26 22:14:39' (UTC) -> '5:14 PM Mon' (Central)."""
+    from email_parser.timezone_utils import to_central, clock12
+    dt = to_central(utc_stamp)
+    return f"{clock12(dt)} {dt.strftime('%a')}" if dt else ""
+
+
+def approval_status(event_id: int, db_path=None, fingerprint: str | None = None) -> dict:
+    """{approval: none | approved | changed, approved_name, approved_at12, label}.
+    changed = approved, then the sheet was edited (CoS #2393-5)."""
+    st = event_state(event_id, db_path)
+    cur = fingerprint if fingerprint is not None else sheet_fingerprint(event_id, db_path)
+    fp = st.get("approved_fp")
+    name = st.get("approved_name") or ("Kerry" if (st.get("approved_by") or "").startswith("admin")
+                                       else "auto 7 PM" if (st.get("approved_by") or "").startswith("auto")
+                                       else (st.get("approved_by") or "").split(" (")[0].title())
+    at = _at12(st.get("approved_at")) if st.get("approved_at") else ""
+    state = "none" if not fp else ("approved" if fp == cur else "changed")
+    return {"approval": state, "approved_name": name if fp else None, "approved_at12": at if fp else None,
+            "label": (f"APPROVED · {name} · {at}" if state == "approved"
+                      else "Changed since approval · Approve again" if state == "changed" else "Approve")}
+
+
+_COURSE_SUFFIX = re.compile(r"\s+(golf club|golf course|country club|golf & country club|gc)\b.*$", re.I)
+
+
+def _course_short(course: str) -> str:
+    return _COURSE_SUFFIX.sub("", (course or "").strip()) or (course or "").strip()
+
+
+def _day_name(d) -> str:
+    try:
+        return datetime.strptime(str(d)[:10], "%Y-%m-%d").strftime("%A")
+    except ValueError:
+        return ""
+
+
+def send_plan(event_id: int, db_path=None, after: bool = False) -> dict:
+    """What approval sends, as the manager reads it under the button and in
+    the confirm pop-up (wording stamped by Kerry, CoS #2393). Live counts:
+    players, the course contact by name, open spots and invitees. after=True
+    is the wording once approved ("are going out now")."""
+    from email_parser import database as db
+    from email_parser import teetimes_email as tt
+    from email_parser.print_pack import course_recipients_for_event
+    from email_parser.course_files_noon import send_day
+    from datetime import timedelta as _td
+    with db._connect(db_path) as conn:
+        r = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+    if not r:
+        return {"error": f"no event {event_id}"}
+    ev = dict(r)
+    c = tt.plan_counts(int(event_id), db_path)
+    n, spots, inv = c["players"], c["open_spots"], c["invitees"]
+    course = (ev.get("course") or "").strip()
+    short = _course_short(course)
+    rec = course_recipients_for_event(ev, db_path)
+    has_contact = bool(rec.get("ok"))
+    if has_contact:
+        staff = rec.get("staff") or []
+        prim = next((x.get("name") for x in staff if x.get("is_primary")), None) or rec.get("to_name") or ""
+        others = [x.get("name") for x in staff if not x.get("is_primary") and x.get("name")]
+        who = prim + (f", CC {', '.join(others)}" if others else "")
+        course_clause = f", to {course} ({who})" if who else f", to {course}"
+    else:
+        course_clause = ""
+    verb = "Tee times are going out now" if after else "Approving sends tee times now"
+    s1 = f"{verb} to all {n} players{course_clause} and to you."
+    s_open = (f"Invitees who haven't registered get the open-spots email ({spots} spot{'s' if spots != 1 else ''} open)."
+              if inv > 0 and spots > 0 else "")
+    morning = is_morning_event(ev)
+    if morning:
+        try:
+            dname = (datetime.strptime(str(ev["event_date"])[:10], "%Y-%m-%d") - _td(days=1)).strftime("%A")
+        except ValueError:
+            dname = ""
+        s_info = (f"Players get their full Event Info at noon {dname}"
+                  + (f", and {short} gets the Course Files at the same time." if has_contact else "."))
+        s_files = ""
+    else:
+        s_info = f"Players get their full Event Info at {info_time(db_path)} {_day_name(ev.get('event_date'))}."
+        s_files = f"{short} gets the Course Files at noon {_day_name(send_day(ev))}." if has_contact else ""
+    s_nocontact = "" if has_contact else "No course contact on file: the course gets nothing until one is added."
+    line = " ".join(x for x in (s1, s_nocontact, s_open, s_info, s_files) if x)
+    confirm = (f"Approve these pairings? Tee times go now to {n} players"
+               + (f", {course} and you" if has_contact else " and you")
+               + (f", and the open-spots email to {inv} invitee{'s' if inv != 1 else ''}." if inv > 0 and spots > 0 else "."))
+    return {"line": line, "auto_line": "If you don't approve, this all goes automatically at 7:00 PM.",
+            "confirm": confirm, "players": n, "open_spots": spots, "invitees": inv,
+            "course": course, "course_contact": has_contact, "morning": morning}
+
 def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
                      session_chapter: str | None, approved_by: str, db_path=None,
-                     send_now: bool = False) -> dict:
+                     send_now: bool = False, background: bool = False) -> dict:
     from email_parser import database as db
     from email_parser.event_day_email import send_event_day_emails
     with db._connect(db_path) as conn:
@@ -402,13 +523,16 @@ def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
     if (fingerprint or "") != cur:
         return {"error": "The pairings changed since this page was opened. Reload to review the new sheet.",
                 "code": 409, "fingerprint": cur}
+    # A second tap on an approved sheet does nothing (CoS #2393-4).
+    if event_state(event_id, db_path).get("approved_fp") == cur and not send_now:
+        return {"status": "already approved", "fingerprint": cur, **approval_status(event_id, db_path, cur)}
     _put(event_id, db_path, approved_fp=cur, approved_by=approved_by,
+         approved_name=approver_name(role, session_chapter, db_path),
          approved_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
     if not send_now:
         # Kerry 10/19: "I thought we're just sending tee times tonight and
         # then the full event info email at 7:00am". Approval signs off the
-        # sheet; the personal Event Info email goes at 7:00 AM on event day
-        # (event_info_morning_check).
+        # sheet; the personal Event Info email goes on event day.
         try:
             db.log_agent_action("pairings-approval", "approve_pairings",
                                 f"{r['item_name']}: sheet {cur} approved by {approved_by}; "
@@ -416,20 +540,28 @@ def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
                                 db_path=db_path)
         except Exception:
             pass
-        rv = review(event_id, db_path)
-        # The tee-times email goes on approval (Kerry 10/19), each version
-        # only with its stamp and the dial on.
-        tt = None
-        try:
-            from email_parser.teetimes_email import _deliver
-            tt = _deliver(int(event_id), db_path)
-        except Exception as exc:
-            logger.exception("tee-times send on approval failed for %s", event_id)
-            tt = {"error": str(exc)}
+        # The tee-times email goes on approval (Kerry 10/19), IN THE
+        # BACKGROUND (CoS #2380-1 / #2393-4: the page sat on "Approving..."
+        # while it built and sent): the answer comes back at once. The
+        # per-message claim (teetimes_email._claim) keeps this and the job
+        # from ever both sending.
+        def _bg():
+            try:
+                from email_parser.teetimes_email import _deliver
+                _deliver(int(event_id), db_path)
+            except Exception:
+                logger.exception("tee-times send on approval failed for %s", event_id)
+        if background:
+            import threading
+            threading.Thread(target=_bg, name=f"teetimes-approve-{event_id}", daemon=True).start()
+            tt = {"status": "sending in the background"}
+        else:
+            _bg()
+            tt = {"status": "sent in the foreground"}
         return {"status": "approved", "fingerprint": cur, "teetimes": tt,
                 "sends_at": (lambda _t: _t if _t.startswith("noon") else f"{_t} on the event day")(info_time_for_id(event_id, db_path)),
-                "counts": {"approved": 1, "ready": (rv.get("counts") or {}).get("ready", 0),
-                           "held": (rv.get("counts") or {}).get("held", 0)}}
+                **approval_status(event_id, db_path, cur),
+                "plan": send_plan(event_id, db_path, after=True)}
     try:
         db.log_agent_action("pairings-approval", "approve_pairings",
                             f"{r['item_name']}: sheet {cur} approved by {approved_by}; emailing players",
@@ -451,25 +583,30 @@ SAMPLE_HEAD = ('<h3>Sample: the 7:00 AM Event Info email each player gets on eve
                'full email that follows in the morning.</p>')
 
 
-def render_page(rv: dict) -> str:
+def render_page(rv: dict, db_path=None) -> str:
+    """The approve page (CoS #2393, Kerry: "Ok, I'm good with that plan now."):
+    the line under the button says what goes where and when, the confirm
+    names the live counts, approval answers at once (the sending runs in the
+    background) and turns into a green APPROVED · who · time bar. The audit
+    and the Event Info sample load after the page (/approve-pairings/check)."""
     ev = rv["event"]
-    c = rv["counts"]
-    st = rv["state"]
-    if rv["sent"]:
-        action = (f'<div class="done">Player emails sent: <b>{rv["sent"]}</b>'
-                  + (f' (approved by {_e(st.get("approved_by"))}, {_e(st.get("approved_at"))} UTC)'
-                     if st.get("approved_by") else "") + ".</div>")
-    elif not rv["fingerprint"]:
+    eid = int(ev["id"])
+    stt = approval_status(eid, db_path, rv["fingerprint"]) if rv["fingerprint"] else {"approval": "none"}
+    approved = stt["approval"] == "approved"
+    plan = send_plan(eid, db_path, after=approved) if rv["fingerprint"] else {}
+    if not rv["fingerprint"]:
         action = '<div class="warn">No pairings are saved for this event yet.</div>'
     else:
-        appr = (f'<div class="done">Approved by {_e(st.get("approved_by"))}. Event Info emails go to '
-                f'{c.get("ready", 0)} players at {info_time()}.</div>'
-                if st.get("approved_fp") == rv["fingerprint"] else "")
-        action = appr or (f'<button id="go" data-fp="{_e(rv["fingerprint"])}">Approve pairings</button>'
-                          f'<div style="color:#6B7280;font-size:13px;margin-top:6px;">Players get their full Event Info '
-                          f'email at {info_time()} on event day ({c.get("ready", 0)} ready).</div>'
-                          '<div id="msg"></div>')
-    sample = rv["sample"]
+        bar = (f'<div id="bar" class="ok">{_e(stt["label"])}</div>' if approved else
+               (f'<div class="amber">Changed since approval: {_e(stt["approved_name"] or "")} approved an earlier '
+                f'sheet at {_e(stt["approved_at12"] or "")}.</div>' if stt["approval"] == "changed" else ""))
+        btn = ("" if approved else
+               f'<button id="go" data-fp="{_e(rv["fingerprint"])}" data-confirm="{_e(plan.get("confirm", ""))}">'
+               f'{"Approve again" if stt["approval"] == "changed" else "Approve pairings"}</button>')
+        action = (bar + btn
+                  + f'<div id="line" class="line">{_e(plan.get("line", ""))}</div>'
+                  + ("" if approved else f'<div class="line sub">{_e(plan.get("auto_line", ""))}</div>')
+                  + '<div id="msg"></div>')
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Approve Pairings · {_e(ev['name'])}</title>
@@ -480,46 +617,73 @@ header .e {{ font:bold 12px Georgia,serif; letter-spacing:2px; color:#E87C3E; }}
 header h1 {{ font:bold 22px Georgia,serif; margin:4px 0 0; }}
 main {{ max-width:640px; margin:0 auto; padding:16px; }}
 button {{ width:100%; background:#E87C3E; color:#fff; border:0; border-radius:999px; padding:14px;
-          font:bold 16px Arial,sans-serif; cursor:pointer; }}
+          font:bold 16px Georgia,serif; cursor:pointer; }}
 button[disabled] {{ opacity:.6; }}
-.done {{ background:#bbf7d0; color:#15803D; border-radius:8px; padding:12px; }}
+.ok {{ background:{APPROVED_GREEN}; color:#fff; border-radius:999px; padding:14px; text-align:center;
+       font:bold 16px Georgia,serif; letter-spacing:.5px; }}
+.amber {{ background:#FEF3C7; color:#92400E; border-radius:8px; padding:10px 12px; margin-bottom:10px; }}
+.line {{ color:#374151; font-size:14px; margin-top:8px; }}
+.line.sub {{ color:#6B7280; font-size:13px; margin-top:4px; }}
 .warn {{ background:#FEF3C7; border-radius:8px; padding:12px; }}
-#msg {{ margin-top:10px; }}
+#msg {{ margin-top:10px; color:#B91C1C; }}
 .sample {{ border:1px solid #E5E7EB; border-radius:8px; background:#fff; overflow:hidden; margin-top:8px; }}
 </style></head><body>
 <header><div class="e">APPROVE PAIRINGS</div><h1>{_e(ev['name'])}</h1>
-<div style="color:#D1D5DB;font-size:14px;">{_e(ev['date'])} · {_e(ev['course'])} · {c.get('ready', 0)} ready{f", {c.get('held')} held" if c.get('held') else ""}</div></header>
+<div style="color:#D1D5DB;font-size:14px;">{_e(_day_name(ev['date']))}, {_e(_date_short(ev['date']))} · {_e(ev['course'])}</div></header>
 <main>
 {action}
-<p style="margin-top:12px;"><a href="/events?event={int(ev['id'])}&amp;view=pairings" style="display:inline-block;width:100%;box-sizing:border-box;text-align:center;border:2px solid #1B1B1B;color:#1B1B1B;text-decoration:none;font-weight:bold;padding:12px;border-radius:999px;">Edit pairings</a></p>
-{_flags_html(rv)}
+<p style="margin-top:12px;"><a href="/events?event={eid}&amp;view=pairings" style="display:inline-block;width:100%;box-sizing:border-box;text-align:center;border:2px solid #1B1B1B;color:#1B1B1B;text-decoration:none;font-weight:bold;padding:12px;border-radius:999px;font-family:Georgia,serif;">Edit pairings</a></p>
+<div id="checks" style="color:#6B7280;font-size:13px;">Checking the rules and the emails…</div>
 <h3>The groups</h3>
 {_groups_html(rv["groups"])}
-{(SAMPLE_HEAD.replace('7:00 AM', info_time()) + '<div class="sample">' + sample["html"] + '</div>') if sample else ""}
+<div id="sample"></div>
 </main>
 <script>
 (function () {{
+  fetch("/events/{eid}/approve-pairings/check").then(function (r) {{ return r.json(); }}).then(function (d) {{
+    document.getElementById("checks").innerHTML = d.flags_html || "";
+    if (d.sample_html) document.getElementById("sample").innerHTML = d.sample_html;
+  }}).catch(function () {{ document.getElementById("checks").textContent = ""; }});
   var b = document.getElementById("go"); if (!b) return;
   b.addEventListener("click", function () {{
-    if (!confirm("Approve these pairings? Players get their Event Info email at {info_time_for_id(ev['id'])}.")) return;
-    b.disabled = true; b.textContent = "Approving\\u2026";
-    fetch("/api/events/{int(ev['id'])}/approve-pairings", {{method: "POST", headers: {{"Content-Type": "application/json"}},
+    if (b.disabled) return;
+    if (!confirm(b.getAttribute("data-confirm"))) return;
+    b.disabled = true; b.textContent = "Approving\u2026";
+    fetch("/api/events/{eid}/approve-pairings", {{method: "POST", headers: {{"Content-Type": "application/json"}},
       body: JSON.stringify({{fingerprint: b.getAttribute("data-fp")}})}})
       .then(function (r) {{ return r.json().then(function (d) {{ return [r, d]; }}); }})
       .then(function (x) {{
         var r = x[0], d = x[1], m = document.getElementById("msg");
         if (r.status === 409 && d.fingerprint) {{ m.textContent = d.error; setTimeout(function () {{ location.reload(); }}, 1500); return; }}
-        if (!r.ok || d.error || d.refused) {{ m.textContent = "Not sent: " + (d.error || d.refused); b.disabled = false; b.textContent = "Try again"; return; }}
-        var k = d.counts || {{}};
-        m.innerHTML = d.status === "approved"
-          ? '<div class="done">Approved. Event Info emails go to ' + (k.ready || 0) + ' players at ' + (d.sends_at || "{info_time_for_id(ev['id'])}") + '.</div>'
-          : '<div class="done">Approved. Sent ' + (k.sent || 0) + ", already sent before " + (k.skipped || 0) + ", failed " + (k.failed || 0) + ".</div>";
-        b.style.display = "none";
-      }}).catch(function (e) {{ b.disabled = false; b.textContent = "Try again"; document.getElementById("msg").textContent = String(e); }});
+        if (!r.ok || d.error || d.refused) {{ m.textContent = "Not approved: " + (d.error || d.refused); b.disabled = false; b.textContent = "Try again"; return; }}
+        var bar = document.createElement("div"); bar.id = "bar"; bar.className = "ok"; bar.textContent = d.label || "APPROVED";
+        b.parentNode.replaceChild(bar, b);
+        var ln = document.getElementById("line"); if (ln && d.plan && d.plan.line) ln.textContent = d.plan.line;
+        var sub = document.querySelector(".line.sub"); if (sub) sub.remove();
+      }}).catch(function (e) {{ b.disabled = false; b.textContent = "Try again"; document.getElementById("msg").textContent = "No answer from the Tracker. Try again."; }});
   }});
 }})();
 </script>
 </body></html>"""
+
+
+def _date_short(d) -> str:
+    try:
+        return datetime.strptime(str(d)[:10], "%Y-%m-%d").strftime("%B %-d")
+    except ValueError:
+        return str(d or "")
+
+
+def check_parts(event_id: int, db_path=None) -> dict:
+    """The slow half of the page, fetched after it loads: rule flags, who
+    gets no Event Info email, and the sample."""
+    rv = review(event_id, db_path)
+    if rv.get("error"):
+        return rv
+    sample = rv.get("sample")
+    return {"flags_html": _flags_html(rv),
+            "sample_html": ((SAMPLE_HEAD.replace('7:00 AM', info_time(db_path)) + '<div class="sample">'
+                             + sample["html"] + '</div>') if sample else "")}
 
 
 # ---------------------------------------------------------------------------

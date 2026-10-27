@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.603.1";
+window.TGF_VERSION = "2.604.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.604.0",
+    date: "2026-10-26",
+    title: "Approve pairings: answers at once, says what goes where and when, and shows APPROVED with who and when",
+    changes: [
+      "Kerry 10/26, after the approve-page mockup (CoS #2393): \"Ok, I'm good with that plan now.\" On 10/26 the approve page took 20 s to load and sat on Approving... after the click. The page now loads light (the pairings audit, who-gets-no-email and the Event Info sample load afterwards from /events/<id>/approve-pairings/check), and approval records the sheet and answers at once while the tee-times email is sent in the background (the claim guard keeps it from ever doubling with the job). A second tap does nothing.",
+      "The line under the button is built live per event (pairings_approval.send_plan): \"Approving sends tee times now to all 25 players, to Silverhorn Golf Club of Texas (Koalbey Lindsey, CC Tiffany Caplan) and to you. Invitees who haven't registered get the open-spots email (3 spots open). Players get their full Event Info at 6:00 AM Tuesday. Silverhorn gets the Course Files at noon Tuesday.\" A morning event reads \"...at noon Friday, and Kissing Tree gets the Course Files at the same time.\"; no course contact reads \"No course contact on file: the course gets nothing until one is added.\"; below it \"If you don't approve, this all goes automatically at 7:00 PM.\" The confirm pop-up gives the live counts (players, course, invitees). After approval a green APPROVED · Kerry · 5:14 PM Mon bar replaces the button and the line reads \"Tee times are going out now...\".",
+      "The Pairings tab's Approve button has three states, desktop and phone: Approve (orange), APPROVED · who · time (green #2f7d4a), and Changed since approval · Approve again (amber) once the saved sheet changes. Read-only bridge scoring-approve-plan:<event_id>. Guard test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.603.1",
     date: "2026-10-26",

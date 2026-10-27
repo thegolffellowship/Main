@@ -209,6 +209,27 @@ db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
 db.set_app_setting(pa.AUTO_DIAL, "off", db_path=DB)
 check("dial off: auto-send stops", pa.auto_send_check(datetime(2026, 10, 27, 7, 30), DB) == {"status": "off"})
 
+print("3d. Who, when, and what approval sends (Kerry via CoS #2393)")
+stt = pa.approval_status(AUS, DB)
+check("the approval reads APPROVED · Robert · <12-hour time> <day>",
+      stt["approval"] == "approved" and stt["label"].startswith("APPROVED · ")
+      and (" AM " in stt["label"] or " PM " in stt["label"]), stt)
+r2 = pa.approve_and_send(AUS, pa.sheet_fingerprint(AUS, DB), role="manager", session_chapter="Austin",
+                         approved_by="manager (Austin)", db_path=DB)
+check("a second tap does nothing", r2.get("status") == "already approved", r2)
+plan = pa.send_plan(AUS, DB)
+check("the line under the button names the players and the Event Info time",
+      plan["line"].startswith("Approving sends tee times now to all ") and "Event Info at" in plan["line"], plan)
+check("no course contact: the course clause is replaced",
+      "No course contact on file: the course gets nothing until one is added." in plan["line"], plan["line"])
+check("the confirm names the live count", plan["confirm"].startswith("Approve these pairings? Tee times go now to "),
+      plan["confirm"])
+check("after approval the line reads 'are going out now'",
+      pa.send_plan(AUS, DB, after=True)["line"].startswith("Tee times are going out now"))
+check("the automatic fallback line", plan["auto_line"] == "If you don't approve, this all goes automatically at 7:00 PM.")
+check("a changed sheet reads Changed since approval",
+      pa.approval_status(AUS, DB, fingerprint="something-else")["label"] == "Changed since approval · Approve again")
+
 print("4. The routes: log in first")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -223,8 +244,13 @@ check("a San Antonio manager cannot open an Austin approval", cl.get(f"/events/{
 with cl.session_transaction() as s:
     s["chapter"] = "Austin"
 page = cl.get(f"/events/{AUS}/approve-pairings")
-check("the Austin manager sees the review with the approved state",
-      page.status_code == 200 and b"Event Info emails go to" in page.data, page.status_code)
+check("the Austin manager sees the review with the green APPROVED bar (CoS #2393-4)",
+      page.status_code == 200 and b"APPROVED \xc2\xb7 " in page.data and b"#2f7d4a" in page.data
+      and b"Tee times are going out now" in page.data, page.status_code)
+check("the page never builds the Event Info emails or runs the audit on view (CoS #2393-6)",
+      b"approve-pairings/check" in page.data)
+chk = cl.get(f"/events/{AUS}/approve-pairings/check")
+check("…they load afterwards from /check", chk.status_code == 200 and "flags_html" in chk.get_json(), chk.status_code)
 
 with cl.session_transaction() as s:
     s["role"] = "admin"; s.pop("chapter", None)

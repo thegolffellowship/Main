@@ -5875,6 +5875,13 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-approve-plan":
+            # "<event_id>": READ-ONLY. What the approve page says approval sends
+            # (CoS #2393): the line, the confirm, the counts, and the
+            # APPROVED · who · time state.
+            from email_parser import pairings_approval as _pa
+            _eid = int((arg or "0").split("|")[0])
+            return json.dumps({**_pa.send_plan(_eid), **_pa.approval_status(_eid)}, indent=2, default=str)
         if cmd == "scoring-tee-colors":
             # scoring-tee-colors            READ-ONLY audit: every course's
             #   designated tees and the colour the one resolver gives them;

@@ -483,6 +483,41 @@ def clock12_safe(v) -> str:
     return clock12(s[:5])
 
 
+def plan_counts(event_id: int, db_path=None) -> dict:
+    """Light counts for the approve page (no messages built): registered
+    players, open seats on the saved sheet, and the invitees the open-spots
+    email would reach (only while its stamp is set and the dial is on)."""
+    from email_parser import database as db
+    pack = db.get_event_print_pack(int(event_id), db_path=db_path) or {}
+    open_list = _open_seats(pack)
+    n_open = sum(open_list.values())
+    seated = {int(p["customer_id"]) for g in pack.get("groups") or []
+              for p in g.get("players") or [] if p.get("customer_id")}
+    conn = db.get_connection(db_path)
+    try:
+        ev = dict(conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone() or {})
+        roster = db._event_roster_rows(conn, int(event_id)) if ev else []
+        registered = {int(r["customer_id"]) for r in roster if not r.get("rsvp_only") and r.get("customer_id")}
+        players = len(registered) or len(seated)
+        inv = 0
+        dl = dials(db_path)
+        if (ev and n_open > 0 and dl[SPOTS_DIAL] != "off"
+                and approval_state(db_path)[OPEN_VERSION]["approved"]):
+            from email_parser import invitations as inv_mod
+            for cid in _spots_people(conn, int(event_id), ev, roster, registered | seated, dl[SPOTS_DIAL], db_path):
+                if cid in seated:
+                    continue
+                try:
+                    if inv_mod.known_scanner(int(cid), db_path=db_path):
+                        continue
+                except Exception:
+                    pass
+                inv += 1
+    finally:
+        conn.close()
+    return {"players": players, "open_spots": n_open, "invitees": inv}
+
+
 def build(event_id: int, db_path=None, preview: bool = False, now: datetime | None = None) -> dict:
     """Every recipient's message across the three versions: `ready` (would
     send if the version is stamped and the dial is on), `held` (with the

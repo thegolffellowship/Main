@@ -6715,7 +6715,7 @@ def approve_pairings_page(event_id):
     The review: groups, hard rule flags, who gets no email, a sample, and
     one Approve button. email_parser/pairings_approval.py."""
     from email_parser.pairings_approval import review, render_page, may_approve
-    rv = review(event_id)
+    rv = review(event_id, light=True)
     if rv.get("error"):
         return rv["error"], 404
     why = may_approve(session.get("role"), session.get("chapter"), rv["event"]["chapter"])
@@ -6730,9 +6730,25 @@ def approve_pairings_page(event_id):
         if session.get("chapter"):
             who = f"{who} ({session.get('chapter')})"
         approve_and_send(event_id, want, role=session.get("role"),
-                         session_chapter=session.get("chapter"), approved_by=who)
-        rv = review(event_id)
+                         session_chapter=session.get("chapter"), approved_by=who, background=True)
+        rv = review(event_id, light=True)
     return render_page(rv)
+
+
+@app.route("/events/<int:event_id>/approve-pairings/check")
+@require_role("manager")
+@perf.timed_route("approve_pairings_check")
+def approve_pairings_check(event_id):
+    """The approve page's slow half, loaded after the page (CoS #2393-6):
+    rule flags, who gets no Event Info email, and the sample."""
+    from email_parser.pairings_approval import check_parts, review, may_approve
+    rv = review(event_id, light=True)
+    if rv.get("error"):
+        return jsonify(rv), 404
+    why = may_approve(session.get("role"), session.get("chapter"), rv["event"]["chapter"])
+    if why:
+        return jsonify({"error": why}), 403
+    return jsonify(check_parts(event_id))
 
 
 @app.route("/api/events/<int:event_id>/approve-pairings", methods=["POST"])
@@ -6748,7 +6764,7 @@ def api_approve_pairings(event_id):
         who = f"{who} ({session.get('chapter')})"
     res = approve_and_send(event_id, str(body.get("fingerprint") or ""),
                            role=session.get("role"), session_chapter=session.get("chapter"),
-                           approved_by=who)
+                           approved_by=who, background=True)
     code = res.pop("code", None) if isinstance(res, dict) else None
     if res.get("refused"):
         return jsonify(res), 409
@@ -7310,8 +7326,16 @@ def api_get_pairings(event_id):
             logger.exception("Blind pool lookup failed for event %d "
                              "(non-fatal)", event_id)
         _lap("blind_pool")
+        # The Pairings tab's Approve button state (CoS #2393-5).
+        approval = None
+        try:
+            from email_parser.pairings_approval import approval_status
+            approval = approval_status(event_id)
+        except Exception:
+            logger.exception("approval status failed for %s (non-fatal)", event_id)
         return jsonify({
             "pairings": pairings,
+            "approval": approval,
             "blind_pool": blind_pool,
             "timings_ms": _sw.snapshot() if _sw else {},
             "slots_9": slots_9,
