@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.604.0";
+window.TGF_VERSION = "2.604.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.604.1",
+    date: "2026-10-26",
+    title: "Approve page: an event approved days ahead says its tee times go at 5:00 PM the evening before",
+    changes: [
+      "The tee-times email only ever goes the evening before play, so approving the Fall Championship's sheet on Wednesday sends nothing until Friday. The line under the button said \"Approving sends tee times now\". It now reads \"Approving sends tee times to all 18 players, to Kissing Tree Golf Club (Rafe Corder) and to you at 5:00 PM Friday.\", the confirm says \"Tee times go at 5:00 PM Friday\", and the fallback line names the day (\"...automatically at 7:00 PM Friday.\"). An event that plays tomorrow reads as before. Guard test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.604.0",
     date: "2026-10-26",

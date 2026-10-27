@@ -480,8 +480,23 @@ def send_plan(event_id: int, db_path=None, after: bool = False) -> dict:
         course_clause = f", to {course} ({who})" if who else f", to {course}"
     else:
         course_clause = ""
-    verb = "Tee times are going out now" if after else "Approving sends tee times now"
-    s1 = f"{verb} to all {n} players{course_clause} and to you."
+    # The tee-times email only goes the evening before play (teetimes_email.
+    # send_window_ok): approving a sheet days ahead (a weekend event locks on
+    # Wednesday) sends it at 5:00 PM that evening, not now.
+    from email_parser.timezone_utils import today_central
+    try:
+        _evd = datetime.strptime(str(ev["event_date"])[:10], "%Y-%m-%d").date()
+    except ValueError:
+        _evd = None
+    eve = _evd - _td(days=1) if _evd else None
+    now_ok = eve is None or today_central() >= eve
+    eve_name = eve.strftime("%A") if eve else ""
+    if now_ok:
+        verb = "Tee times are going out now" if after else "Approving sends tee times now"
+        s1 = f"{verb} to all {n} players{course_clause} and to you."
+    else:
+        verb = "Tee times go" if after else "Approving sends tee times"
+        s1 = f"{verb} to all {n} players{course_clause} and to you at 5:00 PM {eve_name}."
     s_open = (f"Invitees who haven't registered get the open-spots email ({spots} spot{'s' if spots != 1 else ''} open)."
               if inv > 0 and spots > 0 else "")
     morning = is_morning_event(ev)
@@ -498,10 +513,12 @@ def send_plan(event_id: int, db_path=None, after: bool = False) -> dict:
         s_files = f"{short} gets the Course Files at noon {_day_name(send_day(ev))}." if has_contact else ""
     s_nocontact = "" if has_contact else "No course contact on file: the course gets nothing until one is added."
     line = " ".join(x for x in (s1, s_nocontact, s_open, s_info, s_files) if x)
-    confirm = (f"Approve these pairings? Tee times go now to {n} players"
+    confirm = (f"Approve these pairings? Tee times go {'now' if now_ok else 'at 5:00 PM ' + eve_name} to {n} players"
                + (f", {course} and you" if has_contact else " and you")
                + (f", and the open-spots email to {inv} invitee{'s' if inv != 1 else ''}." if inv > 0 and spots > 0 else "."))
-    return {"line": line, "auto_line": "If you don't approve, this all goes automatically at 7:00 PM.",
+    auto_line = ("If you don't approve, this all goes automatically at 7:00 PM."
+                 if now_ok else f"If you don't approve, this all goes automatically at 7:00 PM {eve_name}.")
+    return {"line": line, "auto_line": auto_line,
             "confirm": confirm, "players": n, "open_spots": spots, "invitees": inv,
             "course": course, "course_contact": has_contact, "morning": morning}
 

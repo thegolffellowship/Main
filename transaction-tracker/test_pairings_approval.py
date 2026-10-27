@@ -226,7 +226,18 @@ check("the confirm names the live count", plan["confirm"].startswith("Approve th
       plan["confirm"])
 check("after approval the line reads 'are going out now'",
       pa.send_plan(AUS, DB, after=True)["line"].startswith("Tee times are going out now"))
-check("the automatic fallback line", plan["auto_line"] == "If you don't approve, this all goes automatically at 7:00 PM.")
+check("the automatic fallback line names the evening before",
+      plan["auto_line"].startswith("If you don't approve, this all goes automatically at 7:00 PM"))
+_saved = pa.send_plan
+import email_parser.timezone_utils as _tzu
+_real_today = _tzu.today_central
+_tzu.today_central = lambda: __import__("datetime").date(2000, 1, 1)
+far = pa.send_plan(AUS, DB)
+_tzu.today_central = _real_today
+check("approved days ahead: tee times go at 5:00 PM the evening before, not now",
+      "and to you at 5:00 PM " in far["line"] and " now" not in far["line"].split(".")[0]
+      and far["auto_line"].startswith("If you don't approve, this all goes automatically at 7:00 PM ")
+      and "Tee times go at 5:00 PM " in far["confirm"], far)
 check("a changed sheet reads Changed since approval",
       pa.approval_status(AUS, DB, fingerprint="something-else")["label"] == "Changed since approval · Approve again")
 
