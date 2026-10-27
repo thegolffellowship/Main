@@ -83,6 +83,9 @@ SLOW_MS = {
     "teetimes_email": 900_000,        # job: one Graph send per roster player, course and manager
     "scoring-event-day-email": 60_000, # sends one email per roster player through Graph: p50 6.7 s, 12 s on 10/12
     "approve_pairings_page": 15_000,  # route: builds every player's Event Info email to show the counts and a sample (10.4 s and 11.6 s on 10/19 at load 90); laps in the sample say which part
+    "approve_pairings_check": 15_000, # route: the approve page's slow half (flags, who gets no email, the sample): audit 10.5 s + build_emails 8.6 s on 10/27 before the generator re-run was dropped from the audit
+    "screens_capture_deploy": 600_000, # job: headless-Chromium screenshots of every catalogued screen after each deploy (116 s p50, 348 s max at host load 74-110 on 10/26)
+    "screens_capture_nightly": 600_000, # job: the same capture at night (363 s on 10/27)
     "approve_pairings_api": 180_000,  # route: Approve also sends the tee-times emails inline, one Graph call each (97.6 s on 10/19 at load 80)
     "scoring-pairings-run": 60_000,   # staff bridge: |resend and |prompt send mail (15-20 s on 10/19 at load 76-91)
     "scoring-health": 90_000,        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; the 5:00 read may wait up to 75 s on the replica (33.6 s on 10/19)

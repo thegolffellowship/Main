@@ -54,6 +54,15 @@ from datetime import date, datetime, timedelta
 logger = logging.getLogger(__name__)
 
 VERSIONS = ("player", "course", "manager")
+# THE FOURTH VERSION, "open spots" (Kerry 10/26, CoS #2386/#2387: "Why would
+# there be a spots still open register box sent to those that are already
+# paid and seated? The point is to fill our open spots." / "That works. Send
+# it to build and deploy."): its own email to invitees who are not on the
+# sheet, only while the sheet has open seats. Its words live in code below;
+# the stamp is their hash.
+OPEN_VERSION = "open_spots"
+SEND_ORDER = ("player", OPEN_VERSION, "course", "manager")
+OPEN_STAMP = "teetimes_open_spots_approved"
 TEMPLATES = {"player": "Tee Times — Player",
              "course": "Tee Times — Course Contact",
              "manager": "Tee Times — Manager"}
@@ -103,12 +112,30 @@ MANAGER_LINE = {
 ADD_CONTACT_LINE = ('Add the course contact here and the system sends the packs to them from now on: '
                     '<a href="{add_contact_url}">Add course contact</a>')
 SENT_LINE = {
-    "both": "This went to the players and the course at 7:00 PM.",
-    "players": "This went to the players at 7:00 PM.",
-    "course": "This went to the course at 7:00 PM.",
+    "both": "This went to the players and the course at {sent_time}.",
+    "players": "This went to the players at {sent_time}.",
+    "course": "This went to the course at {sent_time}.",
     "neither": "No tee-times email went to the players or the course.",
 }
 FOOTER = '<p style="font-size:12px;color:#6B7280;">The Golf Fellowship &middot; {mailing_address}</p>'
+
+# The open-spots email, as Kerry approved it (CoS #2387).
+OPEN = {
+    "subject_one": "1 spot open at {short} tomorrow, {start}",
+    "subject_many": "{n} spots open at {short} tomorrow, {start}",
+    "title": "Spots open · {short}",
+    "lead": ("Hi {first_name}, tomorrow's field is set, and there's still room for you. "
+             "Grab an open spot and join the guys at {short}."),
+    "box_one": "1 spot open",
+    "box_many": "{n} spots open",
+    "button": "Register",
+    "table_head": "Who's playing",
+    "open_seat": "Open spot",
+    "under": "Open spots go to the first players who register. Pairings may change until the morning of the event.",
+    "footer": ("You're getting this because you're on the invite list for {short}. "
+               "Not this week? No need to reply."),
+    "stop": "Stop event invitations",
+}
 
 _FIXED = {
     "player": (PRELIM_LINE, TEESHEET_LINK, SPOTS_BOX["one"], SPOTS_BOX["many"], NONREG_LINE),
@@ -163,9 +190,18 @@ def load_template(version: str, db_path=None) -> dict | None:
     return {"id": r["id"], "subject": s, "html_body": h, "hash": template_hash(version, s, h)}
 
 
+def open_spots_hash() -> str:
+    raw = "\x1f".join(f"{k}={OPEN[k]}" for k in sorted(OPEN))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
 def approval_state(db_path=None) -> dict:
     """{version: {template, template_hash, approval_key, approved}}."""
     out = {}
+    oh = open_spots_hash()
+    out[OPEN_VERSION] = {"template": "(in code: teetimes_email.OPEN)", "template_hash": oh,
+                         "approval_key": OPEN_STAMP,
+                         "approved": (_setting(OPEN_STAMP, db_path) or "").strip() == oh}
     for v in VERSIONS:
         tpl = load_template(v, db_path)
         cur = tpl["hash"] if tpl else None
@@ -282,6 +318,22 @@ def _guard(subject: str, body: str, used: set, values: dict) -> list:
     return why
 
 
+MORNING_EVENT_INFO = "went out at noon today"
+MORNING_NONREG = "follows as soon as we place you"
+
+
+def event_info_phrase(body: str, morning: bool = False) -> str:
+    """The stamped line names when Event Info comes. A morning event's Event
+    Info went at noon the day before, with the Course Files (Kerry 10/26,
+    CoS #2355), before this evening email; everyone else's comes at the
+    event_info_hour dial's time tomorrow. The template keeps its words and hash."""
+    if morning:
+        return (body.replace("comes at 7:00 AM tomorrow", MORNING_EVENT_INFO)
+                    .replace("follows at 7:00 AM tomorrow", MORNING_NONREG))
+    from email_parser.pairings_approval import info_time
+    return body.replace("at 7:00 AM tomorrow", f"at {info_time()} tomorrow")
+
+
 def _render(version: str, tpl: dict, values: dict) -> tuple[str, str, list]:
     from email_parser.fetcher import render_msg_template, normalize_email_html
     from email_parser.event_day_email import html_to_text
@@ -294,12 +346,31 @@ def _render(version: str, tpl: dict, values: dict) -> tuple[str, str, list]:
     used = set(_TAG_RE.findall(tpl["subject"] + html_body))
     subject = html_to_text(render_msg_template(tpl["subject"], values))
     body = normalize_email_html(render_msg_template(html_body, values))
+    # The Event Info time follows its dial (Kerry 10/26: "Move event info
+    # email to 6:00am"); the stamped template keeps its words and hash.
+    body = event_info_phrase(body, values.get("_morning"))
     return subject, body, _guard(subject, body, used, values)
 
 
 # ---------------------------------------------------------------------------
 # Build (nothing is sent)
 # ---------------------------------------------------------------------------
+
+RELEASED_LINE = "We're releasing these tee times: {times}."
+
+
+def released_block(ev: dict, db_path=None) -> str:
+    """One line naming each tee time the event holds and its saved sheet does
+    not use (database.released_tee_times), or "" when none."""
+    from email_parser import database as db
+    try:
+        times = db.released_tee_times(ev, db_path=db_path)
+    except Exception:
+        return ""
+    if not times:
+        return ""
+    return f"<p><strong>{_t(RELEASED_LINE.format(times=', '.join(times)))}</strong></p>"
+
 
 def _sent(event_id: int, db_path=None) -> dict:
     try:
@@ -331,6 +402,122 @@ def _spots_people(conn, event_id: int, ev: dict, roster: list, registered: set,
     return sorted(out)
 
 
+FULL_GROUP = 4
+
+
+def _open_seats(pack: dict) -> dict:
+    """{group index: open seats} on the saved sheet: seats short of a full
+    group (a blind seat counts as open; a blind is not a player)."""
+    out = {}
+    for i, g in enumerate(pack.get("groups") or []):
+        n = sum(1 for p in g.get("players") or [] if (p.get("name") or "").strip())
+        if 0 < n < FULL_GROUP:
+            out[i] = FULL_GROUP - n
+    return out
+
+
+def _open_message(pack: dict, open_list: dict, first: str, reg_url: str, stop_url: str,
+                  short: str) -> tuple[str, str, list]:
+    """(subject, body, why) for one invitee. Every word from OPEN."""
+    from email_parser.invitations import _button
+    ev = pack.get("event") or {}
+    n = sum(open_list.values())
+    why = []
+    if not first:
+        why.append("no first name")
+    if not reg_url:
+        why.append("blank: registration link (the event has no registration link)")
+    start = " / ".join(x for x in (ev.get("start_label"), ev.get("start_label_18")) if x)
+    if not start:
+        why.append("no first tee / shotgun time on the event")
+    st = (ev.get("start_type") or "").lower()
+    clock = clock12_safe(ev.get("start_clock") or ev.get("start_time"))
+    subj_start = (f"{clock} shotgun" if "shotgun" in st else f"first tee {clock}") if clock else start
+    subject = (OPEN["subject_one"] if n == 1 else OPEN["subject_many"]).format(n=n, short=short,
+                                                                              start=subj_start)
+    groups = [g for g in pack.get("groups") or []
+              if any((p.get("name") or "").strip() for p in g.get("players") or [])]
+    hk = sorted({str(g.get("holes")) for g in groups if g.get("holes")}) or [pack.get("holes_key") or ""]
+    line = " · ".join(x for x in ((ev.get("course") or "").strip(), _date_long(ev.get("event_date")),
+                                  " and ".join(hk) + " holes", start) if x)
+    O = "#E87C3E"
+    T = 'role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"'
+    box = (f'<table {T} style="margin:12px 0;"><tr><td bgcolor="#FFF4EC" style="background:#FFF4EC;'
+           f'border:2px solid {O};border-radius:10px;padding:14px 16px;">'
+           f'<div style="font:bold 22px Georgia,serif;color:{O};">'
+           f'{_e(OPEN["box_one"] if n == 1 else OPEN["box_many"].format(n=n))}</div>'
+           f'<div style="padding:4px 0 10px;color:#1B1B1B;">{_e(line)}</div>'
+           f'<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
+           f'{_button(reg_url, OPEN["button"], O, "#ffffff")}</tr></table></td></tr></table>')
+    rows = []
+    for i, g in enumerate(pack.get("groups") or []):
+        names = [_e(p["name"].strip()) for p in sorted(g.get("players") or [],
+                                                         key=lambda x: x.get("cart_pos") or 0)
+                 if (p.get("name") or "").strip()]
+        if not names:
+            continue
+        names += [f'<span style="color:{O};font-weight:bold;">{_e(OPEN["open_seat"])}</span>'] * open_list.get(i, 0)
+        gstart = (g.get("start_line") or g.get("slot_label") or "").replace(" | ", " · ")
+        rows.append(f'<tr><td style="padding:8px 10px;border-top:1px solid #E5E7EB;vertical-align:top;'
+                    f'white-space:nowrap;"><b>{_e(gstart)}</b></td>'
+                    f'<td style="padding:8px 10px;border-top:1px solid #E5E7EB;">{"<br>".join(names)}</td></tr>')
+    if not rows:
+        why.append("pairings not saved")
+    table = (f'<table {T} style="border:1px solid #E5E7EB;border-radius:8px;margin:0 0 12px;font-size:15px;">'
+             f'<tr><td colspan="2" bgcolor="#1B1B1B" style="background:#1B1B1B;color:#ffffff;padding:10px;'
+             f'font-weight:bold;">{_e(OPEN["table_head"])}</td></tr>' + "".join(rows) + '</table>')
+    body = (f'<p>{_e(OPEN["lead"].format(first_name=first or "there", short=short))}</p>' + box + table
+            + f'<p>{_e(OPEN["under"])}</p>'
+            + f'<p style="font-size:13px;color:#6B7280;">{_e(OPEN["footer"].format(short=short))} '
+              f'<a href="{_e(stop_url)}" style="color:#6B7280;">{_e(OPEN["stop"])}</a></p>')
+    return subject, body, why
+
+
+def clock12_safe(v) -> str:
+    from email_parser.timezone_utils import clock12
+    s = str(v or "").strip()
+    if not s:
+        return ""
+    if re.search(r"[AaPp][Mm]", s):
+        return s
+    return clock12(s[:5])
+
+
+def plan_counts(event_id: int, db_path=None) -> dict:
+    """Light counts for the approve page (no messages built): registered
+    players, open seats on the saved sheet, and the invitees the open-spots
+    email would reach (only while its stamp is set and the dial is on)."""
+    from email_parser import database as db
+    pack = db.get_event_print_pack(int(event_id), db_path=db_path) or {}
+    open_list = _open_seats(pack)
+    n_open = sum(open_list.values())
+    seated = {int(p["customer_id"]) for g in pack.get("groups") or []
+              for p in g.get("players") or [] if p.get("customer_id")}
+    conn = db.get_connection(db_path)
+    try:
+        ev = dict(conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone() or {})
+        roster = db._event_roster_rows(conn, int(event_id)) if ev else []
+        registered = {int(r["customer_id"]) for r in roster if not r.get("rsvp_only") and r.get("customer_id")}
+        players = len(registered) or len(seated)
+        inv = 0
+        dl = dials(db_path)
+        if (ev and n_open > 0 and dl[SPOTS_DIAL] != "off"
+                and approval_state(db_path)[OPEN_VERSION]["approved"]):
+            from email_parser import invitations as inv_mod
+            for cid in _spots_people(conn, int(event_id), ev, roster, registered | seated, dl[SPOTS_DIAL], db_path):
+                if cid in seated:
+                    continue
+                try:
+                    if inv_mod.known_scanner(int(cid), db_path=db_path):
+                        continue
+                except Exception:
+                    pass
+                inv += 1
+    finally:
+        conn.close()
+    return {"players": players, "open_spots": n_open, "invitees": inv}
+
+
 def build(event_id: int, db_path=None, preview: bool = False, now: datetime | None = None) -> dict:
     """Every recipient's message across the three versions: `ready` (would
     send if the version is stamped and the dial is on), `held` (with the
@@ -359,6 +546,13 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
     common = {"event_name": _e(short), "course": _e(evp.get("course")),
               "date_long": _e(date_long), "tee_sheet": sheet, "chapter": _e(chap),
               "mailing_address": _e(mailing), "footer_block": footer}
+    try:
+        from email_parser.pairings_approval import is_morning_event
+        with db._connect(db_path) as _c:
+            _evr = _c.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        common["_morning"] = bool(_evr and is_morning_event(dict(_evr)))
+    except Exception:
+        common["_morning"] = False
     ready, held, skipped = [], [], []
 
     def add(version, key, cid, name, email, subject_body_why, cc=None, extra=None):
@@ -424,35 +618,60 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
             vals = {**common, "first_name": _e(first), "spots_block": ""}
             add("player", key, cid, full, email, _render("player", tpl_p, vals),
                 extra={"spots_box": False})
-        # 1b. The spots box: non-registered recipients, dial-gated, only while open.
-        if dl[SPOTS_DIAL] != "off" and open_seats > 0 and tpl_p:
+        # 1b. THE OPEN-SPOTS VERSION (Kerry 10/26, CoS #2386/#2387): seated
+        # players get their tee times with no Register box; invitees who are
+        # not on the sheet get their own email, only while the sheet has
+        # open seats. Audience: the invited (dial teetimes_spots_audience),
+        # minus anyone seated, anyone who said Can't make it, opt-outs and
+        # known mail scanners.
+        open_list = _open_seats(pack)
+        n_open = sum(open_list.values())
+        seated = {int(p["customer_id"]) for g in pack.get("groups") or []
+                  for p in g.get("players") or [] if p.get("customer_id")}
+        if dl[SPOTS_DIAL] != "off" and n_open > 0:
             from email_parser import invitations as inv
             evd = date.fromisoformat(str(ev["event_date"])[:10])
             reg_url_on = bool((ev.get("registration_url") or "").strip())
             stamp = int((now or datetime.utcnow()).timestamp())
-            for cid in _spots_people(conn, int(event_id), ev, roster, registered, dl[SPOTS_DIAL], db_path):
+            for cid in _spots_people(conn, int(event_id), ev, roster, registered | seated,
+                                     dl[SPOTS_DIAL], db_path):
+                if cid in seated:
+                    continue
+                try:
+                    if inv.known_scanner(int(cid), db_path=db_path):
+                        skipped.append({"version": OPEN_VERSION, "key": f"open:{cid}", "customer_id": cid,
+                                        "why": "known mail scanner"})
+                        continue
+                except Exception:
+                    pass
                 c = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
                                  (cid,)).fetchone()
                 full = " ".join(x for x in ((c[0], c[1]) if c else ()) if x).strip() or f"#{cid}"
                 email = inv._send_email(conn, cid)
-                key = f"player:{cid}"
+                key = f"open:{cid}"
                 if not email:
-                    held.append({"version": "player", "key": key, "customer_id": cid, "name": full,
+                    held.append({"version": OPEN_VERSION, "key": key, "customer_id": cid, "name": full,
                                  "reason": "no deliverable email"})
                     continue
-                link = (inv.rsvp_url(inv.make_token(cid, int(event_id), "in", evd,
-                                                    preview=preview, sent_at=stamp))
-                        if reg_url_on else "")
-                box_t = SPOTS_BOX["one"] if open_seats == 1 else SPOTS_BOX["many"]
-                box = ("<p>" + box_t.format(spots_left=open_seats, registration_link=_e(link)) + "</p>"
-                       if link else "")
-                vals = {**common, "first_name": _e((c[0] if c else "") or "there"),
-                        "spots_block": box}
-                s, b, why = _render("player", tpl_p, vals)
-                b = b.replace(EVENT_INFO_LINE, NONREG_LINE)
-                if not link:
-                    why = why + ["blank: {registration_link} (the event has no registration link)"]
-                add("player", key, cid, full, email, (s, b, why), extra={"spots_box": True})
+                reg = (inv.rsvp_url(inv.make_token(cid, int(event_id), "in", evd,
+                                                   preview=preview, sent_at=stamp))
+                       if reg_url_on else "")
+                stop = inv.rsvp_url(inv.make_token(cid, int(event_id), "unsub", evd, preview=preview))
+                first = ((c[0] if c else "") or "").strip()
+                subject, body, why = _open_message(pack, open_list, first, reg, stop, short)
+                if sheet_why:
+                    why = [f"tee sheet: {w}" for w in sheet_why] + why
+                row = {"version": OPEN_VERSION, "key": key, "customer_id": cid, "name": full, "email": email,
+                       "spots_box": True}
+                if key in sent:
+                    skipped.append({**row, "why": f"already sent {sent[key]}"})
+                elif why:
+                    held.append({**row, "reason": "; ".join(why), "subject": subject,
+                                 "html": frame(body, label, OPEN["title"].format(short=short))})
+                else:
+                    ready.append({**row, "subject": subject,
+                                  "html": frame(body, label, OPEN["title"].format(short=short)),
+                                  "text": html_to_text(body)})
     finally:
         conn.close()
 
@@ -472,6 +691,12 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
                          "email": rec["to"], "reason": "template missing"})
         else:
             vals = {**common, "first_name": _e(first), "pack_line": _t(PACK_LINE[wk])}
+            # THE RELEASED TEE TIMES (Kerry 10/26, CoS #2331 A / #2332: "let
+            # the course know which ones"): rendered by code under the tee
+            # sheet, inside {tee_sheet}, so the stamped template and its hash
+            # are unchanged.
+            if common["tee_sheet"]:
+                vals["tee_sheet"] = common["tee_sheet"] + released_block(ev, db_path)
             add("course", key, cid, rec.get("to_name"), rec["to"], _render("course", tpl_c, vals),
                 cc=list(rec.get("cc") or []))
 
@@ -483,6 +708,12 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
                  or (appr["course"]["approved"] and any(m["version"] == "course" for m in ready)))
     sent_line = SENT_LINE["both" if players_go and course_go else "players" if players_go
                           else "course" if course_go else "neither"]
+    # The time it ACTUALLY went (CoS #2386-2: an approval at 5:16 PM read
+    # "at 7:00 PM"): the earliest player/course send on record, else now.
+    from email_parser.timezone_utils import clock12, now_central, to_central
+    _went = sorted(v for k, v in sent.items() if k.startswith(("player:", "course:")))
+    _at = to_central(_went[0]) if _went else (now or now_central())
+    sent_line = sent_line.replace("{sent_time}", clock12(_at))
     mgr = manager_for(chap, db_path)
     tpl_m = load_template("manager", db_path)
     if not mgr.get("email"):
@@ -505,7 +736,7 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
 
     counts = {v: {"ready": sum(1 for m in ready if m["version"] == v),
                   "held": sum(1 for m in held if m["version"] == v),
-                  "skipped": sum(1 for m in skipped if m["version"] == v)} for v in VERSIONS}
+                  "skipped": sum(1 for m in skipped if m["version"] == v)} for v in SEND_ORDER}
     return {"event": {"id": int(event_id), "name": evp.get("item_name"), "date": evp.get("event_date"),
                       "course": evp.get("course"), "chapter": chap, "weekend": weekend},
             "field": field, "spots_left": open_seats, "approvals": appr, "dials": dl,
@@ -632,6 +863,34 @@ def send_window_ok(event_date, now: datetime | None = None) -> str | None:
     return None
 
 
+CLAIM_KEY = "teetimes_claim:{event_id}:{key}"
+
+
+def _claim(event_id: int, key: str, db_path=None) -> bool:
+    """Atomically claim one message before it is sent. Two senders can run at
+    once (the manager's approval and the every-5-minute job both deliver an
+    approved sheet); on 10/26 at 5:16 PM both read an empty sent-map and
+    every Silverhorn email went twice. Exactly one caller wins the claim:
+    the row is inserted only if it is not there (app_settings.key is the
+    primary key), and the winner is the one whose insert landed."""
+    from email_parser import database as db
+    ck = CLAIM_KEY.format(event_id=int(event_id), key=key)
+    with db._connect(db_path) as conn:
+        cur = conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
+                           (ck, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return (cur.rowcount or 0) == 1
+
+
+def _release_claim(event_id: int, key: str, db_path=None) -> None:
+    """A failed send gives its claim back so the next run can try again."""
+    from email_parser import database as db
+    with db._connect(db_path) as conn:
+        conn.execute("DELETE FROM app_settings WHERE key = ?",
+                     (CLAIM_KEY.format(event_id=int(event_id), key=key),))
+        conn.commit()
+
+
 def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
     from email_parser import database as db
     from email_parser.event_day_email import _creds
@@ -655,7 +914,7 @@ def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
     sent_map = _sent(event_id, db_path)
     sent, failed, locked = [], [], []
     # Players and course first, then the manager (whose line says what went).
-    order = sorted(built["messages"], key=lambda m: VERSIONS.index(m["version"]))
+    order = sorted(built["messages"], key=lambda m: SEND_ORDER.index(m["version"]))
     for m in order:
         if not built["approvals"][m["version"]]["approved"]:
             locked.append({"version": m["version"], "customer_id": m["customer_id"],
@@ -663,6 +922,8 @@ def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
             continue
         if m["key"] in sent_map:
             continue
+        if not _claim(event_id, m["key"], db_path):
+            continue          # another sender has it (or already sent it)
         ok = False
         try:
             ok = fetcher.send_mail_graph(tenant_id=creds[0], client_id=creds[1], client_secret=creds[2],
@@ -675,8 +936,12 @@ def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
                "email": m["email"]}
         (sent if ok else failed).append(row)
         if ok:
+            # Re-read before writing: the other sender may have added its own.
+            sent_map = _sent(event_id, db_path)
             sent_map[m["key"]] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             db.set_app_setting(key, json.dumps(sent_map, sort_keys=True), db_path=db_path)
+        else:
+            _release_claim(event_id, m["key"], db_path)
         try:
             db.log_message({"event_name": built["event"]["name"], "channel": "email",
                             "recipient_name": m["name"], "recipient_address": m["email"],

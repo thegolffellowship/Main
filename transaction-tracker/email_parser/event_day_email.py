@@ -1216,9 +1216,10 @@ def add_handicap_note(url: str) -> str:
             f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">NO HANDICAP ON FILE</div>'
             f'<div style="padding-top:4px;color:{INK};">We don\'t have a handicap for you yet, so a blind '
             f'stands in for your team score. Add yours and the blind comes off.</div>'
-            f'<div style="padding-top:10px;"><a href="{_e(url)}" style="display:inline-block;background:{ORANGE};'
+            f'<div style="padding-top:10px;"><table {_T}><tr><td bgcolor="{ORANGE}" style="background:{ORANGE};'
+            f'border-radius:999px;"><a href="{_e(url)}" style="display:inline-block;background:{ORANGE};'
             f'color:#ffffff;text-decoration:none;font:bold 14px Arial,sans-serif;border-radius:999px;'
-            f'padding:9px 18px;">ADD HANDICAP</a></div></td></tr></table>')
+            f'padding:9px 18px;">ADD HANDICAP</a></td></tr></table></div></td></tr></table>')
 
 
 def rules_note() -> str:

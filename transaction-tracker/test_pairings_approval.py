@@ -76,7 +76,7 @@ check("…naming the event, the player count and the review link (login)",
       and f"/events/{AUS}/approve-pairings" in p.get("html_body", "")
       and "log in" in p.get("html_body", ""), p.get("html_body", "")[:400])
 check("…with the groups and a sample player email",
-      "Ann Able" in p.get("html_body", "") and "7:00 AM Event Info email" in p.get("html_body", "") and "Edit pairings" in p.get("html_body", ""))
+      "Ann Able" in p.get("html_body", "") and "6:00 AM Event Info email" in p.get("html_body", "") and "Edit pairings" in p.get("html_body", ""))
 check("no player was emailed by the prompt",
       not any(s["to_address"].endswith("@example.test") for s in SENT))
 SENT.clear()
@@ -86,11 +86,13 @@ db.save_event_pairings(AUS, {"9": [{"group_num": 1, "slot_label": "1A", "players
     {"name": "Bob Baker", "cart_pos": 1, "customer_id": 990102},
     {"name": "Ann Able", "cart_pos": 2, "customer_id": 990101}]}]}, db_path=DB)
 r2 = pa.prompt_check(mon_5_05 + timedelta(minutes=20), DB)
-check("a changed sheet waits out the hour before a fresh prompt",
-      not SENT and "hour" in (r2["events"][AUS].get("skipped") or ""), r2["events"].get(AUS))
+check("a changed sheet does not prompt again (Kerry 10/26: \"Just once\")",
+      not SENT and "once" in (r2["events"][AUS].get("skipped") or ""), r2["events"].get(AUS))
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
-pa.prompt_check(mon_5_05 + timedelta(minutes=80), DB)
-check("…then re-prompts for the new sheet", [s["to_address"] for s in SENT] == ["robert@thegolffellowship.com"])
+for _m in (80, 140, 200):
+    pa.prompt_check(mon_5_05 + timedelta(minutes=_m), DB)
+check("…not an hour later, nor at any later tick that evening", not SENT, [s["to_address"] for s in SENT])
+check("the job has no re-prompt timer any more", not hasattr(pa, "REPROMPT_MINUTES"))
 
 print("3. Approve")
 fp = pa.sheet_fingerprint(AUS, DB)
@@ -113,6 +115,36 @@ check("an approved sheet is never prompted again, even on a resend (Kerry 10/19)
 st = pa._load(DB); st[str(AUS)]["prompted_at"] = "2000-01-01 00:00:00"; pa._save(st, DB)
 db.set_app_setting(pa.DIAL, "0", db_path=DB)
 check("dial off: no prompts", pa.prompt_check(mon_5_05, DB) == {"status": "off"})
+db.set_app_setting(pa.DIAL, "", db_path=DB)
+print("2c. A weekend event is prompted at ITS lock, three days before (Kerry 10/26)")
+WE = 9303
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, start_time, course) "
+                 "VALUES (?, 's18.60 SA SATURDAY', '2026-10-24', 'San Antonio', 'active', '18 Holes', 'Tee Times', '08:00', 'Test GC')", (WE,))
+    conn.commit()
+db.save_event_pairings(WE, {"18": SHEET["9"]}, db_path=DB)
+SENT.clear()
+pa.prompt_check(datetime(2026, 10, 21, 16, 55), DB)
+check("Wednesday 4:55 PM: not yet", not pa.event_state(WE, DB).get("prompted_at"))
+r_we = pa.prompt_check(datetime(2026, 10, 21, 17, 5), DB)
+check("Wednesday 5:05 PM: the Saturday event's manager is prompted", bool(pa.event_state(WE, DB).get("prompted_at")), r_we.get("events", {}).get(WE))
+print("2d. A morning event's Event Info goes at noon the day before (Kerry 10/26, #2355)")
+with db._connect(DB) as conn:
+    for cid, name in ((990101, "Ann Able"), (990102, "Bob Baker")):
+        conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, side_games, transaction_status, "
+                     "order_date, order_id, email_uid, merchant) VALUES (?, ?, 's18.60 SA SATURDAY', ?, '18', 'NONE', 'active', "
+                     "'2026-10-01', ?, ?, 'GoDaddy')", (name, cid, WE, f"RW{cid}", f"mw-{cid}"))
+    conn.commit()
+_ev_we = dict(db.get_connection(DB).execute("SELECT * FROM events WHERE id = ?", (WE,)).fetchone())
+check("an 8:00 AM Saturday round is a morning event", pa.is_morning_event(_ev_we) and pa.info_time_for(_ev_we) == "noon the day before")
+pa.auto_send_check(datetime(2026, 10, 23, 11, 50), DB)
+check("Friday 11:50 AM: no Event Info yet", pa.emails_sent(WE, DB) == 0)
+r_noon = pa.auto_send_check(datetime(2026, 10, 23, 12, 0), DB)
+check("Friday noon: the Saturday players get their Event Info", pa.emails_sent(WE, DB) >= 2, r_noon.get("events", {}).get(WE))
+from email_parser import teetimes_email as _tt
+check("the evening tee-times line says it went out at noon today",
+      _tt.event_info_phrase(_tt.EVENT_INFO_LINE, True).endswith("went out at noon today.")
+      and "6:00 AM tomorrow" in _tt.event_info_phrase(_tt.EVENT_INFO_LINE, False))
 
 print("3b. 7 PM locks, 7 AM sends the Event Info email (Kerry 10/19)")
 db.set_app_setting(pa.DIAL, "1", db_path=DB)
@@ -141,7 +173,12 @@ check("7:00 PM: the unapproved sheet is auto-approved, no email",
       r["events"].get(E_AUTO, {}).get("status") == "auto-approved"
       and pa.event_state(E_AUTO, DB).get("approved_by", "").startswith("auto 7 PM"), r["events"].get(E_AUTO))
 check("7 PM sends no player email at all", not SENT and pa.emails_sent(E_APP, DB) == 0 and pa.emails_sent(E_AUTO, DB) == 0, len(SENT))
-check("6:45 AM event day: not yet", pa.auto_send_check(datetime(2026, 10, 27, 6, 45), DB).get("status") == "not yet")
+check("5:45 AM event day: not yet (Event Info is 6:00 AM, Kerry 10/26)",
+      pa.auto_send_check(datetime(2026, 10, 27, 5, 45), DB).get("status") == "not yet")
+check("the Event Info hour is 6 by default", pa.info_hour(DB) == 6 and pa.info_time(DB) == "6:00 AM")
+db.set_app_setting("event_info_hour", "7", db_path=DB)
+check("dial event_info_hour=7: 6:45 AM is not yet", pa.auto_send_check(datetime(2026, 10, 27, 6, 45), DB).get("status") == "not yet")
+db.set_app_setting("event_info_hour", "", db_path=DB)
 r = pa.auto_send_check(datetime(2026, 10, 27, 7, 0), DB)
 check("7:00 AM: both events' players get the Event Info email",
       pa.emails_sent(E_APP, DB) >= 2 and pa.emails_sent(E_AUTO, DB) >= 2, r)
@@ -172,6 +209,27 @@ db.set_app_setting(ede.APPROVAL_KEY, ede.load_template(DB)["hash"], db_path=DB)
 db.set_app_setting(pa.AUTO_DIAL, "off", db_path=DB)
 check("dial off: auto-send stops", pa.auto_send_check(datetime(2026, 10, 27, 7, 30), DB) == {"status": "off"})
 
+print("3d. Who, when, and what approval sends (Kerry via CoS #2393)")
+stt = pa.approval_status(AUS, DB)
+check("the approval reads APPROVED · Robert · <12-hour time> <day>",
+      stt["approval"] == "approved" and stt["label"].startswith("APPROVED · ")
+      and (" AM " in stt["label"] or " PM " in stt["label"]), stt)
+r2 = pa.approve_and_send(AUS, pa.sheet_fingerprint(AUS, DB), role="manager", session_chapter="Austin",
+                         approved_by="manager (Austin)", db_path=DB)
+check("a second tap does nothing", r2.get("status") == "already approved", r2)
+plan = pa.send_plan(AUS, DB)
+check("the line under the button names the players and the Event Info time",
+      plan["line"].startswith("Approving sends tee times now to all ") and "Event Info at" in plan["line"], plan)
+check("no course contact: the course clause is replaced",
+      "No course contact on file: the course gets nothing until one is added." in plan["line"], plan["line"])
+check("the confirm names the live count", plan["confirm"].startswith("Approve these pairings? Tee times go now to "),
+      plan["confirm"])
+check("after approval the line reads 'are going out now'",
+      pa.send_plan(AUS, DB, after=True)["line"].startswith("Tee times are going out now"))
+check("the automatic fallback line", plan["auto_line"] == "If you don't approve, this all goes automatically at 7:00 PM.")
+check("a changed sheet reads Changed since approval",
+      pa.approval_status(AUS, DB, fingerprint="something-else")["label"] == "Changed since approval · Approve again")
+
 print("4. The routes: log in first")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -186,8 +244,13 @@ check("a San Antonio manager cannot open an Austin approval", cl.get(f"/events/{
 with cl.session_transaction() as s:
     s["chapter"] = "Austin"
 page = cl.get(f"/events/{AUS}/approve-pairings")
-check("the Austin manager sees the review with the approved state",
-      page.status_code == 200 and b"Event Info emails go to" in page.data, page.status_code)
+check("the Austin manager sees the review with the green APPROVED bar (CoS #2393-4)",
+      page.status_code == 200 and b"APPROVED \xc2\xb7 " in page.data and b"#2f7d4a" in page.data
+      and b"Tee times are going out now" in page.data, page.status_code)
+check("the page never builds the Event Info emails or runs the audit on view (CoS #2393-6)",
+      b"approve-pairings/check" in page.data)
+chk = cl.get(f"/events/{AUS}/approve-pairings/check")
+check("…they load afterwards from /check", chk.status_code == 200 and "flags_html" in chk.get_json(), chk.status_code)
 
 with cl.session_transaction() as s:
     s["role"] = "admin"; s.pop("chapter", None)

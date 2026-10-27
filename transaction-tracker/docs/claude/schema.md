@@ -614,11 +614,29 @@ hole. It replaced the JSON column `blind_draws.missed_holes` that 0004
 added and nothing ever wrote (Kerry's #1087 rule: facts are rows); 0007
 drops that column (production SQLite 3.46.1, #1107). `blind_draws.holes` is a different fact: the
 9/18 sheet. `get_event_blinds` returns the list as `missed_holes`, and the
-engine takes it as `holes`. The missed-hole WRITER ships with Track A's
-#1021 wave. `_write_blind_row` upserts on `(event_id, slot_key)` (ON
+engine takes it as `holes`. The missed-hole WRITER is
+`database.sync_no_show_blinds` (branch tb5-no-show-2, Kerry 10/26; it keeps
+a blind's id and replaces only its hole rows as the holes change).
+`_write_blind_row` upserts on `(event_id, slot_key)` (ON
 CONFLICT DO UPDATE; #682, CoS #1100-2), so a redraw keeps the row's id and
 its hole rows; an INSERT OR REPLACE would have re-keyed the row.
-Rule: pairings.md 15i.
+Rule: pairings.md 15i, 15j.
+
+## `se_partial_rounds` (migration 0041, branch tb5-no-show-2, RULE 3b: waits on Kerry's OK)
+
+`(round_id → se_rounds, group_id → se_groups, customer_id → customers, kind
+joined | added | left, hole 1–18, makeup yes | no | unfinished | NULL,
+from_group_id → se_groups, marked_by → customers, device_id, created_at,
+updated_at)`, UNIQUE (round_id, customer_id, kind). One row per player per
+round per kind: put back late (`joined`, plays from `hole`), put on the card
+by "+ Player" (`added`, a switch carries `from_group_id`), or left the course
+(`left`, `hole` = the first hole not played). The NOT PLAYED holes are
+derived, never stored (`score_entry.partial_rounds`). Also in the
+score_entry DDL; only score_entry.py touches it (`test_score_entry.py`
+guard). Why a table and not `se_no_shows`: its status CHECK has no WD, and a
+late arrival can also leave or make holes up; three facts per player per
+round as rows. Reversible: DROP TABLE se_partial_rounds. Rule:
+score-entry.md "No-show".
 
 ## Home chapter by id: `customers.home_chapter_id` + `customer_chapter_history` (Kerry APPROVED, CoS #1084, v2.522.56)
 
@@ -689,3 +707,35 @@ stops), `created_at`, `created_by`, `revoked_at`, `last_seen_at`. Pages opened a
 `agent_action_log` rows (agent `advisor:<id>`, action `advisor_concept_open`), not
 a second table. Reversible: drop the table. Library sections added beside it:
 `published` (0022) and `concepts` (0023, served by `/concepts`).
+
+## se_group_pace + se_player_pace (migration 0037, Kerry "Yes to both, go ahead" #2092; db-claude PASS pending)
+
+Pace of play, measured from the phones (score-entry.md "Pace of play,
+measured"). Both tables are DERIVED from `se_audit` (the lossless record of
+every save) and rebuilt by `score_entry.rebuild_pace`, the only writer (dry
+run by default; the morning job applies it). Drop both and a rebuild restores
+them. Integer seconds, ids not names, no JSON, enums by CHECK. Also declared in
+`score_entry.py`'s lazy DDL (both places, like 0009).
+
+- `se_group_pace`: one row per group per timed round, UNIQUE(round_id,
+  group_id). `holes_timed`, `seconds_per_hole` (first hole to second-to-last
+  in play order; the last hole is never used), `field_median_seconds` (median
+  of the round's counting groups), `status` clean | adjusted | flagged,
+  `start_moved` / `end_moved` / `batches` (Kerry's catch-up rule),
+  `flag_few_holes` / `flag_long_gap` / `flag_clock` / `flag_entry_split`
+  (#2103) / `flag_manager_entry`, `takeovers`, `method_version`, `computed_at`.
+- `se_player_pace`: one row per player per timed round carrying the GROUP's
+  pace, UNIQUE(customer_id, round_id): `customer_id` FK, `group_id`,
+  `group_size`, `group_seconds_per_hole` (copied), `rel_seconds_per_hole` (vs
+  the field median), `holes_saved`, `status`, `flag_partial`,
+  `flag_regrouped`, `counts` (CHECK counts = 0 OR status <> 'flagged'; clean +
+  adjusted count, #2084/#2093). A player's history is their rows; averages and
+  counts are read on the fly (`score_entry.pace_players`).
+- Not timed at all: preview/test rounds and Lone Star Cup / match-play rounds.
+- STAFF ONLY. Suggest only (#2100): nothing writes `customers.pace_rating`.
+  No notice key: #2096 dropped `pace_10_round_notice_sent_at`; the 10-round
+  line rides db-claude's digest through `scoring-pace-players`.
+- Reversible: `DROP TABLE se_player_pace; DROP TABLE se_group_pace`.
+- Numbering: `migrations/` holds 0001-0024 with gaps; 0025-0036 are not in
+  the repo (0036 reserved for soft-merge, db-claude #2059). The runner
+  applies each file once in name order, so 0037 applies ahead of the gap.

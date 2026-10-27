@@ -1116,8 +1116,8 @@ Multi-role junction table. A customer can have multiple roles simultaneously.
 | `/api/events/sync` | POST | — | Auto-create events from item_name patterns |
 | `/api/events/add-player` | POST | — | Add player (body: `{event_name, customer, mode, ...}`) |
 | `/api/events/upgrade-rsvp` | POST | — | Convert RSVP placeholder to paid (body: `{item_id, ...}`) |
-| `/api/events/send-reminder` | POST | — | Email payment reminder (body: `{to_email, player_name, event_name}`) |
-| `/api/events/send-reminder-all` | POST | — | Bulk-send reminders to all RSVP-only players in an event |
+| `/api/events/send-reminder` | POST | — | The payment reminder (`email_parser/payment_reminder.py`) to one RSVP-only player (body: `{event_id or event_name, customer_id or to_email, player_name}`); once per person per event per day |
+| `/api/events/send-reminder-all` | POST | — | The same payment reminder to everyone the Events page shows as RSVP-only (shop rows and invitation / GG RSVPs); body `{event_id or event_name}` |
 | `/api/events/merge` | POST | — | Merge two events (body: `{source_event, target_event}`) |
 | `/api/events/orphaned-items` | GET | — | Items not linked to any event |
 | `/api/events/resolve-orphan` | POST | — | Link an orphaned item to an event |

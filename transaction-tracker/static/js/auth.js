@@ -25,7 +25,10 @@
         // A mockup link is its own destination too (Kerry 2026-09-26: a link
         // to the leaderboard mockup opened on /events instead).
         const isMockup = window.location.pathname.startsWith("/admin/mockups");
-        if (window.location.pathname !== "/events" && !isDeepLink && !isMemberPage && !isMockup) {
+        // So is a Screens link (Kerry 2026-10-26): /admin/screens#<sequence>
+        // from a Librarian post opens that sequence.
+        const isScreens = window.location.pathname.startsWith("/admin/screens");
+        if (window.location.pathname !== "/events" && !isDeepLink && !isMemberPage && !isMockup && !isScreens) {
             window.location.replace("/events");
             return;
         }

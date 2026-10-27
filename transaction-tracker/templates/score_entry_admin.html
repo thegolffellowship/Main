@@ -84,6 +84,8 @@
             <b>Copy link</b> copies the link to text to a player once it is on.
         </div>
     </div>
+{# 12-hour times (Kerry 2026-10-26, CoS #2325); this page has no shell nav #}
+<script src="/static/js/time12.js"></script>
 <script>
 (function () {
     const EV = {{ ev.id }};
@@ -140,7 +142,7 @@
     // Payouts skip the hole until then. The full claim history sits underneath.
     function ctpVerify(r, c) {
         const nc = c.needs_confirm;
-        const hist = (c.history || []).map((h) => `<li>${esc((h.at || "").slice(11, 16))} · Group ${h.group_num != null ? h.group_num : "?"}: ${
+        const hist = (c.history || []).map((h) => `<li>${esc((window.tgfTime12 || (x => x))((h.at || "").slice(11, 16)))} · Group ${h.group_num != null ? h.group_num : "?"}: ${
             h.kind === "none" ? "no one closer" : esc(h.name || "#" + h.customer_id) + (h.kind === "manager" ? " (manager)" : "")}</li>`).join("");
         return (nc ? `<div class="mgr-row" style="background:#FEF3C7;border-radius:8px;padding:8px 10px;">
               <span class="lbl"><b>Confirm hole ${c.hole}:</b> ${esc(nc.to.name || "")} (Group ${nc.to.group_num}) took it from
@@ -183,7 +185,7 @@
               <span class="lbl"><b>${esc(p.name)}</b> · Group ${g.group_num}<br><span class="muted">card complete, not signed</span></span>
               <button class="btn" data-signfor="${g.group_id}:${p.customer_id}" data-nm="${esc(p.name)}">Sign for ${esc(String(p.name).split(" ")[0])}</button></div>`).join("")
             : `<div class="mgr-row muted">No complete, unsigned cards.</div>`;
-        const log = (m.log || []).slice(0, 8).map((x) => `${esc(x.at.replace("T", " ").slice(0, 16))} · ${esc(x.actor)} · ${esc(x.kind.replace("manager_", ""))}${x.name ? " · " + esc(x.name) : ""}`).join("<br>");
+        const log = (m.log || []).slice(0, 8).map((x) => `${esc((window.tgfTime12 || (y => y))(x.at.replace("T", " ").slice(0, 16)))} · ${esc(x.actor)} · ${esc(x.kind.replace("manager_", ""))}${x.name ? " · " + esc(x.name) : ""}`).join("<br>");
         return `<div class="mgr">
             <h3>Manager actions</h3>
             <h3>CTP / Longest putt</h3>${ctp}

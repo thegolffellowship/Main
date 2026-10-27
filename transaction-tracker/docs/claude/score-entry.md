@@ -728,7 +728,82 @@ Missing holes are absent, not zero. One version per event; poll every
 `test_score_entry.py` — idempotent replay, lock refusal kept in audit,
 take-over audit, team row, the read shape, links (tamper / revoke / closed
 round), identity, the money-record guard, seeding from PAIRINGS (shotgun
-start hole + clock), and the HTTP layer including the flag.
+start hole + clock), and the HTTP layer including the flag. It also holds
+the **se_audit append-only guard** (db-claude #2059): no code, score_entry.py
+included, may UPDATE / DELETE / REPLACE / DROP se_audit rows.
+
+`test_pace.py` — the pace measure, flags, rebuild, staff read and manager
+report (below).
+
+## Pace of play, measured (migration 0037, Kerry 2026-10-19 #2092)
+
+Kerry: "Pace is measured per group but that group number should be an entry
+for each player as well" (#2073) and "Yes to both, go ahead - I also want a
+pace report sent to the manager ..." (#2092). Measure db-claude #2084,
+entry_split #2103, names not group numbers #2096, suggest only #2100.
+
+**The measure** (`compute_round_pace`, all in score_entry.py):
+- t[hole] = the group's FIRST accepted save on that hole, from `se_audit`
+  (an edit later never moves it; a refused or cleared write is not a save);
+  the phone's `client_ts` when within `pace_clock_seconds` of the server
+  time, else the server time and flag `clock`. Several players saving the
+  same hole: the median of their first saves.
+- Holes in PLAY order from `se_groups.start_hole`, wrapping on a shotgun.
+- STRAY SAVES (method v2, Database #2261, Kerry's OK 10/26): before the
+  median, each player's saves must run forward in play order; the longest
+  run that does is kept and the rest dropped (`strays` on the group). The
+  case: 10/20 TPC 4:20 PM, two cards saved hole 9 during hole 2, which
+  read as 16.9 over 6 adjusted instead of 16.6 over 7 clean.
+- A run of gaps under `pace_batch_seconds` (negative gaps included) is a
+  catch-up: its holes share the time evenly. Hole 1 saved with hole 2 moves
+  the start anchor to the end of that batch; the second-to-last saved with
+  the last moves the end anchor before it. The last hole is never used.
+- seconds_per_hole = (t[end] - t[start]) / play-order holes between them; a
+  missing hole counts as a hole elapsed.
+- Flags (status `flagged`: shown, not counted): `few_holes` (under
+  `pace_min_holes_9` / `_18`), `long_gap` (a hole over `pace_stop_minutes`
+  after spreading), `clock`, `entry_split` (players' saves more than
+  `pace_split_seconds` apart on `pace_split_holes` or more span holes),
+  `manager_entry` (every span save from a `manager*` / `admin*` device);
+  per player `partial` (too few span saves) and `regrouped` (saves in two
+  groups; kept in the one with most). Otherwise `adjusted` if any catch-up
+  or anchor moved, else `clean`. Clean and adjusted count.
+- THREESOMES (method v3, Kerry 10/26: "threesomes are outliers that skew data so don't get configured into standard results"): a group smaller than `pace_standard_group_size` (4) is timed and shown but never in the field median or a player's counted rounds (`standard` 0, `counts` 0).
+- Not timed: preview/test rounds, Lone Star Cup / match-play rounds.
+- Dials (one app_settings key each, plain integers): `pace_batch_seconds`
+  300, `pace_stop_minutes` 35, `pace_clock_seconds` 120, `pace_min_holes_9`
+  6, `pace_min_holes_18` 12, `pace_rounds_to_count` 10, `pace_split_seconds`
+  120, `pace_split_holes` 3, `pace_standard_group_size` 4.
+
+**Storage**: `se_group_pace` / `se_player_pace` (schema.md), rebuilt by
+`rebuild_pace` (dry run default).
+
+**Bridges**: `scoring-se-audit-times:<round_id>` (read-only first saves +
+client_ts per group and player/team, with each group's take-over count),
+`scoring-pace-rebuild[:<round_id>][|apply]`, `scoring-pace-players[:<cid>]`
+(counting rounds, average min/hole and vs field, and the digest line "Pace:
+top player N/10 timed rounds" for db-claude's 7:05 digest, #2096; the
+Tracker's own daily email has no hook for it), `scoring-pace-report:<event_id>
+[|preview|send]`.
+
+**Suggest only** (#2100): `/api/pace/players` (manager+) feeds a small line
+under the 1-2-3 pace buttons on the Customers page: "N/10 timed, not used
+yet" below the threshold, minutes per hole and "+m:ss vs field" at it. No
+suggested 1/2/3; nothing writes `customers.pace_rating`.
+
+**The manager pace report** (`email_parser/pace_report.py`, one per event
+round, STAFF ONLY): (a) groups fastest to slowest, each led by the players'
+NAMES and the start hole or tee time (the group id never appears), average
+min/hole with vs field, total minutes over the measured holes with the hole
+count, estimated round time (average x holes), status with the reason; (b)
+hole by hole across the counting groups, the three slowest marked, n per
+hole, and a reason where a hole has no data; (c) the method line. To the
+chapter manager (`pairings_approval.manager_for`), Kerry copied, staff
+addresses only (`recap_mail.staff_only`), once per round (message_log
+`sent_by='pace_report'`). Job `pace_morning` 6:41 AM Central rebuilds the
+tables, then sends yesterday's rounds ONLY when app setting
+`pace_report_send` = on (default OFF; Kerry turns it on). The bridge's
+`|send` obeys the same dial.
 
 ## Load rehearsal (CA #665.1, 2026-09-25)
 
@@ -901,6 +976,43 @@ the lock dial changes, or its retry time comes.
 
 Bridge `scoring-auto-payouts[:apply][|<event_id>]`. Guard
 `test_auto_payouts.py`.
+
+## The scoring window and the closeout start (Kerry 2026-10-26)
+
+Kerry (CoS #2307 item 6): live scoring turns on one hour before the first tee
+or shotgun and off 15 minutes after the last score is in, per event. Kerry
+(CoS #2329 item 5): "I thought I changed it to 15 minutes after last score."
+Closeout starts 15 minutes after the last score.
+
+`email_parser/scoring_window.py`. The window gates a player's SAVES only
+(`/api/score-entry/write`, non-admin sessions); it does NOT move
+`score_entry_events`. That switch (`live_scoring_default.py`, from 5:00 PM the
+day before) also puts the Keep score link in the 6:00 AM Event Info email,
+the QR codes on the noon cart signs and scorecards, the entered cards on the
+boards and the publish of closed cards, all of which must exist outside the
+window. So:
+- **Opens** at first tee minus `live_scoring_on_minutes` (default 60; the
+  first tee from `database._evlb_first_tee`). Before it a save answers 409
+  "Scoring opens at 3:08 PM"; the phone keeps the batch in its queue (it
+  only drops ops on a 200) and sends it once the window opens.
+- **Closes** once every card of the event is final (each card already locks
+  15 minutes after its own last score, `se_card_lock_minutes`) and the last
+  score is `live_scoring_off_minutes` old (default 15). After that a save
+  answers 409 "Scoring has closed for this event". A card still open (a blank
+  hole, a no-show) keeps the event open. A manager Unlock reopens the card
+  and therefore the event.
+- **Fails open**: no first tee, no rounds, any error, or dial
+  `scoring_window_auto` = off. Admin sessions are never gated.
+- **Closeout start**: closeout is the Event Ops agent routine (the 9:00 PM run
+  stays the backstop); the Tracker cannot start an agent session. Job
+  `scoring_window` (every 5 minutes, 7:00 AM to 11:55 PM) records
+  `closeout_start:<event_id>`, logs agent_action_log `closeout_start`, and
+  posts ONE mailbox line (topic `closeout`, TO front-desk and Event Ops)
+  "CLOSEOUT START: <event>" once every card is final and the last score is
+  `closeout_start_minutes` old (default 15). The routine reads that post. It
+  also records `se_event_closed:<event_id>` and logs `live_scoring_closed`.
+- Read-only bridge `scoring-scoring-window:<event_id>`. Guard
+  `test_live_scoring_timing.py`.
 
 ## Publishing entered scores (G-0 keystone, CA #786 GO 1)
 
@@ -1304,3 +1416,41 @@ layouts changes.
   3. **The manager confirms takeovers.** `ctp_takeover(conn, round, hole)` is set when the current holder came from a phone claim that took the hole from a player in another group. A change within the same group, or a manager ruling, is not a takeover. The Live Scoring manager panel shows a "Confirm <name>" button (a manager ruling on the same player) and the hole's claim history (`ctp_history`). `event_ctp_holders` carries `needs_confirm`. Record Payouts (`_tracker_team_and_ctp_rows`) skips an unconfirmed hole with a note, and the EVENTS board shows it as "to be confirmed" with no dollar.
   4. No schema: everything is read from `se_ctp_claims`.
   5. Guards: test_score_entry.py, test_untethered_payouts.py, test_board_phone_ctp.py.
+
+## No-show: the scorer's "Player missing" (Kerry 2026-09-30 #1021, built 10/26 on branches tb5-no-show and tb5-no-show-2)
+
+Kerry 9/30 (ratified, Pairings Spec v1.4 §12.2): "on the first hole there needs to be an obvious red player missing button at the bottom. Then that opens up a prompt of who it is. Then follows up with the three answers" ... "It should ask each hole until after 4 holes and then the player is taken off card." Kerry 10/26 set N for this and for the course notice: "Both should be at 3p", so both default to 3 holes. Event Ops' NO-SHOW SCORER SEQUENCE items 1 to 4 are built; the scorer's side of item 5 is "+ Player" (below), the manager's "Move to..." is not.
+
+- **The button and the questions** (`templates/score_entry.html`): a red "Player missing" button sits above Save & Go in the bottom bar of every hole screen (while anyone else on the card could be missing). It opens "Who's missing?" (this card's players, not the scorer, not a Foursomes pair), then "Is <Name> coming?" with "Running late, keep him on the card" / "No, take him off this card" / "Don't know yet", and, for a player who has already scored a hole, a fourth answer **"Left the course (WD) from this hole"** (Kerry 10/26: "someone could WD due to whatever reason too, having to leave after any number of holes"). "Don't know yet" asks again on each new hole. An absent player gets a red "Off this card (no-show)" box under the rows with **+ Player** to put him back and the line "Blind for Team Net: <name>, holes 1–9". A late / not-here-yet row has a **Here now** button.
+- **Who may answer:** `POST /api/score-entry/missing` (`t`, `device_id`, `customer_id`, `answer` late | unknown | absent | present | wd | makeup_yes | makeup_no | makeup_unfinished, `hole`) -> `score_entry.mark_player_missing`. Only the phone holding the group's lock, only for a player on that card, never on a FINAL card (the manager unlocks it first), so a scorer can never take an active player off another card. Every answer is an se_audit row of kind `no_show`.
+- **Storage:** `se_no_shows` (migration 0040): one row per round and `customer_id`, `status`, first/last asked hole, `holes_asked`, `marked_by`, `device_id`. **`se_partial_rounds` (migration 0041, a RULE 3b SCHEMA CHANGE that waits on Kerry's OK):** one row per round, `customer_id` and kind: `joined` (put back after his group started; plays from `hole`), `added` (a "+ Player" newcomer or switch, `from_group_id`), `left` (WD; `hole` is the first hole he does not play); `makeup` yes | no | unfinished | NULL. Both tables are also in the score_entry DDL; only score_entry.py touches them (the `test_score_entry.py` guard list includes both).
+- **Effective absent** (`_no_show_state`): status `absent`; or `unknown` asked on N different holes; or `unknown` with no score of his own once his group has scored N holes. N = app setting `no_show_absent_after_holes` (default 3, Kerry 10/26).
+- **An absent player never holds the night.** `_group_card_state` leaves him out of the card's subjects, so his blank holes don't stop `card_final_at`, auto payouts, closeout checks or card parity. `get_entered_scores` leaves him out of `players` and lists him under each round's `absent`. His holes are never filled with par.
+- **BLINDS, by themselves** (Kerry 10/26: "Also need to account for providing a blind, or potentially more blinds for any missing players, based on our blind rules" / "Blinds would happen automatically if a player is removed, correct?"): every answer, every score on a card with a missing or partial player, and the 5-minute `no_show_notice` job call `database.sync_no_show_blinds`. It draws ONE Rule 15 blind per missing seat with the existing per-seat rule (pairings.md 15j) and undoes it when he comes back for those holes or makes them up. An absent player's blind covers every hole; a late arrival's, WD's or newcomer's covers his NOT PLAYED holes (`blind_draw_holes`). No manager tap.
+- **LATE ARRIVAL** (Kerry 10/26: "what happens when player shows up on hole 4???"): "+ Player" on the absent box, or **Here now** on a late / not-here-yet row, on hole H after his group has started records `joined` at H (`partial_rounds`). The holes before H in the group's play order are **NOT PLAYED**: never par, never holding the card, shown on the phone as a plain "Not played" line under "Joined on hole 4 · Blind Sam plays 1–3". Before the group has scored a hole, + Player is "back for the whole round" and the blind is undone.
+- **MAKE-UP HOLES** (Kerry 10/26: "Player late arrival needs to ask if that player will make up missed holes at end of regular scoring, which is always allowed if there's light", then "The late arrival should only ask that about missed holes after the original 9 are finished for other players, not right when he arrives"): `ask_makeup` is raised only once every other non-absent player on the card has a gross on every hole (`_regular_done`); until then the missed holes just show as missed. Once raised, the card holds until the scorer answers "Will Ned make up holes 1–3?". **Yes** (`makeup_yes`) opens them for entry after the last regular hole and the card waits for them (the blind keeps covering each until he enters it; a made-up round is complete and counts for everything). **No** (`makeup_no`) makes them final as not played. During make-up, "<Name> couldn't finish the make-up holes" (`makeup_unfinished`) makes the rest not played. A WD is never asked (he left).
+- **WD** ("Left the course (WD) from this hole" on hole H): his holes played stand; H and after (those with no gross) are NOT PLAYED and never hold the card; a blind covers them; the course notice counts him as having left. "+ Player" on him later deletes the WD (he plays on).
+- **"+ PLAYER" FOR SOMEONE ELSE** (Kerry 10/26: "Could also be there for a threesome as a standard, for someone we add last second or switches from another group last second"): on a card with fewer than 4 players or with a no-show (`card.can_add`), "+ Player: add or move someone onto this card" opens `GET /api/score-entry/add-choices` (`score_entry.add_choices`: roster players on no card of the round; players on another card of the round, Foursomes pairs excluded) and `POST /api/score-entry/add-player` (`add_player_to_card`: the lock holder only; never onto or from a final card).
+  - A **switch** moves his `se_players` row and carries his `se_hole_scores` / `se_hole_marks` / HIO / no-show rows with him. Scores are unique per round and player, so the two cards can never both hold a score for him on one hole. His signatures are voided.
+  - The **pairings follow** with ONE targeted write (`database.move_pairing_seat`, never a full save mid-round): the first free seat of the card's group. An add inserts an `event_pairings` row. The seat a switch leaves is an open seat and gets its Rule 15 blind at once (`draw_one_blind`). An open-seat blind on the seat he takes goes when he plays from the first hole. If the card's group is not on the saved PAIRINGS the response says so and the sheet is left alone (flagged, not guessed).
+  - After his new group has started he is `added` at the current hole (late-arrival rules and the make-up question). A newcomer on a card with an absent player FILLS that seat: the absent player's blind keeps only the holes before the newcomer joined.
+- **What an INCOMPLETE round plays** (a card with NOT PLAYED holes). Kerry 10/26: "For a lack of holes played, a player cannot compete in Individual Net or Individual Gross, but could still compete in Skins, MVP, and CTPs. Team Net is probably the biggest question." / "His ball on holes played, blind on the rest" / "A short round should still count toward points races, but not towards a handicap." One setting per game, `score_entry.INCOMPLETE_ROUND_GAMES`:
+  - individual_net OUT, individual_gross OUT (ruled);
+  - skins IN on the holes he played (ruled); a hole he did not play never holds a skin open;
+  - mvp IN (ruled): net Stableford over the holes he played. His strokes fall where the card's allocation put them over the full round, so a pop on a missed hole is lost; the plus comes off the round; his NOT PLAYED holes are final at zero and never leave the MVP waiting;
+  - ctp IN (ruled);
+  - points IN (ruled): the engine's net Stableford on the holes he played, floored at 0 (`tracker_points.event_lines`);
+  - handicap_round OUT (ruled).
+  - Team / Cart Net: `TEAM_NET_INCOMPLETE_ROUND` = `own_ball_and_blind` (RULED: his ball on the holes he played, the blind's on the rest) or `blind_whole_round`.
+  - Because the handicap round is out, an incomplete round is **never published** into scoring_rounds: `entry_publish` lists it under `incomplete_round`, never `held`, so it does not stop the money. Skins, MVP, points and Team Net read his entered card instead (`event_engine_state` adds it, flagged `incomplete_round`; `_partial_round_mvp_entrants` feeds the recorded City MVP; the board and the field check skip his NOT PLAYED holes). The closeout names him as a warning, not a blocker.
+- **Only what he paid into** (Kerry 10/26, CoS #2375: "Late arrivals of course is only eligible for what he's paid into or what's already included with his entry, in addition to the restrictions for not being eligible in the invidual net or gross due to incomplete scorecard"): a short round plays a game only when the game's buyer list says he bought it, exactly as for anyone (`_event_game_buyers`: Skins and Individual Gross = gross buyers, MVP and Individual Net = net buyers; Team / Cart Net and CTP come with the entry). `INCOMPLETE_ROUND_GAMES` only takes games away on top of that (Individual Net / Gross). Guarded in `test_no_show.py`.
+- **Paying a winning team's shared slot** (Kerry 10/26: "But the question is how you pay it out if the team wins?", then RULED: "Split by holes is good - So that player's share is prorated between two players."): `score_entry.TEAM_SLOT_PAYOUT` = `pro_rata` (the ruled default): the slot's equal share is split between the player and his blind by holes covered, to the cent (`database.team_slot_weights` + `split_weighted_cents`; the parts add up exactly). `player` / `blind` give the whole slot to one. A no-show who covered no hole gives his blind the whole slot in every mode. One slot is never paid twice. Example: a $92 team purse is 4 slots of $23.00; Lou joined on hole 4 (6 holes) and the blind played 1–3: Lou $15.33, the blind $7.67.
+- **The phone:** an absent player has no row; a late or not-here-yet player keeps his row (meta "Running late" / "Not here yet" with Here now), and his blank hole doesn't stop the scorer moving on. The server still holds the card until a late player's holes are in, or he is taken off or put back.
+- **Not built:** the manager's "Move to..." on the Live Scoring page. Holes an absent player DID play before being taken off leave the feed with him (WD is the answer for a player who leaves). The day-after board reads the record, where a short round is not published, so a past board's Team Net shows his slot from the blind's holes only (the money was recorded on the day from the entered cards).
+- **The course notice:** see events.md "Course no-show notice".
+- Screens: sequence `no-show` (11 steps, rendered from the real page and card on a throwaway round, `screens_capture._ns_seed` / `_r_no_show`). Guard `test_no_show.py`.
+
+
+### More than one player missing (Kerry 10/26, v2.603.1)
+
+Kerry: "What if multiple people are missing? Can I tap all that are missing?" Who's missing? is a multi-pick: the scorer taps every player who isn't here, then Next (N missing) asks Is <Name> coming? for each, in turn; the answers post one after another (`/api/score-entry/missing` per player), then one reload. Each absent player gets his own Rule 15 blind (`sync_no_show_blinds`).

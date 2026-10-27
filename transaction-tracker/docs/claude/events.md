@@ -95,6 +95,161 @@ Center texts and the Message Players `{event_url}` variable both read it.
 
 Test: `test_event_links.py`.
 
+## Payment reminder — one email everywhere (v2.581.0, Kerry 2026-10-26)
+
+Kerry: "our standard template for those unpaid DOES include the link. We need to match these up" ... "go with mockup 3" ... a link to who's registered, "but not in a button".
+
+`email_parser/payment_reminder.py` builds THE payment reminder. Four places use it: the Remind tag (`/api/events/send-reminder`), Remind All (`/api/events/send-reminder-all`), the every-other-day 6 AM job (`send_auto_payment_reminders`) and the Messages composer when it sends the "Payment Reminder" template (its preview too). Never write another copy of the body.
+
+- **Words:** the "Payment Reminder" message template (Messages page). The system seed and upgrade in database.py carry mockup 3. The variables are `{player_name}`, `{event_place}`, `{event_date_long}`, `{pay_button}`, `{roster_link}`, `{manager_name}` and `{manager_phone}`.
+- **Frame:** the invitation house frame (`event_day_email.frame`), with the masthead title "<Day> at <place>". The "<Day> at" is dropped when the place already has "@" in it.
+- **Roster link:** `{roster_link}` is a plain text link (not a button) to `/member/results/<event id>`.
+- **Holds:** a blank or expired registration link, a missing manager name or phone, or a leftover `{tag}` HOLDS the email. The Remind routes return 409 with the reason.
+- **Who:** `rsvp_only_people(event_id)` is everyone `_event_roster_rows` marks `rsvp_only`. That covers the shop's RSVP-only rows and the invitation / GG RSVPs. A row with no customer card sends by its email.
+- **Once a day:** each person gets it at most once per event per day. The app setting `payment_reminder_sent:<event id>` maps a customer id (or an email) to the date it went. `force` overrides this, from the Remind tag only. Every send is logged in message_log with event_id and customer_id.
+- **6 AM job:** keeps the `payment_reminder_exclude_events` dial.
+- **Stops at the lock (v2.585.0, Kerry 10/26, CoS #2313):** "Payment Reminders - Those stop at the 5:00p lock for any specific event. So the 4:50p you've been removed email is it for payment reminders for that event." `lock_at(ev)` is 5:00 PM on the event's pairings day (the `pairings_auto_weekdays` lead: Monday for a Tuesday nine, two days ahead for a dialled Saturday, the day before for an undialled weekday). From then on `send()` holds everyone ("past the 5:00 PM lock"), so the Remind tag and Remind All return 409; the 6 AM job skips the event; and the composer refuses the Payment Reminder template for it. Dial `payment_reminder_stop_at_lock` (on unless `off`).
+
+- **The quick out (v2.586.0, Kerry 10/26, CoS #2322/#2324):** "I want you to release the I'm not playing after all button right now." `with_out_button` puts a grey "I'm not playing after all" button under `{pay_button}` for anyone with a customer_id, on every reminder path (the composer adds it per recipient through `vars`) and on the 1:00 PM deadline warning, never the 4:50 PM release. The link is `invitations.make_token(..., "out", src="pay")`: the invitation's Can't make it flow, scanner guard and Thanks page. `record_answer` writes NOT PLAYING and, for `src="pay"`, also the Events page's not-playing mark (`rsvp_deadline._release_mark`), logged `payment_email_out`. Previews and dry runs mint preview links that record nothing. No manager FYI exists for a decline, so none was added.
+
+Guard: `test_payment_reminder.py`.
+
+## RSVP payment deadline — the lock-day warning and release (v2.583.0, Kerry 2026-10-26)
+
+Kerry: "I want the last 'warning' email to go out ... at 1:00p to let him know we haven't received payment, and the implications if not received by 5:00p. And then the 5:00p email if he hasn't made payment" ... "Those should be automated emails sent thru the tracker based on our RSVP rules." (CoS #2307 item 4.)
+
+`email_parser/rsvp_deadline.py`, job `rsvp_deadline` (every 10 minutes, 1:00-4:59 PM Central), dial `rsvp_deadline_auto` (on unless `off`).
+
+- **Which events:** the ones whose lock is today (`database.event_lock_at`, v2.591.0): the event's own `lock_override` when a manager set one, else 5:00 PM on the standard lock day. The warning goes from four hours before the lock (1:00 PM; never before 7:00 AM) and the release in the ten minutes before it (4:50 PM); the job runs every 10 minutes, 7:00 AM to 11:50 PM. Events in `payment_reminder_exclude_events` are skipped.
+
+## Course update before the lock (v2.592.0, Kerry 2026-10-26, CoS #2307 item 2)
+
+Kerry (via CoS): "update to the course contact with the currently registered list, manager CC'd, a live link so they can follow along, and notice that we lock foursome counts at 5:00 PM Monday, so please allow us to grow."
+`email_parser/course_update.py`, job `course_update` (every 15 minutes, noon to 2:45 PM). Noon the day before the event's lock (`event_lock_at`): Sunday noon for a Tuesday nine, Tuesday noon for a Saturday event. To the course's primary TGF contact, CC the other contacts and the chapter manager. The full number expected in two lists, Registered and RSVP Only (Kerry 10/26: "the email needs to also show Registered & RSVP Only, so they can see the full number we're expecting like 22 not 18 for Saturday", v2.602.0; the wording change re-stamped as `13f9bc2e40de4984`), the member tee sheet link, "We lock our foursome counts at 5:00 PM <lock day>". Once per event (`course_update_sent`). Held on a blank. Locked behind dial `course_update_auto` (on since 10/26, #2370) AND Kerry's wording stamp `course_update_approved` = `template_hash()`. Bridge `scoring-course-update:<id>[|preview[|<staff addr>]]`. Guard `test_course_update.py`.
+
+## Handicap reminder in the hour before the lock (v2.592.0)
+
+Kerry (CoS #2307 item 5): a reminder at 4:00 PM the day before to anyone registered without a handicap; #2341/#2345: "I approve today's handicap reminder email." `handicap_ask.plan(now=)` adds `lock_reminders`: anyone already asked and not answered gets the approved reminder email again in the hour before their event's lock (`LOCK_REMIND_MINUTES` 60), once per person per event (state `lock_reminded_<event_id>`). Rides the existing dial `handicap_ask_auto` and stamp `handicap_ask_approved`. Guard `test_handicap_ask.py`.
+
+## Lock days (Kerry 2026-10-26, v2.591.0)
+
+Kerry: "Monday thru Thursday: 1 day before at 5:00p / Friday: 2 days before at 5:00p / Sat/Sunday: 3 days before at 5:00p. These could be overridden by Managers if necessary, or possible Course Contacts within our future TGF Course Connect module."
+- The standard is the dial `pairings_auto_weekdays`, default (and production value) `mon:1,tue:1,wed:1,thu:1,fri:2,sat:3,sun:3`. It applies to every event on that weekday, scheduled or not.
+- The override: `events.lock_override` (migration 0038), 'YYYY-MM-DD HH:MM' Central, set on Edit Event ("Lock (blank = standard)") by a manager or admin; blank goes back to the standard. `update_event` ignores a malformed value.
+- ONE reader, `database.event_lock_at(ev)`. It drives the 5:00 PM pairings run (now every 15 minutes, each event once per lock at its own lock, `pairings_auto_done:<event_id>`; an event with no override still needs its weekday in the dial), the RSVP deadline emails, the payment-reminder stop at lock (`payment_reminder.lock_at`) and seat-fill.
+- The manager's approve prompt follows it too (v2.596.0): `pairings_approval.prompt_check` prompts any event whose lock has passed, so a Saturday event's manager is prompted Wednesday after 5:00 PM. Approving early only signs off the sheet: the tee-times email still goes the evening before play (its `send_window_ok`), and the Event Info at 6:00 AM on event day. Course Connect (course contacts setting it) is a Platform item.
+- **Who:** everyone the Events page shows as RSVP-only (`payment_reminder.rsvp_only_people`), minus known mail scanners (`invitations.known_scanner`) and anyone with no email.
+- **WARN, from 1:00 PM:** one email: pay by 5:00 PM or the spot is released. It uses the payment reminder's frame, variables and holds.
+- **RELEASE, 4:50-4:59 PM, before the pairings run:** anyone still RSVP-only who WAS warned is taken off the roster and gets one email. The roster mark is the Events page's own `rsvp_email_overrides` not_playing, so nothing is deleted and it can be undone on the page. A later registration puts them back as registered.
+  - Someone who RSVPs after the last warning is never released.
+  - A shop $0 RSVP-only order row is never touched. It raises one COO item `RSVP DEADLINE: <event>`.
+- **Once each:** once per person per event per kind (`rsvp_deadline_sent:<event_id>`). Sends are logged in message_log with event_id and customer_id; releases in agent_action_log (`rsvp_deadline_release`).
+- **CC (v2.585.0):** Kerry 10/26: "Can you make the RSVP emails cc me for the after NOON Monday emails?" Every warning and release is CC'd to app setting `rsvp_deadline_cc` (default kerry@thegolffellowship.com; `off` stops it).
+- **Read-only bridge:** `scoring-rsvp-deadline:<event_id>|warn|release` shows who would get each email now, with a sample.
+- **Guard:** `test_rsvp_deadline.py`.
+- **Still open:** text messages (Twilio), and auto-seating someone who pays after lock (seat-fill, #2310).
+
+## Seat-fill — late adds seat themselves (v2.589.0, Kerry 2026-10-26)
+
+Kerry: "Sign-ups between 5 and 7p. We need something here to automate adding to groups ... We've got to get to the point of zero manager reliance. The show must go on." (CoS #2308, #2331 C, #2333; sized in #2310.)
+
+`email_parser/seat_fill.py`. From an event's 5:00 PM lock (`payment_reminder.lock_at`) until its first tee, the FIRST step of the 15-minute `after_lock_changes` job seats every registered (paid) roster player who has no seat on the saved sheet, by the ruled rule (event-timeline.md, Kerry 10/20):
+- tee times: the latest threesome first, then earlier (highest group number first);
+- shotgun: the lowest hole first; on one hole, B before A (3A, 4B, 4A).
+- A group is open below 4 players. The late add takes the lowest free cart seat, and a blind drawn for that seat is cleared (`set_event_blind(..., None)`).
+- Never seated: RSVP-only players (#2310). Requests after the lock are ignored (ruled 10/20).
+- It saves through `save_event_pairings`, so the existing emails follow: before the Event Info send the seat rides in the draft sheet and the 6:00 AM Event Info; after it, the after-lock job's own update emails (player, UPDATED GROUP, course sheets inside the course window).
+- No open seat: the player stays Unassigned and one COO item `NO OPEN SEAT: <event>` per person per event (`seat_fill_unseated:<event_id>`). The waitlist is not ruled. Kerry 10/26: this "shouldn't happen based on locks and windows for signing up once we have the shop in the tracker. Right now it is possible based on not being able to control GoDaddy's product availability windows." So the COO item is a GoDaddy-era safety net; the Tracker shop's sign-up windows should close a full event at the lock.
+- Every seat in agent_action_log (`seat_fill`). Dial `seat_fill_auto` (on unless off). Read-only bridge `scoring-seat-fill:<event_id>`. Guard `test_seat_fill.py`.
+
+## Withdrawal fold — the sheet repairs itself after a withdrawal (Kerry 2026-10-26, CoS #2363-#2366)
+
+Kerry, verbatim (relayed by the Chief of Staff):
+- "Yes. In a shotgun, that should be the foursome with the highest hole number and B before A. In a tee time, that should be the first foursome. ... We don't want 4 threesomes on the course if we can help it. That's the key. And we don't want twosomes out there if we can help it, even though we've had those situations."
+- "Only thing is with two players leaving it depends if we've reduced multiples of four or stayed the same. Like if we had 41, and two dipping from the same group left 39. Of course two could leave from a foursome too, leaving only two. We'd want to fill to at least 3. We need to address all the scenarios to code for it in the tracker."
+- On timing: "Yes that way for now. May need to come back to the within an hour of tee time later. Let's see how this works for now."
+
+`email_parser/withdrawal_fold.py`. ONE algorithm, recomputed every run from the saved sheet, per holes set:
+- **A. Target.** N players on the sheet: G = ceil(N/4) groups, T = 4G - N threesomes (0-3), every group 3 or 4.
+- **B. Dissolve** (the field crossed a multiple of 4 downward, more groups than G): the SHORTEST group dissolves. Tie: the group a withdrawal hit (the fold remembers who was on the sheet, `withdrawal_fold_seen:<event_id>`); then, tee times, the time the keep/release rule gives back (weeknight keeps the latest so the earliest goes, weekend the reverse); shotgun, the highest hole, B before A. Its players go one each into the open groups: a group under 3 first (up to 3), then the threesomes in SEAT-FILL order (`seat_fill.fill_order`: tee times latest threesome first; shotgun lowest hole first, B before A); a mover takes the lowest free seat. The dissolved group's own tee time is released (nobody else's time moves; `released_tee_times` then names it). Repeat while groups > G.
+- **C. Repair:** every group under 3 takes one player from each foursome in DONOR order (`donor_order`: shotgun highest hole first, B before A; tee times the first/earliest foursome), the donor's highest seat that is not tied, until it has 3. The donor group keeps its seats (no re-seat), so nobody else in it "moves".
+- **D. Constraints:** never split a partner request (not suppressed), a Match Play pair (`detect_match_play_pairings`) or a guest from the host (`_host_of_map`), when both are in the same group. A tied unit moves whole into a group with room for it, or the next candidate is tried. If nothing works the run changes NOTHING and raises ONE COO item `WITHDRAWAL FOLD BLOCKED: <event>` (not raised again for the same sheet, `withdrawal_fold_raised:<event_id>`).
+- **E.** Seat-fill runs first in the same 15-minute run, then the fold.
+- **F. Notices:** the fold only writes the saved sheet (`save_event_pairings`; a blind on a seat a mover takes is cleared, as seat-fill does). The after-lock job, in the same run, diffs that sheet against what the Event Info carried: UPDATED GROUP to the moved players and both groups, the manager CC'd, changed sheets to the course only inside its window. Before the Event Info goes, the fold rides in the sheet it sends. No second notifier.
+
+The ten cases (guard `test_withdrawal_fold.py`, both shapes): 40->39 one from a foursome: no move. 40->38 same foursome: one donor -> 8F+2T. 40->38 different foursomes: no move. 41 (8F+3T)->40 one from a foursome: the new threesome dissolves into the three -> 10F, one time released. 41->39 two from one threesome: the single joins a threesome -> 9F+1T. 41->39 two from one foursome: the twosome splits into two threesomes -> 9F+1T. 39 (9F+1T)->38 from the threesome: one donor -> 8F+2T. 38 (8F+2T)->36 two from one threesome: the single joins the other -> 9F. 37 (7F+3T)->36 one from a threesome: the twosome splits into the other two -> 9F. 37->35 two from one foursome: the twosome goes into 2 of the 3 threesomes -> 8F+1T.
+
+**Timing (ruled #2366).** Only from the event's lock (`database.event_lock_at`) to first tee.
+1. A group under 3 is repaired at once (C), on the next 15-minute run.
+2. A dissolve (B) waits for 7:00 AM on event day (dial `withdrawal_fold_dissolve_at`, "07:00") so a late add can still take the seat; after that it runs at once.
+3. Nothing within the hour before the first tee (dial `withdrawal_fold_cutoff_min`, 60): the scorer no-show sequence takes over.
+
+**Wiring:** a step inside `after_lock_changes_job` (app.py), right after seat-fill and before the after-lock emails, so a late add and a withdrawal in the same run are seated, folded and announced together (rule E), and the update emails go in the same run rather than 15 minutes later. Dial `withdrawal_fold_auto` (on unless off). Every move and every released time in agent_action_log (`withdrawal_fold`). Read-only bridge `scoring-withdrawal-fold:<event_id>`.
+
+**Rule 17 after the lock.** `remove_player_from_pairings` used to re-deal the whole holes set with the generator whenever a removal freed a group (pairings.md rule 17). After the lock, with the dial on, it now only closes up the player's group and leaves the regroup to the fold (fewest moves, the 7:00 AM wait). Before the lock, or with the dial off, rule 17 runs as before.
+
+**Choices made where the rules were silent (flagged for Kerry):**
+- Before 7:00 AM with a dissolve pending, a short group is still repaired from a foursome at once (the literal ruling), then dissolved at 7:00 AM. 13->12 (4,3,3,2) is 3,3,3,3 overnight (four open seats kept for sale) and 4,4,4 at 7:00 AM: four moves where dissolving at once would take two. If no foursome can repair it (for example 4,3,3,1), the dissolve runs at once instead.
+- The second tie-break for the dissolve (after "the group the withdrawal hit") is the keep/release rule for tee times and the donor order for shotgun. The dissolved group's own time is released; the other groups are not slid onto the kept times (that would move every later group's start).
+- A dissolved group's players fill a group under 3 before a threesome (fewest moves).
+- Match Play: any two players on the sheet's same group who still owe each other a match (pool or bracket) count as a match, confirmed or not.
+- Only partner requests, matches and guest-host are protected; rules 14/16/18 (1st Timer / first year never alone / guest with an Ambassador) are not re-checked by a fold.
+- A fivesome event (`allow_fivesomes`) is skipped.
+- A blocked fold is all or nothing (B may have worked, C not): nothing moves and the manager is asked.
+- No separate "time released" email: the course learns of it from the changed sheets the after-lock job sends inside its window.
+
+## Same-night admin payout report (Kerry 2026-10-26, CoS #2329 item 6)
+
+Kerry: "I like to pay same night as a standard. ... Needs an automated Admin report once all events are completed that would carry a link to PAYMENTS."
+
+`email_parser/admin_payout_report.py`, job `admin_payout_report` (every 15 minutes, 5:00 PM to 11:45 PM Central), dial `admin_payout_report` (on unless `off`).
+
+- **When:** once EVERY active event dated today is closed. "Closed" is the closeout's own test, `closeout_checks.closeout_final_check(event)["final"]` (cards final, parity, payouts recorded); nothing new is invented. An event with nobody on its roster (`_event_roster_rows`) is skipped so a cancelled date never holds the report. While one is open, the job reports which and why and waits.
+- **What:** one email: each event's name, players, payouts recorded (count and total) and unpaid total, with an "Open PAYMENTS" button to `/tgf?view=unpaid` (Payouts opened on the Unpaid queue; `tgf.html` reads `?view=unpaid|refunds`).
+- **Who:** app setting `admin_payout_report_to`, default kerry@thegolffellowship.com; any address outside @thegolffellowship.com is refused. Never a member.
+- **Once a day:** `admin_payout_report_sent:<YYYY-MM-DD>`; logged in message_log (`sent_by` admin-payout-report) and agent_action_log (`admin_payout_report`).
+- **Read-only bridge:** `scoring-admin-payout-report[:<YYYY-MM-DD>]`.
+- **Guard:** `test_admin_payout_report.py`.
+- **Not built:** PayPal one-tap batch payouts (CFO plan, Board timing, #2338).
+
+## Noon Course Files job (Kerry 2026-10-26, CoS #2321, #2329-3, #2331 item 4)
+
+Kerry: "Event ops - Absolutely should be on Tracker side. Not an agent routine" and "CC Course Files to Manager too at the Tue noon job." Before this the noon send to the course was a one-time agent routine per event.
+
+`email_parser/course_files_noon.py`, job `course_files_noon` (every 15 minutes, 12:00 to 2:45 PM Central), dial `course_files_noon_auto` (on unless `off`).
+- **Event Info rides with it for a morning event (v2.597.0, Kerry 10/26, CoS #2355: "18 hole event info like Fall Champ needs to go out one day prior at noon, same time as course files."):** `pairings_approval.is_morning_event` (first tee before 1:00 PM) is the ONE test both jobs use. Such an event's Event Info goes at noon the day before (no separate 7 PM auto-approve; the noon send approves the sheet as it stands; a failed send retries until the first tee), its evening tee-times line reads "...went out at noon today." (non-registered: "...follows as soon as we place you."), the approve page says "noon the day before", and the after-lock job watches it from that send (it now covers tomorrow's events that have a baseline).
+- **Which day:** event day at noon; a MORNING event (first tee before 1:00 PM, e.g. a Saturday round) at noon the DAY BEFORE (`send_day`), matching the weekend tee-times line "Print packs ... were sent at noon today".
+- **Which events:** active, dated today, with saved pairings.
+- **What and to whom:** the Course Files exactly as the Course Files button sends them (`print_pack.send_course_files`, `COURSE_FILE_PARTS`): To the course's primary TGF contact, CC its other TGF contacts and Kerry's pack recipients, plus the chapter manager (`extra_cc`, `after_lock._manager_cc`).
+- **Once:** skipped when `course_files_sent:<event_id>` exists (a button send or an earlier run); the send records it, so the after-lock job's changed-sheet resends keep working.
+- **A gap** (scorecards that can't print yet, `print_pack._unprintable`): nothing goes to the course; the manager gets one email (Kerry copied, `course_files_noon_gap_sent:<event_id>`) with a link to the event, and the next run sends once the gap is fixed.
+- **Skipped:** no course contact on file (the morning manager-only pack covers it); within the hour before the first tee (`after_lock.course_cutoff_passed`), so a morning event whose first tee is before about 1:00 PM is not sent by this job.
+- Logged in message_log (`sent_by` course-files-noon) and agent_action_log (`course_files_noon`, `course_files_noon_held`). Read-only bridge `scoring-course-files-noon:<event_id>`. Guard `test_course_files_noon.py`.
+- Not built: the one-tap "send as is / wait" in the gap email (Event Ops spec); the manager uses the Course Files button.
+
+## Course no-show notice (Kerry 2026-09-30 #1021; N ruled 10/26; branded + totals 10/26)
+
+When scorers mark players missing (score-entry.md "No-show"), the course gets a TGF-branded player-count update. Kerry 10/26: "Message to course needs to update player count totals. That message should be a TGF branded email that CCs manager and admin." and (#2370) "Yes absent mark and course notice should both happen at 3 holes."
+- `email_parser/no_show_notice.py` (`build` / `run_event` / `check` / `send_preview`), job `no_show_notice` every 5 minutes on event day, dial `no_show_course_notice` (on unless `off`), holes dial `no_show_course_notice_holes` (default 3).
+- The email (Kerry 10/26, CoS #2375: "No-show sequence with email to course should show original count vs updated count and the what happened and who dropped with a request to have them removed from our final payment count"): the house frame (`event_day_email.frame`, like course_update.py); **Original count** (the players on the event's score-entry cards, less newcomers added there: the sheet the course got) vs **Updated count** (playing now); **What happened**, one line a person ("no-show", "left after hole N", "arrived late (from hole N), playing", "added at the course, playing"); "Please remove <no-shows and WDs> from our final payment count." (or "Nobody has dropped. Please keep our final payment count at the updated count."); signed by the chapter manager and The Golf Fellowship. Subject "TGF player count at <course>: <original> to <updated>", "UPDATED: " in front on a later one; the same layout every time.
+- Who counts: a no-show marked "No, take him off this card", or still "Don't know yet", once his group has played the notice's holes; "Running late" never counts. A WD ("Left the course") counts at once. The names come from `score_entry.event_no_shows`; the module never reads se_* tables.
+- To the course's primary TGF contact; CC its other TGF contacts (`print_pack.course_recipients_for_event`), the chapter manager (`after_lock._manager_cc`) and the admin: app setting `no_show_notice_admin_cc`, default kerry@thegolffellowship.com, TGF staff addresses only (a non-staff value holds the notice). Held with no course contact, no manager name or no course name.
+- **UPDATED, never twice for the same set.** The first notice goes once there is a due no-show or a WD. After that, whenever the set changes (a new no-show, a reported no-show who arrives, a WD, a last-second add) an UPDATED notice goes ("UPDATED: " subject, "UPDATED player count", "Arrived since our last note: …"). It is compared with the LAST set sent (`no_show_notice_sent:<event_id>` holds the customer_id signature and a send count), so the same set never goes twice in a row. Logged in message_log (`sent_by` no-show-notice) and agent_action_log (`no_show_notice`). Read-only bridge `scoring-no-show-notice:<event_id>[|preview[|<staff>]]`. Guard `test_no_show.py`.
+- The same job re-syncs the Rule 15 blinds for missing players (pairings.md 15j) on every run, whether or not the notice dial is on.
+
+## Live scoring window and closeout start (Kerry 2026-10-26)
+
+Player score saves open one hour before the first tee and close 15 minutes after the last score once every card is final; the closeout start signal (mailbox topic `closeout`) goes 15 minutes after the last score. `email_parser/scoring_window.py`; full rules in score-entry.md "The scoring window and the closeout start".
+
+## Unused tee times: which to keep (Kerry 2026-10-26)
+
+Kerry (CoS #2331 A / #2332): "If we have more tee times than we need the tee times should save the later times and release the earlier times and let the course know which ones." ... "We do that for 9 hole weeknight events, but with weekend events we keep the earliest times by default and give back the later ones."
+- A TEE-TIME event (not a shotgun) holding more times than its groups need: a weeknight (Monday-Friday) keeps the LATEST times; a weekend (Saturday/Sunday) keeps the EARLIEST.
+- Per event: `events.tee_keep` ('latest' | 'earliest', migration 0039), Edit Event "Unused tee times" (Default / Keep latest / Keep earliest). NULL = the weekday default. `database.tee_keep_mode(ev)` is the one reader.
+- The generator (`generate_event_pairings`) places the groups on `kept_tee_slots(ev, slots, n)` when no seed pins a slot.
+- `released_tee_times(ev)`: the times the event holds and its SAVED sheet does not use. The tee-times email to the course contact names them under the tee sheet: "We're releasing these tee times: 3:40 PM, 3:50 PM." (`teetimes_email.released_block`). It rides inside {tee_sheet}, so the stamped course template and its hash are unchanged.
+- Guard `test_tee_keep.py`.
+
 ## Transaction statuses
 - `active` — normal registration, shown in main table
 - `rsvp_only` — RSVP without payment, shown in main table (yellow background)
@@ -143,7 +298,7 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   unclear person's next email carries `CLARIFY_NOTE` (why we are asking again;
   list `event_invite_unclear:<id>`, cleared by a clear answer; v2.571.3). **Can't make it** lands straight on "Thanks for
   letting us know" with **Changed my mind, I'm in** (-> registration),
-  **Remove me from invitations** (-> straight to Done) and an optional one-tap
+  **Remove me from ALL event invitations** (since v2.579.3 a small grey text link at the bottom, below the reasons, never a button, worded ALL: Kerry 10/25 after two mis-taps; it opens the confirm step) and an optional one-tap
   reason (`REASONS`, table `event_decline_reasons` from migration 0016, one
   row per event + customer_id, a later tap updates it; `decline_reasons(id)`
   reads the counts; route `/rsvp/<token>/reason`) (Kerry 10/13: "The sequence for Can't make it is too
@@ -164,6 +319,7 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   `|keep-answers` (Kerry 10/20, Lou Schneider: his Can't make it was real,
   only the Remove me was a mistake) it only puts them back on invitations
   and leaves every answer and reason as it is.
+  `0|unplay|<post>|<cids>[|confirm]` (Kerry 10/26, Logan Billeaud) takes back Tracker PLAYING rows on upcoming events and noted I'm in clicks that a mail scanner gave past the 2-minute grace; an event the person is registered for is left and reported; nothing else is touched.
 - **Scanner filter (Kerry 10/14: "yes on the scanner filter", CoS #1793/#1794).**
   Each sent link carries its send time (`s` in the token). A tap is ignored
   (the page looks normal, nothing is recorded, `agent_action_log`
@@ -188,6 +344,16 @@ week's events." `email_parser/invitations.py`, guard `test_invitations.py`.
   Research behind it (CAN-SPAM, Gmail/Yahoo/Outlook bulk rules, why no
   RFC 8058 header through Graph): mailbox #1792/#1793. Footer postal address:
   on HOLD for Kerry's virtual mailbox (#1795).
+- **Known scanners + tap fingerprint (Kerry 10/26, v2.580.1, after Logan
+  Billeaud's work filter tapped I'm in ~4 minutes after each send).** Every
+  bare link open is logged (`event_invite_tap`: ua, language, ip). An I'm in
+  or Can't make it from (1) someone caught as a scanner `invite_scanner_known_after`
+  (2) times, or (2) a request with no browser user agent, a scanner token in
+  it (`invite_scanner_ua_tokens`) or no Accept-Language records NOTHING by
+  itself: the page asks for one button tap (`event_invite_scanner_suspect`),
+  whose POST records the answer (I'm in then goes on to registration).
+  `invite_scanner_guard=off` turns both off. `0|unplay|...` takes back what
+  slipped through before.
 - **gg_rsvps_off** now hides only Golf Genius rows: `_rsvps_for_event(...,
   tracker_only=True)`, `get_all_rsvps_bulk`, `_event_rsvp_only_players`.
 - **Schedule** (Kerry), 7:00 AM Central, `schedule(event_date)`: weekday event
@@ -3499,8 +3665,11 @@ for now"). The Customer Communications lane owns its content and timing
     for the same due window as Live Scoring) switches Live Scoring on and
     mails the chapter manager (`manager_for`: SA/TGF → kerry@; otherwise the
     dial `email`, else the manager's `customer_id` email) ONE prompt per
-    sheet fingerprint. A changed sheet re-prompts at most hourly; there are
-    no prompts once player emails went.
+    event, right after the 5:00 PM run. Kerry 10/26 (CoS #2329 item 1):
+    "Just once right after 5:00p pairings generation is fine." A sheet
+    changed after the prompt does not prompt again (the old email's Approve
+    link refuses the stale sheet and opens the review page on the current
+    one); there are no prompts once player emails went.
   - `/events/<id>/approve-pairings` (manager login, own chapter; admin any)
     shows groups, hard audit flags, held players, a sample, and the button.
     `POST /api/events/<id>/approve-pairings {fingerprint}` refuses a stale
@@ -3715,7 +3884,8 @@ them like Cart Net should hide or turn off."
 - 5:00 PM the day before: pairings generate; the manager gets the approval prompt (every 15 min from :05).
 - Approve (5-7 PM) signs off the sheet and sends that event's TEE-TIMES email at once (v2.572.1; each version needs its stamp and `teetimes_email_auto` on). The personal Event Info email is not sent.
 - 7:00 PM: an unapproved sheet is auto-approved as it stands (still no player email); the TEE-TIMES email (players / course / manager) goes once its wordings are stamped and `teetimes_email_auto` is on.
-- 7:00 AM event day: `pairings_approval.auto_send_check` sends every event's personal Event Info email (`event_day_email.send_event_day_emails`), on the sheet as it stands; failure emails Kerry, hourly retry until noon. Dial `pairings_auto_send`.
+- 6:00 AM event day (v2.587.0, Kerry 10/26: "Move event info email to 6:00am"; was 7:00 AM): `pairings_approval.auto_send_check` sends every event's personal Event Info email (`event_day_email.send_event_day_emails`), on the sheet as it stands; failure emails Kerry, hourly retry until noon. Dial `pairings_auto_send`; the hour is dial `event_info_hour` (5-11, default 6, `pairings_approval.info_hour()` / `info_time()`). Every page and email that names the time reads it from there, and the tee-times email's stamped line "comes at 7:00 AM tomorrow" is rendered with the dial's time, so its wording stamp still holds.
+- **No course sheets during play (v2.587.0, Kerry 10/26, CoS #2329 item 4):** "Changed sheets for the course shouldn't be going to them during play. That should be in the window between Noon and 1 hour prior." `after_lock.course_cutoff_passed`: from one hour before the first tee or shotgun (dial `after_lock_course_cutoff_min`, default 60) the after-lock job sends the course nothing; players' update emails still run to the first tee. The no-show course notice after 3 holes is the separate player-count email (see "Course no-show notice").
 ## EVENTS leaderboard: tabs, state strip, THRU, member casing (10/19 rulings B1-B4, B6, B7)
 
 Kerry's 10/19 rulings, specced in
@@ -3826,3 +3996,18 @@ notifications to manager when we have that capability."
 - Read-only bridge `scoring-after-lock:<event_id>` shows what the job would send.
 - Not built: push notifications to the manager (waits for push in the app).
 - Guard `test_after_lock.py`.
+
+
+### Tee times: the open-spots version (Kerry 10/26, CoS #2386/#2387, v2.602.3)
+
+Kerry: "Why would there be a spots still open register box sent to those that are already paid and seated? The point is to fill our open spots." On the mockup: "That works. Send it to build and deploy."
+
+- Four versions go at the same moment: player (seated, no Register box), open spots, course, manager.
+- OPEN SPOTS (`teetimes_email.OPEN`, `_open_seats`, `_open_message`): only while the saved sheet has open seats (seats short of a full group; a blind seat counts as open). To the invited audience (dial `teetimes_spots_audience`), minus anyone seated, anyone who said Can't make it, opt-outs and known mail scanners. Subject "N spots open at <course> tomorrow, <start>", orange box with count / course / date / holes / start / Register (scanner-filtered `/rsvp/` link), the sheet with "Open spot" rows, the approved footer and Stop event invitations. Stamp `teetimes_open_spots_approved` = `open_spots_hash()`. Key `open:<customer_id>`, under the same claim guard.
+- Manager line: "This went to the players and the course at <time>", the time it actually went.
+- Claim guard (v2.602.2): every message is claimed (`teetimes_claim:<event>:<key>`) before it is sent, so the approval and the job can never both send it.
+
+
+### The approve page (Kerry 10/26 via CoS #2378-#2380, #2393, v2.604.0)
+
+Kerry: "Ok, I'm good with that plan now." `/events/<id>/approve-pairings` loads light (`review(light=True)`); the audit, the held list and the Event Info sample come from `/events/<id>/approve-pairings/check` after the page. `send_plan(event_id, after=)` writes the line under the button and the confirm from live counts (`teetimes_email.plan_counts`: registered players, open seats on the saved sheet, invitees the open-spots email would reach once stamped), the course contact by name (`course_recipients_for_event`), the Event Info time/day (morning events: noon the day before, with the Course Files) and the Course Files day (`course_files_noon.send_day`). Approval (`approve_and_send(..., background=True)`) records the sheet (`approved_name`, `approved_at`) and returns at once; the tee-times `_deliver` runs in a thread under the claim guard; a second tap on the same sheet returns "already approved". `approval_status` gives the three button states (Approve / APPROVED · who · time / Changed since approval · Approve again), served on the pairings GET as `approval`. Read-only bridge `scoring-approve-plan:<event_id>`.

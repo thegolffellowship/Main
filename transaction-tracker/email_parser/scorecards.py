@@ -25,6 +25,8 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
+from email_parser.timezone_utils import now_central, stamp12
+
 # Layouts (#891-A / #895 §1): (cards per sheet, orientation, base font px)
 LAYOUTS = {
     "3up": {"per_sheet": 3, "orient": "portrait", "font": 11.0,
@@ -677,7 +679,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                     "ggid": g.get("ggid") or ""} for g in pack["groups"]],
         "pairings_saved": pairings_saved,
         "handicap_as_of": ev.get("event_date") if db._event_index_as_of(ev) else "today",
-        "printed_at": datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
+        "printed_at": stamp12(now_central()) + " CT",
         "dump": dump,
     }
 

@@ -82,6 +82,7 @@
             <a href="/admin/test-center">Test Center</a>
             <a href="/admin/lsc-teams">Cup Teams</a>
             <a href="/admin/advisors">Advisors</a>
+            <a href="/admin/screens">Screens</a>
             <a href="/admin/snapshot-center">Snapshot Center</a>
             <a href="/database">Database</a>
             <a href="/admin/duplicate-detective">Duplicate Detective</a>
@@ -149,7 +150,7 @@
             tbody.innerHTML = rows.map(r => {
                 const reversed = !!r.reversed_at;
                 const state = reversed
-                    ? `<span class="badge reversed">reversed ${escapeHtml(String(r.reversed_at).slice(0,16))}</span>`
+                    ? `<span class="badge reversed">reversed ${escapeHtml((window.tgfTime12 || (s => s))(String(r.reversed_at).slice(0,16)))}</span>`
                     : `<span class="badge ${r.merged_status||"merged"}">${escapeHtml(r.merged_status||"merged")}</span>`;
                 const actions = reversed
                     ? ""
@@ -157,7 +158,7 @@
                 return `
                     <tr class="${reversed?"reversed":""}" data-audit="${r.id}">
                       <td>#${r.id}</td>
-                      <td>${escapeHtml(String(r.merged_at||"").slice(0,16))}</td>
+                      <td>${escapeHtml((window.tgfTime12 || (s => s))(String(r.merged_at||"").slice(0,16)))}</td>
                       <td>${escapeHtml(r.merged_by||"")}</td>
                       <td>${r.confidence_score!=null?Math.round(r.confidence_score*100)+"%":""}</td>
                       <td>

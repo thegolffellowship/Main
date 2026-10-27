@@ -1779,6 +1779,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-rsvp-deadline:<event_id>|warn|release  who the lock-day 1:00 PM warning / 4:50 PM release would reach now, with a sample (read-only)
+      scoring-admin-payout-report[:<YYYY-MM-DD>]  would the same-night admin payout report (PAYMENTS link) go now, and what it says (read-only)
       scoring-unsubscribes[:<hours>][|refresh]  who unsubscribed (Tracker invitations + Brevo Insider) in the last <hours>, default 24 (read-only toward Brevo)
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
       scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
@@ -1814,6 +1816,10 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-se-gate-check:<event_id>[|<chapter>]  read-only: status codes a manager / a player link get (per-event opt-in proof)
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
       scoring-se-hole-times:<round_id>  read-only: when each hole was saved (UTC), per player/team
+      scoring-se-audit-times:<round_id>  read-only: FIRST save per hole per player/team (se_audit) + client_ts, take-overs per group
+      scoring-pace-rebuild[:<round_id>][|apply]  the pace tables, rebuilt out of se_audit (dry run default)
+      scoring-pace-players[:<customer_id>]  staff read: counting rounds, avg min/hole vs field, the digest line (no 1/2/3)
+      scoring-pace-report:<event_id>[|preview|send]  the manager pace report (data | HTML | send behind dial pace_report_send)
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
       scoring-se-clear-group:<group_id>[|apply][|checks]  start one group's card over (|checks: also a submitted TEST card's checks): scores, marks, CTP answers and the scorer lock go, signatures voided; the cleared scores stay in se_audit (dry run by default; open rounds only)
@@ -1848,8 +1854,14 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
       scoring-payout-ask[:preview[|<cid>][|<staff>][|reminder] | :send|<cid>,<cid> | :state]  THE PAYOUT ASK (Kerry 10/17): bare = who would be asked; send needs the wording stamp payout_ask_approved
       scoring-handicap-ask[:preview|<event_id>[|<staff addr>][|reminder] | :state]  THE HANDICAP ASK (Kerry 10/16): bare = who would be asked / reminded now; preview to STAFF only; member sends only from the job (dial handicap_ask_auto=on + wording stamp handicap_ask_approved)
-      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm]  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
+      scoring-event-invite:<event_id>[|preview[|<staff addr>][|reminder] | |send|<kerry-ok post id>[|reminder][|confirm]] | 0|restore|<kerry-ok post id>|<cid,cid>[|keep-answers][|confirm] | 0|unplay|<kerry-ok post id>|<cid,cid>[|confirm] (take back Tracker I'm in rows a mail scanner gave, Kerry 10/26)  TRACKER INVITATIONS with I'm in / Can't make it (Kerry 10/13): bare = who would be invited (members + played the chapter in 12 months + lead opt-ins, minus opt-outs/undeliverable/non-members/registered); preview to STAFF only; send needs the wording stamp event_invite_approved, Kerry's word on the mailbox and |confirm; once per event + person per kind
       scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]  the 7 PM TEE-TIMES EMAIL, three versions (player / course contact / manager, CMO #2101): dry build = per-recipient ready / held with reasons, wording hashes, stamps (teetimes_<version>_approved) and dials (teetimes_email_auto, teetimes_spots_audience); |preview mails ONE combined preview to STAFF only. No send bridge: only the 7 PM job sends
+      scoring-no-show-notice:<event_id>[|preview[|<staff addr>]]  THE COURSE NO-SHOW NOTICE (Kerry 9/30 #1021): READ ONLY, who the scorers marked missing, whether the notice is due (group played no_show_course_notice_holes, default 3, or a WD), the TGF-branded player-count totals (registered, no-shows, left, added, playing now), To/CC (course contacts + manager + admin no_show_notice_admin_cc), held reasons, the last set sent and whether this one would go as UPDATED; |preview mails ONE sample to STAFF only. The job sends itself (dial no_show_course_notice, on unless off)
+      scoring-course-update:<event_id>[|preview[|<staff addr>]]  THE COURSE UPDATE BEFORE THE LOCK (Kerry 10/26): who it would go to, held reasons, wording hash; |preview mails ONE sample to STAFF only. The job sends only with dial course_update_auto=on and stamp course_update_approved
+      scoring-course-files-noon:<event_id>  NOON COURSE FILES, read only (Kerry 10/26): would the event-day noon job send the Course Files now (To the course contact, CC TGF contacts + the chapter manager), or why not (already sent, no pairings, no course contact, within the hour before first tee, a scorecard gap)
+      scoring-scoring-window:<event_id>  THE SCORING WINDOW, read only (Kerry 10/26): first tee, saves open (first tee - 60 min), cards final, last score, scoring closes (last score + 15 min once every card is final), closeout start (last score + 15 min)
+      scoring-seat-fill:<event_id>  SEAT-FILL, read only (Kerry 10/26): the registered late adds the after-lock job would seat now (tee times: latest threesome first; shotgun: lowest hole first, B before A) and who has no open seat
+      scoring-withdrawal-fold:<event_id>  WITHDRAWAL FOLD, read only (Kerry 10/26, #2363-#2366): what the after-lock job would do now after a withdrawal: a group under 3 takes from a foursome (shotgun highest hole first, B before A; tee times the first foursome), a group the field no longer needs dissolves into the threesomes (from 7:00 AM event day), never splitting a request, match or guest and host; or why it waits / is blocked
       scoring-after-lock:<event_id>  AFTER-LOCK CHANGES, read only (Kerry #2139/#2168): moved / added / removed players, tee and games changes since the Event Info send, the emails the 15-min job would send (manager CC'd) and the changed course sheets
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO first-send member bridge. |reissue|<kerry-ok post id>[|confirm] RE-ISSUES the approved message after a start change ("UPDATED START:" + a notice) to every ready player, once per sheet state; refused without a post carrying Kerry's word, dry run without |confirm (Kerry 10/13). |lateadd|<cid,cid>|<kerry-ok post id>[|confirm] sends the approved message to each late add and "UPDATED GROUP:" + a notice to their groupmates only, same gates (Kerry 10/20)
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
@@ -3568,6 +3580,63 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_se.hole_save_times(int(arg.strip())), indent=2)
             except ValueError:
                 return json.dumps({"error": "usage: scoring-se-hole-times:<round_id>"})
+        if cmd == "scoring-se-audit-times":
+            # scoring-se-audit-times:<round_id> — read-only (#2092/#2103): each
+            # group's FIRST accepted save per hole per player/team from
+            # se_audit, client_ts beside the server time, and the group's
+            # take-over count. An edit later never moves a first save.
+            from email_parser import score_entry as _se
+            try:
+                return json.dumps(_se.audit_first_saves(int(arg.strip())), indent=2, default=str)
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-audit-times:<round_id>"})
+        if cmd == "scoring-pace-rebuild":
+            # scoring-pace-rebuild[:<round_id>][|apply] — se_group_pace +
+            # se_player_pace, out of se_audit (migration 0037). Dry run default.
+            from email_parser import score_entry as _se
+            _r, _, _flag = arg.partition("|")
+            if _r.strip().lower() == "apply":
+                _r, _flag = "", "apply"
+            try:
+                _rid = int(_r.strip()) if _r.strip() else None
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-pace-rebuild[:<round_id>][|apply]"})
+            _res = _se.rebuild_pace(_rid, apply=_flag.strip().lower() == "apply")
+            if _res.get("applied"):
+                _audit("scoring-pace-rebuild", f"round {_rid or 'all'}: {_res.get('stored')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-pace-players":
+            # scoring-pace-players[:<customer_id>] — STAFF read of se_player_pace:
+            # every player's counting rounds + the digest line ("Pace: top
+            # player N/10 timed rounds", #2096), or one player's history. No
+            # suggested 1/2/3 (#2100); never writes customers.pace_rating.
+            from email_parser import score_entry as _se
+            try:
+                _cid = int(arg.strip().lstrip("c")) if arg.strip() else None
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-pace-players[:<customer_id>]"})
+            return json.dumps(_se.pace_players(_cid), indent=2, default=str)
+        if cmd == "scoring-pace-report":
+            # scoring-pace-report:<event_id>[|preview|send] — the manager pace
+            # report (#2092 §2, #2096 §1). No flag: the data. |preview: the
+            # data + the HTML, nothing sent. |send: each round to the chapter
+            # manager, Kerry copied — refused unless dial pace_report_send=on,
+            # staff addresses only, once per round.
+            from email_parser import pace_report as _pr
+            _ev, _, _flag = arg.partition("|")
+            _flag = _flag.strip().lower()
+            try:
+                _eid = int(_ev.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-pace-report:<event_id>[|preview|send]"})
+            if _flag == "send":
+                from email_parser import score_entry as _se
+                _out = {_rid: _pr.send_round(_eid, _rid) for _rid in _se.event_round_ids(_eid)}
+                _audit("scoring-pace-report", f"event {_eid} send: {_out}")
+                return json.dumps(_out, indent=2, default=str)
+            if _flag == "preview":
+                return json.dumps(_pr.build_email(_eid), indent=2, default=str)
+            return json.dumps(_pr.event_report(_eid), indent=2, default=str)
         if cmd == "scoring-se-links":
             # scoring-se-links:<round_id> — one link per group (Kerry hands them out).
             from email_parser import score_entry as _se
@@ -4109,6 +4178,22 @@ def _scoring_dispatch_inner(url: str, extract: str):
             db.set_app_setting(_k.strip(), _v.strip())
             return json.dumps({"key": _k.strip(), "value": _v.strip(),
                                "saved": True})
+        if cmd == "scoring-rsvp-deadline":
+            # "<event_id>|warn|release" (Kerry 10/26, CoS #2307 item 4): who
+            # the 1:00 PM warning / 4:50 PM release would reach right now,
+            # with a sample. Read-only: the scheduler job sends.
+            from email_parser import rsvp_deadline as _rd
+            _a = [x.strip() for x in (arg or "").split("|")]
+            if len(_a) < 2 or not _a[0].isdigit():
+                return json.dumps({"error": "usage: scoring-rsvp-deadline:<event_id>|warn|release"})
+            return json.dumps(_rd.run(int(_a[0]), _a[1], confirm=False), indent=2, default=str)
+        if cmd == "scoring-admin-payout-report":
+            # "[<YYYY-MM-DD>]" (Kerry 10/26, CoS #2329 item 6): would the
+            # same-night admin payout report go now, and what it says.
+            # Read-only: the scheduler job sends.
+            from email_parser import admin_payout_report as _apr
+            _d = (arg or "").strip() or None
+            return json.dumps(_apr.run(day=_d, confirm=False), indent=2, default=str)
         if cmd == "scoring-unsubscribes":
             # "[<hours>][|refresh]" (Kerry 10/23): who unsubscribed from Tracker
             # invitations or the Brevo Insider list in the last <hours>
@@ -5790,6 +5875,13 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-approve-plan":
+            # "<event_id>": READ-ONLY. What the approve page says approval sends
+            # (CoS #2393): the line, the confirm, the counts, and the
+            # APPROVED · who · time state.
+            from email_parser import pairings_approval as _pa
+            _eid = int((arg or "0").split("|")[0])
+            return json.dumps({**_pa.send_plan(_eid), **_pa.approval_status(_eid)}, indent=2, default=str)
         if cmd == "scoring-tee-colors":
             # scoring-tee-colors            READ-ONLY audit: every course's
             #   designated tees and the colour the one resolver gives them;
@@ -7382,6 +7474,17 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                                     clarify=("unsub" if "clarify-unsub" in _low else
                                                              ("out" if "clarify" in _low else False))),
                                   indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "unplay":
+                # "0|unplay|<kerry-ok post id>|<cid,cid>[|confirm]" (Kerry 10/26,
+                # Logan Billeaud): take back Tracker I'm in answers a mail
+                # scanner gave; PLAYING rows + noted clicks only.
+                db.log_agent_action("mcp-claude", "scoring-event-invite", arg)
+                if len(_p) < 4 or not _p[2].lstrip("#").isdigit():
+                    return json.dumps({"error": "0|unplay|<kerry-ok post id>|<cid,cid>[|confirm]"})
+                return json.dumps(_inv.remove_playing(
+                    [c for c in _p[3].split(",") if c.strip().isdigit()],
+                    int(_p[2].lstrip("#")),
+                    confirm=("confirm" in [x.lower() for x in _p[4:]])), indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "restore":
                 # "0|restore|<kerry-ok post id>|<cid,cid,...>[|confirm]" (Kerry
                 # 10/14): undo answers a person did not give (mail scanners,
@@ -7433,6 +7536,72 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if len(_p) > 1 and _p[1]:
                 return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview (there is no send bridge)"})
             return json.dumps(_tte.summarize(_tte.build(int(_p[0]))), indent=2, default=str)
+        if cmd == "scoring-course-update":
+            # "<event_id>[|preview[|<staff addr>]]" (Kerry 10/26, CoS #2307
+            # item 2): the course update before the lock, built (read only)
+            # or one PREVIEW to staff for Kerry's wording stamp.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>[|preview[|<staff addr>]]"})
+            from email_parser import course_update as _cu
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-course-update", arg)
+                return json.dumps(_cu.send_preview(int(_p[0]), _p[2] if len(_p) > 2 else None),
+                                  indent=2, default=str)
+            _b = _cu.build(int(_p[0]))
+            _b.pop("html", None)
+            return json.dumps(_b, indent=2, default=str)
+        if cmd == "scoring-no-show-notice":
+            # "<event_id>[|preview[|<staff addr>]]" (Kerry 9/30 #1021): the
+            # course no-show notice, built read only, or one PREVIEW to staff.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>[|preview[|<staff addr>]]"})
+            from email_parser import no_show_notice as _nsn
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-no-show-notice", arg)
+                return json.dumps(_nsn.send_preview(int(_p[0]), _p[2] if len(_p) > 2 else None),
+                                  indent=2, default=str)
+            return json.dumps(_nsn.run_event(int(_p[0]), confirm=False), indent=2, default=str)
+        if cmd == "scoring-course-files-noon":
+            # "<event_id>" — NOON COURSE FILES (Kerry 10/26, CoS #2331 item 4),
+            # READ ONLY: would the noon job send now, to whom (manager CC'd),
+            # or why not, including a scorecard gap. The job sends itself.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>"})
+            from email_parser import course_files_noon as _cfn
+            from app import _print_pack_render, app as _flask
+            return json.dumps(_cfn.run_event(int(_p[0]), _print_pack_render, _flask.static_folder,
+                                             confirm=False), indent=2, default=str)
+        if cmd == "scoring-scoring-window":
+            # "<event_id>" — THE SCORING WINDOW (Kerry 10/26), READ ONLY:
+            # first tee, when saves open, cards final, last score, when
+            # scoring closes and when closeout starts.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>"})
+            from email_parser import scoring_window as _sw
+            return json.dumps(_sw.event_state(int(_p[0])), indent=2, default=str)
+        if cmd == "scoring-seat-fill":
+            # "<event_id>" — SEAT-FILL (Kerry 10/26, CoS #2331 C), READ ONLY:
+            # who the after-lock job would seat now, where, and who has no
+            # open seat. The job seats them itself.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>"})
+            from email_parser import seat_fill as _sf
+            return json.dumps(_sf.run(int(_p[0]), apply=False), indent=2, default=str)
+        if cmd == "scoring-withdrawal-fold":
+            # "<event_id>" — WITHDRAWAL FOLD (Kerry 10/26, CoS #2363-#2366),
+            # READ ONLY: the groups the after-lock job would repair or
+            # dissolve now, every move, the released time, or why it waits
+            # or is blocked. The job applies it itself.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>"})
+            from email_parser import withdrawal_fold as _wf
+            return json.dumps(_wf.run(int(_p[0]), apply=False), indent=2, default=str)
         if cmd == "scoring-after-lock":
             # "<event_id>" — AFTER-LOCK CHANGES (Kerry #2139, #2168), READ
             # ONLY: what changed since the Event Info send and every email

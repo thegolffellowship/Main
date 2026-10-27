@@ -1678,13 +1678,40 @@ def start_scheduler():
     # nobody has paired them yet. Kerry 2026-09-21: "Generate Pairings
     # automatically at 5:00p on Mondays for Tuesday events. Only if they
     # aren't run already." v2.468.5.
+    # Since v2.591.0 (Kerry 10/26, the manager's lock override) it runs
+    # every 15 minutes and pairs each event at ITS lock
+    # (database.event_lock_at); the standard lock is still 5:00 PM.
     scheduler.add_job(
         auto_generate_pairings_job,
         "cron",
-        hour=17,
-        minute=0,
+        minute="0-59/15",
         timezone="US/Central",
         id="pairings_auto_generate",
+        replace_existing=True,
+    )
+
+    # SCREENS STAY CURRENT (Kerry 2026-10-26: "an absolute requirement"):
+    # recapture every catalogued recipe 10 minutes after a deploy (once per
+    # version) and nightly at 3:37 AM. email_parser/screens_capture.py.
+    from datetime import datetime as _dt, timedelta as _td
+    scheduler.add_job(screens_capture_job, "date", run_date=_dt.now() + _td(minutes=10),
+                      id="screens_capture_deploy", replace_existing=True)
+    scheduler.add_job(screens_capture_job, "cron", hour=3, minute=37, timezone="US/Central",
+                      kwargs={"force": True}, id="screens_capture_nightly", replace_existing=True)
+
+    # RSVP PAYMENT DEADLINE (Kerry 2026-10-26, CoS #2307 item 4): on an
+    # event's lock day, the 1:00 PM warning to unpaid RSVP-only players and
+    # the 4:50 PM release before the 5:00 PM pairings run.
+    # email_parser/rsvp_deadline.py, dial rsvp_deadline_auto.
+    # Since v2.591.0 the windows follow each event's own lock (a manager's
+    # override): the warning four hours before, the release ten minutes before.
+    scheduler.add_job(
+        rsvp_deadline_job,
+        "cron",
+        hour="7-23",
+        minute="*/10",
+        timezone="US/Central",
+        id="rsvp_deadline",
         replace_existing=True,
     )
 
@@ -2377,8 +2404,9 @@ def start_scheduler():
     # ── PAIRINGS APPROVAL PROMPT (Kerry 2026-10-13: the manager reviews and
     #    approves the automated pairings, which sends the player emails).
     #    Every 15 min from :05 (so the 5:00 PM auto-generate has saved):
-    #    each due event's chapter manager gets ONE prompt per sheet (a
-    #    changed sheet re-prompts at most hourly; none once emails went).
+    #    each due event's chapter manager gets ONE prompt, right after the
+    #    5:00 PM run, never repeated (Kerry 10/26: "Just once right after
+    #    5:00p pairings generation is fine."); none once emails went.
     #    Dial `pairings_approval_prompt` (0/off stops it).
     #    email_parser/pairings_approval.py.
     def pairings_approval_prompt_job():
@@ -2420,12 +2448,141 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # THE COURSE UPDATE BEFORE THE LOCK (Kerry 10/26, CoS #2307 item 2):
+    # noon the day before an event's lock (Sunday noon for a Tuesday nine),
+    # the registered list + live link + the lock notice to the course
+    # contact, manager CC'd. Locked behind dial course_update_auto and
+    # Kerry's wording stamp course_update_approved. email_parser/course_update.py.
+    def course_update_job():
+        from email_parser.course_update import check as _cu
+        try:
+            res = _cu()
+            if res.get("events"):
+                logger.info("Course update: %s", res["events"])
+        except Exception:
+            logger.exception("Course update failed (non-fatal)")
+    scheduler.add_job(
+        course_update_job,
+        "cron", hour="12-14", minute="1-59/15",
+        timezone="US/Central",
+        id="course_update",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # THE COURSE NO-SHOW NOTICE (Kerry 9/30 #1021; Event Ops no-show item 3):
+    # once a scorer's no-show's group has played 3 holes, ONE email per event
+    # to the course contact, manager CC'd, naming every no-show. Dial
+    # no_show_course_notice (on unless off). email_parser/no_show_notice.py.
+    def no_show_notice_job():
+        from email_parser.no_show_notice import check as _ns
+        try:
+            res = _ns()
+            if res.get("events"):
+                logger.info("No-show notice: %s", res["events"])
+        except Exception:
+            logger.exception("No-show notice failed (non-fatal)")
+    scheduler.add_job(
+        no_show_notice_job,
+        "cron", minute="2-59/5",
+        timezone="US/Central",
+        id="no_show_notice",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # SAME-NIGHT ADMIN PAYOUT REPORT (Kerry 2026-10-26, CoS #2329 item 6):
+    # once every event dated today is closed (closeout_final_check final),
+    # one email to Kerry with a link to PAYMENTS. Every 15 min, 5:00 PM to
+    # midnight Central. Dial `admin_payout_report`.
+    # email_parser/admin_payout_report.py.
+    def admin_payout_report_job():
+        from email_parser.admin_payout_report import tick
+        try:
+            res = tick()
+            if res.get("status") in ("sent", "failed", "held"):
+                logger.info("Admin payout report: %s", res)
+        except Exception:
+            logger.exception("Admin payout report failed (non-fatal)")
+    # THE SCORING WINDOW + CLOSEOUT START (Kerry 10/26, CoS #2307 item 6,
+    # #2329 item 5): every 5 min, record each of today's events closing (all
+    # cards final, last score + 15 min) and post the closeout start signal
+    # (last score + 15 min) once per event. email_parser/scoring_window.py.
+    def scoring_window_job():
+        from email_parser.scoring_window import tick
+        try:
+            res = tick()
+            if res.get("events"):
+                logger.info("Scoring window: %s", res["events"])
+        except Exception:
+            logger.exception("Scoring window failed (non-fatal)")
+    scheduler.add_job(
+        scoring_window_job,
+        "cron", hour="7-23", minute="*/5",
+        timezone="US/Central",
+        id="scoring_window",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    scheduler.add_job(
+        admin_payout_report_job,
+        "cron", hour="17-23", minute="2-59/15",
+        timezone="US/Central",
+        id="admin_payout_report",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # ── PACE OF PLAY (Kerry 2026-10-19 #2092, migration 0037): every morning
+    #    at 6:41 Central, rebuild the pace tables out of se_audit
+    #    (derived tables, always), then send yesterday's MANAGER PACE REPORT
+    #    per round (chapter manager, Kerry copied, staff only, once per
+    #    round) ONLY when app setting pace_report_send = on (default OFF).
+    #    email_parser/pace_report.py.
+    def pace_morning_job():
+        from email_parser.pace_report import morning_job
+        try:
+            res = morning_job()
+            if res.get("sent"):
+                logger.info("Pace reports: %s", res["sent"])
+        except Exception:
+            logger.exception("Pace morning job failed (non-fatal)")
+    scheduler.add_job(
+        pace_morning_job,
+        "cron", hour=6, minute=41,
+        timezone="US/Central",
+        id="pace_morning",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # AFTER-LOCK CHANGES (Kerry 2026-10-20 #2139, #2168): from the Event Info
     # send to the first tee, a moved / added / removed player, a tee change
     # or a games change sends its notices (manager CC'd) and, for a seat
     # change, only the changed sheets to the course. Dial `after_lock_auto`.
     def after_lock_changes_job():
         from email_parser.after_lock import check
+        # SEAT-FILL FIRST (Kerry 10/26, CoS #2331 C): a late add is seated by
+        # the ruled rule before the update emails below are worked out.
+        try:
+            from email_parser.seat_fill import check as _seat_fill
+            _sf = _seat_fill()
+            if _sf.get("events"):
+                logger.info("Seat-fill: %s", _sf["events"])
+        except Exception:
+            logger.exception("Seat-fill failed (non-fatal)")
+        # WITHDRAWAL FOLD SECOND (Kerry 10/26, CoS #2363-#2366): after the
+        # late adds are seated, a short group is repaired and (from 7:00 AM
+        # event day) a group the field no longer needs is dissolved, so the
+        # update emails below carry both in the same run.
+        try:
+            from email_parser.withdrawal_fold import check as _fold
+            _wf = _fold()
+            if _wf.get("events"):
+                logger.info("Withdrawal fold: %s", _wf["events"])
+        except Exception:
+            logger.exception("Withdrawal fold failed (non-fatal)")
         try:
             res = check(_print_pack_render, app.static_folder)
             ran = {k: v for k, v in (res.get("events") or {}).items()
@@ -2439,6 +2596,31 @@ def start_scheduler():
         "cron", minute="2-59/15",
         timezone="US/Central",
         id="after_lock_changes",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # NOON COURSE FILES (Kerry 2026-10-26, CoS #2321/#2329-3/#2331 item 4:
+    # "Event ops - Absolutely should be on Tracker side. Not an agent
+    # routine" / "CC Course Files to Manager too"). Event day, every 15 min
+    # 12:00-2:45 PM Central, once per event, manager CC'd; a gap holds the
+    # send and tells the manager. Dial `course_files_noon_auto`.
+    # email_parser/course_files_noon.py.
+    def course_files_noon_job():
+        from email_parser.course_files_noon import check
+        try:
+            res = check(_print_pack_render, app.static_folder)
+            ran = {k: v for k, v in (res.get("events") or {}).items()
+                   if v.get("status") in ("sent", "failed", "held", "error") or v.get("error")}
+            if ran:
+                logger.info("Noon Course Files: %s", ran)
+        except Exception:
+            logger.exception("Noon Course Files failed (non-fatal)")
+    scheduler.add_job(
+        course_files_noon_job,
+        "cron", hour="12-14", minute="0-59/15",
+        timezone="US/Central",
+        id="course_files_noon",
         replace_existing=True,
         max_instances=1, coalesce=True,
     )
@@ -2490,19 +2672,12 @@ def prune_processed_emails(days=90):
 
 
 def send_auto_payment_reminders():
-    """Send payment reminders to all RSVP-only/gg_rsvp players for upcoming events."""
-    tenant_id = os.getenv("AZURE_TENANT_ID")
-    client_id = os.getenv("AZURE_CLIENT_ID")
-    client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    from_address = os.getenv("EMAIL_ADDRESS")
-    if not all([tenant_id, client_id, client_secret, from_address]):
-        logger.warning("Auto reminders: email credentials not configured, skipping")
-        return
+    """Every-other-day 6 AM: the payment reminder (email_parser.payment_reminder,
+    the same email as the Remind tag and Remind All) to everyone the Events
+    page shows as RSVP-only for each upcoming event."""
+    from email_parser import payment_reminder
 
     today = today_central_str()
-    events = get_all_events()
-    items = get_all_items()
-
     # payment_reminder_exclude_events dial: JSON list of event ids whose
     # RSVP rows must NEVER get auto payment reminders. Needed for events
     # whose money is collected OUTSIDE the store (Lone Star Cup: Venmo
@@ -2516,57 +2691,31 @@ def send_auto_payment_reminders():
     except Exception:
         _excluded = set()
 
-    total_sent = 0
-    total_failed = 0
-
-    for ev in events:
+    totals = {"sent": 0, "failed": 0, "held": 0}
+    for ev in get_all_events():
         event_date = ev.get("event_date") or ""
-        # Skip past events
         if event_date and event_date < today:
             continue
-        if ev.get("id") in _excluded:
+        if ev.get("id") in _excluded or not ev.get("item_name"):
             continue
-        event_name = ev.get("item_name") or ""
-        if not event_name:
+        # Kerry 2026-10-26 (#2313): reminders stop at the event's 5:00 PM
+        # lock; the 4:50 PM release email is the last one.
+        if payment_reminder.past_lock(ev):
             continue
-
-        # Find RSVP-only / gg_rsvp players for this event (case-insensitive)
-        rsvp_players = [
-            i for i in items
-            if (i.get("item_name") or "").lower() == event_name.lower()
-            and (i.get("transaction_status") or "active") in ("rsvp_only", "gg_rsvp")
-        ]
-        if not rsvp_players:
+        people = payment_reminder.rsvp_only_people(ev["id"])
+        if not people:
             continue
+        res = payment_reminder.send(ev["id"], people, sent_by="auto")
+        if res.get("error"):
+            logger.warning("Auto reminders: %s", res["error"])
+            return
+        for k in totals:
+            totals[k] += len(res.get(k) or [])
+        if res.get("held"):
+            logger.warning("Auto reminders held for %s: %s", ev.get("item_name"), res["held"])
 
-        for player in rsvp_players:
-            to_email = _resolve_player_email(player)
-            if not to_email:
-                continue
-            player_name = player.get("customer") or "Player"
-            subject = f"Payment Reminder — {event_name}"
-            html_body = (
-                f"<p>Hi {player_name},</p>"
-                f"<p>This is a friendly reminder that we have you down for "
-                f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-                f"<p>Please complete your registration at your earliest convenience.</p>"
-                f"<p>Thanks,<br>The Golf Fellowship</p>"
-            )
-            try:
-                ok = send_mail_graph(
-                    tenant_id=tenant_id, client_id=client_id,
-                    client_secret=client_secret, from_address=from_address,
-                    to_address=to_email, subject=subject, html_body=html_body,
-                )
-                if ok:
-                    total_sent += 1
-                else:
-                    total_failed += 1
-            except Exception:
-                logger.exception("Auto reminder failed for %s", to_email)
-                total_failed += 1
-
-    logger.info("Auto payment reminders: %d sent, %d failed", total_sent, total_failed)
+    logger.info("Auto payment reminders: %d sent, %d failed, %d held",
+                totals["sent"], totals["failed"], totals["held"])
 
 
 # ---------------------------------------------------------------------------
@@ -5244,17 +5393,31 @@ def public_event_rsvp(token):
     import html as _h
     from email_parser import invitations as _inv
     res = {}
+    _client = {"ua": request.headers.get("User-Agent", ""),
+               "lang": request.headers.get("Accept-Language", ""),
+               "ip": (request.headers.get("X-Forwarded-For", "") or request.remote_addr or "")}
+    confirm_why = None
     if request.method == "POST":
         res = _inv.record_answer(token)
         if not res.get("ok"):
             return _public_page("RSVP link", f"<h2>{_h.escape(res['error'])}</h2>"), 400
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify({"ok": True})
+        # The one-tap confirm of a guarded I'm in (Kerry 10/26): on to registration.
+        _reg = ((res.get("event") or {}).get("registration_url") or "").strip()
+        if res.get("action") == "in" and _reg and not res.get("ignored") and not res.get("preview"):
+            return redirect(_reg)
     else:
+        _inv.log_tap(token, _client)
         # "go straight to the event registration page if they click I'm In"
-        _go = _inv.click_in(token)
+        _go = _inv.click_in(token, client=_client)
         if _go.get("ok"):
             return redirect(_go["redirect"])
+        confirm_why = _go.get("confirm")
+        if not confirm_why:
+            # Can't make it from a known scanner or a non-browser: a button,
+            # not the self-saving script (Kerry 10/26).
+            confirm_why = _inv.needs_confirm(token, _client)
     info = _inv.describe_token(token)
     if not info.get("ok"):
         return _public_page("RSVP link", f"<h2>{_h.escape(info['error'])}</h2>"), 400
@@ -5270,7 +5433,7 @@ def public_event_rsvp(token):
         if done and res.get("ignored"):
             # Tapped within the scanner grace (Kerry 10/14): never claim it
             # was done; ask again so a real person can confirm.
-            body = ("<h2>Remove you from event invitations?</h2>"
+            body = ("<h2>Remove you from ALL event invitations?</h2>"
                     "<p>Please tap the button once more to confirm.</p>"
                     f"<form method='post'><button type='submit' style='{btn}border:0;"
                     "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
@@ -5279,28 +5442,35 @@ def public_event_rsvp(token):
             body = ("<h2>Done. You won't get event invitations from us any more.</h2>"
                     "<p>Changed your mind? Reply to any TGF email and we'll put you back on.</p>")
             return _public_page("Invitations", body)
-        body = ("<h2>Remove you from event invitations?</h2>"
-                "<p>You'll stop getting our event invitations and reminders.</p>"
+        body = ("<h2>Remove you from ALL event invitations?</h2>"
+                "<p>You'll stop getting invitations and reminders for every TGF event, not just this one.</p>"
                 f"<form method='post'><button type='submit' style='{btn}border:0;"
                 "background:#1B1B1B;color:#fff;cursor:pointer'>Yes, remove me</button></form>")
         return _public_page("Invitations", body)
+    if confirm_why and not done and info["action"] in ("in", "out"):
+        # KNOWN SCANNER / NOT A BROWSER (Kerry 10/26): nothing is recorded
+        # until this button is tapped; scanners open links, they do not tap.
+        return _rsvp_confirm_page(info)
     if info["action"] == "in":           # no registration link on the event
         body = (f"<h2>You're in. Thanks!</h2><p>{_h.escape(info['course'])}, "
                 f"{_h.escape(info['date_long'])}. {_h.escape(info['start_sentence'])}</p>" + record)
         return _public_page("RSVP", body)
     reasons = "".join(
         f"<form method='post' action='/rsvp/{_h.escape(token)}/reason' style='display:inline'>"
-        f"<button name='r' value='{_h.escape(r)}' style='border:1px solid #D1D5DB;background:#fff;"
-        f"border-radius:999px;padding:6px 12px;margin:4px 4px 0 0;font-size:14px'>{_h.escape(r)}"
+        f"<button class='rsn' name='r' value='{_h.escape(r)}'>{_h.escape(r)}"
         "</button></form>" for r in _inv.REASONS)
     body = (f"<h2>Thanks for letting us know.</h2><p>We'll miss you at {_h.escape(info['course'])} "
             f"on {_h.escape(info['date_long'])}.</p>"
             f'<a href="{_h.escape(links.get("in", ""))}" style="{btn}background:#15803D;color:#fff;">'
             "Changed my mind, I'm in</a>"
-            f'<a href="{_h.escape(links.get("unsub", ""))}" style="{btn}background:#E5E7EB;color:#1B1B1B;">'
-            "Remove me from invitations</a>"
             "<p style='margin-top:22px;color:#6B7280;font-size:14px'>Mind sharing why? (optional)</p>"
-            + reasons + record)
+            + reasons +
+            # Kerry 10/25 ("Move the Remove me button to a small link"): a
+            # button beside "Changed my mind" was mis-tapped twice in a week
+            # (Lou Schneider 10/20, Michele McCormick 10/24).
+            f'<p style="margin-top:28px;font-size:13px"><a href="{_h.escape(links.get("unsub", ""))}" '
+            'style="color:#6B7280;text-decoration:underline">Remove me from ALL event invitations</a></p>'
+            + record)
     return _public_page("RSVP", body)
 
 
@@ -5312,6 +5482,23 @@ def api_invitation_declines():
     from email_parser import invitations as _inv
     y = request.args.get("year", "")
     return jsonify(_inv.season_decline_report(int(y) if y.isdigit() else None))
+
+
+def _rsvp_confirm_page(info: dict) -> str:
+    """The one-tap confirm a known scanner or a non-browser gets (Kerry
+    10/26). Its own function so Screens captures this exact page
+    (email_parser/screens_capture.py) without a way around the guard."""
+    import html as _h
+    btn = ("display:inline-block;border-radius:999px;padding:12px 22px;margin:6px 6px 0 0;"
+           "font:bold 16px Georgia,serif;text-decoration:none;")
+    _q = ("One more tap and you're in" if info["action"] == "in"
+          else "Can't make it?")
+    _b = ("Yes, I'm in" if info["action"] == "in" else "Confirm: I can't make it")
+    body = (f"<h2>{_q}</h2><p>{_h.escape(info['course'])}, {_h.escape(info['date_long'])}.</p>"
+            f"<form method='post'><button type='submit' style='{btn}border:0;"
+            f"background:{'#15803D' if info['action'] == 'in' else '#1B1B1B'};color:#fff;"
+            f"cursor:pointer'>{_b}</button></form>")
+    return _public_page("RSVP", body)
 
 
 @app.route("/rsvp/<token>/reason", methods=["POST"])
@@ -5376,6 +5563,15 @@ def _public_page(title: str, body_html: str) -> str:
           border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.06); }}
   h1 {{ font-size:1.05rem; color:#6b7280; margin:0 0 1.25rem; font-weight:600;
         text-transform:uppercase; letter-spacing:0.05em; }}
+  /* Reason chips on the Can't make it page (Kerry 10/26: "Hover states ...
+     need to highlight somehow so they can see that those are active
+     options"): pointer + orange on hover and keyboard focus, filled orange
+     while pressed so a phone tap shows too. */
+  .rsn {{ border:1px solid #D1D5DB; background:#fff; color:#111827; border-radius:999px;
+          padding:6px 12px; margin:4px 4px 0 0; font-size:14px; cursor:pointer;
+          transition:background .12s, border-color .12s, color .12s; }}
+  .rsn:hover, .rsn:focus-visible {{ border-color:#E87C3E; background:#FFF4EC; color:#C2410C; outline:none; }}
+  .rsn:active {{ background:#E87C3E; border-color:#E87C3E; color:#fff; }}
 </style>
 </head><body><div class="card">
 <h1>The Golf Fellowship</h1>
@@ -5664,6 +5860,19 @@ def api_set_customer_pace(customer_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/pace/players")
+@require_role("manager")
+def api_pace_players():
+    """MEASURED PACE beside the manager's 1-3 (Kerry #2100: suggest only).
+    STAFF ONLY. {customer_id: {timed_rounds, counting_rounds, rounds_needed,
+    avg_seconds_per_hole, avg_rel_seconds_per_hole, in_use}} read by
+    score_entry.pace_players. No suggested 1/2/3; never writes customers.pace_rating."""
+    from email_parser.score_entry import pace_players
+    res = pace_players()
+    return jsonify({str(p["customer_id"]): {**p, "rounds_needed": res["rounds_needed"]}
+                    for p in res["players"]})
 
 
 @app.route("/api/customers/<int:customer_id>/status-history")
@@ -6466,6 +6675,26 @@ def send_due_print_packs_job():
         logger.exception("print pack routine failed")
 
 
+def screens_capture_job(force: bool = False):
+    from email_parser.screens_capture import capture_live
+    try:
+        res = capture_live(force=force)
+        logger.info("screens capture: %s", {k: (len(v) if isinstance(v, list) else v)
+                                              for k, v in res.items()})
+    except Exception:
+        logger.exception("screens capture failed")
+
+
+def rsvp_deadline_job():
+    from email_parser.rsvp_deadline import tick
+    try:
+        res = tick()
+        if res:
+            logger.info("rsvp deadline: %s", res)
+    except Exception:
+        logger.exception("rsvp deadline failed")
+
+
 def auto_generate_pairings_job():
     from email_parser.database import auto_generate_pairings
     try:
@@ -6486,7 +6715,7 @@ def approve_pairings_page(event_id):
     The review: groups, hard rule flags, who gets no email, a sample, and
     one Approve button. email_parser/pairings_approval.py."""
     from email_parser.pairings_approval import review, render_page, may_approve
-    rv = review(event_id)
+    rv = review(event_id, light=True)
     if rv.get("error"):
         return rv["error"], 404
     why = may_approve(session.get("role"), session.get("chapter"), rv["event"]["chapter"])
@@ -6501,9 +6730,25 @@ def approve_pairings_page(event_id):
         if session.get("chapter"):
             who = f"{who} ({session.get('chapter')})"
         approve_and_send(event_id, want, role=session.get("role"),
-                         session_chapter=session.get("chapter"), approved_by=who)
-        rv = review(event_id)
+                         session_chapter=session.get("chapter"), approved_by=who, background=True)
+        rv = review(event_id, light=True)
     return render_page(rv)
+
+
+@app.route("/events/<int:event_id>/approve-pairings/check")
+@require_role("manager")
+@perf.timed_route("approve_pairings_check")
+def approve_pairings_check(event_id):
+    """The approve page's slow half, loaded after the page (CoS #2393-6):
+    rule flags, who gets no Event Info email, and the sample."""
+    from email_parser.pairings_approval import check_parts, review, may_approve
+    rv = review(event_id, light=True)
+    if rv.get("error"):
+        return jsonify(rv), 404
+    why = may_approve(session.get("role"), session.get("chapter"), rv["event"]["chapter"])
+    if why:
+        return jsonify({"error": why}), 403
+    return jsonify(check_parts(event_id))
 
 
 @app.route("/api/events/<int:event_id>/approve-pairings", methods=["POST"])
@@ -6519,7 +6764,7 @@ def api_approve_pairings(event_id):
         who = f"{who} ({session.get('chapter')})"
     res = approve_and_send(event_id, str(body.get("fingerprint") or ""),
                            role=session.get("role"), session_chapter=session.get("chapter"),
-                           approved_by=who)
+                           approved_by=who, background=True)
     code = res.pop("code", None) if isinstance(res, dict) else None
     if res.get("refused"):
         return jsonify(res), 409
@@ -7081,8 +7326,16 @@ def api_get_pairings(event_id):
             logger.exception("Blind pool lookup failed for event %d "
                              "(non-fatal)", event_id)
         _lap("blind_pool")
+        # The Pairings tab's Approve button state (CoS #2393-5).
+        approval = None
+        try:
+            from email_parser.pairings_approval import approval_status
+            approval = approval_status(event_id)
+        except Exception:
+            logger.exception("approval status failed for %s (non-fatal)", event_id)
         return jsonify({
             "pairings": pairings,
+            "approval": approval,
             "blind_pool": blind_pool,
             "timings_ms": _sw.snapshot() if _sw else {},
             "slots_9": slots_9,
@@ -9853,109 +10106,85 @@ def api_upgrade_rsvp():
     return jsonify({"error": "Item not found or not in RSVP-only state."}), 400
 
 
+def _reminder_event_id(data: dict):
+    """The event a Remind call is about: event_id, else the event_name."""
+    if data.get("event_id") not in (None, ""):
+        try:
+            return int(data["event_id"])
+        except (TypeError, ValueError):
+            return None
+    name = (data.get("event_name") or "").strip().lower()
+    for ev in get_all_events() if name else []:
+        if (ev.get("item_name") or "").strip().lower() == name:
+            return int(ev["id"])
+    return None
+
+
+def _reminder_reply(res: dict):
+    """One JSON reply shape for both Remind routes."""
+    if res.get("error"):
+        return jsonify(res), 500 if "credentials" in res["error"] else 404
+    sent, failed = len(res["sent"]), len(res["failed"])
+    total = sent + failed + len(res["held"]) + len(res["no_email"]) + len(res["already_today"])
+    body = {**res, "sent": sent, "failed": failed, "total": total,
+            "held_count": len(res["held"]), "already_today_count": len(res["already_today"]),
+            "no_email_count": len(res["no_email"])}
+    if sent == 0:
+        if res["held"]:
+            why = "; ".join(sorted({w for h in res["held"] for w in h["why"]}))
+            return jsonify({**body, "error": f"Held, not sent: {why}"}), 409
+        if res["already_today"] and not failed:
+            return jsonify({**body, "error": "Already reminded today"}), 409
+        if res["no_email"] and not failed:
+            return jsonify({**body, "error": "No email address on file"}), 400
+        return jsonify({**body, "error": "Reminder email failed to send"}), 500
+    body["status"] = "ok" if not (failed or res["held"]) else "partial"
+    return jsonify(body)
+
+
 @app.route("/api/events/send-reminder", methods=["POST"])
 @require_role("manager")
 def api_send_reminder():
-    """Send a payment reminder email to an RSVP-only player."""
+    """The payment reminder (email_parser.payment_reminder) to ONE RSVP-only
+    player: {event_id | event_name, customer_id | to_email, player_name}."""
+    from email_parser import payment_reminder
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON body required"}), 400
-    to_email = (data.get("to_email") or "").strip()
-    player_name = data.get("player_name", "Player")
-    event_name = data.get("event_name", "the upcoming event")
-    if not to_email:
-        return jsonify({"error": "to_email is required"}), 400
-
-    tenant_id = os.getenv("AZURE_TENANT_ID")
-    client_id = os.getenv("AZURE_CLIENT_ID")
-    client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    from_address = os.getenv("EMAIL_ADDRESS")
-    if not all([tenant_id, client_id, client_secret, from_address]):
-        return jsonify({"error": "Email credentials not configured"}), 500
-
-    subject = f"Payment Reminder — {event_name}"
-    html_body = (
-        f"<p>Hi {player_name},</p>"
-        f"<p>This is a friendly reminder that we have you down for "
-        f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-        f"<p>Please complete your registration at your earliest convenience.</p>"
-        f"<p>Thanks,<br>The Golf Fellowship</p>"
-    )
-
-    ok = send_mail_graph(
-        tenant_id=tenant_id,
-        client_id=client_id,
-        client_secret=client_secret,
-        from_address=from_address,
-        to_address=to_email,
-        subject=subject,
-        html_body=html_body,
-    )
-    if ok:
-        return jsonify({"status": "ok", "message": f"Reminder sent to {to_email}"})
-    return jsonify({"error": "Failed to send reminder email"}), 500
+    event_id = _reminder_event_id(data)
+    if event_id is None:
+        return jsonify({"error": "event not found"}), 404
+    cid = data.get("customer_id")
+    try:
+        cid = int(cid) if cid not in (None, "") else None
+    except (TypeError, ValueError):
+        cid = None
+    email = (data.get("to_email") or "").strip()
+    if cid is None and not email:
+        return jsonify({"error": "customer_id or to_email is required"}), 400
+    person = {"customer_id": cid, "email": email, "name": data.get("player_name") or ""}
+    res = payment_reminder.send(event_id, [person], sent_by=session.get("role", "manager"),
+                                force=bool(data.get("force")))
+    return _reminder_reply(res)
 
 
 @app.route("/api/events/send-reminder-all", methods=["POST"])
 @require_role("manager")
 def api_send_reminder_all():
-    """Send payment reminder emails to ALL RSVP-only players for an event."""
+    """The payment reminder to EVERYONE the Events page shows as RSVP-only
+    for an event (shop RSVP-only rows and invitation / Golf Genius RSVPs)."""
+    from email_parser import payment_reminder
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON body required"}), 400
-    event_name = (data.get("event_name") or "").strip()
-    if not event_name:
-        return jsonify({"error": "event_name is required"}), 400
-
-    tenant_id = os.getenv("AZURE_TENANT_ID")
-    client_id = os.getenv("AZURE_CLIENT_ID")
-    client_secret = os.getenv("AZURE_CLIENT_SECRET")
-    from_address = os.getenv("EMAIL_ADDRESS")
-    if not all([tenant_id, client_id, client_secret, from_address]):
-        return jsonify({"error": "Email credentials not configured"}), 500
-
-    # Find all RSVP-only players for this event with email addresses (case-insensitive)
-    items = get_all_items()
-    rsvp_players = [
-        i for i in items
-        if (i.get("item_name") or "").lower() == event_name.lower()
-        and (i.get("transaction_status") or "active") == "rsvp_only"
-    ]
-
-    if not rsvp_players:
+    event_id = _reminder_event_id(data)
+    if event_id is None:
+        return jsonify({"error": "event not found"}), 404
+    people = payment_reminder.rsvp_only_people(event_id)
+    if not people:
         return jsonify({"error": "No RSVP-only players found for this event"}), 404
-
-    sent = 0
-    failed = 0
-    skipped_no_email = 0
-    for player in rsvp_players:
-        to_email = _resolve_player_email(player)
-        if not to_email:
-            skipped_no_email += 1
-            continue
-        player_name = player.get("customer") or "Player"
-        subject = f"Payment Reminder — {event_name}"
-        html_body = (
-            f"<p>Hi {player_name},</p>"
-            f"<p>This is a friendly reminder that we have you down for "
-            f"<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-            f"<p>Please complete your registration at your earliest convenience.</p>"
-            f"<p>Thanks,<br>The Golf Fellowship</p>"
-        )
-        ok = send_mail_graph(
-            tenant_id=tenant_id, client_id=client_id,
-            client_secret=client_secret, from_address=from_address,
-            to_address=to_email, subject=subject, html_body=html_body,
-        )
-        if ok:
-            sent += 1
-        else:
-            failed += 1
-
-    if sent == 0:
-        return jsonify({"error": "All reminder emails failed to send", "sent": sent, "failed": failed, "total": len(rsvp_players)}), 500
-    status = "ok" if failed == 0 else "partial"
-    return jsonify({"status": status, "sent": sent, "failed": failed, "total": len(rsvp_players)})
+    res = payment_reminder.send(event_id, people, sent_by=session.get("role", "manager"))
+    return _reminder_reply(res)
 
 
 # ---------------------------------------------------------------------------
@@ -10094,7 +10323,21 @@ def api_send_messages():
         # chapter (Kerry 2026-09-09). Blank = the send below refuses.
         "fellowship_spot": (event_info.get("fellowship_spot") or "").strip(),
     }
+    # The payment reminder's words (event place, long date, the plain
+    # "who's registered" link) so the template sends the same here as
+    # from the Remind tag (email_parser.payment_reminder).
+    _is_pay_reminder = bool(template_id) and (
+        (tpl.get("name") or "").strip().lower() == "payment reminder")
+    if event_info.get("id"):
+        from email_parser import payment_reminder as _pr
+        _pv = _pr.event_vars(event_info)
+        for _k in ("event_place", "event_date_long", "roster_link"):
+            event_vars[_k] = _pv[_k]
     event_status = (event_info.get("status") or "active")
+    if _is_pay_reminder and event_info.get("id"):
+        from email_parser import payment_reminder as _pr
+        if _pr.past_lock(event_info):
+            return jsonify({"error": "Not sent: this event is " + _pr.PAST_LOCK + "."}), 409
 
     # Boundary check: a template that ASKS for the manager's name or cell
     # must not go out with a blank where it should be. Austin ships with
@@ -10299,6 +10542,12 @@ def api_send_messages():
         {"player_name": r.get("customer") or "Player", "email": resolve_email(r)}
         for r in filtered
     ]
+    if _is_pay_reminder and event_info.get("id"):
+        # The quick out under Complete Registration, per person (CoS #2324).
+        for _rcp, _r in zip(recipients, filtered):
+            if _r.get("customer_id") is not None:
+                _rcp["vars"] = {"pay_button": _pr.with_out_button(
+                    event_vars, event_info, _r["customer_id"])["pay_button"]}
 
     # Add extra recipients (manually entered emails not on the player list)
     extra_recipients = data.get("extra_recipients") or []
@@ -10312,11 +10561,15 @@ def api_send_messages():
     if not recipients:
         return jsonify({"error": "No recipients found matching the audience filter", "sent": 0, "failed": 0}), 404
 
-    # Send with throttle
+    # Send with throttle. The payment reminder goes out in the invitation
+    # house frame, as it does from the Remind tag.
+    _send_body = body_tpl
+    if _is_pay_reminder and event_info.get("id"):
+        _send_body = _pr.frame_for(event_info, body_tpl)
     result = send_bulk_emails(
         recipients=recipients,
         subject_template=subject_tpl,
-        body_template=body_tpl,
+        body_template=_send_body,
         event_vars=event_vars,
     )
 
@@ -10394,10 +10647,30 @@ def api_preview_message():
         'sent with a payment button)</p>')
     variables["fellowship_spot"] = (data.get("fellowship_spot") or "").strip() \
         or "(no fellowship spot set for this event)"
+    # The payment reminder's variables, from the real event when the
+    # composer names one, and its house frame (email_parser.payment_reminder).
+    _ev = None
+    _ename = (data.get("event_name") or "").strip().lower()
+    if _ename:
+        _ev = next((e for e in get_all_events()
+                    if (e.get("item_name") or "").strip().lower() == _ename), None)
+    variables["event_place"] = variables["event_name"]
+    variables["event_date_long"] = variables["event_date"]
+    variables["roster_link"] = ('<a href="#" style="color:#2563eb;text-decoration:underline;">'
+                                "See who's registered so far</a>")
+    if _ev:
+        from email_parser import payment_reminder as _pr
+        _pv = _pr.event_vars(_ev)
+        for _k in ("event_place", "event_date_long", "roster_link"):
+            variables[_k] = _pv[_k]
+    html_out = render_msg_template(body_tpl, variables)
+    if (_ev and template_id and tpl
+            and (tpl.get("name") or "").strip().lower() == "payment reminder"):
+        html_out = _pr.frame_for(_ev, html_out)
 
     return jsonify({
         "subject": render_msg_template(subject_tpl, variables),
-        "html_body": render_msg_template(body_tpl, variables),
+        "html_body": html_out,
     })
 
 
@@ -12854,6 +13127,19 @@ def api_se_write():
     gid, err = _se_group_from_request(body)
     if err:
         return err
+    if not _se_is_admin():
+        # THE SCORING WINDOW (Kerry 10/26): saves open one hour before the
+        # first tee and close 15 minutes after the last score once every card
+        # is final. A refused batch stays in the phone's queue (non-200) and
+        # goes once the window opens. Fails open (scoring_window.entry_open).
+        from email_parser.scoring_window import entry_open
+        from email_parser.score_entry import event_of
+        try:
+            _ok, _why = entry_open(event_of("group", gid))
+        except Exception:
+            _ok, _why = True, None
+        if not _ok:
+            return jsonify({"error": _why, "window": "closed" if "closed" in (_why or "") else "not_open"}), 409
     by = body.get("entered_by")
     res = write_scores(gid, str(body.get("device_id") or ""), int(by) if by else None,
                        list(body.get("ops") or []))
@@ -12873,6 +13159,59 @@ def api_se_sign():
     kind = "scorekeeper" if b.get("kind") == "scorekeeper" else "player"
     try:
         res = sign_card(gid, str(b.get("device_id") or ""), int(b["customer_id"]), kind=kind)
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "customer_id is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/missing", methods=["POST"])
+@perf.timed_route("se_missing")
+def api_se_missing():
+    """NO-SHOW (Kerry 9/30 #1021): the scorer's "Player missing" answer for a
+    player on his own card: late / unknown / absent, or present ("+ Player",
+    "Here now"); wd ("Left the course"); makeup_yes / makeup_no /
+    makeup_unfinished (Kerry 10/26)."""
+    from email_parser.score_entry import mark_player_missing
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    try:
+        res = mark_player_missing(gid, str(b.get("device_id") or ""), int(b["customer_id"]),
+                                  str(b.get("answer") or ""), hole=b.get("hole"),
+                                  entered_by=b.get("who"))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "customer_id is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/add-choices", methods=["GET"])
+@perf.timed_route("se_add_choices")
+def api_se_add_choices():
+    """"+ Player" (Kerry 10/26): who may be put on this card, a roster
+    player on no card (last-second add) or a player on another card of the
+    round (switch). Names and customer_ids only, for the signed link."""
+    from email_parser.score_entry import add_choices
+    gid, err = _se_group_from_request(None)
+    if err:
+        return err
+    res = add_choices(gid)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/add-player", methods=["POST"])
+@perf.timed_route("se_add_player")
+def api_se_add_player():
+    """"+ Player" (Kerry 10/26): the phone keeping score puts someone else on
+    its card (add or switch); his pairing seat and the blinds follow."""
+    from email_parser.score_entry import add_player_to_card
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    try:
+        res = add_player_to_card(gid, str(b.get("device_id") or ""), int(b["customer_id"]),
+                                 hole=b.get("hole"), entered_by=b.get("who"))
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "customer_id is required"}), 400
     return (jsonify(res), 400) if "error" in res else jsonify(res)
@@ -14896,6 +15235,108 @@ def advisor_link(token):
     session["advisor_name"] = a["name"]
     session.permanent = True
     return redirect("/concepts")
+
+
+# ---------------------------------------------------------------------------
+# SCREENS — the Librarian's screenshot library (Kerry 2026-10-26)
+# ---------------------------------------------------------------------------
+
+def _screens_allowed() -> bool:
+    from email_parser import screens as _scr
+    need = _scr.viewer_role()
+    return _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK.get(need, 99)
+
+
+@app.route("/admin/screens")
+def admin_screens_page():
+    """Every catalogued screenshot sequence, with comments to the Librarian."""
+    if not _screens_allowed():
+        if _wants_page(request) and not session.get("role"):
+            return render_template("login_gate.html"), 401
+        return redirect("/events")
+    return render_template("admin_screens.html")
+
+
+@app.route("/admin/screens/file/<base>/<path:rel>")
+def admin_screens_file(base, rel):
+    from email_parser import screens as _scr
+    if not _screens_allowed():
+        return jsonify({"error": "Admin access required."}), 403
+    p = _scr.safe_file(rel, base=base)
+    if not p:
+        return jsonify({"error": "not found"}), 404
+    return send_file(str(p), max_age=3600)
+
+
+def _screens_demo_event(need_link: bool = False):
+    """The next upcoming active event (with a usable store link when asked)."""
+    from email_parser.event_links import event_url_for_message
+    today = today_central_str()
+    for ev in sorted(get_all_events(), key=lambda e: (e.get("event_date") or "9999")):
+        if (ev.get("event_date") or "") < today or (ev.get("status") or "active") != "active":
+            continue
+        if need_link and not event_url_for_message(ev)[0]:
+            continue
+        return ev
+    return None
+
+
+@app.route("/admin/screens/demo/<name>")
+def admin_screens_demo(name):
+    """Test-drive renders for the Screens page. Nothing is sent or recorded:
+    the invitation uses PREVIEW links on the staff preview person (taps open
+    the real pages and record nothing); the reminder is only rendered."""
+    from email_parser import invitations as _inv, payment_reminder as _pr
+    if not _screens_allowed():
+        return jsonify({"error": "Admin access required."}), 403
+    pcid = int(_inv._setting(_inv.PREVIEW_CID_KEY) or _inv.DEFAULT_PREVIEW_CID)
+    if name == "invitation":
+        ev = _screens_demo_event()
+        if not ev:
+            return "No upcoming event to preview.", 404
+        from email_parser.database import get_connection
+        conn = get_connection()
+        try:
+            r = conn.execute("SELECT first_name FROM customers WHERE customer_id = ?", (pcid,)).fetchone()
+        finally:
+            conn.close()
+        msg = _inv.build_message(ev, {"customer_id": pcid, "first_name": (r[0] if r else "") or "Kerry"},
+                                 "invite", preview=True)
+        return Response(msg["html"], mimetype="text/html")
+    if name == "payment-reminder":
+        ev = _screens_demo_event(need_link=True)
+        if not ev:
+            return "No upcoming event with a registration link.", 404
+        return Response(_pr.preview(int(ev["id"]), pcid)["html"], mimetype="text/html")
+    return jsonify({"error": "no such demo"}), 404
+
+
+@app.route("/api/screens", methods=["GET"])
+def api_screens():
+    from email_parser import screens as _scr
+    if not _screens_allowed():
+        return jsonify({"error": "Admin access required."}), 403
+    cat = _scr.catalog()
+    cat["comment_counts"] = _scr.counts()
+    cat["kinds"] = list(_scr.KINDS)
+    return jsonify(cat)
+
+
+@app.route("/api/screens/<seq_id>/comments", methods=["GET", "POST"])
+def api_screens_comments(seq_id):
+    from email_parser import screens as _scr
+    if not _screens_allowed():
+        return jsonify({"error": "Admin access required."}), 403
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        res = _scr.add_comment(seq_id, data.get("kind") or "Note", data.get("text") or "",
+                               step_file=data.get("step") or "",
+                               who=session.get("role") or "admin",
+                               device=data.get("device") or "")
+        if res.get("error"):
+            return jsonify(res), 400
+        return jsonify({"status": "ok", "post": res})
+    return jsonify({"comments": _scr.thread(seq_id)})
 
 
 @app.route("/admin/advisors")

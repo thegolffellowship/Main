@@ -79,7 +79,7 @@ CLARIFY_NOTE = ("<b>A quick check:</b> your invitation link recorded \"I'm in\" 
                 "every button by itself, so we want to be sure we have you right.{extra} "
                 "Please tap the one you meant below.")
 CLARIFY_SECOND = {"out": ("Can't make it", ""),
-                  "unsub": ("Remove me from invitations",
+                  "unsub": ("Remove me from ALL event invitations",
                             " You're still on our invitation list.")}
 UNCLEAR_KEY = "event_invite_unclear:{event_id}"
 
@@ -149,7 +149,7 @@ def _secret() -> bytes:
 
 
 def make_token(customer_id: int, event_id: int, action: str, expires: date,
-               preview: bool = False, sent_at: int | None = None) -> str:
+               preview: bool = False, sent_at: int | None = None, src: str = "") -> str:
     """preview=True marks a staff PREVIEW link (Kerry 10/14: tapping the
     preview recorded Todd McConahy's answers). It opens the same pages and
     records nothing."""
@@ -162,6 +162,8 @@ def make_token(customer_id: int, event_id: int, action: str, expires: date,
         payload["p"] = 1
     if sent_at:
         payload["s"] = int(sent_at)     # when the email went out (scanner grace)
+    if src:
+        payload["k"] = src              # "pay": the payment emails' quick out (Kerry 10/26)
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()
                                     ).rstrip(b"=").decode()
     sig = hmac.new(_secret(), b"rsvp." + body.encode(), hashlib.sha256).hexdigest()[:32]
@@ -427,9 +429,16 @@ def _context(ev: dict, db_path=None) -> dict:
 
 
 def _button(url: str, label: str, bg: str, ink: str) -> str:
-    return (f'<td style="padding:4px 6px;"><a href="{_e(url)}" style="display:inline-block;'
+    # The colour lives on the CELL too (bgcolor + style), not only on the
+    # link (Kerry 10/26, a quoted reply in Outlook): Outlook drops a link's
+    # background when quoting and in some desktop versions, which left the
+    # white "I'm in" text invisible on white. Structure only, no words.
+    return (f'<td style="padding:4px 6px;"><table role="presentation" cellpadding="0" '
+            f'cellspacing="0" border="0"><tr><td bgcolor="{bg}" style="background:{bg};'
+            f'border-radius:999px;"><a href="{_e(url)}" style="display:inline-block;'
             f'background:{bg};color:{ink};font:bold 16px Georgia,serif;text-decoration:none;'
-            f'padding:12px 22px;border-radius:999px;">{_e(label)}</a></td>')
+            f'padding:12px 22px;border-radius:999px;"><span style="color:{ink};">{_e(label)}'
+            f'</span></a></td></tr></table></td>')
 
 
 def build_message(ev: dict, person: dict, kind: str = "invite", db_path=None,
@@ -574,6 +583,99 @@ def _scanner_ignored(p: dict, action: str, db_path=None) -> str | None:
     return why
 
 
+# KNOWN SCANNERS + TAP FINGERPRINT (Kerry 10/26: "Anyway to guard against
+# those email scanner false positives?" ... "Yes, build 1 and 2 now", after
+# Logan Billeaud's work filter tapped I'm in ~4 minutes after each send, past
+# the 2-minute grace). A tap from (1) someone whose email has been caught as
+# a scanner SCANNER_KNOWN_AFTER times, or (2) a request that does not look
+# like a person's browser, records nothing by itself: the page asks for one
+# button tap, which scanners do not make. Everyone else is unchanged.
+SCANNER_GUARD_DIAL = "invite_scanner_guard"          # 'off' turns 1 + 2 off
+SCANNER_KNOWN_DIAL = "invite_scanner_known_after"    # default 2
+SCANNER_KNOWN_AFTER = 2
+SCANNER_UA_DIAL = "invite_scanner_ua_tokens"         # comma list, replaces the default
+SCANNER_UA_TOKENS = ("bot", "crawler", "spider", "python", "curl", "wget", "go-http",
+                     "java/", "okhttp", "headless", "phantomjs", "mimecast", "proofpoint",
+                     "barracuda", "symantec", "forcepoint", "trendmicro", "safelinks",
+                     "microsoft office", "ms-office", "bingpreview", "preview",
+                     "scanner", "urldefense", "linkprotect")
+
+
+def _guard_on(db_path=None) -> bool:
+    return (_setting(SCANNER_GUARD_DIAL, db_path) or "").strip().lower() != "off"
+
+
+def tap_fingerprint(client: dict | None, db_path=None) -> str | None:
+    """Why this request does not look like a person, or None. `client` is
+    {ua, lang, ip} from the request headers."""
+    if not client:
+        return None
+    ua = (client.get("ua") or "").strip().lower()
+    if not ua:
+        return "no user agent"
+    raw = (_setting(SCANNER_UA_DIAL, db_path) or "").strip()
+    toks = [t.strip().lower() for t in raw.split(",") if t.strip()] if raw else SCANNER_UA_TOKENS
+    for t in toks:
+        if t in ua:
+            return f"user agent '{t}'"
+    if not (client.get("lang") or "").strip():
+        return "no Accept-Language"
+    return None
+
+
+def known_scanner(cid: int, db_path=None) -> bool:
+    """Has this person's email been caught as a scanner before?"""
+    from email_parser import database as db
+    try:
+        n = int((_setting(SCANNER_KNOWN_DIAL, db_path) or "").strip() or SCANNER_KNOWN_AFTER)
+    except ValueError:
+        n = SCANNER_KNOWN_AFTER
+    conn = db.get_connection(db_path)
+    try:
+        r = conn.execute(
+            "SELECT COUNT(*) FROM agent_action_log WHERE agent_name = 'rsvp-link' "
+            "AND action_type IN ('event_invite_scanner_ignored', 'event_invite_scanner_suspect') "
+            "AND description LIKE ?", (f"event % customer {int(cid)} %",)).fetchone()
+    finally:
+        conn.close()
+    return bool(r and r[0] >= n)
+
+
+def log_tap(token: str, client: dict | None, db_path=None) -> None:
+    """Every bare link open, with its fingerprint (for spotting scanners)."""
+    from email_parser import database as db
+    p = verify_token(token)
+    if not p or p.get("p"):
+        return
+    c = client or {}
+    try:
+        db.log_agent_action("rsvp-link", "event_invite_tap",
+                            f"event {int(p['v'])} customer {int(p['c'])} {p['a']} | "
+                            f"ua={(c.get('ua') or '')[:160]} | lang={(c.get('lang') or '')[:40]} | "
+                            f"ip={(c.get('ip') or '')[:60]}")
+    except Exception:
+        pass
+
+
+def needs_confirm(token: str, client: dict | None, db_path=None) -> str | None:
+    """Why this tap must be confirmed with a button (a known scanner or a
+    non-browser fingerprint), or None. Logs the suspect once per tap."""
+    from email_parser import database as db
+    p = verify_token(token)
+    if not p or p.get("p") or p.get("a") not in ("in", "out") or not _guard_on(db_path):
+        return None
+    why = tap_fingerprint(client, db_path)
+    if not why and known_scanner(int(p["c"]), db_path):
+        why = "known scanner"
+    if why:
+        try:
+            db.log_agent_action("rsvp-link", "event_invite_scanner_suspect",
+                                f"event {int(p['v'])} customer {int(p['c'])} {p['a']} ({why})")
+        except Exception:
+            pass
+    return why
+
+
 def record_answer(token: str, db_path=None) -> dict:
     """POST side of the link. Records I'm in / Can't make it as a Tracker
     rsvps row (one per event + person, the latest answer wins), or the
@@ -625,6 +727,18 @@ def record_answer(token: str, db_path=None) -> dict:
         db.log_agent_action("rsvp-link", "event_rsvp", f"event {eid} customer {cid} {RESPONSE[action]}")
     except Exception:
         pass
+    if action == "out" and p.get("k") == "pay":
+        # "I'm not playing after all" on a payment email (Kerry 10/26, CoS
+        # #2324): off the roster by the Events page's own not-playing mark
+        # too, so a Golf Genius RSVP of theirs can't keep them on it and no
+        # further payment email goes for this event. Undo on the Events page.
+        try:
+            from email_parser.rsvp_deadline import _release_mark
+            _release_mark(ev, email, cid, db_path)
+            db.log_agent_action("rsvp-link", "payment_email_out",
+                                f"event {eid} customer {cid} {name}: I'm not playing after all")
+        except Exception:
+            logger.exception("invitations: payment-email out failed for %s", cid)
     ctx_ev = {"name": ev.get("item_name"), "date": ev.get("event_date"),
               "registration_url": (ev.get("registration_url") or "").strip()}
     return {"ok": True, "action": action, "response": RESPONSE[action], "name": name,
@@ -800,7 +914,7 @@ def clicks_to_rsvps(event_id: int, apply: bool = False, db_path=None) -> dict:
     return out
 
 
-def click_in(token: str, db_path=None) -> dict:
+def click_in(token: str, db_path=None, client: dict | None = None) -> dict:
     """GET of an I'm in link. With a registration link on the event, the
     player goes straight there; the tap is noted AND recorded as a PLAYING
     RSVP (Kerry 10/17), even if they never pay. Mail-scanner taps (the grace
@@ -823,6 +937,11 @@ def click_in(token: str, db_path=None) -> dict:
     why = _scanner_ignored(p, "in", db_path)
     if why:
         return {"ok": True, "redirect": url, "ignored": why}
+    sus = needs_confirm(token, client, db_path)
+    if sus:
+        # Known scanner / not a browser: record nothing; the page asks for
+        # one tap, whose POST records PLAYING and goes on to registration.
+        return {"ok": False, "confirm": sus, "redirect": url}
     key = CLICKS_KEY.format(event_id=int(p["v"]))
     try:
         clicks = json.loads(_setting(key, db_path) or "{}")
@@ -1134,6 +1253,66 @@ def _deliver(ev: dict, pl: dict, db_path=None) -> dict:
         except Exception:
             pass
     return {"sent": sent, "failed": failed, "held": held}
+
+
+def remove_playing(customer_ids, kerry_ok_post, confirm: bool = False, db_path=None) -> dict:
+    """Take back Tracker I'm in answers a person did not give (Kerry 10/26,
+    Logan Billeaud: "falsely being added as RSVP ... remove him from his I'm
+    playing RSVPs"; a mail scanner tapping I'm in a few minutes after the
+    send). Deletes each person's Tracker PLAYING rows (`tracker:<event>:<cid>`)
+    and their noted I'm in clicks. A registration, a Golf Genius RSVP and any
+    Can't make it are never touched; upcoming events only, and an event the
+    person is registered for is left alone and reported. Kerry's word on the
+    mailbox; dry run unless confirm."""
+    from email_parser import database as db
+    from email_parser.customer_query import _kerry_ok
+    from email_parser.timezone_utils import today_central_str as today_iso
+    cids = sorted({int(c) for c in customer_ids})
+    if not cids:
+        return {"error": "no customer ids"}
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+        if not ok:
+            return {"refused": f"rule 3b: {why}"}
+        marks = ",".join("?" * len(cids))
+        found = [dict(r) for r in conn.execute(
+            f"SELECT email_uid, customer_id, matched_event, event_date, received_at FROM rsvps "
+            f"WHERE customer_id IN ({marks}) AND response = 'PLAYING' "
+            f"AND substr(email_uid, 1, 8) = 'tracker:' AND event_date >= ? ORDER BY event_date",
+            (*cids, today_iso())).fetchall()]
+        # Upcoming events only (past rows stay as history), and never an
+        # event the person is registered for (Front Desk #2300: that is
+        # Kerry's call, money rows are never touched here).
+        rows, skipped = [], []
+        for r in found:
+            ev = _event(conn, int(r["email_uid"].split(":")[1]))
+            if ev and int(r["customer_id"]) in _registered_ids(conn, ev):
+                skipped.append({**r, "why": "registered for this event"})
+            else:
+                rows.append(r)
+        out = {"authority": why, "customer_ids": cids, "playing_rows_removed": rows,
+               "left_registered": skipped}
+        if confirm is not True:
+            return {**out, "dry_run": True}
+        for r in rows:
+            conn.execute("DELETE FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
+                         (r["email_uid"],))
+        conn.commit()
+    finally:
+        conn.close()
+    for eid in {int(r["email_uid"].split(":")[1]) for r in rows}:
+        key = CLICKS_KEY.format(event_id=eid)
+        try:
+            clicks = json.loads(_setting(key, db_path) or "{}")
+            for c in cids:
+                clicks.pop(str(c), None)
+            db.set_app_setting(key, json.dumps(clicks), db_path=db_path)
+        except Exception:
+            logger.exception("invitations: could not drop a noted click")
+    db.log_agent_action("mcp-claude", "event_invite_remove_playing",
+                        f"post {kerry_ok_post}: customers {cids}, {len(rows)} row(s)")
+    return {**out, "applied": True}
 
 
 def restore_answers(customer_ids, kerry_ok_post, confirm: bool = False, keep_answers: bool = False,

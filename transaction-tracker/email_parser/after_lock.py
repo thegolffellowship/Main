@@ -176,7 +176,7 @@ def _manager_cc(chapter, db_path=None) -> str | None:
 
 
 def run_event(event_id: int, render=None, static_dir=None, confirm: bool = False,
-              db_path=None) -> dict:
+              db_path=None, at=None) -> dict:
     """Send what one event's changes call for. confirm=False is a dry run."""
     from email_parser import database as db
     from email_parser import event_day_email as ede
@@ -275,7 +275,14 @@ def run_event(event_id: int, render=None, static_dir=None, confirm: bool = False
     course = {"status": "no seat change"}
     if d["moved"] or d["added"] or d["removed"]:
         prev = _get(COURSE_KEY.format(int(event_id)), db_path)
-        if not prev:
+        if at is None:
+            from email_parser.timezone_utils import now_central
+            at = now_central()
+        with db._connect(db_path) as _c:
+            _evr = _c.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        if _evr and course_cutoff_passed(dict(_evr), at, db_path):
+            course = {"status": "within the hour before the first tee: the course gets no more sheets"}
+        elif not prev:
             course = {"status": "Course Files not sent yet: the next send carries the new sheet"}
         elif render is None:
             course = {"status": "no renderer (dry run outside the app)"}
@@ -345,19 +352,44 @@ def _course_resend(event_id, render, static_dir, prev, confirm, db_path=None) ->
     return {"status": "sent" if res.get("sent") else "failed", "parts": changed, **res}
 
 
-def _first_tee_passed(ev: dict, now) -> bool:
+def _first_tee(ev: dict):
     from email_parser import database as db
     try:
         ft = db._evlb_first_tee(ev, {}, None)
     except Exception:
         ft = None
     if not ft:
+        return None
+    try:
+        return datetime.strptime(f"{str(ev.get('event_date'))[:10]} {ft}", "%Y-%m-%d %I:%M %p")
+    except ValueError:
+        return None
+
+
+def _first_tee_passed(ev: dict, now) -> bool:
+    t = _first_tee(ev)
+    return t is not None and now >= t
+
+
+COURSE_CUTOFF_DIAL = "after_lock_course_cutoff_min"
+
+
+def course_cutoff_passed(ev: dict, now, db_path=None) -> bool:
+    """Kerry 10/26 (CoS #2329 item 4): "Changed sheets for the course
+    shouldn't be going to them during play. That should be in the window
+    between Noon and 1 hour prior." From this many minutes before the first
+    tee or shotgun (dial after_lock_course_cutoff_min, default 60) the course
+    gets no more sheets. Players' update emails are not affected."""
+    from datetime import timedelta
+    from email_parser import database as db
+    t = _first_tee(ev)
+    if t is None:
         return False
     try:
-        t = datetime.strptime(f"{str(ev.get('event_date'))[:10]} {ft}", "%Y-%m-%d %I:%M %p")
-    except ValueError:
-        return False
-    return now >= t
+        mins = int((db.get_app_setting(COURSE_CUTOFF_DIAL, db_path=db_path) or "60").strip())
+    except (ValueError, TypeError):
+        mins = 60
+    return now >= t - timedelta(minutes=max(0, mins))
 
 
 def check(render=None, static_dir=None, now=None, db_path=None) -> dict:
@@ -369,9 +401,14 @@ def check(render=None, static_dir=None, now=None, db_path=None) -> dict:
         from email_parser.timezone_utils import now_central
         now = now_central()
     with db._connect(db_path) as conn:
+        # Today's events, and tomorrow's whose Event Info already went (a
+        # morning event's goes at noon the day before, Kerry 10/26 #2355);
+        # an event with no Event Info send has no baseline and is skipped below.
+        from datetime import timedelta as _td
         rows = [dict(r) for r in conn.execute(
-            "SELECT * FROM events WHERE substr(event_date, 1, 10) = ? "
-            "AND COALESCE(status, 'active') = 'active'", (now.date().isoformat(),))]
+            "SELECT * FROM events WHERE substr(event_date, 1, 10) IN (?, ?) "
+            "AND COALESCE(status, 'active') = 'active'",
+            (now.date().isoformat(), (now.date() + _td(days=1)).isoformat()))]
     out = {}
     for ev in rows:
         if not _get(STATE_KEY.format(int(ev["id"])), db_path):
@@ -380,7 +417,8 @@ def check(render=None, static_dir=None, now=None, db_path=None) -> dict:
             out[ev["id"]] = {"status": "first tee passed"}
             continue
         try:
-            out[ev["id"]] = run_event(ev["id"], render, static_dir, confirm=True, db_path=db_path)
+            out[ev["id"]] = run_event(ev["id"], render, static_dir, confirm=True, db_path=db_path,
+                                      at=now)
         except Exception as exc:
             logger.exception("after-lock check failed for %s", ev["id"])
             out[ev["id"]] = {"error": str(exc)}

@@ -1927,6 +1927,59 @@ the best ball and plays the blind's card, labelled `Bl[Name]`, at the
 blind's own strokes. GG stays the payer of record until the entry-record
 cutover (#846). Guards: `test_nh_blinds.py`.
 
+### 15j — a blind for a MISSING player: no-show, late arrival, WD, "+ Player" (Kerry 2026-10-26, branch tb5-no-show-2)
+
+Kerry, verbatim: *"Also need to account for providing a blind, or
+potentially more blinds for any missing players, based on our blind
+rules."* / *"Blinds would happen automatically if a player is removed,
+correct?"* / *"His ball on holes played, blind on the rest"* / *"Split by
+holes is good - So that player's share is prorated between two players."*
+
+* **When.** The scorer's answers on the phone (score-entry.md "No-show")
+  decide who is missing; `database.sync_no_show_blinds(event_id)` turns them
+  into blinds the moment he is marked absent or WD, after every score on such
+  a card and every 5 minutes on event day (`no_show_notice.check`). No
+  manager tap. It is idempotent and undoes a blind when he comes back for
+  those holes or makes them up.
+* **One blind per missing seat**, reason `missed_hole`, keyed to the MISSING
+  player's own seat (`holes:group:cart_pos`). Two absents in a group get two
+  blinds. The blind is never written into `event_pairings` (15c), and
+  `_reseat_event_blinds` never moves a missed-hole blind (its seat is not
+  open: the missing player still sits there).
+* **The same per-seat rule, no second draw.** Candidates come from
+  `_blind_seat_candidates` and the pick from `_blind_pick`, exactly as the
+  whole-sheet draw and the open-seat RANDOM: Cart Net = the other cart of the
+  same foursome first, then the field (15h); Team Net = the field outside the
+  group; eligibility `blind_gate` (15i); fewest blinds this calendar year
+  first; one blind per person per event (every blind already on the event is
+  taken). A missing or partial player never serves as a blind (no full card).
+* **Which holes** (`blind_draw_holes`, the rows 0006 made for this): an
+  absent player's blind covers every hole (none of his holes count); a late
+  arrival's covers the holes before he joined; a WD's the holes from the one
+  he left on; holes he will make up stay covered until he enters each. When
+  the holes change, the SAME blind keeps the seat and only its hole rows
+  change. `TEAM_NET_INCOMPLETE_ROUND = "blind_whole_round"` (not the ruled
+  default) widens a partial player's blind to every hole and drops his ball.
+* **Team Net / Cart Net use it.** The EVENTS board plays a missed-hole blind
+  on its listed holes only and never waits on a hole the missing player did
+  not play; the engine (`live_scoring.game_team_net`) does the same. Proven by
+  `test_no_show.py` (blind 4 on holes 1–3, the late player's 3 on 4–9 = 30).
+* **"+ Player" newcomers.** A newcomer added to a card with an absent player
+  fills that seat: the absent player's blind keeps only the holes before the
+  newcomer joined. A newcomer on a short card takes the first free seat
+  (`move_pairing_seat`, one targeted write); an open-seat blind there becomes
+  a missed-hole blind for the holes before he joined, or goes when he plays
+  them all. A switch leaves an open seat behind, which gets its blind at once
+  (`draw_one_blind`).
+* **Money.** The missing player and his blind share ONE slot. Ruled
+  (`score_entry.TEAM_SLOT_PAYOUT = "pro_rata"`): the slot's share is split by
+  holes covered, to the cent (late player 6/9, blind 3/9). `player` / `blind`
+  give the whole slot to one; a no-show (no holes) gives it all to the blind.
+  `_tracker_team_and_ctp_rows` marks the shared slot (`slots`) and
+  `assemble_event_game_payouts` pays it once.
+* **Logged:** `agent_action_log` `no_show_blind` (drawn / removed);
+  `pairing_seat_move` for a "+ Player" seat.
+
 ### Surfaces
 
 * `POST /api/events/<id>/pairings/blinds` — `{apply, redraw, clear}`
@@ -2227,6 +2280,8 @@ Kerry, verbatim: "1st Timers have additional rules to First Year members. You gr
 
 ### 17 — a reseat that frees a group re-deals the short groups
 
+*(Since the withdrawal fold, Kerry 10/26: before the lock only, or with dial `withdrawal_fold_auto` off. After the lock the fold regroups with the fewest moves; see "After the lock: the withdrawal fold".)*
+
 - **Where.** `remove_player_from_pairings` calls `_regroup_after_removal` when it re-seats (before the start only; rule 15b is unchanged) and the field now fits fewer groups: ceil(n / 4), or n / 5 on a fivesome event. For example, 20 players need 5 groups, not 6.
 - **What moves (Kerry 2026-10-12: "When a reseat happens, only locked groups and partner requests should persist").**
   - The whole holes set is dealt again by the generator under every rule.
@@ -2442,3 +2497,22 @@ use as a test case because of there being 3 threesomes required."
   (`smalls_lead`, Kerry 2026-07-21) already sends threesomes to the earliest
   tee times; the 10/19 sheet and a fresh preview both had them first. Kerry
   10/19: "3somes go first on tee times." Nothing changed.
+
+## After the lock: the withdrawal fold (Kerry 2026-10-26, CoS #2363-#2366)
+
+After the lock the sheet is never re-dealt (event-timeline.md §3: "REDISTRIBUTE with the fewest moves"). A withdrawal is folded by `email_parser/withdrawal_fold.py`, a step of the 15-minute after-lock job right after seat-fill:
+- G = ceil(N/4). A group under 3 takes one player from each foursome in DONOR order (shotgun highest hole first, B before A; tee times the first foursome) at once.
+- More groups than G: from 7:00 AM event day the shortest group (the one the withdrawal hit on a tie) dissolves one each into the threesomes in seat-fill order, and its time is released.
+- A partner request, a Match Play pair or a guest and host in one group never split; if every candidate is blocked nothing moves and one COO item is raised.
+- Nothing inside the hour before the first tee.
+- Rule 17 (`_regroup_after_removal`, the generator re-deal after a removal) now runs only before the lock or with dial `withdrawal_fold_auto` off.
+Full rules, Kerry's words, the ten cases and the open choices: events.md "Withdrawal fold". Guard `test_withdrawal_fold.py`.
+
+## Unused tee times: which to keep (Kerry 2026-10-26)
+
+Kerry (CoS #2331 A / #2332): "If we have more tee times than we need the tee times should save the later times and release the earlier times and let the course know which ones." ... "We do that for 9 hole weeknight events, but with weekend events we keep the earliest times by default and give back the later ones."
+- A TEE-TIME event (not a shotgun) holding more times than its groups need: a weeknight (Monday-Friday) keeps the LATEST times; a weekend (Saturday/Sunday) keeps the EARLIEST.
+- Per event: `events.tee_keep` ('latest' | 'earliest', migration 0039), Edit Event "Unused tee times" (Default / Keep latest / Keep earliest). NULL = the weekday default. `database.tee_keep_mode(ev)` is the one reader.
+- The generator (`generate_event_pairings`) places the groups on `kept_tee_slots(ev, slots, n)` when no seed pins a slot.
+- `released_tee_times(ev)`: the times the event holds and its SAVED sheet does not use. The tee-times email to the course contact names them under the tee sheet: "We're releasing these tee times: 3:40 PM, 3:50 PM." (`teetimes_email.released_block`). It rides inside {tee_sheet}, so the stamped course template and its hash are unchanged.
+- Guard `test_tee_keep.py`.

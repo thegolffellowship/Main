@@ -1,11 +1,315 @@
-window.TGF_VERSION = "2.579.2";
+window.TGF_VERSION = "2.604.1";
 window.TGF_CHANGELOG = [
   {
-    version: "2.579.2",
+    version: "2.604.1",
     date: "2026-10-24",
-    title: "Health: cut-off Graph reply retried twice with diagnostics, 180 s invite-send line",
+    title: "Health: approve check no longer re-runs the generator, slow lines, cut-off Graph reads retried",
     changes: [
-      "Digest #2254 (10/24). (1) inbox_check hit a cut-off Microsoft reply a third time (10/23 7:10 AM CDT, about 259 KB; also 110 KB on 10/18 and 243 KB on 10/19), after the one-retry fix of v2.577.3 was live, so the second try failed too or the cut is not random. A Graph read whose body will not parse is now asked for up to twice more, after 2 s and 4 s, and if every try fails the error names how many bytes came back against how many the server announced, so the next occurrence tells us whether the reply is being cut by the network or by Microsoft. Reads only; a repeat is safe; a mail that is not read is picked up by the next 5-minute run, as before. (2) The invite-send bridge slow line goes from 90 s to 180 s: Wednesday 10/21's 7 AM Fall Championship reminder (221 recipients through Microsoft) took 99 s. No email, audience, wording, send behaviour or money changes."
+      "Digest #2412 (10/27). (1) The approve-pairings page's slow half (/approve-pairings/check, which Tracker Build moved off the page itself in v2.604.0) took 20.6 s at host load 92-97 on 10/26-27, and the laps added in v2.577.3 name where: the pairings audit 10.5 s and the Event Info build 8.6 s. The audit was running the pairings generator a second time just to print \"the generator's alternative\", and the approve page reads only the hard rule flags, so it no longer asks for it (event_pairing_audit(..., with_alternative=False), the page shows the same flags). Expect about half the time; the Event Info build (the GAMES tab read, 8.6 s) is the next piece and is left for the Tracker Build lane. (2) Slow lines: approve_pairings_check 15 s; the screenshot jobs screens_capture_deploy and screens_capture_nightly 600 s (they ran 116 s typical and 363 s at most, each flagged slow against the 2-minute default); the invite-send bridge 180 s (Wednesday's reminder to 221 people took 99 s). (3) A Microsoft mail read that comes back cut off (JSONDecodeError at 110 KB on 10/18, 243 KB on 10/19 and 259 KB on 10/23, after the single retry was live) is now asked for up to twice more, after 2 s and 4 s, and if every try fails the error names how many bytes came back against how many the server announced. Reads only; a mail not read is picked up by the next 5-minute run. No email, audience, wording, send behaviour or money changes."
+    ]
+  },
+  {
+    version: "2.604.0",
+    date: "2026-10-26",
+    title: "Approve pairings: answers at once, says what goes where and when, and shows APPROVED with who and when",
+    changes: [
+      "Kerry 10/26, after the approve-page mockup (CoS #2393): \"Ok, I'm good with that plan now.\" On 10/26 the approve page took 20 s to load and sat on Approving... after the click. The page now loads light (the pairings audit, who-gets-no-email and the Event Info sample load afterwards from /events/<id>/approve-pairings/check), and approval records the sheet and answers at once while the tee-times email is sent in the background (the claim guard keeps it from ever doubling with the job). A second tap does nothing.",
+      "The line under the button is built live per event (pairings_approval.send_plan): \"Approving sends tee times now to all 25 players, to Silverhorn Golf Club of Texas (Koalbey Lindsey, CC Tiffany Caplan) and to you. Invitees who haven't registered get the open-spots email (3 spots open). Players get their full Event Info at 6:00 AM Tuesday. Silverhorn gets the Course Files at noon Tuesday.\" A morning event reads \"...at noon Friday, and Kissing Tree gets the Course Files at the same time.\"; no course contact reads \"No course contact on file: the course gets nothing until one is added.\"; below it \"If you don't approve, this all goes automatically at 7:00 PM.\" The confirm pop-up gives the live counts (players, course, invitees). After approval a green APPROVED · Kerry · 5:14 PM Mon bar replaces the button and the line reads \"Tee times are going out now...\".",
+      "The Pairings tab's Approve button has three states, desktop and phone: Approve (orange), APPROVED · who · time (green #2f7d4a), and Changed since approval · Approve again (amber) once the saved sheet changes. Read-only bridge scoring-approve-plan:<event_id>. Guard test_pairings_approval.py."
+    ]
+  },
+  {
+    version: "2.603.1",
+    date: "2026-10-26",
+    title: "Player missing: tap everyone who is missing at once",
+    changes: [
+      "Kerry 10/26: \"What if multiple people are missing? Can I tap all that are missing?\" Who's missing? now lets the scorer tap every player who isn't here (each turns red with a check), then Next (N missing) asks Is <Name> coming? for each in turn (\"1 of 2\", \"2 of 2\"), and the answers are saved one after another with one reload. The back end already handled several absent players on one card (one Rule 15 blind per missing seat). Screens sequence no-show retaken with the new step 2b."
+    ]
+  },
+  {
+    version: "2.603.0",
+    date: "2026-10-26",
+    title: "No-shows, late arrivals and WDs: the course gets the count, blinds draw themselves, short rounds play what they paid for",
+    changes: [
+      "Course notice (Kerry 10/26: \"No-show sequence with email to course should show original count vs updated count and the what happened and who dropped with a request to have them removed from our final payment count.\"): a TGF-branded email to the course contact, CC its other contacts, the chapter manager and admin (setting no_show_notice_admin_cc), with Original count vs Updated count, what happened to each person (no-show, left after hole N, arrived late, added) and a request to remove the dropped players from TGF's final payment count. An UPDATED version goes whenever that set changes, never twice for the same set.",
+      "Blinds draw themselves (Kerry: \"Blinds would happen automatically if a player is removed, correct?\"): database.sync_no_show_blinds draws one Rule 15 blind per missing seat (Cart Net from the other cart, Team Net from the field outside the group, fewest blinds this year first, one per person per event), covering only the holes that seat missed, and undoes it when he plays or makes them up.",
+      "Late arrival, WD, make-up and + Player on the scorer's phone: Here now from hole H (earlier holes NOT PLAYED, never par, never holding the card); Left the course (WD) from this hole; once the rest of the group has finished, Will he make up the missed holes? (Kerry: \"which is always allowed if there's light\"); + Player on a short card adds a last-second player or switches one from another card, carrying his scores. New table se_partial_rounds (migration 0041).",
+      "What a short round plays (Kerry 10/26): out of Individual Net and Gross; in Skins, MVP and CTPs (\"could still compete in Skins, MVP, and CTPs\"); counts toward points races, not toward a handicap; only in games he paid into or that come with his entry. Team Net: \"His ball on holes played, blind on the rest\" and \"Split by holes is good - So that player's share is prorated between two players.\" Guard test_no_show.py (117 checks); screens sequence no-show retaken (11 steps).",
+      "Also in this release (v2.602.1): the course update's RSVP Only list leaves out known mail scanners."
+    ]
+  },
+  {
+    version: "2.602.3",
+    date: "2026-10-26",
+    title: "Tee times: the open-spots email goes to invitees, not to seated players; the manager line says when it really went",
+    changes: [
+      "Kerry 10/26 (CoS #2386): \"Why would there be a spots still open register box sent to those that are already paid and seated? The point is to fill our open spots.\" and, on the mockup (#2387), \"That works. Send it to build and deploy.\" A fourth tee-times version, open spots, goes at the same moment as the other three and only while the saved sheet has open seats: to invitees who are not on the sheet, have not said Can't make it, have not opted out and are not known mail scanners. Subject \"3 spots open at Silverhorn tomorrow, 4:30 PM shotgun\"; an orange box with the count, course, date, holes, start and a Register button; the live sheet with each empty seat as \"Open spot\"; the approved footer with Stop event invitations. Its words are in code (teetimes_email.OPEN) and its stamp is their hash (teetimes_open_spots_approved). Seated players get their tee times with no Register box. Once per person per event under the same claim guard.",
+      "The manager copy said \"This went to the players and the course at 7:00 PM\" after a 5:16 PM approval (CoS #2386-2). It now names the time the players' or course's email actually went, in 12-hour Central. That line is part of the manager wording's stamp, so the stamp moves with it."
+    ]
+  },
+  {
+    version: "2.602.2",
+    date: "2026-10-26",
+    title: "Fix: tee-times emails went twice when a manager approved",
+    changes: [
+      "On 10/26 at 5:16 PM every Silverhorn tee-times email (players, course and manager) went twice. Kerry approved the sheet, the approval sent the emails, and the every-few-minutes job, which also sends an approved sheet at once from 5:00 PM, ran at the same moment; both read an empty sent list. Each message is now claimed atomically before it is sent (app setting teetimes_claim:<event>:<key>, inserted only if absent), so exactly one sender sends it; a failed send gives the claim back for the next run. Guard test_teetimes_email.py runs two senders at once and fails without the claim."
+    ]
+  },
+  {
+    version: "2.602.1",
+    date: "2026-10-26",
+    title: "Course update leaves known mail scanners out of RSVP Only",
+    changes: [
+      "CoS #2372: the course update's RSVP Only list leaves out anyone already caught as a mail scanner (invitations.known_scanner), as the RSVP deadline emails do; unconfirmed scanner taps were already dropped when they happened. The wording and its stamp are unchanged."
+    ]
+  },
+  {
+    version: "2.602.0",
+    date: "2026-10-26",
+    title: "The course update shows Registered and RSVP Only, so the course sees the full number expected",
+    changes: [
+      "Kerry 10/26: \"the email needs to also show Registered & RSVP Only, so they can see the full number we're expecting like 22 not 18 for Saturday.\" The noon-before-the-lock course update now reads the whole pairings roster (_event_roster_rows): the subject and first line give the total expected, with the registered and RSVP-only counts, and the body lists the two groups under their own headings. The wording changed, so its stamp moves to the new hash (13f9bc2e40de4984), set on Kerry's word above when this deploys. Guard test_course_update.py."
+    ]
+  },
+  {
+    version: "2.601.0",
+    date: "2026-10-26",
+    title: "Withdrawal fold: after the lock, a withdrawal regroups the sheet so nobody plays in a twosome",
+    changes: [
+      "Kerry 10/26 (CoS #2363-#2366): \"We don't want 4 threesomes on the course if we can help it. That's the key. And we don't want twosomes out there if we can help it.\" email_parser/withdrawal_fold.py runs inside the after-lock job right after seat-fill: groups = ceil(N/4); a group left under 3 takes one player from a foursome at once (shotgun the highest hole, B before A; tee times the first foursome); when the field drops to a multiple of 4 the short group dissolves into the threesomes in seat-fill order and its tee time is released, waiting until 7:00 AM event day so a late add can still fill it. Nothing moves before the lock or inside the hour before the first tee. Partner requests, matches and guest-with-host are never split; a blocked case changes nothing and raises one COO item. The existing after-lock emails tell moved players, both groups, the manager and the course. Dial withdrawal_fold_auto; read-only bridge scoring-withdrawal-fold. Guard test_withdrawal_fold.py (the CoS's ten cases, tee times and shotgun).",
+      "After the lock, removing a player (credit, WD or the Remove button) no longer re-deals the whole sheet with the generator; it closes up his group and the fold regroups. Before the lock, or with the dial off, removal works as before."
+    ]
+  },
+  {
+    version: "2.600.0",
+    date: "2026-10-26",
+    title: "Player missing on the phone: absent players come off the card, and the course is told",
+    changes: [
+      "Kerry 9/30 (#1021), built 10/26 with his ruling \"Both should be at 3\": every hole screen has a red-outlined Player missing button above Save & Go. Who's missing? then Is <Name> coming? with three answers: Running late, keep him on the card; No, take him off this card; Don't know yet. Don't know yet asks again each hole and takes him off after 3 asks, or once his group has scored 3 holes and he has none. + Player puts him back. Only the phone keeping score can answer, for its own players. Answers are stored by customer_id in se_no_shows (migration 0040), touched only by score_entry.py.",
+      "An absent player's blank holes no longer hold his group's card from going final, and he is left out of the entered scores (no net/gross, MVP, points or handicap round); his holes are never filled with par. Save leaves a late player's hole blank instead of entering par.",
+      "Once a no-show's group has played 3 holes, one email per event goes to the course contact, manager CC'd: \"No-shows today at <course>: <names>\" (email_parser/no_show_notice.py, dial no_show_course_notice, every 5 minutes on event day, read-only bridge scoring-no-show-notice). Not yet built: the per-hole blind for a short team (item 4) and Move to another card (item 5). Guard test_no_show.py; screens sequence no-show.",
+      "Screens: the sandbox capture now skips the HTTPS proxy for the locally served demo pages, which had come back as the proxy's error page."
+    ]
+  },
+  {
+    version: "2.599.0",
+    date: "2026-10-26",
+    title: "Screens retake live scoring, the member tee sheet and the Cup from the code",
+    changes: [
+      "Kerry 10/26: \"want updated screens to be automated to mirror with what's live.\" A new demo recipe seeds one made-up event on a throwaway database (fake players 990001-990008) and serves the Tracker's own pages in a separate process with every credential stripped, so pages that need an event, a round or a signed link now retake themselves after each deploy and nightly: score-entry-live (join, pick your name, hole screen, scorer's board), member-teesheet and lone-star-cup-live. Recipes can tap elements before the picture.",
+      "member-pages step 1 now shows the member Leaderboard (/member/results); it had been a second copy of Spotlight because /member redirects there. A failed or partial production capture now writes agent_action_log screens_capture_failed. Sequences that are not automated (back-end pages and reports carry member data; mockups) say why on the Screens page, and the old score-entry and 2026 Cup sets are archived, not deleted. Guard test_screens.py section 6."
+    ]
+  },
+  {
+    version: "2.598.0",
+    date: "2026-10-26",
+    title: "Every time people read is 12-hour with AM/PM",
+    changes: [
+      "Kerry 10/26: \"All times should show AM/PM\" (CoS #2325: \"Please don't use Military Time\"). One shared helper on each side (clock12 / stamp12 in timezone_utils, window.tgfTime12 in static/js/time12.js) and every page, email and print sheet that showed a 24-hour time now uses it: the printed scorecards' stamp (also moved from UTC to Central), the Screens capture label, the health page and daily digest, the Games & Payouts start time, and times on the Lone Star Cup teams, Snapshot Center, Contests, Customers, CA Queue, Duplicate Detective, Health, Leads, Events and score-entry admin pages. Stored stamps, logs and cron strings are unchanged. Guard test_twelve_hour_times.py fails on a new person-facing 24-hour time."
+    ]
+  },
+  {
+    version: "2.597.0",
+    date: "2026-10-26",
+    title: "Morning events (like the Fall Championship): Event Info at noon the day before, with the Course Files",
+    changes: [
+      "Kerry 10/26 (CoS #2355): \"18 hole event info like Fall Champ needs to go out one day prior at noon, same time as course files.\" An event whose first tee is before 1:00 PM now sends each player's Event Info at noon the day before, the same moment and the same test as its Course Files (Fall Championship: Friday 10/30 at noon). Evening events keep Event Info at 6:00 AM on event day. The evening tee-times email for a morning event says \"Your full Event Info email, with your start, group, cart and games, went out at noon today.\" (not-yet-registered: \"...follows as soon as we place you.\"), the approve page says \"noon the day before\", and the after-lock update emails start from that noon send. Guards test_pairings_approval.py, test_course_files_noon.py, test_after_lock.py."
+    ]
+  },
+  {
+    version: "2.596.0",
+    date: "2026-10-26",
+    title: "The \"Pairings ready to approve\" email follows the event's lock (weekend events: three days before)",
+    changes: [
+      "With weekend events now locking three days before (Kerry 10/26), the manager's one approve prompt goes right after that lock: a Saturday event's manager hears Wednesday after 5:00 PM, not Friday evening. Approving early signs off the sheet only; the tee-times email still goes the evening before play and the Event Info at 6:00 AM on event day. The prompt now says \"at 7:00 PM the evening before play if nobody approves\". Guard test_pairings_approval.py."
+    ]
+  },
+  {
+    version: "2.595.0",
+    date: "2026-10-26",
+    title: "Unused tee times: weeknights keep the latest, weekends keep the earliest, and the course is told which are released",
+    changes: [
+      "Kerry 10/26 (CoS #2331, #2332): \"If we have more tee times than we need the tee times should save the later times and release the earlier times and let the course know which ones\" ... \"We do that for 9 hole weeknight events, but with weekend events we keep the earliest times by default and give back the later ones.\" When a tee-time event holds more times than its groups need, the pairings now use the latest times on a weeknight (Monday to Friday) and the earliest on a weekend. Edit Event has a per-event choice, Unused tee times: Default / Keep latest / Keep earliest (events.tee_keep, migration 0039). A sheet with seeded groups keeps its seeded slots. Shotguns are unchanged.",
+      "The course contact's tee-times email now names the released times under the tee sheet, in bold, only when there are any: \"We're releasing these tee times: 3:40 PM, 3:50 PM.\" The stamped template is unchanged; the line is added by code. Guard test_tee_keep.py."
+    ]
+  },
+  {
+    version: "2.594.0",
+    date: "2026-10-26",
+    title: "Live scoring window and closeout start, built and held OFF until after Tuesday",
+    changes: [
+      "Kerry (CoS #2307 item 6): live scoring on one hour before the first tee or shotgun and off 15 minutes after the last score; Kerry (#2329 item 5): \"I thought I changed it to 15 minutes after last score.\" A scoring window now decides when players' score saves are accepted: from one hour before the first tee (dial live_scoring_on_minutes) until every card is final and the last score is 15 minutes old (dial live_scoring_off_minutes). A save outside it gets a plain message, and the phone keeps it queued. Any open card keeps the event open; a manager Unlock reopens it; admins are never gated; any error lets the save through. The event itself still switches on at 5:00 PM the day before, because the 6:00 AM email's Keep score links, the noon cart-sign and scorecard QR codes and the board all need it.",
+      "Closeout start: when every card is final and the last score is 15 minutes old (dial closeout_start_minutes), a job posts one mailbox line, CLOSEOUT START: <event>, to the Front Desk and Event Ops, once per event; the 9:00 PM run stays the backstop. Both pieces sit behind dial scoring_window_auto, which is OFF for Tuesday 10/27's live rounds and is turned on after Tuesday on Kerry's word. Read-only bridge scoring-scoring-window:<event_id>; guard test_live_scoring_timing.py."
+    ]
+  },
+  {
+    version: "2.593.0",
+    date: "2026-10-26",
+    title: "Noon Course Files run by the Tracker, with the manager copied",
+    changes: [
+      "Kerry 10/26 (CoS #2321, #2329 item 3): \"Event ops - Absolutely should be on Tracker side. Not an agent routine\" and \"CC Course Files to Manager too at the Tue noon job.\" On event day, from 12:00 PM (every 15 minutes until 2:45 PM), the Tracker sends each event's Course Files (Starter Sheet, Cart Signs, Scorecards, Proximity, Rules of Play) to the course's primary contact, with the other contacts, the pack recipients and the chapter manager copied. Once per event; a send already made from the button counts. A scorecard gap holds the send and emails the manager the reason instead; the next run sends once it's fixed. No course contact on file: the morning manager pack covers it as before. A morning event (first tee before 1:00 PM, such as a Saturday round) goes at noon the day before, as the weekend tee-times email already says. Never within the hour before the first tee. Dial course_files_noon_auto; read-only bridge scoring-course-files-noon; guard test_course_files_noon.py."
+    ]
+  },
+  {
+    version: "2.592.0",
+    date: "2026-10-26",
+    title: "Handicap reminder an hour before the lock, and the course update before the lock (held for Kerry's wording)",
+    changes: [
+      "Kerry 10/26 (CoS #2307 item 5; \"I approve today's handicap reminder email.\"): anyone registered without a handicap who has had the ask and not answered gets the approved reminder email once more in the hour before their event's lock (4:00 PM for a 5:00 PM lock), once per event. Same wording and signed link as the existing reminder, same dial and stamp. Guard test_handicap_ask.py.",
+      "Kerry 10/26 (CoS #2307 item 2): the course update before the lock. At noon the day before an event's lock (Sunday noon for a Tuesday nine, Tuesday noon for a Saturday event), the course contact gets who's registered so far, a live link to follow along, and \"We lock our foursome counts at 5:00 PM <day>. Please allow us room to grow until then.\" The manager is copied. It does not send until Kerry stamps the wording (course_update_approved) and the dial course_update_auto is on; scoring-course-update:<id>|preview mails staff a sample. Guard test_course_update.py.",
+      "Seat-fill's \"no open seat\" alert is now documented as a GoDaddy-era safety net (Kerry: the Tracker shop's sign-up windows will close at the lock)."
+    ]
+  },
+  {
+    version: "2.591.0",
+    date: "2026-10-26",
+    title: "Lock days for every weekday, and a manager's lock override on Edit Event",
+    changes: [
+      "Kerry 10/26: \"Monday thru Thursday: 1 day before at 5:00p / Friday: 2 days before at 5:00p / Sat/Sunday: 3 days before at 5:00p\" ... \"Lock days should be set for any future event, whether there's any scheduled or not.\" These are now the code's default lock days as well as the production setting, so they cover every event on any weekday.",
+      "Kerry 10/26: \"These could be overridden by Managers if necessary\" ... \"Yes build the manager override.\" Edit Event has a new field, Lock (blank = standard). A manager or admin can set a date and time for one event's lock; clearing it goes back to the standard. Everything that depends on the lock reads it through one helper (event_lock_at): the automatic pairings (now checked every 15 minutes, so an event pairs at its own lock, once), the RSVP deadline warning (four hours before) and release (ten minutes before), the stop on payment reminders, and seat-fill. New column events.lock_override (migration 0038). The manager's approve prompt and the evening tee-times email still follow the day before play. Guards test_pairings_automation.py, test_payment_reminder.py, test_rsvp_deadline.py."
+    ]
+  },
+  {
+    version: "2.590.0",
+    date: "2026-10-26",
+    title: "Same-night admin report: one email to Kerry with a PAYMENTS link once every event that day is closed",
+    changes: [
+      "Kerry 10/26 (CoS #2329 item 6): \"I like to pay same night as a standard. ... Needs an automated Admin report once all events are completed that would carry a link to PAYMENTS.\" Every 15 minutes from 5:00 PM to 11:45 PM, the Tracker checks every event dated today with the closeout's own test (cards final, card parity, payouts recorded). Once all of them pass, it sends Kerry one email listing each event's players, the payouts recorded and what is still unpaid, with an Open PAYMENTS button that lands on Payouts with the Unpaid queue open (/tgf?view=unpaid, also ?view=refunds).",
+      "It goes once a day and only to a @thegolffellowship.com address (app setting admin_payout_report_to, default Kerry). An event with nobody on its roster never holds it. Every send is logged. Dial admin_payout_report; read-only bridge scoring-admin-payout-report; guard test_admin_payout_report.py. PayPal one-tap batch payouts are not part of this (CFO plan #2338)."
+    ]
+  },
+  {
+    version: "2.589.0",
+    date: "2026-10-26",
+    title: "Seat-fill: a paid late add is seated automatically, by the ruled rule",
+    changes: [
+      "Kerry 10/26 (CoS #2308): \"Sign-ups between 5 and 7p. We need something here to automate adding to groups ... We've got to get to the point of zero manager reliance. The show must go on.\" From an event's 5:00 PM lock until its first tee, every 15 minutes, anyone who has registered and paid but has no seat on the saved pairings is seated by Kerry's 10/20 rule: tee times fill the latest threesome first, then earlier; a shotgun fills the lowest hole first, B before A. The late add takes the open seat and any blind drawn for it is cleared.",
+      "It runs as the first step of the after-lock job (Kerry, #2331: \"tracker side automation ... placing newly registered players into groups\" comes before the updates), so the existing emails follow on their own: before the 6:00 AM Event Info the seat rides in the sheet the manager approves and the Event Info carries; after it, the player gets their email, the group gets UPDATED GROUP, and the course gets that group's sheets inside its window. RSVP-only players are never seated. When no group has an open seat the player stays in Unassigned and one COO item says so. Dial seat_fill_auto; read-only bridge scoring-seat-fill; guard test_seat_fill.py."
+    ]
+  },
+  {
+    version: "2.588.0",
+    date: "2026-10-26",
+    title: "One \"Pairings ready to approve\" email per event, right after the 5:00 PM run",
+    changes: [
+      "Kerry 10/26 (CoS #2329 item 1): \"Just once right after 5:00p pairings generation is fine.\" The manager's approve prompt now goes once per event, at the first check after the 5:00 PM pairings run, and never again: the hourly re-prompt after a sheet change is gone. The old email's Approve link still refuses a changed sheet and opens the review page on the current one, and the 7:00 PM auto-approve is unchanged. Dial pairings_approval_prompt still turns the prompt off. Guard test_pairings_approval.py."
+    ]
+  },
+  {
+    version: "2.587.0",
+    date: "2026-10-26",
+    title: "Event Info at 6:00 AM, and no changed sheets to the course in the hour before the first tee",
+    changes: [
+      "Kerry 10/26 (CoS #2307 item 3, #2331 B): \"Move event info email to 6:00am.\" The event-day Event Info email now goes at 6:00 AM instead of 7:00 AM. The hour is a dial (event_info_hour, default 6), and everything that names it follows the dial: the evening tee-times email (\"Your full Event Info email ... comes at 6:00 AM tomorrow\"), the manager's approve prompt and page, and Kerry's failure alert. The tee-times template keeps its stamped words, and the time is filled in when it is sent, so its wording stamp still holds.",
+      "Kerry 10/26 (CoS #2329 item 4): \"Changed sheets for the course shouldn't be going to them during play. That should be in the window between Noon and 1 hour prior.\" The after-lock job still sends a moved, added or removed player's update emails until the first tee, but from one hour before the first tee or shotgun it sends the course nothing. Dial after_lock_course_cutoff_min (default 60). The no-show notice to the course after about 3 holes is not built yet; it waits on Event Ops' scorer no-show sequence. Guards test_pairings_approval.py, test_teetimes_email.py and test_after_lock.py."
+    ]
+  },
+  {
+    version: "2.586.0",
+    date: "2026-10-26",
+    title: "I'm not playing after all: a quick out on the payment reminder and the 1:00 PM warning",
+    changes: [
+      "Kerry 10/26 (CoS #2322, #2324): \"On those RSVP payment reminder emails there should also be the option to click an I'm Not Playing After All button. Or something like it as a quick out for them\" ... \"I want you to release the I'm not playing after all button right now.\" Under Complete Registration there is now a grey \"I'm not playing after all\" button on the payment reminder (the 6:00 AM job, Remind, Remind All and the composer's Payment Reminder template) and on the 1:00 PM deadline warning. It is not on the 4:50 PM release.",
+      "A tap is the invitation's own Can't make it: the same signed /rsvp link, the same scanner guard (a tap within two minutes of the send is ignored; known scanners and non-browsers confirm with one button), and the same Thanks page with Changed my mind, the optional reason and Remove me. It records NOT PLAYING and also sets the Events page's not-playing mark, so a Golf Genius RSVP can't keep them on the roster and no further payment email goes for that event. It can be undone on the Events page. A person with no customer card gets no button, and staff previews and dry runs carry preview links that record nothing. Guards test_payment_reminder.py and test_rsvp_deadline.py; the payment reminder, deadline and invitation Screens sets were retaken."
+    ]
+  },
+  {
+    version: "2.585.0",
+    date: "2026-10-26",
+    title: "Payment reminders stop at the 5:00 PM lock, and Kerry is copied on the lock-day warning and release",
+    changes: [
+      "Kerry 10/26 (CoS #2313): \"Payment Reminders - Those stop at the 5:00p lock for any specific event. So the 4:50p you've been removed email is it for payment reminders for that event.\" Until now the every-other-day 6:00 AM job still covered an event on its own day, so a Tuesday morning run could remind someone for that evening's nine. Now every path stops at the event's lock (5:00 PM on its pairings day: Monday for a Tuesday nine, two days ahead for a dialled Saturday). The 6:00 AM job skips the event, the Remind tag and Remind All answer 'past the 5:00 PM lock', and the Messages composer refuses the Payment Reminder template for it. Dial payment_reminder_stop_at_lock (on unless it reads off); guard test_payment_reminder.py.",
+      "Kerry 10/26: \"Can you make the RSVP emails cc me for the after NOON Monday emails?\" The 1:00 PM deadline warning and the 4:50 PM release are now CC'd to kerry@thegolffellowship.com. App setting rsvp_deadline_cc changes the address; off stops the copy. The payment reminder and deadline screenshots were retaken in the same commit (no visible change)."
+    ]
+  },
+  {
+    version: "2.584.0",
+    date: "2026-10-26",
+    title: "Screens update themselves: captured from the live code after every deploy, and enforced in the tests",
+    changes: [
+      "Kerry 10/26: \"When we make an update to anything, the screenshots are set to update too, correct? If not, that's an absolute requirement.\" They weren't, until now. Each catalogued screen can carry a recipe: a public page URL, or a render from the same code that sends or serves it (the invitation and last call, the RSVP pages, the payment reminder, the deadline warning and release). Production retakes every recipe on desktop, tablet and mobile ten minutes after each deploy and every night at 3:37 AM, and Screens shows those first with the time and version.",
+      "In the repo, each sequence lists the code it shows. test_screens.py now FAILS when that code changes and its screenshots were not retaken. tools/screens_refresh.py retakes them from the code on a throwaway database and stamps the new hash. Production never invents a demo event. The one-more-tap page moved into its own function (app._rsvp_confirm_page) so it can be captured without any way around the scanner guard. Today's invitation, reminder, deadline and member-page sets were all retaken this way (45 screenshots).",
+      "Kerry 10/26, same day: \"All screenshots need to have accurate font types and everything same as live tracker\" and \"Make preview enlargements actual screen size\". A capture now waits for the page's web fonts and refuses to save a picture if Bitter did not load (never a fallback font), and the production captures are taken by the Tracker itself with the same fonts and CSS members get. The full-size viewer shows each picture at the device's real size: a phone shot at 390 px wide, tablet and desktop at 1:1, never wider than the window."
+    ]
+  },
+  {
+    version: "2.583.0",
+    date: "2026-10-26",
+    title: "RSVP payment deadline: the 1:00 PM warning and the 4:50 PM release, sent by the Tracker",
+    changes: [
+      "Kerry 10/26: \"I want the last 'warning' email to go out ... at 1:00p ... And then the 5:00p email if he hasn't made payment\" ... \"Those should be automated emails sent thru the tracker based on our RSVP rules\" (CoS #2307 item 4). On an event's lock day (the day the 5:00 PM pairings run builds it: Monday for a Tuesday nine), every unpaid RSVP-only player gets one email from 1:00 PM: pay by 5:00 PM or the spot is released. At 4:50 PM, before the pairings run, anyone still unpaid who was warned is taken off the roster and gets one email saying so, with the registration button in case a seat is open.",
+      "Rules and safeguards. The release is the Events page's own not-playing mark, so nothing is deleted and it can be undone on the page; paying later puts them back as registered. Known mail scanners are never emailed, nobody who RSVPs after the last warning is released, and shop $0 RSVP-only order rows are left for a person (one COO item). Each email goes once per person per event, and every send and release is logged. Dial rsvp_deadline_auto; read-only bridge scoring-rsvp-deadline; guard test_rsvp_deadline.py. Both emails are in Screens on all three devices."
+    ]
+  },
+  {
+    version: "2.582.2",
+    date: "2026-10-26",
+    title: "Can't make it page: the reason chips show they can be tapped",
+    changes: [
+      "Kerry 10/26: \"Hover states for the Mind sharing why? section needs to highlight somehow so they can see that those are active options\". The Schedule / Weather / Course or price / Injury / Other chips now show a pointer and turn orange on hover and keyboard focus, then fill solid orange while pressed so a phone tap shows too. At rest they look the same as before."
+    ]
+  },
+  {
+    version: "2.582.1",
+    date: "2026-10-26",
+    title: "Screens: collapsible sections in the left column",
+    changes: [
+      "Kerry 10/26: \"Make each section collapsable in the nav column on the left. Way too many to scroll thru\". Each area is now a header with a chevron and its count. Only the section you are in starts open, and the page remembers which ones you opened on this browser. Expand all and Collapse all sit at the top, and a search or a status filter opens every section with a match. The payment reminder sequence is marked Current now that v2.581.0 is live."
+    ]
+  },
+  {
+    version: "2.582.0",
+    date: "2026-10-26",
+    title: "Screens: every standard screen and sequence on one page, with comments to the Librarian",
+    changes: [
+      "Kerry 10/26: \"I want to be able to go to a page and select whatever I want to look at to review standard screenshot layouts and sequences\" ... \"managed by the Librarian\" ... comments that go \"to the librarian who would submit back to the Front Desk or Chief of Staff\". The new Admin › Screens page (/admin/screens) is admin only. Dial screens_viewer_role=manager opens it to managers later.",
+      "It lists every catalogued sequence by area (member emails and pages, leaderboard, live scoring, Lone Star Cup, manager and admin). You can filter by status (current, built not live, mockup, superseded, reference) and search. Each sequence shows its screens in order with captions, phone, desktop and email views, and a full-size viewer with arrow keys. The catalogue is docs/claude/screenshots/catalog.json, owned by the Librarian: 15 sequences and 125 screens, including today's invitation, payment reminder and events leaderboard sets, saved for good.",
+      "A comment, on the whole sequence or one screen, marked Improve, Submit for review or Note, becomes a mailbox post to the Librarian (topic screens, cc Front Desk). The Librarian's replies show in the same thread. A comment is never a Kerry OK for anything. Guard test_screens.py; standing rule in CLAUDE.md: retake a sequence in the same commit as a change to its look.",
+      "Same day, Kerry's follow-ups: (1) a Desktop / Tablet / Mobile toggle on every sequence. Each screen holds one picture per device, and the page says plainly when a device hasn't been shot. Today's invitation and reminder sets now have all three. (2) More screens: the live member pages (Leaderboard, Season Contests, Handicaps, Player Spotlight on one player, the live scoring guide) on all three devices, the live scoring how-to pictures where they already live, and the design mockups. 33 sequences in all. (3) Reports and Back-end pages areas, listing the screens we still need. (4) Try it: test-drive a sequence in a frame sized to the device. The invitation runs on preview links that record nothing, the reminder is only rendered, and the member pages are live and read-only. (5) An HTML/CSS tab shows the exact source with Copy and Download, for Claude Design and the CA."
+    ]
+  },
+  {
+    version: "2.581.0",
+    date: "2026-10-26",
+    title: "One payment reminder everywhere, with the registration link",
+    changes: [
+      "Kerry 10/26: \"our standard template for those unpaid DOES include the link. We need to match these up\" ... \"go with mockup 3\" ... \"Let's also provide a link to see who's currently registered. but not in a button\". The Remind tag, Remind All and the every-other-day 6 AM job each carried their own old body with no registration link. Now all three, and the Messages composer when it sends the Payment Reminder template, use one builder (email_parser/payment_reminder.py). The words are the Payment Reminder template, the frame is the invitation's dark masthead, there's a Complete Registration button, and a plain \"See who's registered so far\" link goes to the member results page. A blank or expired link, a missing manager or a leftover {tag} holds the email instead of sending it. Each person gets it at most once per event per day, and every send is logged against the event and customer.",
+      "Remind All now reaches everyone the Events page shows as RSVP-only: the shop's RSVP-only rows and the invitation / Golf Genius RSVPs. Before, it only reached shop rows. The 6 AM job keeps the payment_reminder_exclude_events dial. The masthead drops \"Saturday at\" when the event name already names the place (\"2026 Fall Championship @ Kissing Tree\"). Guard test_payment_reminder.py."
+    ]
+  },
+  {
+    version: "2.580.2",
+    date: "2026-10-26",
+    title: "Email buttons keep their colour in Outlook",
+    changes: [
+      "Kerry 10/26, a member's reply in Outlook: the invitation's I'm in button vanished. Its white text was left on white because Outlook drops a link's background when it quotes an email (and in some desktop versions). The colour now sits on the cell around the link too (bgcolor + style), the standard bulletproof-button pattern. Same fix, as a class, for every email button built the old way: invitations (I'm in, Can't make it), membership renewal and roster keep/remove, the event-day Add Handicap box, the event-link button and the manager's Approve pairings. Layout only; no words changed, so every wording stamp stands. New guard test_email_buttons.py fails if a coloured email link has no bgcolor cell around it."
+    ]
+  },
+  {
+    version: "2.580.1",
+    date: "2026-10-26",
+    title: "Mail scanners: take back their I'm in, and stop them recording one",
+    changes: [
+      "Kerry 10/26: \"Logan Billeaud is falsely being added as RSVP for events ... remove him from his I'm playing RSVPs.\" His work mail filter opens the I'm in link a few minutes after each 7 AM send. Four times it fell inside the 2-minute scanner window and was ignored; three times (10/16, 10/23, 10/25) it fell just outside and was recorded as PLAYING. That put him on rosters as RSVP-only. New bridge scoring-event-invite 0|unplay|<kerry-ok post>|<cid,...>[|confirm] (invitations.remove_playing): dry run by default, needs Kerry's word on the mailbox. It deletes only that person's Tracker PLAYING rows on UPCOMING events, plus their noted I'm in clicks. Past rows stay as history. An event the person is registered for is left alone and reported (Front Desk #2300). Registrations, money rows, Golf Genius RSVPs and Can't make it answers are never touched. Logged. Guard test_invitations.py.",
+      "Guard (Kerry 10/26: \"Yes, build 1 and 2 now\"). (1) Known scanners: once someone's email has been caught as a scanner twice (dial invite_scanner_known_after), their I'm in no longer records on its own. The page says \"One more tap and you're in\" with a Yes, I'm in button, and the button records PLAYING and goes on to registration. Their Can't make it also needs a button instead of saving itself. (2) Fingerprint: every bare link open is logged with its user agent, language and IP (agent_action_log event_invite_tap). A request with no browser user agent, a known scanner name (Mimecast, Proofpoint, Barracuda, Safe Links, bots, headless browsers...; dial invite_scanner_ua_tokens) or no Accept-Language gets the same one-tap page. Scanners open links but don't tap buttons. Everyone else keeps the one-tap I'm in. Dial invite_scanner_guard=off turns both off. Guard test_invitations.py."
+    ]
+  },
+  {
+    version: "2.580.0",
+    date: "2026-10-26",
+    title: "Pace of play, measured (migration 0037), with stray saves dropped",
+    changes: [
+      "Kerry 10/19 (#2073, #2092): pace is measured per group from the first save of each hole on the phones, and every player in the group carries that number. Migration 0037 adds the derived tables se_group_pace and se_player_pace, rebuilt each morning at 6:41 from se_audit. The manager pace report (fastest first, hole by hole) stays off until dial pace_report_send is on. Pace is suggest-only: nothing writes a player's 1/2/3 pace rating.",
+      "Stray saves (Database #2261, Kerry 10/26 \"work on the pace branch\"): each player's saves must run forward in play order. The longest run that does is kept and the rest are dropped and counted (strays). On 10/20 at TPC, two cards in the 4:20 PM group saved hole 9 during hole 2; that read 16.9 min/hole over 6 holes (adjusted) and now reads 16.6 over 7 (clean). Method version 2. Guard test_pace.py.",
+      "Threesomes (Kerry 10/26: \"threesomes are outliers that skew data so don't get configured into standard results\"): a group smaller than four (dial pace_standard_group_size) is timed and shown, but never counts in the field median or a player's counted rounds. Our first data had threesomes at 12.8 min/hole against foursomes at 15.9. Method version 3. Kerry's bands (under 2:15 per nine = 3, 2:15-2:29 = 2, 2:30+ = 1) are ruled and recorded (#2293); they are not applied to anyone's rating yet."
+    ]
+  },
+  {
+    version: "2.579.3",
+    date: "2026-10-25",
+    title: "Can't make it page: Remove me is a small link, not a button",
+    changes: [
+      "Kerry 10/25: \"Move the Remove me button to a small link\". On the Can't make it thank-you page, Remove me from invitations sat as a pill button beside Changed my mind, I'm in, and it was mis-tapped twice in a week (Lou Schneider 10/20, Michele McCormick 10/24; both restored). It is now a small grey underlined text link at the bottom of the page, below the optional reasons, and it reads Remove me from ALL event invitations (Kerry 10/25: \"I think it's in the wording\"). The confirm page says Remove you from ALL event invitations? and that it stops every TGF event, not just this one; the clarify note quotes the same words. The invitation email's own footer link (Stop event invitations) is unchanged, so Kerry's approved wording stamp stands. Guard test_invitations.py."
     ]
   },
   {

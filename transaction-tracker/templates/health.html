@@ -78,6 +78,7 @@
             <a href="/admin/test-center">Test Center</a>
             <a href="/admin/lsc-teams">Cup Teams</a>
             <a href="/admin/advisors">Advisors</a>
+            <a href="/admin/screens">Screens</a>
         </nav>
 
         <div class="hl-head">
@@ -163,7 +164,7 @@
             if (!rows.length) { t.innerHTML = `<tr><td class="bd">no job runs in the window</td></tr>`; return; }
             t.innerHTML = `<tr><th>job</th><th class="n">runs</th><th class="n">avg</th><th class="n">max</th><th class="n">errors</th><th>last</th></tr>` +
                 rows.map(j => `<tr><td>${esc(j.name)}</td><td class="n">${j.runs}</td><td class="n">${ms(j.avg_ms)}</td><td class="n">${ms(j.max_ms)}</td>` +
-                    `<td class="n ${j.errors ? "over" : ""}">${j.errors}</td><td class="bd">${esc(j.last_at)} <span class="st-${esc(j.last_status)}">${esc(j.last_status)}</span>${j.last_error ? " — " + esc(j.last_error) : ""}</td></tr>`).join("");
+                    `<td class="n ${j.errors ? "over" : ""}">${j.errors}</td><td class="bd">${esc((window.tgfTime12 || (s => s))(j.last_at))} <span class="st-${esc(j.last_status)}">${esc(j.last_status)}</span>${j.last_error ? " — " + esc(j.last_error) : ""}</td></tr>`).join("");
         }
         function slowTable(r) {
             const t = document.getElementById("hl-slow"), rows = r.slow || [];

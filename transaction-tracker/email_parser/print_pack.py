@@ -464,7 +464,8 @@ def course_contact_for_event(ev: dict | None, db_path=None) -> str | None:
     return r.get("to") if r.get("ok") else None
 
 
-def send_course_files(built: dict, db_path=None, only=None, updated: bool = False) -> dict:
+def send_course_files(built: dict, db_path=None, only=None, updated: bool = False,
+                      extra_cc=None) -> dict:
     """Course Files to the course's primary TGF contact; its other TGF
     contacts and Kerry's pack recipients on CC. ``only`` sends just those
     parts (an after-lock change, Kerry #2139: "only the affected sheets");
@@ -474,7 +475,7 @@ def send_course_files(built: dict, db_path=None, only=None, updated: bool = Fals
     held = _unprintable(built)
     if held:
         return {"sent": False, "why": held}
-    res = _send_course_files(built, db_path, only, updated)
+    res = _send_course_files(built, db_path, only, updated, extra_cc=extra_cc)
     if res.get("sent") and ev.get("id") is not None:
         try:
             from email_parser import after_lock
@@ -487,7 +488,8 @@ def send_course_files(built: dict, db_path=None, only=None, updated: bool = Fals
     return res
 
 
-def _send_course_files(built: dict, db_path=None, only=None, updated: bool = False) -> dict:
+def _send_course_files(built: dict, db_path=None, only=None, updated: bool = False,
+                       extra_cc=None) -> dict:
     ev = built.get("event") or {}
     # None lets send_print_pack_files cut the usual course set itself
     files = lambda: split_print_pack(built, only=tuple(only)) if only else None
@@ -506,7 +508,9 @@ def _send_course_files(built: dict, db_path=None, only=None, updated: bool = Fal
         return {**res, "no_contact": True, "to_manager": True, "course_id": rec.get("course_id"),
                 "course": ev.get("course"), "why": why}
     cc = list(rec.get("cc") or [])
-    for a in (print_pack_recipient(ev, db_path=db_path) or "").split(","):
+    # extra_cc: the chapter manager on the noon job (Kerry 10/26, #2329-3:
+    # "CC Course Files to Manager too at the Tue noon job.")
+    for a in ((print_pack_recipient(ev, db_path=db_path) or "") + "," + (extra_cc or "")).split(","):
         a = a.strip()
         if a and a.lower() not in {x.lower() for x in cc} and a.lower() != rec["to"].lower():
             cc.append(a)
