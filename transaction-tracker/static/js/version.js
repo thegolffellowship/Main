@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.604.1";
+window.TGF_VERSION = "2.604.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.604.2",
+    date: "2026-10-26",
+    title: "Approve page: a sheet re-approved after the tee times went says nothing is re-sent",
+    changes: [
+      "Tee times go once per person per event. Kerry changed Silverhorn's groups and approved again at 9:59 PM; every message had already gone at 5:14 PM, so nothing went, but the page had said \"Approving sends tee times now to all 24 players\". The line now reads \"Tee times already went at 5:14 PM Mon. Approving again does not send them again. Players get their full Event Info with the updated groups at 6:00 AM Tuesday.\", the confirm says the same, and the fallback line reads \"Nothing else goes tonight.\" The 6:00 AM Event Info is built from the sheet as it stands then, so players get the new groups. Guard test_pairings_approval.py."
+    ]
+  },
   {
     version: "2.604.1",
     date: "2026-10-26",

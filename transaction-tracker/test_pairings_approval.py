@@ -1,3 +1,4 @@
+import json
 """MANAGER APPROVES THE PAIRINGS, THEN THE PLAYER EMAILS GO (Kerry
 2026-10-13). Graph is mocked: nothing leaves.
 
@@ -238,6 +239,16 @@ check("approved days ahead: tee times go at 5:00 PM the evening before, not now"
       "and to you at 5:00 PM " in far["line"] and " now" not in far["line"].split(".")[0]
       and far["auto_line"].startswith("If you don't approve, this all goes automatically at 7:00 PM ")
       and "Tee times go at 5:00 PM " in far["confirm"], far)
+import email_parser.teetimes_email as _tte
+_sk = _tte.SENT_KEY.format(event_id=AUS)
+_prev = db.get_app_setting(_sk, db_path=DB) if hasattr(db, "get_app_setting") else None
+db.set_app_setting(_sk, json.dumps({"player:1": "2026-10-26 22:14:39"}), db_path=DB)
+went = pa.send_plan(AUS, DB)
+check("re-approved after tee times went: the line says they already went and are not sent again (Kerry 10/26)",
+      went["line"].startswith("Tee times already went at 5:14 PM Mon. Approving again does not send them again.")
+      and "with the updated groups" in went["line"] and "already went" in went["confirm"]
+      and " go now" not in went["confirm"] and went["auto_line"] == "Nothing else goes tonight.", went)
+db.set_app_setting(_sk, _prev or "{}", db_path=DB)
 check("a changed sheet reads Changed since approval",
       pa.approval_status(AUS, DB, fingerprint="something-else")["label"] == "Changed since approval · Approve again")
 

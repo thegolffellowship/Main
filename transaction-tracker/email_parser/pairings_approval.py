@@ -491,14 +491,23 @@ def send_plan(event_id: int, db_path=None, after: bool = False) -> dict:
     eve = _evd - _td(days=1) if _evd else None
     now_ok = eve is None or today_central() >= eve
     eve_name = eve.strftime("%A") if eve else ""
-    if now_ok:
+    # Tee times go once per person per event (teetimes_email._sent). A sheet
+    # re-approved after they went sends nothing new, so the line says so
+    # (Kerry 10/26, Silverhorn re-approved 9:59 PM, nothing went); the
+    # 6:00 AM Event Info carries the updated groups.
+    _went = sorted(v for k, v in tt._sent(int(event_id), db_path).items() if str(k).startswith("player:"))
+    already = _at12(_went[0]) if _went else ""
+    if already:
+        s1 = (f"Tee times already went at {already}." + (" They are not sent again." if after
+              else " Approving again does not send them again."))
+    elif now_ok:
         verb = "Tee times are going out now" if after else "Approving sends tee times now"
         s1 = f"{verb} to all {n} players{course_clause} and to you."
     else:
         verb = "Tee times go" if after else "Approving sends tee times"
         s1 = f"{verb} to all {n} players{course_clause} and to you at 5:00 PM {eve_name}."
     s_open = (f"Invitees who haven't registered get the open-spots email ({spots} spot{'s' if spots != 1 else ''} open)."
-              if inv > 0 and spots > 0 else "")
+              if inv > 0 and spots > 0 and not already else "")
     morning = is_morning_event(ev)
     if morning:
         try:
@@ -509,18 +518,26 @@ def send_plan(event_id: int, db_path=None, after: bool = False) -> dict:
                   + (f", and {short} gets the Course Files at the same time." if has_contact else "."))
         s_files = ""
     else:
-        s_info = f"Players get their full Event Info at {info_time(db_path)} {_day_name(ev.get('event_date'))}."
+        s_info = (f"Players get their full Event Info{' with the updated groups' if already else ''}"
+                  f" at {info_time(db_path)} {_day_name(ev.get('event_date'))}.")
         s_files = f"{short} gets the Course Files at noon {_day_name(send_day(ev))}." if has_contact else ""
     s_nocontact = "" if has_contact else "No course contact on file: the course gets nothing until one is added."
     line = " ".join(x for x in (s1, s_nocontact, s_open, s_info, s_files) if x)
-    confirm = (f"Approve these pairings? Tee times go {'now' if now_ok else 'at 5:00 PM ' + eve_name} to {n} players"
-               + (f", {course} and you" if has_contact else " and you")
-               + (f", and the open-spots email to {inv} invitee{'s' if inv != 1 else ''}." if inv > 0 and spots > 0 else "."))
+    if already:
+        confirm = (f"Approve these pairings? Tee times already went at {already} and are not sent again. "
+                   + s_info)
+    else:
+        confirm = (f"Approve these pairings? Tee times go {'now' if now_ok else 'at 5:00 PM ' + eve_name} to {n} players"
+                   + (f", {course} and you" if has_contact else " and you")
+                   + (f", and the open-spots email to {inv} invitee{'s' if inv != 1 else ''}." if inv > 0 and spots > 0 else "."))
     auto_line = ("If you don't approve, this all goes automatically at 7:00 PM."
                  if now_ok else f"If you don't approve, this all goes automatically at 7:00 PM {eve_name}.")
+    if already:
+        auto_line = "Nothing else goes tonight."
     return {"line": line, "auto_line": auto_line,
             "confirm": confirm, "players": n, "open_spots": spots, "invitees": inv,
-            "course": course, "course_contact": has_contact, "morning": morning}
+            "course": course, "course_contact": has_contact, "morning": morning,
+            "teetimes_sent_at12": already}
 
 def approve_and_send(event_id: int, fingerprint: str, *, role: str | None,
                      session_chapter: str | None, approved_by: str, db_path=None,
