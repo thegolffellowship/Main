@@ -66,7 +66,7 @@ def _skip_reason(ev: dict, db_path=None) -> str | None:
     return None
 
 
-def ensure_live_scoring(event_id: int, db_path=None) -> dict:
+def ensure_live_scoring(event_id: int, db_path=None, now=None) -> dict:
     """Switch the event on and seed a round per saved hole set. Idempotent.
     {'enabled': bool, 'newly_enabled': bool, 'rounds': {holes: round_id},
      'skipped': reason or None}"""
@@ -86,8 +86,15 @@ def ensure_live_scoring(event_id: int, db_path=None) -> dict:
     if not hole_sets:
         return {"enabled": se.event_enabled(event_id, db_path), "skipped": "no saved pairings"}
     newly = _enable(int(event_id), db_path)
-    rounds = {}
+    rounds, held = {}, {}
+    started = _started(int(event_id), db_path, now)
     for hk in hole_sets:
+        # The round follows the sheet UNTIL FIRST TEE (Kerry 10/27, CoS
+        # #2429-2). After it, a re-seed could relink a group mid-round; a
+        # change on the course goes through the card (+ Player, missing).
+        if started and se_round_id(int(event_id), hk, db_path):
+            held[hk] = "first tee passed"
+            continue
         res = se.seed_round_from_pairings(int(event_id), hk, db_path=db_path)
         if res.get("round_id"):
             rounds[hk] = res["round_id"]
@@ -98,7 +105,41 @@ def ensure_live_scoring(event_id: int, db_path=None) -> dict:
                                 db_path=db_path)
         except Exception:
             pass
-    return {"enabled": True, "newly_enabled": newly, "rounds": rounds, "skipped": None}
+    out = {"enabled": True, "newly_enabled": newly, "rounds": rounds, "skipped": None}
+    if held:
+        out["held"] = held
+    return out
+
+
+def se_round_id(event_id: int, holes: str, db_path=None):
+    from email_parser import score_entry as se
+    return se.round_id_for(event_id, holes, db_path)
+
+
+def _started(event_id: int, db_path=None, now=None) -> bool:
+    """First tee (or shotgun) has come, Central."""
+    from email_parser import database as db
+    from email_parser.after_lock import _first_tee_passed
+    from email_parser.timezone_utils import now_central
+    with db._connect(db_path) as conn:
+        r = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+    return bool(r) and _first_tee_passed(dict(r), now or now_central())
+
+
+def follow_sheet(event_id: int, db_path=None, now=None) -> dict:
+    """LIVE ROUND FOLLOWS THE SHEET (Kerry 10/27, CoS #2429-2: "live, not
+    snapshot"). Called after every saved change to an event's pairings or a
+    player's tee (app.py `_follow_sheet_after_save`): if the event already has
+    a live round, re-derive it from the saved sheet now (groups, players,
+    tees, playing handicaps; groups no longer on the sheet dropped). Never
+    creates a round (the 5:00 PM job does that), never runs after first tee,
+    never touches a score."""
+    from email_parser import score_entry as se
+    if not se.event_enabled(int(event_id), db_path):
+        return {"skipped": "live scoring not on for this event"}
+    if not se.event_has_round(int(event_id), db_path):
+        return {"skipped": "no live round yet"}
+    return ensure_live_scoring(int(event_id), db_path=db_path, now=now)
 
 
 def due_event_ids(now=None, db_path=None) -> list[int]:
@@ -127,7 +168,7 @@ def live_scoring_auto_check(now=None, db_path=None) -> dict:
     out = {}
     for eid in due_event_ids(now, db_path):
         try:
-            out[eid] = ensure_live_scoring(eid, db_path=db_path)
+            out[eid] = ensure_live_scoring(eid, db_path=db_path, now=now)
         except Exception as exc:
             logger.exception("live scoring auto: event %s failed", eid)
             out[eid] = {"error": str(exc)}

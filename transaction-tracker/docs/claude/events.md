@@ -241,6 +241,10 @@ When scorers mark players missing (score-entry.md "No-show"), the course gets a 
 
 Player score saves open one hour before the first tee and close 15 minutes after the last score once every card is final; the closeout start signal (mailbox topic `closeout`) goes 15 minutes after the last score. `email_parser/scoring_window.py`; full rules in score-entry.md "The scoring window and the closeout start".
 
+## Manager tee change for one event (v2.605.0, Kerry 10/27, CoS #2429-3)
+
+Kerry: "There's no tool to manually update the tee on the ROSTER or PAIRINGS." Every tee a manager or admin sees on ROSTER (desktop cell and phone card) and PAIRINGS (both renderers) is a tap target (`teePickHtml`, one picker: <50 / 50-64 / 65+ / Forward). `POST /api/events/<id>/tee` {customer_id, tee} (manager of the event's chapter or admin, `may_approve`) calls `database.set_event_tee`: the player must be on the roster; the band is kept per event in app setting `event_tee_override:<id>` (it covers a GG-RSVP player with no order row), copied onto the player's active order row and the saved sheet's `event_pairings.tee_choice`, and logged (`agent_action_log`, action `set_event_tee`, who and before -> after). `_event_roster_rows` applies the override last (`tee_source = "manager"`), so the sheet, playing and team handicaps follow; the answer carries the new playing / team handicap for the toast; the live round follows (`_follow_sheet_after_save`). Guard `test_follow_sheet.py`.
+
 ## Unused tee times: which to keep (Kerry 2026-10-26)
 
 Kerry (CoS #2331 A / #2332): "If we have more tee times than we need the tee times should save the later times and release the earlier times and let the course know which ones." ... "We do that for 9 hole weeknight events, but with weekend events we keep the earliest times by default and give back the later ones."

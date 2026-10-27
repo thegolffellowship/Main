@@ -416,6 +416,51 @@ def _no_store_api_responses(resp):
     return resp
 
 
+_FOLLOW_SHEET_PATHS = (
+    re.compile(r"^/api/events/(\d+)/pairings(?:/|$)"),
+    re.compile(r"^/api/events/(\d+)/tee(?:/|$)"),
+)
+_FOLLOW_SHEET_ITEM = re.compile(r"^/api/items/(\d+)(?:/(?:wd|credit|assign-guest|assign-member))?$")
+
+
+@app.after_request
+def _follow_sheet_after_save(resp):
+    """Every saved change to an event's pairings or a player's tee re-derives
+    that event's live scoring round from the saved sheet, until first tee
+    (Kerry 10/27, CoS #2429-2: Monday's regroup left an empty "Hole 3B" card).
+    Runs in a thread after the answer so the page never waits on it;
+    live_scoring_default.follow_sheet does nothing when there is no round."""
+    try:
+        if request.method not in ("POST", "PATCH", "PUT", "DELETE") or resp.status_code >= 400:
+            return resp
+        eid = None
+        for rx in _FOLLOW_SHEET_PATHS:
+            m = rx.match(request.path)
+            if m:
+                eid = int(m.group(1))
+                break
+        if eid is None:
+            m = _FOLLOW_SHEET_ITEM.match(request.path)
+            if m:
+                from email_parser import database as _db
+                with _db._connect() as _c:
+                    _r = _c.execute("SELECT item_name FROM items WHERE id = ?", (int(m.group(1)),)).fetchone()
+                    eid = _db._event_id_for_item_name(_c, _r[0]) if _r and _r[0] else None
+        if eid:
+            import threading
+
+            def _run(_eid=eid):
+                try:
+                    from email_parser.live_scoring_default import follow_sheet
+                    follow_sheet(_eid)
+                except Exception:
+                    logger.exception("follow_sheet failed for event %s (non-fatal)", _eid)
+            threading.Thread(target=_run, name=f"follow-sheet-{eid}", daemon=True).start()
+    except Exception:
+        logger.exception("follow-sheet hook failed (non-fatal)")
+    return resp
+
+
 def _read_app_version() -> str:
     """TGF_VERSION from static/js/version.js, read once at boot — the
     cache-buster for versioned static includes (?v=...). Without it a
@@ -2264,7 +2309,7 @@ def start_scheduler():
             logger.exception("Live scoring auto failed (non-fatal)")
     scheduler.add_job(
         live_scoring_auto_job,
-        "cron", minute="*/15",
+        "cron", minute="*/5",     # was */15; the round follows the sheet (Kerry 10/27)
         timezone="US/Central",
         id="live_scoring_auto",
         replace_existing=True,
@@ -5296,7 +5341,9 @@ def public_handicap_ask(token):
         ctx.update(done=res,
                    done_set=_ha.DONE_SET.format(index=idx_txt),
                    done_check=_ha.DONE_CHECK.format(start=start_txt, index=idx_txt, day=info["day"]),
-                   done_need=_ha.DONE_NEED.format(day=info["day"]))
+                   done_need=_ha.DONE_NEED.format(day=info["day"]),
+                   done_rule=_ha.DONE_RULE.format(
+                       low=(_a.get("score_low") or 0) * (2 if _a.get("nine") else 1)))
     return render_template("handicap_ask.html", **ctx)
 
 
@@ -7692,6 +7739,45 @@ def api_gg_points_identity_audit():
     except Exception as e:
         logger.exception("GG points identity audit failed")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/tee", methods=["POST"])
+@require_role("manager")
+def api_event_tee(event_id):
+    """Change one player's tee for this event (Kerry 10/27, CoS #2429-3).
+    Body {customer_id, tee}. Manager of the event's chapter, or admin. Answers
+    with the player's new playing / team handicap read from the sheet; the
+    live scoring round follows (`_follow_sheet_after_save`)."""
+    from email_parser import database as _db
+    from email_parser.pairings_approval import may_approve
+    body = request.get_json(silent=True) or {}
+    with _db._connect() as _c:
+        ev = _c.execute("SELECT chapter FROM events WHERE id = ?", (event_id,)).fetchone()
+    if not ev:
+        return jsonify({"error": "event not found"}), 404
+    why = may_approve(session.get("role"), session.get("chapter"), ev["chapter"])
+    if why:
+        return jsonify({"error": why}), 403
+    try:
+        cid = int(body.get("customer_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "customer_id required"}), 400
+    who = session.get("role") or "manager"
+    if session.get("chapter"):
+        who += f" ({session.get('chapter')})"
+    res = _db.set_event_tee(event_id, cid, body.get("tee"), set_by=who)
+    if res.get("error"):
+        return jsonify(res), 400
+    try:
+        pack = _db.get_event_print_pack(event_id) or {}
+        p = next((p for g in pack.get("groups") or [] for p in g.get("players") or []
+                  if p.get("customer_id") is not None and int(p["customer_id"]) == cid), None)
+        if p:
+            res["playing_handicap"] = p.get("playing_handicap")
+            res["team_handicap"] = p.get("team_handicap")
+    except Exception:
+        logger.exception("tee change: handicap read failed (non-fatal)")
+    return jsonify(res)
 
 
 @app.route("/api/events/<int:event_id>/pairings", methods=["DELETE"])

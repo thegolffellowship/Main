@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.604.3";
+window.TGF_VERSION = "2.605.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.605.0",
+    date: "2026-10-27",
+    title: "Live round follows the sheet; managers change a player's tee; low score minus 72 for players with no index",
+    changes: [
+      "Live scoring follows the saved sheet until first tee (Kerry 10/27, CoS #2429-2). Silverhorn's Monday-night consolidation left an empty Hole 3B card because a re-seed only dropped groups numbered past the count. Now every saved change to pairings, a tee, a credit or a WD re-derives the round at once, and any group no longer on the sheet is dropped whatever its number (one holding a player or a score is kept and reported). After first tee nothing re-derives, so a group never relinks mid-round. The 5-minute job covers changes made by background jobs. Guard test_follow_sheet.py.",
+      "Manager tee change (Kerry: \"There's no tool to manually update the tee on the ROSTER or PAIRINGS\"). Tap any player's tee on ROSTER (desktop and phone) or PAIRINGS and pick <50, 50-64, 65+ or Forward. It saves for that event only, the sheet's playing and team handicaps follow, the live card follows, and the change is logged with who and when.",
+      "Handicap-link answers (Kerry 10/27, CoS #2425/#2426: \"go with the low score minus 72\"). A player with no index gets a starting handicap of their low usual 18-hole score minus 72 (a single score is the low end; a 9-hole score is doubled), recorded as rule:low_score_minus_72 with their words. A stated index always wins. Every answer now emails the chapter manager with Kerry CC'd, quoting the player and with a one-tap link to change it; an answer with no number says NOTHING SET. The banner shows Set by rule and Set by manager, so a number a manager typed no longer reads Needs a number (Alex Porter)."
+    ]
+  },
   {
     version: "2.604.3",
     date: "2026-10-27",

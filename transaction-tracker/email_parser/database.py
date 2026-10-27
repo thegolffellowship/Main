@@ -71401,8 +71401,79 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
             continue
         _decorate_roster_roles(d, ev_year)
         out.append(d)
+    # A manager's tee change for this event wins (Kerry 10/27, CoS #2429-3).
+    _tees = event_tee_overrides(conn, event_id)
+    if _tees:
+        for d in out:
+            _b = _tees.get(str(d.get("customer_id")))
+            if _b:
+                d["tee_choice"] = _b
+                d["tee_source"] = "manager"
     _mark_first_timers(conn, event_id, out)
     return out
+
+
+EVENT_TEE_KEY = "event_tee_override:{event_id}"
+
+
+def event_tee_overrides(conn, event_id: int) -> dict:
+    """{str(customer_id): band} set by a manager for one event."""
+    r = conn.execute("SELECT value FROM app_settings WHERE key = ?",
+                     (EVENT_TEE_KEY.format(event_id=int(event_id)),)).fetchone()
+    try:
+        v = json.loads((r[0] if r else None) or "{}")
+        return v if isinstance(v, dict) else {}
+    except Exception:
+        return {}
+
+
+def set_event_tee(event_id: int, customer_id: int, band: str, *, set_by: str,
+                  db_path=None) -> dict:
+    """MANAGER TEE CHANGE for one event (Kerry 10/27, CoS #2429-3: "There's
+    no tool to manually update the tee on the ROSTER or PAIRINGS."). The
+    player must be on the event's roster; the band is one of TEE_BANDS. The
+    change is kept per event in app setting `event_tee_override:<id>` (it
+    covers a GG-RSVP player with no order row) and copied onto the player's
+    active order row for the event, so every reader of items.tee_choice
+    agrees. Logged with who and when. The playing and team handicaps follow
+    because they are derived from the tee wherever they are shown."""
+    band = (band or "").strip()
+    if band not in TEE_BANDS:
+        return {"error": f"tee must be one of {', '.join(TEE_BANDS)}"}
+    with _connect(db_path) as conn:
+        roster = _event_roster_rows(conn, int(event_id))
+        row = next((d for d in roster if d.get("customer_id") is not None
+                    and int(d["customer_id"]) == int(customer_id)), None)
+        if not row:
+            return {"error": "that player is not on this event's roster"}
+        before = row.get("tee_choice")
+        key = EVENT_TEE_KEY.format(event_id=int(event_id))
+        conn.commit()          # the roster read may have opened a transaction
+        conn.execute("BEGIN IMMEDIATE")
+        cur = event_tee_overrides(conn, int(event_id))
+        cur[str(int(customer_id))] = band
+        conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+                     (key, json.dumps(cur, sort_keys=True)))
+        ev = conn.execute("SELECT item_name FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        items_updated = 0
+        if ev:
+            items_updated = conn.execute(
+                "UPDATE items SET tee_choice = ? WHERE customer_id = ? AND lower(item_name) = lower(?) "
+                "AND COALESCE(transaction_status, 'active') IN ('active', 'rsvp_only')",
+                (band, int(customer_id), ev[0])).rowcount or 0
+        # the saved sheet's own copy too, so nothing reads the old band
+        try:
+            conn.execute("UPDATE event_pairings SET tee_choice = ? WHERE event_id = ? AND customer_id = ?",
+                         (band, int(event_id), int(customer_id)))
+        except sqlite3.OperationalError:
+            pass          # no pairings table yet
+        conn.commit()
+    log_agent_action("event-tee", "set_event_tee",
+                     f"event {event_id} customer {customer_id} ({row.get('name')}): tee "
+                     f"{before or '-'} -> {band} by {set_by}", db_path=db_path)
+    return {"event_id": int(event_id), "customer_id": int(customer_id), "name": row.get("name"),
+            "before": before, "tee": band, "items_updated": items_updated, "set_by": set_by}
 
 
 def _mark_first_timers(conn, event_id: int, rows: list[dict]) -> None:

@@ -1273,6 +1273,13 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
                 conn.execute("DELETE FROM se_players WHERE round_id = ? AND customer_id = ?", (rid, cid))
                 dropped.append({"customer_id": cid, "name": row[1], "scores_removed": len(scores)})
             conn.commit()
+    # A GROUP THE SHEET NO LONGER HAS goes too (Kerry 10/27, s9.29 Silverhorn:
+    # he consolidated 25 -> 24 on Monday night, the sheet went to groups 1-5
+    # and 7, and "Hole 3B" (group 6) stayed on Live Scoring as a blank card:
+    # "That should happen automatically if I've approved it. There was no
+    # way to manually delete it."). Any number, not only past the count.
+    # A group holding a player, a score or a mark is kept and reported.
+    gone = _drop_off_sheet_groups(rid, set(num_for.values()), db_path)
     from email_parser.database import event_games_off
     if not event_games_off(evrow):        # no games, no team handicap (Kerry 10/8)
         set_game_handicaps(rid, {p["customer_id"]: p.get("team_handicap")
@@ -1286,6 +1293,7 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
         out["skipped_no_customer_id"] = skipped
     if dropped:
         out["dropped_off_sheet"] = dropped
+    out.update(gone)
     if len(course_holes) < n_holes:
         out["warning"] = (f"course card gave {len(course_holes)} of {n_holes} holes; "
                           "set par and stroke index before scoring")
@@ -1449,6 +1457,70 @@ def _group_rosters(round_id: int, db_path=None) -> dict:
             out[num] = (gid, frozenset(r[0] for r in conn.execute(
                 "SELECT customer_id FROM se_players WHERE group_id = ?", (gid,))))
         return out
+
+
+_GROUP_TABLES = ("se_hole_scores", "se_hole_marks", "se_teams", "se_signoffs", "se_card_flags",
+                 "se_ctp_claims", "se_hio_claims", "se_card_checks")
+
+
+def _group_busy(conn, gid: int) -> bool:
+    """A group holds something: a player, or any score / mark / claim."""
+    if conn.execute("SELECT 1 FROM se_players WHERE group_id = ? LIMIT 1", (gid,)).fetchone():
+        return True
+    return any(conn.execute(f"SELECT 1 FROM {t} WHERE group_id = ? LIMIT 1", (gid,)).fetchone()
+               for t in _GROUP_TABLES)
+
+
+def round_id_for(event_id: int, holes: str, db_path=None):
+    """The event's live round for a hole set, or None (also None when score
+    entry was never set up on this database)."""
+    try:
+        with _closing(_conn(db_path)) as conn:
+            r = conn.execute("SELECT id FROM se_rounds WHERE event_id = ? AND pairings_holes = ? "
+                             "ORDER BY id LIMIT 1", (int(event_id), str(holes))).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return r[0] if r else None
+
+
+def event_has_round(event_id: int, db_path=None) -> bool:
+    try:
+        with _closing(_conn(db_path)) as conn:
+            return bool(conn.execute("SELECT 1 FROM se_rounds WHERE event_id = ? LIMIT 1",
+                                     (int(event_id),)).fetchone())
+    except sqlite3.OperationalError:
+        return False
+
+
+def _drop_off_sheet_groups(round_id: int, keep_nums: set, db_path=None) -> dict:
+    """Delete the round's groups whose number is not on the saved sheet and
+    that hold nothing. A closed round is never touched. Returns
+    {dropped_empty_groups: [...], leftover_groups_kept: [...]} (only the
+    keys that have something)."""
+    dropped, kept = [], []
+    with _closing(_conn(db_path)) as conn:
+        st = conn.execute("SELECT status, event_id FROM se_rounds WHERE id = ?", (round_id,)).fetchone()
+        if not st or st[0] != "open":
+            return {}
+        for gid, num in conn.execute("SELECT id, group_num FROM se_groups WHERE round_id = ?",
+                                     (round_id,)).fetchall():
+            if int(num) in keep_nums:
+                continue
+            if _group_busy(conn, gid):
+                kept.append(gid)
+                continue
+            conn.execute("DELETE FROM se_group_locks WHERE group_id = ?", (gid,))
+            conn.execute("DELETE FROM se_groups WHERE id = ?", (gid,))
+            dropped.append(gid)
+        if dropped:
+            _bump(conn, st[1])
+        conn.commit()
+    out = {}
+    if dropped:
+        out["dropped_empty_groups"] = dropped
+    if kept:
+        out["leftover_groups_kept"] = kept
+    return out
 
 
 def _settle_regrouped(round_id: int, before: dict, n_groups: int, db_path=None) -> dict:
@@ -3093,7 +3165,10 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
     with _closing(_conn(db_path)) as conn:
         g = _group_ctx(conn, group_id)
         if not g:
-            return {"error": "no such group"}
+            # A group the sheet dropped (Kerry 10/27, `_drop_off_sheet_groups`):
+            # its printed QR still says so plainly.
+            return {"error": "This group isn't on tonight's pairings any more. "
+                             "Ask the manager for your group's link.", "gone": True}
         players = [dict(p) for p in conn.execute(
             "SELECT customer_id, display_name, tee, playing_handicap, seat "
             "FROM se_players WHERE group_id = ? ORDER BY COALESCE(seat, 99), id",

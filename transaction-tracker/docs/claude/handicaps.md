@@ -1033,6 +1033,9 @@ triple with two pops is a net bogey which is not worth any points."
 
 ### The handicap ask (v2.569.0, Kerry 2026-10-16 "Build it")
 
+**No index: low score minus 72 (v2.605.0, Kerry 10/27, CoS #2425/#2426).** Kerry: "I want you to go with the low score minus 72 to establish their starting handicap with TGF." A "no handicap" answer now sets `starting_handicap_18` = the LOW end of the usual 18-hole score minus 72 (`handicap_ask.starting_from_scores`): a single score is the low end; a 9-hole score (both numbers under 60) is doubled first (CoS readings); a stated index always wins (GHIN / other keep the 75% rule). Recorded `set_by = "rule:low_score_minus_72"` with the player's words in the note; a later answer may replace a rule value, never a manager's. An answer with no number sets nothing. EVERY answer emails the event's chapter manager (`pairings_approval.manager_for`), Kerry CC'd, with the player's words, what was set and a one-tap "Change it on the roster" link (`notify_manager` / `manager_message`; no number reads "NOTHING SET"). The banner gains "Set by rule" and "Set by manager" (a number a person typed after the answer replaces "Needs a number", the Alex Porter case). The thank-you line for the rule (`DONE_RULE`) sits OUTSIDE `template_hash()` so the live ask is not locked; Kerry reviews it with the build. Guards `test_handicap_ask.py`, `test_follow_sheet.py`.
+
+
 Kerry: "We need some kind of automatic ask for new people that we don't have
 handicap for." The handicap is for the TEAM game: a non-member can't enter
 individual net or MVP, "so this is just about giving them a handicap so that

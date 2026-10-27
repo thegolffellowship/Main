@@ -1147,6 +1147,13 @@ returns the status codes a chapter manager and a player link get on that event.
 
 ## Links are slot numbers; the round follows the saved pairings (Kerry 2026-09-29)
 
+**The round follows the sheet until first tee (v2.605.0, Kerry 10/27, CoS #2429-2).** Silverhorn 10/27: Kerry's Monday-night consolidation (25 -> 24) took the sheet to groups 1-5 and 7, and the empty "Hole 3B" (group 6) stayed on Live Scoring because a re-seed only dropped groups numbered past the count. Kerry: "That should happen automatically if I've approved it. There was no way to manually delete it." Now:
+- `seed_round_from_pairings` drops EVERY group whose number is not on the saved sheet and that holds nothing (`_drop_off_sheet_groups`; a group holding a player, score, mark or claim is kept and reported). A dropped group's printed QR opens "This group isn't on tonight's pairings any more."
+- `live_scoring_default.follow_sheet(event_id)` re-derives an existing round from the sheet; app.py's `_follow_sheet_after_save` runs it in a thread after every successful POST/PATCH/PUT/DELETE under `/api/events/<id>/pairings…`, `/api/events/<id>/tee`, and `/api/items/<id>` (+ wd, credit, assign-guest/member). The `live_scoring_auto` job (now every 5 minutes) covers changes made by background jobs (seat-fill, withdrawal fold).
+- Nothing re-derives an existing round once first tee has passed (`ensure_live_scoring(..., now)` reports `held`): a group never relinks mid-round. Changes on the course go through the card (+ Player, Player missing).
+- se_* reads for this live in score_entry (`round_id_for`, `event_has_round`). Guard `test_follow_sheet.py`.
+
+
 A group link is the `se_groups` row, and the row is the pairings' GROUP NUMBER, its
 place in the list ("slot one and slot two through how many ever slots there are").
 It is never matched by the hole or tee-time label: relabelling 2A to 3 keeps the link,
