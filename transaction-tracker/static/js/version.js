@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.612.0";
+window.TGF_VERSION = "2.613.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.613.0",
+    date: "2026-10-28",
+    title: "Shotgun staging: live rebalance as you edit; reverse starts with two on hole 1",
+    changes: [
+      "Kerry 10/28: \"if I made hole one 2 groups (which I think should be a default on a reverse shotgun regardless of hole length) then it removes one off the far end ... Or if there were 2 on 14 it would auto reduce to 1. Live updating. Or if I changed 1 to 2 and 18 to 2 it would live remove the 1's on 14 and 15.\" Two changes. (1) A reverse shotgun now gives its start hole two groups by default whatever its length (shotgun_hole_labels and the grid). (2) The staging grid rebalances as you type: the total always stays at the groups needed; extra groups come off the far end of the order (a 2 drops to 1 before a 1 drops to 0), and a hole given fewer puts them back at the far end (the last loaded hole up to its usual cap, then the next hole). The hole you just typed in is never changed. Guard test_shotgun_order.py; the rebalance was checked against Kerry's three examples."
+    ]
+  },
   {
     version: "2.612.0",
     date: "2026-10-28",

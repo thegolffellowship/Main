@@ -1265,7 +1265,12 @@ reverse or staged shotgun. Seat-fill (`seat_fill.fill_order`: back of the pack
 first) and the withdrawal fold (`donor_order`, the dissolve tie-break: front of
 the pack first) read the same play order (`seat_fill.shotgun_back_key` /
 `shotgun_front_key`); a standard shotgun orders exactly as before. The checkbox
-reads "1 Group after Par 3's" (Kerry's wording).
+reads "1 Group after Par 3's" (Kerry's wording). **v2.613.0 (Kerry 10/28):** a reverse
+shotgun gives its start hole TWO groups by default regardless of length, and
+the grid REBALANCES LIVE (`sgRebalance` in events.html): the total stays at the
+groups needed; extra groups come off the far end of the order (2 before 1),
+and a hole given fewer puts them back at the far end; the hole just typed in
+is never changed.
 
 **One group on short holes (v2.607.0, Kerry 10/28):** "standard shotguns need
 to put 2 per hole starting on that side but 1 per hole on par 3s and par 4s

@@ -16370,7 +16370,16 @@
                     inp.type = "number"; inp.min = "0"; inp.max = "2"; inp.value = x.groups;
                     inp.id = `sg-g-${h}-${x.hole}`; inp.disabled = st.locked;
                     inp.setAttribute("aria-label", `Groups on hole ${x.hole}`);
-                    inp.addEventListener("input", () => { x.groups = Math.max(0, Math.min(2, parseInt(inp.value || "0", 10) || 0)); st.edited = true; sgTotal(sec, st); });
+                    inp.addEventListener("input", () => {
+                        x.groups = Math.max(0, Math.min(2, parseInt(inp.value || "0", 10) || 0));
+                        st.edited = true;
+                        sgRebalance(st, d.rows.indexOf(x));
+                        sec.querySelectorAll(".sg-row-groups input").forEach(el => {
+                            const r = d.rows.find(y => el.id === `sg-g-${h}-${y.hole}`);
+                            if (r && el !== inp) el.value = r.groups;
+                        });
+                        sgTotal(sec, st);
+                    });
                     grp.insertCell().appendChild(inp);
                 });
                 wrap.appendChild(tbl);
@@ -16378,6 +16387,35 @@
             box.appendChild(sec);
             sgTotal(sec, st);
         });
+    }
+    // LIVE REBALANCE (Kerry 10/28: "if I made hole one 2 groups ... then it
+    // removes one off the far end ... Or if there were 2 on 14 it would auto
+    // reduce to 1. Live updating."). After an edit the grid keeps exactly the
+    // groups needed: extra groups come off the far end of the order (a 2
+    // drops to 1 before a 1 drops to 0), and a hole given fewer puts them
+    // back at the far end (the last loaded hole up to its usual cap, then
+    // the next hole). The hole just typed is never changed.
+    function sgRebalance(st, edited) {
+        const rows = st.data.rows, need = st.data.groups_needed;
+        let total = rows.reduce((t, x) => t + (x.groups || 0), 0);
+        let guard = 100;
+        while (total > need && guard--) {
+            let j = rows.length - 1;
+            while (j >= 0 && (j === edited || !(rows[j].groups > 0))) j--;
+            if (j < 0) break;
+            rows[j].groups -= 1; total -= 1;
+        }
+        while (total < need && guard--) {
+            let last = -1;
+            rows.forEach((x, k) => { if (x.groups > 0) last = k; });
+            let j = -1;
+            if (last >= 0 && last !== edited && rows[last].groups < (rows[last].cap || 2)) j = last;
+            else {
+                for (let k = last + 1; k < rows.length; k++) { if (k !== edited) { j = k; break; } }
+            }
+            if (j < 0) break;
+            rows[j].groups += 1; total += 1;
+        }
     }
     function sgTotal(sec, st) {
         const d = st.data;

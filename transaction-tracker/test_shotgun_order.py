@@ -119,7 +119,8 @@ got = db._pairing_time_slots(e, "18")
 check("standard: 1A, 2A, 3A, 3B, 4A, 5A, 5B", got == ["1A", "2A", "3A", "3B", "4A", "5A", "5B"], got)
 e["shotgun_order"] = "reverse"
 got = db._pairing_time_slots(e, "18")
-check("reverse: 1A, 18A, 17A, 17B, 16A, 16B, 15A", got == ["1A", "18A", "17A", "17B", "16A", "16B", "15A"], got)
+check("reverse: hole 1 takes two by default (Kerry 10/28), then 18 down",
+      got == ["1A", "1B", "18A", "17A", "17B", "16A", "16B"], got)
 check("a listed short hole still takes one", L(N("2 3"), 1, 18, 3, caps) == ["2A", "3A", "3B"])
 check("a typed B on a short hole is used as typed", L(N("2A 2B"), 1, 18, 2, caps) == ["2A", "2B"])
 check("a full course: the short holes take a B before any overflow",
@@ -144,7 +145,7 @@ check("default counts follow the rule: 1,1,2,1,2 then 0",
       [r["groups"] for r in st["rows"]][:6] == [1, 1, 2, 1, 2, 0], [r["groups"] for r in st["rows"]][:6])
 rv = db.shotgun_staging(KTE, reverse=True, db_path=DB)
 check("Reverse previews 1 then 18 backward: 1,18,17,16,15",
-      [(r["hole"], r["groups"]) for r in rv["rows"]][:5] == [(1, 1), (18, 1), (17, 2), (16, 2), (15, 1)])
+      [(r["hole"], r["groups"]) for r in rv["rows"]][:5] == [(1, 2), (18, 1), (17, 2), (16, 2), (15, 0)])
 db.update_event(KTE, {"shotgun_staging": {"reverse": False, "locked": True,
                                            "counts": {"1": 2, "2": 1, "10": 2, "11": 2},
                                            "hole_order": list(range(1, 19))}}, db_path=DB)
@@ -157,7 +158,7 @@ check("the generator deals the locked grid",
 db.update_event(KTE, {"shotgun_staging": {"reverse": True, "locked": False}}, db_path=DB)
 st = db.shotgun_staging(KTE, db_path=DB)
 check("unlocked + Reverse goes back to the rule, reversed", st["order"] == "reverse" and not st["locked"]
-      and st["labels"][:3] == ["1A", "18A", "17A"], st)
+      and st["labels"][:3] == ["1A", "1B", "18A"], st)
 
 print("6. After par 3s, one group (Kerry 10/28) and the front of the pack")
 info = {h: v for h, v in KT.items()}

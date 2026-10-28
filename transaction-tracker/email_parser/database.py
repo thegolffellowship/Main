@@ -62842,9 +62842,13 @@ def shotgun_hole_labels(order: str, first: int, last: int, count: int,
     A hole with no card data takes two. When the field needs more groups than
     the caps allow, the one-group holes take a B next, in the same order,
     before anything overflows past the last hole."""
-    caps = caps or {}
+    caps = dict(caps or {})
     o = (order or "").strip().lower()
     holes = _reverse_seq(first, last) if o == "reverse" else list(range(first, last + 1))
+    if o == "reverse":
+        # Kerry 10/28: on a reverse shotgun the first hole takes two groups by
+        # default, "regardless of hole length".
+        caps[first] = 2
     picked: list[str] = []
     if o and o != "reverse":
         for tok in re.split(r"[\s,;]+", order.upper()):
@@ -63068,6 +63072,8 @@ def shotgun_staging(event_id: int, holes: str | None = None, nine_side: str | No
         if m:
             counts[int(m.group(1))] = counts.get(int(m.group(1)), 0) + 1
     seq = _reverse_seq(first, last) if rev else list(range(first, last + 1))
+    if rev:
+        caps[first] = 2  # the reverse start hole takes two (shotgun_hole_labels)
     return {"ok": True, "event_id": int(event_id), "holes": h, "nine_side": side,
             "reverse": rev, "after_par3": ap3, "locked": locked, "order": order,
             "groups_needed": needed, "players": len(rows), "labels": labels,
