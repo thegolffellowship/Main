@@ -90,6 +90,41 @@ res = db.generate_event_pairings(TT, db_path=DB, save_log=False)
 got = [g["slot_label"] for g in sorted(res.get("18") or [], key=lambda g: g["group_num"])]
 check("a tee-time event ignores it", got == ["8:00 AM", "8:10 AM", "8:20 AM"], got)
 
+print("4. One group on a par 3 or a par 4 under 325 from the <50 tees (Kerry 10/28)")
+# Kissing Tree's Back (<50) card: (par, yards) by hole.
+KT = {1: (4, 305), 2: (3, 165), 3: (5, 533), 4: (3, 177), 5: (5, 550), 6: (4, 413), 7: (4, 400),
+      8: (4, 362), 9: (4, 320), 10: (4, 345), 11: (4, 415), 12: (3, 206), 13: (4, 444), 14: (5, 567),
+      15: (3, 132), 16: (4, 367), 17: (5, 500), 18: (4, 283)}
+CRS, KTE = 99881, 9813
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO courses (course_id, name) VALUES (?, 'Test Kissing Tree')", (CRS,))
+    cur = conn.execute("INSERT INTO course_tees (course_id, tee_name, gender, holes, tgf_bands) "
+                       "VALUES (?, 'Back', 'M', 18, '<50')", (CRS,))
+    tid = cur.lastrowid
+    for h, (par, yd) in KT.items():
+        conn.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par, yardage) VALUES (?, ?, ?, ?)",
+                     (tid, h, par, yd))
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_type, start_time, "
+                 "tee_time_count, course, course_id) VALUES (?, 's18.83 KT', '2099-12-19', 'TGF', 'active', "
+                 "'18 Holes', 'Shotgun', '08:00', 7, 'Test Kissing Tree', ?)", (KTE, CRS))
+    conn.commit()
+    e = dict(conn.execute("SELECT * FROM events WHERE id = ?", (KTE,)).fetchone())
+    caps = db._shotgun_caps_conn(conn, e)
+check("short holes take one: 1 (305), 2, 4, 9 (320), 12, 15, 18 (283)",
+      sorted(h for h, c in caps.items() if c == 1) == [1, 2, 4, 9, 12, 15, 18], caps)
+check("a 345-yard par 4 takes two", caps.get(10) == 2)
+e["shotgun_caps"], e["shotgun_order"] = caps, ""
+got = db._pairing_time_slots(e, "18")
+check("standard: 1A, 2A, 3A, 3B, 4A, 5A, 5B", got == ["1A", "2A", "3A", "3B", "4A", "5A", "5B"], got)
+e["shotgun_order"] = "reverse"
+got = db._pairing_time_slots(e, "18")
+check("reverse: 18A, 17A, 17B, 16A, 16B, 15A, 14A", got == ["18A", "17A", "17B", "16A", "16B", "15A", "14A"], got)
+check("a listed short hole still takes one", L(N("2 3"), 1, 18, 3, caps) == ["2A", "3A", "3B"])
+check("a typed B on a short hole is used as typed", L(N("2A 2B"), 1, 18, 2, caps) == ["2A", "2B"])
+check("a full course: the short holes take a B before any overflow",
+      len(L("", 1, 18, 30, caps)) == 30 and L("", 1, 18, 30, caps)[-1] == "1B" and "19A" not in L("", 1, 18, 36, caps))
+check("no card: every hole takes two (the old standard)", L("", 1, 18, 3, {}) == ["1A", "1B", "2A"])
+
 try:
     os.remove(DB)
 except OSError:

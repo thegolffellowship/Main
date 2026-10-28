@@ -31788,6 +31788,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
             _before = dict(_b) if _b else None
             if _before is not None:
                 _before["shotgun_order"] = _shotgun_order_conn(conn, event_id)
+                _before["shotgun_caps"] = _shotgun_caps_conn(conn, _before)
 
         _validate_column_names(list(safe))
         set_clause = ", ".join(f"{col} = ?" for col in safe)
@@ -31800,6 +31801,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 _after = dict(conn.execute("SELECT * FROM events WHERE id = ?",
                                            (event_id,)).fetchone())
                 _after["shotgun_order"] = _before.get("shotgun_order", "")
+                _after["shotgun_caps"] = _shotgun_caps_conn(conn, _after)
                 _res = _sheet_follows_event(conn, event_id, _before, _after)
                 if _res["moved"] or _res["relabelled"]:
                     logger.info("Event %s edit: saved sheet followed (%s)", event_id, _res)
@@ -62682,7 +62684,8 @@ def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
         if holes == "9" and _nine_side(event) == "Back":
             base_hole = 10
         last_hole = base_hole + (8 if holes == "9" else 17)
-        return shotgun_hole_labels(shotgun_order_of(event), base_hole, last_hole, count)
+        return shotgun_hole_labels(shotgun_order_of(event), base_hole, last_hole, count,
+                                   shotgun_caps_of(event))
 
     if not start_time:
         return [f"Group {i + 1}" for i in range(count)]
@@ -62764,8 +62767,16 @@ def shotgun_order_of(event: dict) -> str:
         return ""
 
 
-def shotgun_hole_labels(order: str, first: int, last: int, count: int) -> list[str]:
-    """`count` shotgun slot labels for holes first..last under `order`."""
+def shotgun_hole_labels(order: str, first: int, last: int, count: int,
+                        caps: dict | None = None) -> list[str]:
+    """`count` shotgun slot labels for holes first..last under `order`.
+
+    `caps` {hole: 1 | 2} is how many groups a hole takes (shotgun_caps_of:
+    Kerry 10/28, one on a par 3 or a par 4 under 325 yards from the <50 tees,
+    two elsewhere). A hole with no card data takes two. When the field needs
+    more groups than the caps allow, the one-group holes take a B next, in the
+    same order, before anything overflows past the last hole."""
+    caps = caps or {}
     holes = list(range(first, last + 1))
     o = (order or "").strip().lower()
     if o == "reverse":
@@ -62776,18 +62787,73 @@ def shotgun_hole_labels(order: str, first: int, last: int, count: int) -> list[s
             m = _SHOTGUN_TOKEN_RE.match(tok)
             if not m or int(m.group(1)) not in holes:
                 continue
-            for lab in ([tok] if m.group(2) else [m.group(1) + "A", m.group(1) + "B"]):
+            h = int(m.group(1))
+            labs = [tok] if m.group(2) else [f"{h}A", f"{h}B"][:caps.get(h, 2)]
+            for lab in labs:
                 if lab not in picked:
                     picked.append(lab)
     for h in holes:
-        for x in ("A", "B"):
+        for x in ("A", "B")[:caps.get(h, 2)]:
             if f"{h}{x}" not in picked:
                 picked.append(f"{h}{x}")
+    if len(picked) < count:
+        for h in holes:
+            if f"{h}B" not in picked:
+                picked.append(f"{h}B")
     i = last + 1
     while len(picked) < count:  # more groups than two per hole: the old overflow
         picked += [f"{i}A", f"{i}B"]
         i += 1
     return picked[:count]
+
+
+SHORT_PAR4_YARDS = 325  # Kerry 10/28: "par 4s less than 325 yards from the <50 tees"
+
+
+def _shotgun_caps_conn(conn, ev: dict) -> dict:
+    """{hole: groups it takes} from the course card's <50 tee: 1 on a par 3
+    or a par 4 under SHORT_PAR4_YARDS, else 2. {} when the course has no
+    card (every hole then takes two, the old standard)."""
+    try:
+        legend = event_tee_legend(conn, int(ev.get("id") or 0), ev)
+    except Exception:
+        return {}
+    pick = next((t for t in legend if t.get("band") == "<50" and t.get("tee_id")), None)
+    if not pick:
+        return {}
+    try:
+        row = conn.execute("SELECT course_id, tee_name, gender FROM course_tees WHERE tee_id = ?",
+                           (pick["tee_id"],)).fetchone()
+        ids = [pick["tee_id"]]
+        if row:
+            ids += [r[0] for r in conn.execute(
+                "SELECT tee_id FROM course_tees WHERE course_id = ? AND lower(trim(tee_name)) = lower(trim(?)) "
+                "AND COALESCE(gender, '') = COALESCE(?, '') AND tee_id != ?",
+                (row[0], row[1], row[2], pick["tee_id"]))]
+        info: dict = {}
+        for tid in ids:
+            for h, par, yd in conn.execute(
+                    "SELECT hole_number, par, yardage FROM course_tee_holes WHERE tee_id = ?", (tid,)):
+                if h and par and int(h) not in info:
+                    info[int(h)] = (int(par), int(yd or 0))
+    except sqlite3.DatabaseError:
+        return {}
+    return {h: (1 if par == 3 or (par == 4 and 0 < yd < SHORT_PAR4_YARDS) else 2)
+            for h, (par, yd) in info.items()}
+
+
+def shotgun_caps_of(event: dict) -> dict:
+    """The event's hole capacities: the dict's own `shotgun_caps` when a
+    caller loaded it, else read from the default database."""
+    if "shotgun_caps" in event:
+        return event.get("shotgun_caps") or {}
+    if not event.get("course_id"):
+        return {}
+    try:
+        with _connect(None) as conn:
+            return _shotgun_caps_conn(conn, event)
+    except Exception:
+        return {}
 
 
 def set_shotgun_order(event_id: int, value, db_path=None) -> dict:
@@ -62810,6 +62876,7 @@ def set_shotgun_order(event_id: int, value, db_path=None) -> dict:
         res = {"moved": None, "relabelled": 0}
         if new != old:
             before = {**dict(row), "shotgun_order": old}
+            before["shotgun_caps"] = _shotgun_caps_conn(conn, before)
             res = _sheet_follows_event(conn, event_id, before, {**before, "shotgun_order": new})
         conn.commit()
     return {"ok": True, "shotgun_order": new, "was": old, "relabelled": res["relabelled"]}
@@ -72096,6 +72163,7 @@ def generate_event_pairings(
             raise ValueError(f"Event {event_id} not found")
         ev = dict(ev)
         ev["shotgun_order"] = _shotgun_order_conn(conn, event_id)
+        ev["shotgun_caps"] = _shotgun_caps_conn(conn, ev)
         ev_chapter = ev.get("chapter")
 
         fmt = (ev.get("format") or "").strip()

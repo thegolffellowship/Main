@@ -1229,6 +1229,19 @@ Changing it after the generator relabels the saved sheet by slot position
 (`_sheet_follows_event`): group 1 stays the first slot, its label changes.
 Guard `test_shotgun_order.py`.
 
+**One group on short holes (v2.607.0, Kerry 10/28):** "standard shotguns need
+to put 2 per hole starting on that side but 1 per hole on par 3s and par 4s
+less than 325 yards from the <50 tees. Same concept if reverse shotgun is
+selected." `_shotgun_caps_conn` reads the course card's <50 tee
+(`event_tee_legend` → `course_tee_holes`): a par 3, or a par 4 under
+`SHORT_PAR4_YARDS` (325), takes ONE group (label A only); every other hole two.
+A hole with no card data takes two. If the field needs more groups than that,
+the short holes take a B next, in the same order, before anything overflows.
+A listed hole in a custom order follows the same caps; a label typed with a
+letter is used as typed. Kissing Tree (<50 Back): one group on 1, 2, 4, 9,
+12, 15, 18. The course's own say over this (TGF Course Connect, "one per hole
+wherever possible") is the planned next step, not built.
+
 ## Bullpen X (v2.413.0)
 
 > *"Need the ability to remove a player. Maybe just a simple red X to be

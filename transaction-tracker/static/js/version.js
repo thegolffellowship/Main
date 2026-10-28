@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.606.0";
+window.TGF_VERSION = "2.607.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.607.0",
+    date: "2026-10-28",
+    title: "Shotguns: one group on par 3s and short par 4s",
+    changes: [
+      "Kerry 10/28: \"standard shotguns need to put 2 per hole starting on that side but 1 per hole on par 3s and par 4s less than 325 yards from the <50 tees. Same concept if reverse shotgun is selected.\" The shotgun slots now read the course card's <50 tee: a par 3 or a par 4 under 325 yards gets one group (A only), every other hole two (A and B), in the event's order (standard, reverse or a typed list). A hole with no card data takes two, as before. A field bigger than that puts a B on the short holes next, before anything goes past the last hole. Kissing Tree: one group on 1, 2, 4, 9, 12, 15 and 18, so seven groups deal 1A, 2A, 3A, 3B, 4A, 5A, 5B (reverse: 18A, 17A, 17B, 16A, 16B, 15A, 14A). Guard test_shotgun_order.py section 4."
+    ]
+  },
   {
     version: "2.606.0",
     date: "2026-10-28",
