@@ -38,9 +38,11 @@ RULED (Kerry 10/17) at lock:
 | E-1 5-7 PM | Manager review window; approval not required | RULED "Agreed" |
 | E-1 7:00 PM | Preliminary tee sheet to players, NO personal link | RULED (Kerry: "I don't think personal link would go then") |
 | E-1 7:00 PM (built) | Tee-times email in three versions: players (registered roster), course contact (To primary, CC other TGF contacts), chapter manager (print or not). `email_parser/teetimes_email.py`, job `teetimes_email`, beside the 7 PM pairing auto-send. LOCKED until Kerry stamps each wording and turns on `teetimes_email_auto`; player version also waits on `tgf_mailing_address`. Spots-open box behind `teetimes_spots_audience` (off). events.md | BUILT 10/19, not stamped |
-| E 7:00 AM | Personal Event Info email to every player (the full breakdown sent 10/13), with the personal link | RULED |
+| Event day 6:00 AM (was 7:00 AM) | Personal Event Info email to every player (the full breakdown sent 10/13), with the personal link. **Moved to 6:00 AM** (Kerry: "Move event info email to 6:00am.", CoS #2331-B; live v2.590.0, dial `event_info_hour`). **18-hole events go at noon the day before, with the Course Files** (Kerry, CoS #2355: "18 hole event info like Fall Champ needs to go out one day prior at noon, same time as course files."; built as first tee before 1:00 PM, live v2.598.0) | RULED, LIVE |
 | E 12:00 PM | Print pack to course contact, TGF CC'd (TGF only if no contact). Revised Event Info ONLY to players whose details changed since 7 AM | RULED |
-| E noon → first tee | Late adds into open seats (see §3) | RULED |
+| Event day, 1 hour before first tee or shotgun | **Live scoring turns on** for that event (§2b) | RULED, LIVE |
+| E noon → first tee | Late adds into open seats (see §3); seat-fill does it automatically from the lock (live v2.590.0). Course sheets for a change go only from noon to 1 hour before first tee (Kerry #2329; live v2.590.0) | RULED |
+| 15 minutes after the event's last score | **Live scoring turns off** for that event and **CLOSEOUT START** posts (§2b) | RULED, LIVE |
 
 Kerry 10/17 on single changes: "A group adding a fourth is not reason to send
 out a whole new set of updates. There would just be an email sent to that
@@ -86,6 +88,16 @@ even just his affected printouts." The player's line prints blank (N/H) and
 never holds Course Files; a later handicap is entered on the Tracker, the N/H
 blind comes off, and nothing is reprinted or resent (v2.575.14:
 `scorecards` flags it instead of a gap; `print_pack._handicap_only_change`).
+
+## 2b. Live scoring window and closeout start (RULED, universal, Monday 10/26)
+
+Kerry, verbatim (CoS #2358): *"No! Live scoring turns on one hour before all events and turns off 15 minutes after last score is entered. That is universal for all events and is based per event."*
+
+- **Every event, each on its own clock:** live scoring turns on one hour before that event's first tee or shotgun, and turns off 15 minutes after that event's last score is entered.
+- **Closeout starts at the same moment** (CLOSEOUT START post). The 9:08 PM closeout run stays as the backstop.
+- Dial `scoring_window_auto` is ON permanently (#2359). It is not a per-night switch.
+- Examples (#2359): Teravista Tuesday 10/27 opens 3:08 PM; Silverhorn Tuesday 10/27 opens 3:30 PM; Fall Championship Saturday 10/31 opens 7:00 AM.
+- Fallback only: if an event's scoring is not on 7 minutes after its open time, Event Ops / Track A turns it on by hand and posts it.
 
 ## 3. Adds and withdrawals after lock (PROPOSAL, Kerry: "the messiest and most complex of all")
 
