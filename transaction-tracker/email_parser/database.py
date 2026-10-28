@@ -63061,7 +63061,11 @@ def shotgun_staging(event_id: int, holes: str | None = None, nine_side: str | No
     rev = bool(meta.get("reverse")) if reverse is None else bool(reverse)
     locked = bool(meta.get("locked"))
     previewing = reverse is not None or after_par3 is not None
-    if locked or (not previewing and order not in ("", "reverse")):
+    # A toggle being previewed (Reverse / 1 Group after Par 3's, only possible
+    # while unlocked) always re-deals the default (Kerry 10/28: "It should
+    # basically reset the numbers when that's checked unchecked to the
+    # default setup"), even when the saved grid is locked.
+    if not previewing and (locked or order not in ("", "reverse")):
         use = order  # the saved grid
     else:
         use = "reverse" if rev else ""  # the rule (or a toggle being previewed)

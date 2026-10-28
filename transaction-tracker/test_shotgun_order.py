@@ -208,6 +208,19 @@ k2 = [{"slot_label": l, "group_num": 0, "players": P(n)} for l, n in
       (("1A", 3), ("18A", 3), ("17A", 3), ("17B", 4), ("16A", 4))]
 check("Kerry's example: threesomes on 1, 18, 17A fill from 17A", first_open(k2)[0] == "17A", first_open(k2))
 
+print("8. Toggling Reverse resets to the default (Kerry 10/28)")
+db.update_event(KTE, {"shotgun_staging": {"reverse": True, "locked": True, "after_par3": False,
+                                           "counts": {"1": 2, "18": 1, "17": 2, "16": 2, "15": 1},
+                                           "hole_order": [1] + list(range(18, 1, -1))}}, db_path=DB)
+off = db.shotgun_staging(KTE, reverse=False, after_par3=False, db_path=DB)
+check("unchecking Reverse on a saved, locked reverse grid deals the standard default",
+      [r["hole"] for r in off["rows"]][:3] == [1, 2, 3] and [r["groups"] for r in off["rows"]][:5] == [1, 1, 2, 1, 2],
+      [(r["hole"], r["groups"]) for r in off["rows"]][:6])
+on = db.shotgun_staging(KTE, reverse=True, after_par3=False, db_path=DB)
+check("checking it again deals the reverse default", [r["groups"] for r in on["rows"]][:4] == [2, 1, 2, 2],
+      [(r["hole"], r["groups"]) for r in on["rows"]][:5])
+check("opening the modal still shows the saved grid", db.shotgun_staging(KTE, db_path=DB)["locked"])
+
 try:
     os.remove(DB)
 except OSError:

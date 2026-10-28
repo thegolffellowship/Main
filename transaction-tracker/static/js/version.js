@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.613.0";
+window.TGF_VERSION = "2.613.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.613.1",
+    date: "2026-10-28",
+    title: "Shotgun staging: Reverse on/off resets the grid to that order's default",
+    changes: [
+      "Kerry 10/28 (screenshot: unchecking Reverse left the reverse counts on 14-18): \"When unchecking Reverse Shotgun, it needs to adjust accordingly automatically ... It should basically reset the numbers when that's checked unchecked to the default setup.\" The preview behind the Reverse and 1 Group after Par 3's checkboxes read the SAVED lock and kept the saved counts once a grid had been saved locked. A toggle now always re-deals that order's default (standard: from hole 1 up; reverse: two on hole 1, then 18 down); opening the modal still shows the saved grid. Guard test_shotgun_order.py section 8."
+    ]
+  },
   {
     version: "2.613.0",
     date: "2026-10-28",
