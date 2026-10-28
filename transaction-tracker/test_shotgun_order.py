@@ -193,6 +193,20 @@ check("reverse: late adds fill from the back of the pack (16 first)",
 check("reverse: donors from the front of the pack (1 first)",
       [g["slot_label"] for g in donor_order(rev)] == ["1A", "18A", "17B", "17A", "16A"])
 
+# Kerry 10/28: "If for instance we had 3somes in hole 1A (lead group), 1B, and
+# 18A, then the first late add would go to the threesome in 18A. A second late
+# add would go to 1B, then the next to 1A. If it was threesomes on single stage
+# holes like 1 then 18, then 17A, it would start to fill at 17a on late adds."
+def first_open(groups):
+    return [g["slot_label"] for g in fill_order(groups) if len(g["players"]) < 4]
+P = lambda n: [{}] * n
+k1 = [{"slot_label": l, "group_num": 0, "players": P(n)} for l, n in
+      (("1A", 3), ("1B", 3), ("18A", 3), ("17A", 4), ("17B", 4), ("16A", 4))]
+check("Kerry's example: late adds go 18A, then 1B, then 1A", first_open(k1) == ["18A", "1B", "1A"], first_open(k1))
+k2 = [{"slot_label": l, "group_num": 0, "players": P(n)} for l, n in
+      (("1A", 3), ("18A", 3), ("17A", 3), ("17B", 4), ("16A", 4))]
+check("Kerry's example: threesomes on 1, 18, 17A fill from 17A", first_open(k2)[0] == "17A", first_open(k2))
+
 try:
     os.remove(DB)
 except OSError:
