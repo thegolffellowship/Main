@@ -1447,6 +1447,20 @@ async function loadEventsForPicker() {
     } catch { return []; }
 }
 
+// Whose credit it becomes (Kerry 10/28): a spot bought on someone else's
+// order credits the BUYER; say so in the modal before Apply.
+async function tgfShowCreditTo(itemId, infoEl) {
+    try {
+        const r = await fetch(`/api/items/${itemId}/credit-to`);
+        if (!r.ok) return;
+        const d = await r.json();
+        let line = "";
+        if (d.buyer_id) line = `<div class="credit-to-line" style="margin-top:6px;color:#15803D;">Credit goes to: <strong>${escapeHtml(d.buyer_name || "the buyer")}</strong> (bought on their order${d.reason && d.reason.startsWith("coupon") ? ", " + escapeHtml(d.reason) : ""})</div>`;
+        else if (d.hold) line = `<div class="credit-to-line" style="margin-top:6px;color:#b91c1c;">Credit on hold: ${escapeHtml(d.hold)}</div>`;
+        if (line && infoEl && !infoEl.querySelector(".credit-to-line")) infoEl.insertAdjacentHTML("beforeend", line);
+    } catch (e) { /* the server still routes the credit; this is only the label */ }
+}
+
 async function openCreditModal(itemId) {
     const item = allItems.find(r => r.id === itemId);
     if (!item) return;
@@ -1457,6 +1471,7 @@ async function openCreditModal(itemId) {
     document.getElementById("credit-info").innerHTML =
         `<strong>${escapeHtml(displayName(item.customer || "Unknown", item.user_status))}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
         `Price: <strong>${escapeHtml(item.item_price || "$0")}</strong>`;
+    tgfShowCreditTo(itemId, document.getElementById("credit-info"));
 
     // Reset UI
     document.querySelectorAll(".credit-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "credit"));

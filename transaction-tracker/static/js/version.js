@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.615.0";
+window.TGF_VERSION = "2.615.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.615.1",
+    date: "2026-10-28",
+    title: "The Credit modal says whose credit it becomes",
+    changes: [
+      "Kerry 10/28 (screenshot of the Credit modal on Peter Rundqvist's Silverhorn row): \"Why is it showing Peter Rundqvist when I click credit then?\" The modal names the ROW being credited; since v2.615.0 the server sends that credit to the buyer, but the modal never said so. Both Credit modals (Transactions and Events) now add a line under the price: \"Credit goes to: Jeff Young (bought on their order, coupon tgf-jeff)\", or \"Credit on hold: …\" when the order's personal coupon has no owner on file. New read GET /api/items/<id>/credit-to (manager). Guard test_credit_buyer.py section 7."
+    ]
+  },
   {
     version: "2.615.0",
     date: "2026-10-28",

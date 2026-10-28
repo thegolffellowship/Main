@@ -9762,6 +9762,22 @@ def api_credit_item(item_id):
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
 
 
+@app.route("/api/items/<int:item_id>/credit-to")
+@require_role("manager")
+def api_credit_to(item_id):
+    """Whose credit this row's Credit / WD credit becomes (Kerry 10/28:
+    "Why is it showing Peter Rundqvist when I click credit then?"). The
+    Credit modals show it so the manager sees the buyer before applying."""
+    from email_parser import credit_buyer as _cb
+    from email_parser import database as _db
+    with _db._connect() as _c:
+        row = _c.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        b = _cb.buyer_of(_c, dict(row))
+    return jsonify({"item_id": item_id, "player": row["customer"], **b})
+
+
 @app.route("/api/items/<int:item_id>/wd", methods=["POST"])
 @require_role("manager")
 def api_wd_item(item_id):

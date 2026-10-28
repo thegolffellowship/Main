@@ -109,5 +109,18 @@ check("Peter none", credits(848) == 0, credits(848))
 check("reverse wd ok", db.reverse_credit(peter, db_path=DB))
 check("Jeff back to $49", abs(credits(88) - 49) < 0.01, credits(88))
 
+print("7. The Credit modal is told whose credit it becomes (Kerry 10/28)")
+os.environ["DISABLE_SCHEDULER"] = "1"
+import app as appmod                                               # noqa: E402
+cl = appmod.app.test_client()
+with cl.session_transaction() as s_:
+    s_["role"] = "manager"
+d = cl.get(f"/api/items/{peter}/credit-to").get_json()
+check("Peter's row -> Jeff Young", d.get("buyer_id") == 88 and d.get("buyer_name") == "Jeff Young", d)
+d = cl.get(f"/api/items/{dee}/credit-to").get_json()
+check("Dee's row -> on hold", "tgf-cal" in (d.get("hold") or ""), d)
+d = cl.get(f"/api/items/{cal}/credit-to").get_json()
+check("Cal's own row (unmapped code, but own order) -> hold too, shared order", "hold" in d, d)
+
 print("FAILED: " + ", ".join(F) if F else "ALL PASS")
 sys.exit(1 if F else 0)

@@ -1266,7 +1266,7 @@ becomes `transferred` (a WD keeps `wd` with `credit_amount` cleared) with
 `transferred_to_id` → a new credited row for the buyer (`email_uid`
 `buyer-credit-<item>-<ms>`, same event name, note naming whose spot).
 `reverse_credit` deletes that row while still credited and refuses once the
-buyer has used it. Logged `credit-buyer` / `credit_to_buyer`. Read-only bridge
+buyer has used it. Logged `credit-buyer` / `credit_to_buyer`. Both Credit modals show "Credit goes to: <buyer>" (or "Credit on hold") from `GET /api/items/<id>/credit-to` (v2.615.1). Read-only bridge
 `scoring-coupon-owners`. Guard `test_credit_buyer.py`.
 
 ## Who did it: the UI action log (v2.615.0, Kerry 2026-10-28)

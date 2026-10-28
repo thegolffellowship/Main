@@ -13702,6 +13702,13 @@
         document.getElementById("ev-credit-info").innerHTML =
             `<strong>${escapeHtml(item.customer || "Unknown")}</strong> &mdash; ${escapeHtml(item.item_name || "")}<br>` +
             `Price: <strong>${escapeHtml(stripPriceSuffix(item.item_price) || "$0")}</strong>`;
+        // Whose credit it becomes (Kerry 10/28) — the buyer on someone else's order.
+        fetch(`/api/items/${itemId}/credit-to`).then(r => r.ok ? r.json() : null).then(d => {
+            const el = document.getElementById("ev-credit-info");
+            if (!d || !el || el.querySelector(".credit-to-line") || evCreditItemId !== itemId) return;
+            if (d.buyer_id) el.insertAdjacentHTML("beforeend", `<div class="credit-to-line" style="margin-top:6px;color:#15803D;">Credit goes to: <strong>${escapeHtml(d.buyer_name || "the buyer")}</strong> (bought on their order${(d.reason || "").startsWith("coupon") ? ", " + escapeHtml(d.reason) : ""})</div>`);
+            else if (d.hold) el.insertAdjacentHTML("beforeend", `<div class="credit-to-line" style="margin-top:6px;color:#b91c1c;">Credit on hold: ${escapeHtml(d.hold)}</div>`);
+        }).catch(() => {});
 
         // Transfer / Partial Refund don't make sense on +PAY children — they're
         // top-up payments tied to a parent registration, not standalone purchases.
