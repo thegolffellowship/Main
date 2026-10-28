@@ -141,6 +141,7 @@ def tick(now=None, db_path=None) -> dict:
             "SELECT id FROM events WHERE substr(event_date, 1, 10) = ? "
             "AND COALESCE(status, 'active') = 'active'", (now.date().isoformat(),))]
     out = {}
+    live_any = False
     for eid in ids:
         if not se.event_enabled(eid, db_path):
             continue
@@ -189,4 +190,27 @@ def tick(now=None, db_path=None) -> dict:
                 logger.exception("scoring window: race close failed for %s", eid)
         if did:
             out[eid] = did
+        if st.get("last_score_at") and not st.get("closed"):
+            live_any = True
+    # LIVE POINTS (Kerry 10/28): while any of today's events is in play,
+    # rebuild the Tracker's races every run (5 minutes) so the standings
+    # carry the strokes saved so far (tracker_points live lines).
+    if live_any:
+        out["live_points"] = refresh_live_points(db_path=db_path)
     return {"status": "ran", "events": out}
+
+
+def refresh_live_points(db_path=None) -> dict:
+    """Rebuild the Tracker-computed races (and Monthly, inside the refresh)."""
+    from email_parser import database as db
+    from email_parser import tracker_points as tp
+    res = {}
+    if not tp.tracker_source_on(db_path):
+        return {"skipped": "points_source is not tracker"}
+    for rk in tp.TRACKER_RACES:
+        try:
+            res[rk] = db.refresh_points_race_standings(rk, db_path=db_path)
+        except Exception as e:
+            logger.exception("live points: %s failed", rk)
+            res[rk] = f"error: {e}"
+    return res

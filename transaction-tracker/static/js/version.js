@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.617.0";
+window.TGF_VERSION = "2.618.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.618.0",
+    date: "2026-10-28",
+    title: "Live points during play: Monthly at every event, the season races at a finale",
+    changes: [
+      "Kerry 10/28: \"Shouldn't we know the points standings updates during the event too? Live? So when the last score is entered we already know the winners.\" tracker_points.event_lines now gives LIVE lines for today's entered event that has not published yet: each player's net Stableford so far from the strokes saved on his card (an 18 by nine). The season races take them only at a finale (Kerry #2462-F: City Championships and Fall Championships are real-time; regular nights update after the event); Monthly takes them at every event (#2466-F). While any of today's events is in play, the 5-minute scoring-window job rebuilds the Tracker's races (and Monthly) so the board follows the round. Live lines are provisional: the published cards replace them, and race close never treats them as the finale's result. Guard test_live_points.py.",
+      "Kerry 10/28: \"I'm eligible.\" The race prizes treat the owner like any bought-in player (no change)."
+    ]
+  },
   {
     version: "2.617.0",
     date: "2026-10-28",

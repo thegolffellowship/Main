@@ -131,6 +131,7 @@ def event_lines(db_path=None, through: str | None = None) -> tuple[list, list]:
         code = f"{m.group(1).lower()}{m.group(2)}.{m.group(3)}"
         ev_chapter = ev.get("chapter") or ("San Antonio" if m.group(1).lower() == "s" else "Austin")
         raw: list = []
+        live = False
         r = ruled.get(str(ev["id"]))
         if r:
             for cid, pts in (r.get("points") or {}).items():
@@ -141,11 +142,21 @@ def event_lines(db_path=None, through: str | None = None) -> tuple[list, list]:
                     "SELECT DISTINCT COALESCE(source, 'gg') FROM scoring_rounds "
                     "WHERE event_id = ?", (ev["id"],)).fetchall()}
             if not srcs:
-                continue                  # not published yet
-            if srcs != {"entry"}:
+                # LIVE (Kerry 10/28: "Shouldn't we know the points standings
+                # updates during the event too? Live? So when the last score
+                # is entered we already know the winners"): today's entered
+                # event, not published yet, scores from the strokes saved so
+                # far. Lines carry live=True; season races use them only at a
+                # finale (#2462-F), Monthly at every event (#2466-F).
+                lv = _live_lines(ev, db_path)
+                if lv is None:
+                    continue              # not published yet, not live
+                raw, live = lv, True
+            elif srcs != {"entry"}:
                 warnings.append(f"{ev['item_name']}: cards from {sorted(srcs)} — only published "
                                 f"entered cards (or a ruled event) score points; skipped")
                 continue
+        if not r and not live:
             st = db.event_engine_state(ev["item_name"], db_path=db_path)
             if st.get("error"):
                 warnings.append(f"{ev['item_name']}: {st['error']}")
@@ -194,8 +205,46 @@ def event_lines(db_path=None, through: str | None = None) -> tuple[list, list]:
                     "member": not _non_member(p.get("status")),
                     "date": ev["event_date"], "event_id": ev["id"], "code": code,
                     "championship": "championship" in (ev["item_name"] or "").lower(),
+                    "live": live,
                     "nine": nine, "points": max(0.0, pts)})
     return lines, warnings
+
+
+def _live_lines(ev: dict, db_path=None) -> list | None:
+    """Points SO FAR for today's entered event that has not published:
+    [(customer_id, nine, points)] from the strokes saved on each card (net
+    Stableford on the holes played; an 18 by nine). None when the event is
+    not live today. Provisional and display-only: nothing is paid off it,
+    and the published cards replace it at closeout."""
+    from . import database as db
+    from . import live_scoring as ls
+    from .timezone_utils import today_central_str
+    if str(ev.get("event_date") or "")[:10] != today_central_str():
+        return None
+    try:
+        from .score_entry import event_enabled
+        if not event_enabled(int(ev["id"]), db_path):
+            return None
+        st = db.event_engine_state(ev["item_name"], db_path=db_path)
+        if st.get("error"):
+            return None
+        formulas = (db.get_championship_formulas(db_path=db_path)
+                    if st["meta"].get("championship") else db.get_scoring_formulas(db_path))
+        out = []
+        for c in ls.build_cards(st, formulas):
+            if not c.get("customer_id") or not c.get("thru"):
+                continue
+            nines = c.get("points_by_nine")
+            if nines:
+                for n in nines:
+                    if n.get("thru"):
+                        out.append((int(c["customer_id"]), n["nine"], float(n["points"] or 0)))
+            else:
+                out.append((int(c["customer_id"]), None, float(c.get("stableford_net") or 0)))
+        return out
+    except Exception:
+        logger.exception("live points for %s failed (left out)", ev.get("item_name"))
+        return None
 
 
 def _wins(position) -> int:
@@ -228,6 +277,11 @@ def build_race(race_key: str, db_path=None, tracker_lines: list | None = None) -
     if tracker_lines is None:
         tracker_lines, w = event_lines(db_path=db_path)
         warnings += w
+    # Season races move live only at a finale (Kerry #2462-F: "Regular season
+    # events ... would only show post event updates (as opposed to season
+    # finales like the City Championships and Fall City Championships which
+    # would be real-time"). Monthly keeps every live line (#2466-F).
+    tracker_lines = [l for l in tracker_lines if not l.get("live") or l.get("championship")]
     people: dict = {}
     with db._connect(db_path) as conn:
         db._ensure_gg_points_table(conn)

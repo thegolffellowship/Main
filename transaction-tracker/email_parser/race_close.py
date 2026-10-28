@@ -100,7 +100,7 @@ def run(event_id: int, apply: bool = False, db_path=None) -> dict:
     # 1. The finale must be IN the standings: published, not held.
     lines, warnings = tp.event_lines(db_path=db_path)
     held = [w for w in tp.held_events(warnings) if (ev["item_name"] or "\0") in w]
-    counted = any(int(l.get("event_id") or 0) == ev["id"] for l in lines)
+    counted = any(int(l.get("event_id") or 0) == ev["id"] and not l.get("live") for l in lines)
     if held:
         out["held"] = f"the finale's points are HELD ({held[0]})"
     elif not counted:

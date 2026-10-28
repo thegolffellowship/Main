@@ -1285,7 +1285,16 @@ Net")` with customer_id → `gg_points_race_final[rk] = event_date` (board WON +
 item "RACE PRIZES HELD"; a mailbox post (topic closeout) lists the rows.
 Spotlight: `cup_titles.CUP_NAMES` carries the two fall keys and
 `_spotlight_cup_titles` passes their champions once final. Bridge
-`scoring-race-close:<event_id>[|apply]`. Guard `test_race_close.py`.
+`scoring-race-close:<event_id>[|apply]`. Guard `test_race_close.py`. Kerry
+10/28: the owner is eligible for race prizes like any bought-in player.
+
+**Live points (v2.618.0, Kerry 10/28: "So when the last score is entered we
+already know the winners").** `tracker_points._live_lines`: today's enabled
+score-entry event with no published `scoring_rounds` gives points so far from
+`event_engine_state` (lines `live=True`, an 18 by nine). `build_race` keeps live
+lines only for a championship (finale, #2462-F); Monthly keeps all (#2466-F).
+`scoring_window.tick` calls `refresh_live_points` every run while an event is in
+play. race_close counts only non-live lines. Guard `test_live_points.py`.
 
 ## Who did it: the UI action log (v2.615.0, Kerry 2026-10-28)
 
