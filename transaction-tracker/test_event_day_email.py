@@ -5,7 +5,7 @@ never twice per event + customer. Graph is mocked — nothing leaves.
 
 Run: python3 test_event_day_email.py
 """
-import os, sys, io, contextlib, logging, tempfile
+import re, os, sys, io, contextlib, logging, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 DB = tempfile.mktemp(suffix=".db")
 os.environ["DATABASE_PATH"] = DB
@@ -183,11 +183,20 @@ check("…and the handicap chain in words",
 check("no strip without stroke indexes (never guessed)",
       ede.card_strip({"ph": "6", "si_by_hole": {}}, {"holes": [10]}, {}, None, None) == "")
 from email_parser import member_teesheet as mts
+from email_parser import after_lock as _al
+_pre_ei = mts.render_teesheet(mts.build_teesheet(EV, db_path=DB))
+check("before the Event Info, a shotgun's member tee sheet hides the holes (Kerry 10/28)",
+      "Group 1" in _pre_ei and "Hole 1A" not in _pre_ei and not re.search(r">\s*\d{1,2}[AB]\b", _pre_ei)
+      and "Shotgun 8:00 AM" in _pre_ei, _pre_ei[:600])
+_al._set(_al.STATE_KEY.format(int(EV)), {"seeded": True}, DB)
 td = mts.build_teesheet(EV, db_path=DB)
 page = mts.render_teesheet(td)
 check("the member tee sheet lists every group with its anchor and players",
       'id="g1"' in page and 'id="g2"' in page and "Ann Able" in page and "Gus Gray" in page
       and "Hole 1A \u00b7 8:00 AM" in page, page[:300])
+with db._connect(DB) as conn:  # back to "Event Info not sent" for the sections below
+    conn.execute("DELETE FROM app_settings WHERE key = ?", (_al.STATE_KEY.format(int(EV)),))
+    conn.commit()
 check("each seated player shows his TGF index or No handicap (Kerry 10/20)",
       all(("HCP " in r or "No handicap" in r) for r in page.split('<div class="p"')[1:]), page[:600])
 with db._connect(DB) as conn:

@@ -356,6 +356,34 @@ check("an approval on event morning sends nothing", "refused" in r and not SENT,
 _pa = open("email_parser/pairings_approval.py", encoding="utf-8").read()
 check("the approval path goes through the same _deliver", "from email_parser.teetimes_email import _deliver" in _pa)
 
+print("9. No hole assignments in the tee-times email for a shotgun (Kerry 10/28)")
+import re as _re
+def _pk(start_label, labels, start_label_18=None, holes="18"):
+    return {"event": {"course": "Kissing Tree Golf Club", "event_date": "2026-10-31", "start_label": start_label,
+                      "start_label_18": start_label_18, "start_clock": "8:30 AM", "start_type": "Shotgun"},
+            "holes_key": holes,
+            "groups": [{"group_num": i + 1, "holes": holes, "slot_label": lab,
+                        "start_line": (f"Hole {lab} | 8:30 AM" if start_label.startswith("Shotgun") else f"{lab} | Hole 1"),
+                        "players": [{"name": f"P{i}a", "cart_pos": 1}, {"name": f"P{i}b", "cart_pos": 2}],
+                        "carts": []} for i, lab in enumerate(labels)]}
+_sg = _pk("Shotgun 8:30 AM", ["18A", "17A", "17B"])
+_html, _why = tt.tee_sheet_block(_sg, 3305)
+check("shotgun: groups by number, no hole labels", not _why and "Group 1" in _html and "Group 3" in _html
+      and not _re.search(r"\b1[78][AB]\b", _html) and "Hole " not in _html, _html)
+check("shotgun: the header states the start time and the format", "Shotgun 8:30 AM" in _html, _html)
+_subj, _body, _w = tt._open_message(_sg, {0: 2}, "Ann", "https://reg.example.test", "https://stop.example.test",
+                                     "Kissing Tree", event_day="Saturday")
+check("open-spots email: no hole labels on a shotgun either", "Group 1" in _body
+      and not _re.search(r"\b1[78][AB]\b", _body) and "8:30 AM shotgun" in _subj, (_subj, _body[:400]))
+_tt = _pk("First tee 8:00 AM", ["8:00 AM", "8:10 AM"])
+_html2, _ = tt.tee_sheet_block(_tt, 3305)
+check("tee times keep their times (the time IS the start)", "8:10 AM" in _html2 and "Group 1" not in _html2, _html2)
+_cb = _pk("First tee 4:00 PM", ["4:00 PM"], start_label_18="Shotgun 8:30 AM", holes="9")
+_cb["groups"] += _pk("Shotgun 8:30 AM", ["1A"], holes="18")["groups"]
+_html3, _ = tt.tee_sheet_block(_cb, 3305)
+check("a 9/18 Combo: the shotgun leg hides holes, the tee-time leg keeps its time",
+      "18 · Group 1" in _html3 and "4:00 PM" in _html3 and not _re.search(r"\b1A\b", _html3), _html3)
+
 try:
     os.unlink(DB)
 except OSError:

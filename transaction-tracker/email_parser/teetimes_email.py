@@ -250,11 +250,45 @@ def _base_url() -> str:
         return ""
 
 
+def leg_is_shotgun(ev: dict, holes) -> bool:
+    """Does this leg start on a shotgun? The pack's own start labels say so
+    ("Shotgun 8:30 AM"); a 9/18 Combo's 18 leg has its own label."""
+    lab = ev.get("start_label_18") if (str(holes) == "18" and ev.get("start_label_18")) else ev.get("start_label")
+    return str(lab or "").strip().lower().startswith("shotgun")
+
+
+def public_group_starts(pack: dict) -> list:
+    """The start cell for each group of the pack, in pack order. A SHOTGUN
+    leg shows "Group N", never the hole (Kerry 10/28: "For initial pairings
+    emails we will not show hole assignments, only the start time and start
+    format (shotgun v tee times)"); the start time and the word shotgun are
+    in the header. A tee-time leg keeps its time, which IS the start. Groups
+    are numbered per leg, counting only groups with a player, and a Combo
+    with both legs present names the leg ("18 · Group 1")."""
+    ev = pack.get("event") or {}
+    groups = pack.get("groups") or []
+    legs = {str(g.get("holes")) for g in groups if g.get("holes")}
+    n: dict = {}
+    out = []
+    for g in groups:
+        h = str(g.get("holes") or "")
+        if not any((p.get("name") or "").strip() for p in g.get("players") or []):
+            out.append("")
+            continue
+        if leg_is_shotgun(ev, h):
+            n[h] = n.get(h, 0) + 1
+            out.append((f"{h} · " if len(legs) > 1 else "") + f"Group {n[h]}")
+        else:
+            out.append((g.get("start_line") or g.get("slot_label") or "").replace(" | ", " · "))
+    return out
+
+
 def tee_sheet_block(pack: dict, event_id: int) -> tuple[str, list]:
     """(html, problems). Any problem leaves the block empty, which holds
     every message that uses it."""
     ev = pack.get("event") or {}
-    groups = [g for g in pack.get("groups") or []
+    _starts = public_group_starts(pack)
+    groups = [dict(g, _public_start=_starts[i]) for i, g in enumerate(pack.get("groups") or [])
               if any((p.get("name") or "").strip() for p in g.get("players") or [])]
     why = []
     if not groups:
@@ -287,7 +321,7 @@ def tee_sheet_block(pack: dict, event_id: int) -> tuple[str, list]:
         for p in players:
             if id(p) not in seated:
                 lines.append(_e(p["name"].strip()))
-        start = (g.get("start_line") or g.get("slot_label") or "").replace(" | ", " · ")
+        start = g["_public_start"]
         rows.append(f'<tr><td style="padding:8px 10px;border-top:1px solid #E5E7EB;vertical-align:top;'
                     f'white-space:nowrap;"><b>{_e(start)}</b></td>'
                     f'<td style="padding:8px 10px;border-top:1px solid #E5E7EB;">{"<br>".join(lines)}</td></tr>')
@@ -509,6 +543,7 @@ def _open_message(pack: dict, open_list: dict, first: str, reg_url: str, stop_ur
            f'<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
            f'{_button(reg_url, OPEN["button"], O, "#ffffff")}</tr></table></td></tr></table>')
     rows = []
+    _starts = public_group_starts(pack)
     for i, g in enumerate(pack.get("groups") or []):
         names = [_e(p["name"].strip()) for p in sorted(g.get("players") or [],
                                                          key=lambda x: x.get("cart_pos") or 0)
@@ -516,7 +551,7 @@ def _open_message(pack: dict, open_list: dict, first: str, reg_url: str, stop_ur
         if not names:
             continue
         names += [f'<span style="color:{O};font-weight:bold;">{_e(OPEN["open_seat"])}</span>'] * open_list.get(i, 0)
-        gstart = (g.get("start_line") or g.get("slot_label") or "").replace(" | ", " · ")
+        gstart = _starts[i]
         rows.append(f'<tr><td style="padding:8px 10px;border-top:1px solid #E5E7EB;vertical-align:top;'
                     f'white-space:nowrap;"><b>{_e(gstart)}</b></td>'
                     f'<td style="padding:8px 10px;border-top:1px solid #E5E7EB;">{"<br>".join(names)}</td></tr>')

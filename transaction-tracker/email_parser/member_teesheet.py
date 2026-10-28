@@ -108,7 +108,19 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
             blinds = blinds or {}
         finally:
             conn.close()
-    for g in pack.get("groups") or []:
+    # Holes stay off the page until the Event Info has gone (Kerry 10/28:
+    # "For initial pairings emails we will not show hole assignments, only
+    # the start time and start format"); the tee-times email links here.
+    # after_lock_state:<id> is written by the Event Info send.
+    hide = False
+    try:
+        from email_parser import after_lock as _al
+        hide = not _al._get(_al.STATE_KEY.format(int(event_id)), db_path)
+    except Exception:
+        hide = False
+    from email_parser.teetimes_email import public_group_starts
+    _pub = public_group_starts(pack) if hide else []
+    for _gi, g in enumerate(pack.get("groups") or []):
         players = []
         for p in sorted(g.get("players") or [], key=lambda x: x.get("cart_pos") or 0):
             if not (p.get("name") or "").strip():
@@ -134,7 +146,8 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
             brows.append({"name": b["name"].strip(), "why": why,
                           "index": _fmt_index(idx) if idx is not None else ""})
         groups.append({"group_num": g.get("group_num"),
-                       "start": (g.get("start_line") or g.get("slot_label") or "").replace(" | ", " · "),
+                       "start": (_pub[_gi] if hide else
+                                 (g.get("start_line") or g.get("slot_label") or "").replace(" | ", " · ")),
                        "players": players, "blinds": brows})
     from email_parser.event_day_email import event_short_name, _weekday
     try:
@@ -184,7 +197,10 @@ def build_teesheet(event_id: int, db_path=None) -> dict | None:
             "day": _weekday(ev.get("event_date")), "date": date,
             "course": ev.get("course") or "",
             "chapter": "" if chap.upper() == "TGF" else chap,
-            "groups": groups, "player_count": sum(len(g["players"]) for g in groups)}
+            "groups": groups, "player_count": sum(len(g["players"]) for g in groups),
+            # While holes are hidden the start time + format stand in for them.
+            "start": (" / ".join(x for x in (ev.get("start_label"), ev.get("start_label_18")) if x)
+                      if hide and groups else "")}
 
 
 def render_teesheet(data: dict) -> str:
@@ -227,7 +243,7 @@ def render_teesheet(data: dict) -> str:
                          + "".join(rows) + "</section>")
         body = "".join(cards)
     title = f"{data['day']} at {data['title']}" if data["day"] else data["title"]
-    sub = " · ".join(x for x in (data["date"], data["course"],
+    sub = " · ".join(x for x in (data["date"], data["course"], data.get("start") or "",
                                      f"{data['player_count']} players" if data["player_count"] else
                                      (f"{len(data.get('registered') or [])} registered"
                                       if data.get("registered") else "")) if x)
