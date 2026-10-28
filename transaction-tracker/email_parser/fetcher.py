@@ -52,15 +52,28 @@ TRANSACTION_SUBJECTS = [
 
 def _json_or_retry(resp: requests.Response, **kwargs):
     """The body of a Graph GET as JSON; if the reply arrived cut off or garbled
-    (JSONDecodeError at ~110 KB on 10/18 and ~243 KB on 10/19, both with the host
-    at load 80-90 and a mail send running), ask once more. A GET is safe to repeat."""
-    try:
-        return resp.json()
-    except ValueError as exc:
-        logger.warning("Graph API reply for %s would not parse (%s) — asking once more", resp.url, exc)
-        again = _request_with_retry("get", resp.url, **kwargs)
-        again.raise_for_status()
-        return again.json()
+    (JSONDecodeError at ~110 KB on 10/18, ~243 KB on 10/19 and ~259 KB on 10/23,
+    each with the host at load 80-105), ask again, up to twice with a short wait.
+    A GET is safe to repeat. If every try fails the error says how many bytes
+    came back against what the server announced, so the cause can be named."""
+    waits = (2, 4)
+    seen = []
+    cur = resp
+    for attempt in range(len(waits) + 1):
+        try:
+            return cur.json()
+        except ValueError as exc:
+            seen.append("%d bytes of %s announced (%s)" % (
+                len(getattr(cur, "content", b"") or b""),
+                (getattr(cur, "headers", {}) or {}).get("Content-Length", "none"), exc))
+            if attempt == len(waits):
+                raise ValueError("Graph reply would not parse after %d tries: %s" % (
+                    attempt + 1, "; ".join(seen))) from exc
+            logger.warning("Graph API reply for %s would not parse (%s) — asking again in %ds",
+                           resp.url, seen[-1], waits[attempt])
+            time.sleep(waits[attempt])
+            cur = _request_with_retry("get", resp.url, **kwargs)
+            cur.raise_for_status()
 
 
 def _get_graph_token(tenant_id: str, client_id: str, client_secret: str) -> str | None:

@@ -190,7 +190,9 @@ def review(event_id: int, db_path=None, light: bool = False) -> dict:
                 "sent": emails_sent(event_id, db_path), "state": st}
     try:
         from email_parser.pairings_audit import event_pairing_audit
-        au = event_pairing_audit(int(event_id), db_path=db_path) or {}
+        # Only the hard flags are read here; the generator's own alternative (a whole
+        # second pairings run, ~10 s at host load 90 on 10/26) is not shown.
+        au = event_pairing_audit(int(event_id), db_path=db_path, with_alternative=False) or {}
         flags = [f for f in au.get("flags") or [] if f.get("kind") == "hard"]
     except Exception:
         logger.exception("pairings approval: audit failed (non-fatal)")

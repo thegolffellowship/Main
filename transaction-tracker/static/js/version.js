@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.605.1";
+window.TGF_VERSION = "2.605.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.605.2",
+    date: "2026-10-28",
+    title: "Health (was 2.604.1 on its branch): approve check no longer re-runs the generator, slow lines, cut-off Graph reads retried",
+    changes: [
+      "Digest #2412 (10/27). (1) The approve-pairings page's slow half (/approve-pairings/check, which Tracker Build moved off the page itself in v2.604.0) took 20.6 s at host load 92-97 on 10/26-27, and the laps added in v2.577.3 name where: the pairings audit 10.5 s and the Event Info build 8.6 s. The audit was running the pairings generator a second time just to print \"the generator's alternative\", and the approve page reads only the hard rule flags, so it no longer asks for it (event_pairing_audit(..., with_alternative=False), the page shows the same flags). Expect about half the time; the Event Info build (the GAMES tab read, 8.6 s) is the next piece and is left for the Tracker Build lane. (2) Slow lines: approve_pairings_check 15 s; the screenshot jobs screens_capture_deploy and screens_capture_nightly 600 s (they ran 116 s typical and 363 s at most, each flagged slow against the 2-minute default); the invite-send bridge 180 s (Wednesday's reminder to 221 people took 99 s). (3) A Microsoft mail read that comes back cut off (JSONDecodeError at 110 KB on 10/18, 243 KB on 10/19 and 259 KB on 10/23, after the single retry was live) is now asked for up to twice more, after 2 s and 4 s, and if every try fails the error names how many bytes came back against how many the server announced. Reads only; a mail not read is picked up by the next 5-minute run. No email, audience, wording, send behaviour or money changes."
+    ]
+  },
   {
     version: "2.605.1",
     date: "2026-10-28",

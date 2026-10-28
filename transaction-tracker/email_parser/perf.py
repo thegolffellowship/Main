@@ -75,7 +75,7 @@ SLOW_MS = {
     "scoring-scorecards": 60_000,    # |pdf|all binds 24 layout combos in Chromium (21-26 s on 9/29)
     "scoring-spotlight": 20_000,     # staff bridge; a cold Player Spotlight build took 13 s on 10/5, by design after >24 h idle
     "scoring-gg-history": 60_000,     # staff GG-archive ingest: each call fetches Golf Genius pages (p50 1.5 s, 10-39 s at host load 100 on 10/15)
-    "scoring-event-invite": 90_000,   # staff bridge: |send| mails a whole audience through Graph (17.4 s on 10/18 for one call of 236 recipients at load 93); reads stay fast
+    "scoring-event-invite": 180_000,  # staff bridge: |send| mails a whole audience through Graph (17.4 s on 10/18, 99 s on 10/21 for 221 recipients); reads stay fast
     "scoring-import-orders": 60_000,  # staff order-email import through Graph (19.8 s on 10/15)
     "event_invite_auto": 900_000,     # job: sends mail to a roster through Graph (346 s on 10/14 at host load 110)
     "results_email_auto": 900_000,    # job: the 6 AM results email, one message per recipient (233 s for 209 on 10/14)
@@ -83,6 +83,9 @@ SLOW_MS = {
     "teetimes_email": 900_000,        # job: one Graph send per roster player, course and manager
     "scoring-event-day-email": 60_000, # sends one email per roster player through Graph: p50 6.7 s, 12 s on 10/12
     "approve_pairings_page": 15_000,  # route: builds every player's Event Info email to show the counts and a sample (10.4 s and 11.6 s on 10/19 at load 90); laps in the sample say which part
+    "approve_pairings_check": 15_000, # route: the approve page's slow half (flags, who gets no email, the sample): audit 10.5 s + build_emails 8.6 s on 10/27 before the generator re-run was dropped from the audit
+    "screens_capture_deploy": 600_000, # job: headless-Chromium screenshots of every catalogued screen after each deploy (116 s p50, 348 s max at host load 74-110 on 10/26)
+    "screens_capture_nightly": 600_000, # job: the same capture at night (363 s on 10/27)
     "approve_pairings_api": 180_000,  # route: Approve also sends the tee-times emails inline, one Graph call each (97.6 s on 10/19 at load 80)
     "scoring-pairings-run": 60_000,   # staff bridge: |resend and |prompt send mail (15-20 s on 10/19 at load 76-91)
     "scoring-health": 90_000,        # the report itself: a cold R2 listing + a saturated host took 16-20 s on 10/8; the 5:00 read may wait up to 75 s on the replica (33.6 s on 10/19)
