@@ -1261,8 +1261,11 @@ staging step (`_stage_shotgun_smalls_lead`, ring 9 or 18) puts threesomes, then
 the fastest groups, there (Kerry: "Faster groups just always need to be at the
 front of the pack ... threesomes are automatically placed in front of
 foursomes"). Before this it read "front" as the highest hole number, wrong for a
-reverse or staged shotgun. seat_fill / withdrawal_fold still order shotgun holes
-by number (lowest/highest), not yet by the train.
+reverse or staged shotgun. Seat-fill (`seat_fill.fill_order`: back of the pack
+first) and the withdrawal fold (`donor_order`, the dissolve tie-break: front of
+the pack first) read the same play order (`seat_fill.shotgun_back_key` /
+`shotgun_front_key`); a standard shotgun orders exactly as before. The checkbox
+reads "1 Group after Par 3's" (Kerry's wording).
 
 **One group on short holes (v2.607.0, Kerry 10/28):** "standard shotguns need
 to put 2 per hole starting on that side but 1 per hole on par 3s and par 4s

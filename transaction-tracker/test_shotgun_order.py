@@ -178,6 +178,21 @@ check("the threesome leads a reverse shotgun from hole 1", out[0] == ["e", "f", 
 db.update_event(KTE, {"shotgun_staging": {"reverse": False, "locked": False, "after_par3": True}}, db_path=DB)
 check("saving the option keeps it", db.shotgun_staging(KTE, db_path=DB)["after_par3"])
 
+print("7. Late adds and withdrawals follow the pack in play order")
+from email_parser.seat_fill import fill_order
+from email_parser.withdrawal_fold import donor_order
+G = lambda l: {"slot_label": l, "group_num": 0, "players": []}
+std = [G(x) for x in ["1A", "1B", "2A", "3A", "3B"]]
+check("standard: late adds fill from the back (1B first), unchanged",
+      [g["slot_label"] for g in fill_order(std)] == ["1B", "1A", "2A", "3B", "3A"])
+check("standard: donors from the front (3B first), unchanged",
+      [g["slot_label"] for g in donor_order(std)] == ["3B", "3A", "2A", "1B", "1A"])
+rev = [G(x) for x in ["1A", "18A", "17A", "17B", "16A"]]
+check("reverse: late adds fill from the back of the pack (16 first)",
+      [g["slot_label"] for g in fill_order(rev)] == ["16A", "17B", "17A", "18A", "1A"])
+check("reverse: donors from the front of the pack (1 first)",
+      [g["slot_label"] for g in donor_order(rev)] == ["1A", "18A", "17B", "17A", "16A"])
+
 try:
     os.remove(DB)
 except OSError:

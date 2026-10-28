@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.611.0";
+window.TGF_VERSION = "2.612.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.612.0",
+    date: "2026-10-28",
+    title: "\"1 Group after Par 3's\"; late adds and withdrawal repairs follow the pack on a reverse shotgun",
+    changes: [
+      "Kerry 10/28: \"Just say '1 Group after Par 3's'\". The staging checkbox now reads exactly that.",
+      "Seat-fill (late adds take the back of the pack first) and the withdrawal fold (donors and the dissolve tie-break from the front of the pack) read shotgun holes in PLAY order, the same rule as the generator in v2.611.0. On a reverse shotgun loaded 1, 18, 17, 16 a late add now goes to 16 (the back) and a donor comes from 1 (the front); before, both went by hole number and would have picked the wrong end. A standard shotgun orders exactly as before. seat_fill.shotgun_back_key / shotgun_front_key; guard test_shotgun_order.py section 7."
+    ]
+  },
   {
     version: "2.611.0",
     date: "2026-10-28",

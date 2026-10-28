@@ -86,7 +86,10 @@ def donor_order(groups: list) -> list:
     (earliest) group first. The mirror of seat-fill, so threesomes stay out
     front."""
     if _is_shotgun(groups):
-        return sorted(groups, key=lambda g: (-_hole_key(g)[0], _hole_key(g)[1]))
+        # Front of the pack in PLAY order (Kerry 10/28: a reverse or staged
+        # shotgun's front is not its highest hole number).
+        from email_parser.seat_fill import shotgun_front_key
+        return sorted(groups, key=shotgun_front_key(groups))
     return sorted(groups, key=lambda g: int(g.get("group_num") or 0))
 
 
@@ -166,9 +169,12 @@ def fold(groups: list, ties: dict | None = None, hit: set | None = None,
                              "to": _label(dst), "to_group": dst.get("group_num"),
                              "seat": p["cart_pos"], "step": step, **({"why": why} if why else {})})
 
+    from email_parser.seat_fill import shotgun_front_key
+    _front_key = shotgun_front_key(gs) if shotgun else None
+
     def dissolve_rank(g):
         if shotgun:
-            tie2 = (-_hole_key(g)[0], _hole_key(g)[1])
+            tie2 = _front_key(g)
         else:
             gn = int(g.get("group_num") or 0)
             tie2 = (gn,) if keep_mode == "latest" else (-gn,)

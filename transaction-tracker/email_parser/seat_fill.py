@@ -56,14 +56,47 @@ def _holes_key(ev: dict, sheet: dict) -> str | None:
     return None
 
 
+def shotgun_train_rank(labels: list) -> dict:
+    """{hole: place in the pack, 0 = the FRONT} in play order (Kerry 10/28:
+    a reverse or staged shotgun's front is not its highest hole number;
+    database.shotgun_train_order). A sheet whose holes span at most nine is
+    treated as one nine, which loops on itself."""
+    from email_parser import database as db
+    hs = [int(m.group(1)) for m in (_SHOTGUN.match(x or "") for x in labels) if m]
+    if not hs:
+        return {}
+    ring = 9 if max(hs) - min(hs) <= 8 else 18
+    order = db.shotgun_train_order([f"{h}A" for h in sorted(set(hs))], ring)
+    return {int(x[:-1]): i for i, x in enumerate(order)}
+
+
+def shotgun_back_key(groups: list):
+    """Sort key BACK of the pack first, B before A on a hole: the old 'lowest
+    hole first, B before A' read in play order."""
+    rank = shotgun_train_rank([g.get("slot_label") or "" for g in groups])
+    def key(g):
+        m = _SHOTGUN.match(g.get("slot_label") or "")
+        return (-rank.get(int(m.group(1)), 0), 0 if m.group(2).upper() == "B" else 1)
+    return key
+
+
+def shotgun_front_key(groups: list):
+    """Sort key FRONT of the pack first, B before A on a hole: the old 'highest
+    hole first, B before A' read in play order."""
+    rank = shotgun_train_rank([g.get("slot_label") or "" for g in groups])
+    def key(g):
+        m = _SHOTGUN.match(g.get("slot_label") or "")
+        return (rank.get(int(m.group(1)), 0), 0 if m.group(2).upper() == "B" else 1)
+    return key
+
+
 def fill_order(groups: list) -> list:
-    """The groups in the order a late add takes them (Kerry 10/20)."""
+    """The groups in the order a late add takes them (Kerry 10/20): on a
+    shotgun the BACK of the pack first (in play order, Kerry 10/28), B
+    before A; tee times the latest group first."""
     labels = [g.get("slot_label") or "" for g in groups]
     if groups and all(_SHOTGUN.match(x) for x in labels):
-        def key(g):
-            m = _SHOTGUN.match(g.get("slot_label") or "")
-            return (int(m.group(1)), 0 if m.group(2).upper() == "B" else 1)
-        return sorted(groups, key=key)
+        return sorted(groups, key=shotgun_back_key(groups))
     return sorted(groups, key=lambda g: int(g.get("group_num") or 0), reverse=True)
 
 

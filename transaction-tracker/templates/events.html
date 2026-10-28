@@ -16351,7 +16351,7 @@
             const sec = document.createElement("div"); sec.className = "sg-stage"; sec.dataset.holes = h;
             sec.innerHTML = `<div class="sg-head"><span class="sg-title">Shotgun staging${st.leg.label ? " · " + st.leg.label + " leg" : ""}</span>` +
                 `<label class="sg-opt"><input type="checkbox" class="sg-rev" id="sg-rev-${h}"${st.reverse ? " checked" : ""}${st.locked ? " disabled" : ""}> Reverse shotgun</label>` +
-                `<label class="sg-opt"><input type="checkbox" class="sg-ap3" id="sg-ap3-${h}"${st.after_par3 ? " checked" : ""}${st.locked ? " disabled" : ""}> 1 group on the hole after a par 3</label>` +
+                `<label class="sg-opt"><input type="checkbox" class="sg-ap3" id="sg-ap3-${h}"${st.after_par3 ? " checked" : ""}${st.locked ? " disabled" : ""}> 1 Group after Par 3's</label>` +
                 `<button type="button" class="sg-lockbtn${st.locked ? " on" : ""}" id="sg-lock-${h}" title="${st.locked ? "Locked: tap to unlock and edit" : "Unlocked: tap to lock these counts"}">${st.locked ? "&#128274; Locked" : "&#128275; Unlocked"}</button></div>` +
                 `<div class="sg-scroll"></div><div class="sg-total"></div>`;
             const wrap = sec.querySelector(".sg-scroll");
