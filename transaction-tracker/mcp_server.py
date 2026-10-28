@@ -758,7 +758,10 @@ def credit_transaction(transaction_id: int, note: str = "",
             "player leaves the active roster and the money is held for a "
             "future event.",
             "Reversible with undo_credit_or_transfer.")
-    ok = credit_item(transaction_id, note)
+    try:
+        ok = credit_item(transaction_id, note)
+    except Exception as e:  # CreditHold: whose credit it is can't be told
+        return json.dumps({"error": f"Credit held: {e}"})
     _audit("credit_transaction", f"note={note!r} row={row}",
            item_id=transaction_id, outcome="ok" if ok else "no-op")
     if ok:
@@ -4205,6 +4208,14 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _r = _us.refresh() if "refresh" in [x.lower() for x in _a] else None
             return json.dumps({"hours": _h, "refresh": _r, "rows": _us.recent(hours=_h)},
                               indent=2, default=str)
+        if cmd == "scoring-coupon-owners":
+            # Read-only: every personal coupon code (tgf-<name>) on orders,
+            # its order count and owner on file (app setting coupon_owners;
+            # set with scoring-setting-set). Credit goes to the BUYER
+            # (credit_buyer.py, Kerry 10/28).
+            from email_parser import credit_buyer as _cb
+            with db._connect() as _c:
+                return json.dumps(_cb.personal_coupons(_c), indent=2, default=str)
         if cmd == "scoring-setting-get":
             # "<key>" — read an app_settings dial (null when unset, i.e.
             # the code default applies).
@@ -6596,18 +6607,31 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # blind_draws, no gen-log setting, no action log. Returns the
             # proposed groups, the cost summary, the audit's checks applied
             # to the proposed sheet, and the generation log.
-            _a = (arg or "").strip()
+            # "<event_id>|standings" (Event Ops #2484, Kerry 10/28) runs the
+            # event's SAVED pairing_mode and pairing_race_key instead of
+            # random, the way the 5:00 PM run does; still saves nothing.
+            _a, _, _m = (arg or "").strip().partition("|")
+            _a = _a.strip()
             if not _a.isdigit():
-                return json.dumps({"error": "give scoring-pairings-generate-preview:<event_id>"})
+                return json.dumps({"error": "give scoring-pairings-generate-preview:<event_id>[|standings]"})
             _eid = int(_a)
+            _mode, _rk = "random", None
+            if _m.strip().lower() in ("standings", "saved"):
+                with db._connect() as _c:
+                    _ev = _c.execute("SELECT pairing_mode, pairing_race_key FROM events WHERE id = ?",
+                                     (_eid,)).fetchone()
+                _mode = ((_ev["pairing_mode"] if _ev else None) or "random")
+                _rk = (_ev["pairing_race_key"] if _ev else None) or None
             try:
-                res = db.generate_event_pairings(_eid, mode="random", protect_partner_requests=True,
-                                                 save_log=False)
+                res = db.generate_event_pairings(_eid, mode=_mode, race_key=_rk,
+                                                 protect_partner_requests=True, save_log=False)
             except ValueError as e:
                 return json.dumps({"error": str(e)})
             sets = {h: res[h] for h in ("9", "18") if res.get(h)}
             _glog = res.get("gen_log") or {}
             out = {"event_id": _eid, "preview": True, "saved": False,
+                   "mode": _mode, "race_key": _rk,
+                   "passes": {h: (v or {}).get("passes") for h, v in (_glog.get("holes") or {}).items()},
                    "notes": res.get("mp_notes") or [],
                    "groups": {h: [{"slot": g.get("slot_label"),
                                    "players": [p["name"] for p in sorted(g["players"], key=lambda p: p["cart_pos"])]}

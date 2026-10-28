@@ -40,6 +40,7 @@ from email_parser.database import (
     delete_item,
     delete_manual_player,
     credit_item,
+    CreditHold,
     transfer_item,
     reverse_credit,
     wd_item,
@@ -1573,6 +1574,48 @@ def require_role(role):
             return f(*args, **kwargs)
         return decorated
     return decorator
+
+
+@app.before_request
+def _ui_audit_before():
+    """WHO DID IT (Kerry 10/28): note the row a change is about to touch,
+    as it stands BEFORE the change, so a delete still names who it removed.
+    The log line itself is written after the answer (_ui_audit_after)."""
+    try:
+        from email_parser import ui_audit as _ua
+        if request.method not in _ua.MUTATING or not request.path.startswith("/api/"):
+            return None
+        iid = _ua.item_id_of(request.path)
+        if iid:
+            from email_parser import database as _db
+            with _db._connect() as _c:
+                g.ui_audit_before = _ua.item_snapshot(_c, iid)
+    except Exception:
+        logger.warning("ui audit snapshot failed (non-fatal)", exc_info=True)
+    return None
+
+
+@app.after_request
+def _ui_audit_after(resp):
+    """Log every successful change made from a PIN session to agent_action_log
+    (agent ui:<role>[:<chapter>]); see email_parser/ui_audit.py."""
+    try:
+        from email_parser import ui_audit as _ua
+        role = session.get("role")
+        if not _ua.should_log(request.method, request.path, resp.status_code, role):
+            return resp
+        who = f"ui:{role}" + (f":{session['chapter']}" if session.get("chapter") else "")
+        ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[-1].strip()
+        desc = _ua.describe(request.method, request.path, getattr(g, "ui_audit_before", ""),
+                            _ua.safe_body(request.get_data(cache=True)), ip,
+                            request.headers.get("User-Agent", ""))
+        rule = request.url_rule.rule if request.url_rule else request.path
+        from email_parser.database import log_agent_action as _log
+        _log(who, f"{request.method} {rule}"[:120], desc[:1500],
+                         related_item_id=_ua.item_id_of(request.path))
+    except Exception:
+        logger.warning("ui audit log failed (non-fatal)", exc_info=True)
+    return resp
 
 
 @app.before_request
@@ -9710,7 +9753,11 @@ def api_credit_item(item_id):
     """Mark an item as credited (money held for future event)."""
     data = request.get_json(silent=True) or {}
     probe = _pairings_seat_probe(item_id)
-    if credit_item(item_id, note=data.get("note", "")):
+    try:
+        ok = credit_item(item_id, note=data.get("note", ""))
+    except CreditHold as e:
+        return jsonify({"error": f"Credit held: {e}"}), 409
+    if ok:
         return jsonify({"status": "ok", "pairings": _pairings_sync_result(probe)})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
 
@@ -9724,7 +9771,11 @@ def api_wd_item(item_id):
     credits = data.get("credits")  # dict like {"included_games": 14, ...}
     credit_amount = data.get("credit_amount", "")
     probe = _pairings_seat_probe(item_id)
-    if wd_item(item_id, note=note, credits=credits, credit_amount=credit_amount):
+    try:
+        ok = wd_item(item_id, note=note, credits=credits, credit_amount=credit_amount)
+    except CreditHold as e:
+        return jsonify({"error": f"Credit held: {e}"}), 409
+    if ok:
         return jsonify({"status": "ok", "pairings": _pairings_sync_result(probe)})
     return jsonify({"error": "Item not found or already credited/transferred/WD."}), 400
 

@@ -1226,6 +1226,18 @@ requests trump "for this event (not TGF Championship or Prime Time City
 Championships)" - those turn the Partner Requests box off. Guard
 `test_standings_pods.py`.
 
+**Pods are locked (v2.615.0, Kerry 10/28, Event Ops #2483).** On 3305 the pods
+came out right and then rule 7 (spread leaders) and the rule-miss swaps (16, 18)
+moved Marroquin and Mazanec out of their pod. On a STANDINGS run every player in
+a ranked unit (one race: everyone the race ranks) is passed to `_rules_fix` as
+`extra_locked`, so rules 7, 12, 14, 16 and 18 move only players outside the
+pods; a leaderless group or a 1st Timer without an Ambassador that can't be
+fixed is reported ("the standings pods were kept"). Guard
+`test_standings_pod_lock.py`. Preview a standings run without saving:
+`scoring-pairings-generate-preview:<event_id>|standings` (uses the saved mode
+and races, returns the passes). Choosing STANDINGS turns the points on the
+cards on.
+
 ## Shotgun hole order (v2.606.0, Kerry 2026-10-28)
 
 Kerry: "configure for different type of starts and allowances for easily

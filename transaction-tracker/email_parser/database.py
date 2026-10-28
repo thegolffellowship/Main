@@ -33996,9 +33996,58 @@ def _pairings_drop_if_off_roster(item_id: int, reason: str,
         return None
 
 
+class CreditHold(Exception):
+    """A credit that can't say whose it is (credit_buyer.buyer_of hold)."""
+
+
+def _buyer_for_credit(conn, item_id: int) -> dict:
+    """Credit goes to the BUYER (Kerry 10/28, #2476-#2478): who bought this
+    spot, or {} when the player did. Raises CreditHold when it can't tell."""
+    from email_parser.credit_buyer import buyer_of
+    row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if not row:
+        return {}
+    buyer = buyer_of(conn, dict(row))
+    if buyer.get("hold"):
+        raise CreditHold(buyer["hold"])
+    return buyer
+
+
+def _move_credit_to_buyer(conn, item_id: int, buyer: dict, wd: bool = False) -> int | None:
+    """Move the credit just written on ``item_id`` (and its cascaded child
+    payments) to ``buyer``'s own credited row. Returns the new row id."""
+    from email_parser.credit_buyer import post_buyer_credit
+    item = dict(conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone())
+    kids = [dict(r) for r in conn.execute(
+        "SELECT * FROM items WHERE parent_item_id = ? AND transaction_status = 'credited'",
+        (item_id,)).fetchall()]
+    amount = round(_item_credit_value(conn, item) + sum(_item_credit_value(conn, k) for k in kids), 2)
+    if amount <= 0:
+        return None
+    new_id = post_buyer_credit(conn, item, amount, buyer)
+    moved = f"Credit ${amount:.2f} moved to buyer {buyer['buyer_name']} (item {new_id})"
+    if wd:
+        conn.execute("UPDATE items SET credit_amount = '', transferred_to_id = ?, "
+                     "credit_note = ? WHERE id = ?", (new_id, moved, item_id))
+    else:
+        conn.execute("UPDATE items SET transaction_status = 'transferred', transferred_to_id = ?, "
+                     "credit_note = ? WHERE id = ?", (new_id, moved, item_id))
+    if kids:
+        conn.execute(f"UPDATE items SET transaction_status = 'transferred', credit_note = ? "
+                     f"WHERE id IN ({','.join('?' * len(kids))})",
+                     [moved + " (cascaded from parent)"] + [k["id"] for k in kids])
+    conn.execute(
+        "INSERT INTO agent_action_log (agent_name, action_type, description, related_item_id) "
+        "VALUES ('credit-buyer', 'credit_to_buyer', ?, ?)",
+        (f"item {item_id} ({item.get('customer')}, {item.get('item_name')}): {moved}", item_id))
+    return new_id
+
+
 def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None) -> bool:
-    """Mark an item as credited (money held for future use). Cascades to child payments."""
+    """Mark an item as credited (money held for future use). Cascades to child payments.
+    A spot bought on someone else's order credits the BUYER (credit_buyer.py)."""
     with _connect(db_path) as conn:
+        buyer = _buyer_for_credit(conn, item_id)
         cursor = conn.execute(
             "UPDATE items SET transaction_status = 'credited', credit_note = ? WHERE id = ? AND COALESCE(transaction_status, 'active') = 'active'",
             (note or "Credit on account", item_id),
@@ -34009,6 +34058,8 @@ def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None)
             "WHERE parent_item_id = ? AND COALESCE(transaction_status, 'active') = 'active'",
             (note or "Credit on account (cascaded from parent)", item_id),
         )
+        if cursor.rowcount > 0 and buyer.get("buyer_id"):
+            _move_credit_to_buyer(conn, item_id, buyer)
         conn.commit()
         changed = cursor.rowcount > 0
     # Off the roster ⇒ off the sheet, automatically (Kerry 2026-09-15).
@@ -34267,6 +34318,7 @@ def wd_item(
 
     credits_json = _json.dumps(credits) if credits else None
     with _connect(db_path) as conn:
+        buyer = _buyer_for_credit(conn, item_id) if _parse_dollar(credit_amount or "0") > 0 else {}
         cursor = conn.execute(
             """UPDATE items
                SET transaction_status = 'wd',
@@ -34309,6 +34361,8 @@ def wd_item(
                         )
             except Exception:
                 logger.warning("Failed to create liability entry for WD %s", item_id, exc_info=True)
+        if cursor.rowcount > 0 and buyer.get("buyer_id"):
+            _move_credit_to_buyer(conn, item_id, buyer, wd=True)
 
         conn.commit()
         changed = cursor.rowcount > 0
@@ -34693,6 +34747,17 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
         if status not in ("credited", "transferred", "wd", "refunded"):
             return False
 
+        # A credit moved to the buyer (credit_buyer.py): its row goes while
+        # still unspent; a buyer credit already applied is money in play.
+        spent_buyer = conn.execute(
+            """SELECT id FROM items WHERE email_uid LIKE ?
+               AND COALESCE(transaction_status, '') != 'credited'""",
+            (f"buyer-credit-{item_id}-%",)).fetchone()
+        if spent_buyer:
+            logger.warning("reverse_credit %s refused: buyer credit %s already used", item_id, spent_buyer[0])
+            return False
+        conn.execute("DELETE FROM items WHERE email_uid LIKE ? AND transaction_status = 'credited'",
+                     (f"buyer-credit-{item_id}-%",))
         if status == "transferred" and item.get("transferred_to_id"):
             transferred_to_id = item["transferred_to_id"]
             # Delete the destination item
@@ -72922,6 +72987,8 @@ def generate_event_pairings(
             amb_fit[k] = {_pair_key_name(a) for a, d in dists.items()
                           if d == best or _pair_count(pair_counts, n, a) > 0}
 
+        _locked_base = set(locked_names)
+
         def _rule_misses(g) -> tuple:
             """(lone back, no leader, 1st Timer without Ambassador, a first
             year player who must ride alone, a guest who cannot ride with an
@@ -72941,7 +73008,14 @@ def generate_event_pairings(
             n = [x + y for x, y in zip(_rule_misses(ng), _rule_misses(nh))]
             return all(nv <= ov for nv, ov in zip(n, o))
 
-        def _rules_fix(gp, improve: bool, trace: list | None = None):
+        def _rules_fix(gp, improve: bool, trace: list | None = None,
+                       extra_locked: set | None = None):
+            # POD LOCK (Kerry 10/28, Event Ops #2483): on a standings run the
+            # race pods are locked units like requests; the rules may move
+            # only the players outside them, and a miss they can't fix is
+            # reported instead of breaking a pod.
+            locked_names = _locked_base | set(extra_locked or ())
+
             def _t(stage, why, before, after):
                 if trace is not None:
                     mv = _gen_moves(before, after)
@@ -72975,6 +73049,12 @@ def generate_event_pairings(
                               + ": no Ambassador on their tees (or one they have played "
                               "with) free to ride with them; requests, matches and "
                               "locks kept.")
+                if extra_locked and _m[1]:
+                    n4.append(", ".join(g) + ": no captain or Ambassador in the group; "
+                              "the standings pods were kept (Kerry 10/28).")
+                if extra_locked and _m[2]:
+                    n4.append(", ".join(g) + ": a 1st Timer without an Ambassador; "
+                              "the standings pods were kept (Kerry 10/28).")
             if improve:
                 # The fixes swap by cheapest history but never re-optimise;
                 # on 10/5 that left Baker + Rideout together a 4th time. A
@@ -73072,6 +73152,7 @@ def generate_event_pairings(
             # MULTI-RACE PODS (Kerry 10/28): composition from the races'
             # standings, staging by pace below.
             _maps, _enr = [], []
+            _pod_names: set = set()
             standings_points, standings_enrolled = {}, {}
             for _rk in _race_keys:
                 _rm, _ru, _rn, _mt = _standings_rank_map(
@@ -73088,10 +73169,12 @@ def generate_event_pairings(
                 host_units=bound_units if protect_partner_requests else None,
                 id_map={p["customer"]: p.get("customer_id")
                         for p in player_items if p.get("customer")},
-                enrolled_maps=_enr, max_group=max_group, seed=event_id)
+                enrolled_maps=_enr, max_group=max_group, seed=event_id,
+                pod_out=_pod_names)
             mp_notes.extend(_snotes)
             groups_players, _rnotes2 = _rules_fix(groups_players, improve=False,
-                                                  trace=hlog["passes"])
+                                                  trace=hlog["passes"],
+                                                  extra_locked=_pod_names)
             mp_notes.extend(_rnotes2)
         elif mode == "standings":
             _rank_map, _race_used, _rnotes, _meta = _standings_rank_map(
@@ -73109,13 +73192,19 @@ def generate_event_pairings(
                             for p in player_items if p.get("customer")},
                     hcp_map=hcp_map, max_group=max_group)
                 mp_notes.extend(_snotes)
+                _ids_sr = {p["customer"]: p.get("customer_id") for p in player_items if p.get("customer")}
+                _pod_names = {n for n in free_players
+                              if (_ids_sr.get(n) is not None and _rank_map.get(int(_ids_sr[n])) is not None)
+                              or _rank_map.get(_pair_key_name(n)) is not None}
             else:
                 # No usable standings — say so and fall back rather than
                 # silently producing an order that looks intentional.
                 groups_players = _abcd_groups(free_players, hcp_map, max_group)
                 mp_notes.append("Standings unavailable — used ABCD instead.")
+                _pod_names = set()
             groups_players, _rnotes2 = _rules_fix(groups_players, improve=False,
-                                                  trace=hlog["passes"])
+                                                  trace=hlog["passes"],
+                                                  extra_locked=_pod_names)
             mp_notes.extend(_rnotes2)
         else:
             # Best-of-K restarts + swap hill-climb. The greedy alone has a
@@ -74765,7 +74854,8 @@ def _standings_pods(players: list[str], rank_maps: list, partner_map: dict,
                     host_units: list[list[str]] | None = None,
                     id_map: dict | None = None,
                     enrolled_maps: list | None = None,
-                    max_group: int = 4, seed=None) -> tuple[list, list]:
+                    max_group: int = 4, seed=None,
+                    pod_out: set | None = None) -> tuple[list, list]:
     """MULTI-RACE STANDINGS PODS (Kerry 2026-10-28, the Fall Championship:
     "pairings themselves would be nice to do groups going with the top 2 from
     each city that are bought into the event going into the first pairing,
@@ -74840,6 +74930,11 @@ def _standings_pods(players: list[str], rank_maps: list, partner_map: dict,
     for q in queues:
         q.sort(key=lambda t: t[0])
     queues = [[u for _r, u in q] for q in queues]
+    if pod_out is not None:
+        # Every player in a ranked unit (a request partner rides with his pod).
+        for q in queues:
+            for u in q:
+                pod_out.update(u)
 
     # Pods: two from each race per group, in standing order; once a race
     # runs out the others carry on; the unranked fill after, at random.

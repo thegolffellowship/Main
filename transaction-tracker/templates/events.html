@@ -7713,6 +7713,8 @@
             const saved = String(ev.pairing_mode || local.mode || '').trim();
             if (saved === 'random' || saved === 'abcd' || saved === 'standings') {
                 state.mode = saved;
+                // STANDINGS shows the points (Kerry 10/28, Event Ops #2485).
+                if (saved === 'standings') state.showPointsCol = true;
             }
             const rk = ev.pairing_race_key || local.raceKey;
             if (rk) state.raceKey = rk;
@@ -8638,6 +8640,7 @@
             const savedMode = String(evb.pairing_mode || lsm.mode || '').trim();
             if (savedMode === 'random' || savedMode === 'abcd' || savedMode === 'standings') {
                 state.mode = savedMode;
+                if (savedMode === 'standings') state.showPointsCol = true;
             }
             const savedRace = evb.pairing_race_key || lsm.raceKey;
             if (savedRace) state.raceKey = savedRace;
@@ -11704,6 +11707,9 @@
             btn.addEventListener('click', async e => {
                 e.stopPropagation();
                 state.mode = btn.dataset.pairingsMode;
+                // "if STANDINGS are clicked then POINTS should automatically be
+                // checked and shown" (Kerry 10/28). Random / ABCD leave it be.
+                if (state.mode === 'standings') state.showPointsCol = true;
                 state.swapMode = null; state.selection = null;
                 savePairingMode(ev, state);
                 rerenderDetailBody(container, ev);

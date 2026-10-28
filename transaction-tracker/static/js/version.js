@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.614.1";
+window.TGF_VERSION = "2.615.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.615.0",
+    date: "2026-10-28",
+    title: "Credit goes to the buyer; every change logged with who made it; STANDINGS pods stay together",
+    changes: [
+      "Kerry 10/28 (Event Ops #2476-#2478): \"Anytime that's under a player purchase any credit would go back to the person who purchased\" and \"Jeff was the buyer, he used his coupon code\". Credit and WD credit on a spot bought on someone else's order now land on the BUYER, not the player on the row: the owner of a personal coupon code (tgf-<name>, mapped to a customer_id in app setting coupon_owners, never by name), else the order's buyer row (the pickBuyerRow rule). The player's row leaves the credit pool with a note naming the buyer, and the buyer gets a credited row naming whose spot it was. A personal code with no owner on file on a shared order holds the credit with a message instead of guessing. Reverse puts it all back while the buyer's credit is unspent. Read-only bridge scoring-coupon-owners lists the codes. email_parser/credit_buyer.py; guard test_credit_buyer.py.",
+      "Kerry 10/28: \"Sounds like we need a log of clicks and who did it so you can easily see that I was the one that removed myself.\" Every successful change made in the Tracker from a PIN session (admin, a chapter manager, view-only) is now written to the action log as ui:<role>[:<chapter>], with the route, the row it touched as it stood BEFORE the change (so a delete still names who was removed), the safe fields sent, IP and browser. Read it with get_agent_action_log. Player phones, sign-in and chat are not logged here. email_parser/ui_audit.py; guard test_ui_audit.py.",
+      "Kerry 10/28 on the Fall Championship (Event Ops #2483): \"Luke Maz & Scott should have been paired together because they were next on the points list, and then Gus Vasquez and Chuck Fehlis with them\". The standings step built that group, then the spread-leaders and rule-miss passes pulled Marroquin and Mazanec out. On a STANDINGS run the race pods are now locked like partner requests: the rules may move only players outside them, and a miss they can't fix is reported (\"the standings pods were kept\") instead of breaking a pod. Guard test_standings_pod_lock.py (fails on the old code).",
+      "Event Ops #2484: scoring-pairings-generate-preview:<event_id>|standings runs the event's saved pairing mode and races, saves nothing, and returns the generator's passes.",
+      "Kerry 10/28: \"if STANDINGS are clicked then POINTS should automatically be checked and shown.\" Choosing STANDINGS (or opening an event saved on it) turns the points on the PAIRINGS cards on; Random and ABCD leave it as set."
+    ]
+  },
   {
     version: "2.614.1",
     date: "2026-10-28",

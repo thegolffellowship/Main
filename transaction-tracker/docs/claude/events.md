@@ -1248,6 +1248,39 @@ Regression: `test_customer_identity.py`.
   sweeps existing credit-transfer rows with `balance_due:*` and applies the same logic
   retroactively. Idempotent; supports `?dry_run=1`.
 
+## Credit goes to the BUYER (v2.615.0, Kerry 2026-10-28, Event Ops #2476-#2478)
+
+Kerry: "Anytime that's under a player purchase any credit would go back to the
+person who purchased." / "Jeff was the buyer, he used his coupon code".
+`credit_item` and `wd_item` (with a credit amount) ask
+`credit_buyer.buyer_of(conn, item)` first:
+- a personal coupon code on the order (`tgf-<name>`, not `tgf-referral-*`)
+  names the buyer through app setting `coupon_owners` (`{"tgf-jeff": 88}`,
+  customer_id, never a name); unmapped on an order with more than one player
+  → `CreditHold` (409 "Credit held: …"), nothing written;
+- else an extra row ("Purchased by" note or no customer_email) → the order's
+  buyer row (pickBuyerRow rule);
+- else the player is the buyer: unchanged.
+When someone else bought it, the player's row (and its cascaded payments)
+becomes `transferred` (a WD keeps `wd` with `credit_amount` cleared) with
+`transferred_to_id` → a new credited row for the buyer (`email_uid`
+`buyer-credit-<item>-<ms>`, same event name, note naming whose spot).
+`reverse_credit` deletes that row while still credited and refuses once the
+buyer has used it. Logged `credit-buyer` / `credit_to_buyer`. Read-only bridge
+`scoring-coupon-owners`. Guard `test_credit_buyer.py`.
+
+## Who did it: the UI action log (v2.615.0, Kerry 2026-10-28)
+
+"Sounds like we need a log of clicks and who did it so you can easily see that
+I was the one that removed myself." `app._ui_audit_before` / `_ui_audit_after`
++ `email_parser/ui_audit.py`: every successful POST/PUT/PATCH/DELETE under
+/api/ from an admin, manager or view-only session → `agent_action_log`
+(`agent_name` `ui:<role>[:<chapter>]`, `action_type` `<METHOD> <route>`,
+description = path, the items row as it stood before, safe body fields, IP,
+browser; `related_item_id` when the path names a row). Score entry, the member
+beacon, sign-in and chat are skipped. PINs are per role, so `ui:admin` is
+Kerry and each chapter manager has his own. Guard `test_ui_audit.py`.
+
 ## Apply Credit to Event from Customers Page
 
 Credited items in customer detail views have an **Apply** button (alongside Reverse).
