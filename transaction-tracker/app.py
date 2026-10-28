@@ -7323,17 +7323,20 @@ def api_get_pairings(event_id):
         standings_points, standings_enrolled = {}, {}
         try:
             from email_parser.database import _standings_rank_map
-            _rk = (request.args.get("race_key") or "").strip() or None
-            _, _, _, _meta = _standings_rank_map(
-                ev.get("chapter"), _rk, max_age_hours=10 ** 6,
-                event_name=ev.get("item_name"), _with_meta=True,
-                no_network=True)
-            # Keyed by customer_id AND name — see the note in
-            # generate_event_pairings. Name-only made GG's spelling of a
-            # player ("MURPHY, Mike") fail to match our roster's
-            # ("Michael Murphy") even when the id had resolved.
-            standings_points = {str(k): v for k, v in _meta["points"].items()}
-            standings_enrolled = {str(k): v for k, v in _meta["enrolled"].items()}
+            _rks = [k.strip() for k in (request.args.get("race_key") or "").split(",") if k.strip()] or [None]
+            for _rk in _rks:  # one race or several (Kerry 10/28)
+                _, _, _, _meta = _standings_rank_map(
+                    ev.get("chapter"), _rk, max_age_hours=10 ** 6,
+                    event_name=ev.get("item_name"), _with_meta=True,
+                    no_network=True)
+                # Keyed by customer_id AND name — see the note in
+                # generate_event_pairings. Name-only made GG's spelling of a
+                # player ("MURPHY, Mike") fail to match our roster's
+                # ("Michael Murphy") even when the id had resolved.
+                for k, v in _meta["points"].items():
+                    standings_points.setdefault(str(k), v)
+                for k, v in _meta["enrolled"].items():
+                    standings_enrolled.setdefault(str(k), v)
         except Exception:
             logger.exception("Standings points lookup failed for event %d "
                              "(non-fatal)", event_id)

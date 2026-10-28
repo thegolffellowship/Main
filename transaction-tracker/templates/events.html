@@ -7751,20 +7751,24 @@
         // 2026-07-30).
         if (state.mode === 'standings') {
             const opts = state.raceOptions || [];
-            html += `<select class="pairings-race-select" data-ev-id="${ev.id}"
-                        title="Season contest standings to order by"
-                        style="margin-left:0.4rem;border:1px solid var(--border);
-                               border-radius:8px;padding:4px 8px;font-size:0.78rem;">`;
+            // Pick one race or several (Kerry 10/28: "I want it to be able to
+            // select multiple"); two or more pair the top 2 of each race
+            // together. Only ACTIVE races are offered.
+            const chosen = new Set(String(state.raceKey || opts.filter(o => o.is_default).map(o => o.race_key).join(','))
+                                   .split(',').map(x => x.trim()).filter(Boolean));
+            html += `<span class="pairings-race-pick" data-ev-id="${ev.id}" title="Points races to pair by. Pick two and each group takes the top 2 of each race."
+                        style="margin-left:0.4rem;display:inline-flex;flex-wrap:wrap;gap:0.2rem 0.7rem;align-items:center;
+                               border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:0.78rem;">`;
             if (!opts.length) {
-                html += '<option>Loading races…</option>';
+                html += 'Loading races…';
             } else {
                 opts.forEach(o => {
-                    const sel = (state.raceKey || (o.is_default ? o.race_key : '')) === o.race_key;
-                    html += `<option value="${escapeHtml(o.race_key)}"${sel ? ' selected' : ''}>${
-                        escapeHtml(o.label)}${o.is_default ? ' (default)' : ''}</option>`;
+                    html += `<label style="display:inline-flex;align-items:center;gap:0.25rem;cursor:pointer;">` +
+                        `<input type="checkbox" class="pairings-race-chk" data-ev-id="${ev.id}" value="${escapeHtml(o.race_key)}"${chosen.has(o.race_key) ? ' checked' : ''}>` +
+                        `${escapeHtml(o.label)}</label>`;
                 });
             }
-            html += '</select>';
+            html += '</span>';
         }
 
         // Partner requests toggle. Shown for RANDOM and STANDINGS — Kerry
@@ -8190,9 +8194,10 @@
         const showPoints = havePoints && state.showPointsCol !== false;
         const showBands = (state.standingsEnrolled
             && Object.keys(state.standingsEnrolled).length > 0) || havePoints;
-        const _raceOpt = (state.raceOptions || []).find(
-            o => o.race_key === (state.raceKey || (o.is_default ? o.race_key : null)));
-        const raceLabel = (_raceOpt && _raceOpt.label) || 'points race';
+        const _rk = String(state.raceKey || '').split(',').filter(Boolean);
+        const _raceOpts = (state.raceOptions || []).filter(o => _rk.length ? _rk.includes(o.race_key) : o.is_default);
+        const raceLabel = _raceOpts.length > 1 ? 'a chosen race'
+            : ((_raceOpts[0] && _raceOpts[0].label) || 'points race');
 
         const bandLegend = !showBands ? '' : [
             ['in', `IN ${raceLabel.toUpperCase()}`],
@@ -11664,13 +11669,15 @@
 
         // Mode toggle
         // Race pulldown: remember the choice for this event.
-        container.querySelectorAll('.pairings-race-select').forEach(sel => {
-            sel.addEventListener('change', () => {
-                const st = pairingsData[sel.dataset.evId];
-                if (st) {
-                    st.raceKey = sel.value || null;
-                    savePairingMode(ev, st);
-                }
+        container.querySelectorAll('.pairings-race-chk').forEach(chk => {
+            chk.addEventListener('change', e => {
+                e.stopPropagation();
+                const st = pairingsData[chk.dataset.evId];
+                if (!st) return;
+                const keys = [...container.querySelectorAll(`.pairings-race-chk[data-ev-id="${chk.dataset.evId}"]`)]
+                    .filter(x => x.checked).map(x => x.value);
+                st.raceKey = keys.join(',') || null;
+                savePairingMode(ev, st);
             });
         });
 
@@ -11685,8 +11692,7 @@
                 .then(d => {
                     state.raceOptions = d.options || [];
                     if (!state.raceKey) {
-                        const def = state.raceOptions.find(o => o.is_default);
-                        state.raceKey = def ? def.race_key : null;
+                        state.raceKey = state.raceOptions.filter(o => o.is_default).map(o => o.race_key).join(',') || null;
                     }
                     state._raceFetch = false;
                     rerenderDetailBody(container, ev);
@@ -11710,8 +11716,7 @@
                         const d = await r.json();
                         state.raceOptions = d.options || [];
                         if (!state.raceKey) {
-                            const def = state.raceOptions.find(o => o.is_default);
-                            state.raceKey = def ? def.race_key : null;
+                            state.raceKey = state.raceOptions.filter(o => o.is_default).map(o => o.race_key).join(',') || null;
                             if (state.raceKey) savePairingMode(ev, state);
                         }
                         rerenderDetailBody(container, ev);

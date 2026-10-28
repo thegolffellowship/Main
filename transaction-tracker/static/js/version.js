@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.613.1";
+window.TGF_VERSION = "2.614.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.614.0",
+    date: "2026-10-28",
+    title: "STANDINGS pairings: several races at once (top 2 of each per group), active races only, and the 5:00 PM run follows your choice",
+    changes: [
+      "Kerry 10/28: \"will the generator honor my STANDINGS selection?\" It did not: the 5:00 PM lock run always generated Random. It now uses the mode and races saved on the event's PAIRINGS tab (Random, ABCD or STANDINGS), partner requests honoured; Random stays the default.",
+      "Kerry 10/28: \"only active season points races should be options. But also, I want it to be able to select multiple.\" The race pulldown is now a set of checkboxes listing only the active races (app setting pairing_active_races, default the races the Tracker is computing: the SA and Austin Fall nets; Monthly is never offered). A chapter event preselects its own race; a joint TGF event preselects every active race. The saved choice is a comma list in events.pairing_race_key.",
+      "Kerry 10/28: \"groups going with the top 2 from each city that are bought into the event going into the first pairing, followed by the next two from each city who are bought in being paired together. Then after one city's bought in is exhausted, it just fills the next group with any other player's from the other chapter if they're bought in and then randomly from there. The only caveat is if they selected someone to play with as a preferred playing partner. Those can trump the other rules.\" With two or more races picked, database._standings_pods builds the groups that way (a player counts for a race he is bought into; a partner request binds first and takes its best member's place), and the groups are then started by pace like any other sheet: threesomes and the fastest groups at the front of the pack (\"The order of the pairings should still be organized by pace standards\"). One race picked keeps the old leaders-last standings order. Guards test_standings_pods.py, test_pairings_standings.py."
+    ]
+  },
   {
     version: "2.613.1",
     date: "2026-10-28",

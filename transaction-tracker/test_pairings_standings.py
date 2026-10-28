@@ -268,26 +268,20 @@ check("the Austin City Championship stays on the Austin race",
 check("an unknown chapter has no default rather than a wrong one",
       db._default_pairing_race("Houston") is None)
 
+# Kerry 2026-10-28: "only active season points races should be options"
+# (app setting pairing_active_races, default the races the Tracker computes,
+# the Fall nets); the chapter's own race is the default, a joint event
+# defaults to every active race (multi-select).
 opts = db.pairing_race_options("San Antonio")
 keys = [o["race_key"] for o in opts]
-check("every configured race is offered", set(keys) >= set(db._GG_POINTS_RACES))
-check("...plus the Fellowship Cup", db.FELLOWSHIP_CUP_RACE_KEY in keys, str(keys))
-check("exactly one option is flagged default",
+check("only the active races are offered", sorted(keys) == sorted(db.pairing_active_races()), str(keys))
+check("the chapter's own active race is the default, listed first",
+      opts[0]["is_default"] and opts[0]["race_key"] == "san_antonio_fall_net", str(opts[0]))
+check("exactly one option is flagged default on a chapter event",
       sum(1 for o in opts if o["is_default"]) == 1, str(opts))
-check("the default is listed first",
-      opts[0]["is_default"] and opts[0]["race_key"] == "san_antonio_net",
-      str(opts[0]))
-check("the GROSS Players Cup is selectable but NOT the default",
-      any(o["race_key"] == "players_cup_gross" and not o["is_default"]
-          for o in opts))
-
-tgf_opts = db.pairing_race_options("TGF", "2026 TGF CHAMPIONSHIP")
-check("for the TGF Championship the Cup is default and listed first",
-      tgf_opts[0]["race_key"] == db.FELLOWSHIP_CUP_RACE_KEY
-      and tgf_opts[0]["is_default"], str(tgf_opts[0]))
 plain = db.pairing_race_options("TGF", "TGF Fall Outing")
-check("a non-championship TGF event flags no default",
-      not any(o["is_default"] for o in plain), str(plain[:2]))
+check("a joint TGF event defaults to every active race",
+      plain and all(o["is_default"] for o in plain), str(plain[:2]))
 
 # The Fellowship Cup routes to its own projection, not a City race.
 _realp, _realf = db.get_points_race_standings, db.get_fellowship_cup_projection

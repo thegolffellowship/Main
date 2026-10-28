@@ -1205,6 +1205,23 @@ GET passes the roster split by normalised holes + the saved sheet's group
 count, so the seed picker and the saved sheet offer the same holes.
 Guard: `test_pairing_slots.py`.
 
+## STANDINGS across several races (v2.614.0, Kerry 2026-10-28)
+
+The race picker on the PAIRINGS tab is a set of checkboxes of the ACTIVE races
+only (`pairing_active_races`, app setting `pairing_active_races`, default
+`tracker_points.TRACKER_RACES`; Monthly never). One race keeps the leaders-last
+`_standings_groups`. Two or more run `_standings_pods`: each group takes the top
+2 bought-in players of each race, then the next 2; when a race runs out the
+others carry on, then everyone else at random; a partner request (when the
+Partner Requests box is on) binds first and takes its best member's place. The
+groups are then STAGED BY PACE (threesomes and the fastest at the front of the
+pack); leaders-last ordering does not apply to pods. The 5:00 PM lock run
+(`auto_generate_pairings`) now uses the event's saved `pairing_mode` /
+`pairing_race_key` (comma list) instead of always Random. Kerry: partner
+requests trump "for this event (not TGF Championship or Prime Time City
+Championships)" - those turn the Partner Requests box off. Guard
+`test_standings_pods.py`.
+
 ## Shotgun hole order (v2.606.0, Kerry 2026-10-28)
 
 Kerry: "configure for different type of starts and allowances for easily

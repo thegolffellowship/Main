@@ -72280,7 +72280,12 @@ def auto_generate_pairings(db_path=None, today=None, now=None) -> list[dict]:
             if _event_has_saved_pairings(ev["id"], db_path):
                 row.update(generated=False, why="already paired")
             else:
-                res = generate_event_pairings(ev["id"], mode="random",
+                # The manager's saved choice wins (Kerry 10/28: "will the
+                # generator honor my STANDINGS selection?"); else random.
+                _m = (ev.get("pairing_mode") or "random").strip().lower()
+                _m = _m if _m in ("random", "abcd", "standings") else "random"
+                res = generate_event_pairings(ev["id"], mode=_m,
+                                              race_key=(ev.get("pairing_race_key") or None) if _m == "standings" else None,
                                               protect_partner_requests=True, db_path=db_path)
                 groups = {k: res.get(k) or [] for k in ("9", "18")}
                 seated = sum(len(g.get("players") or []) for gs in groups.values() for g in gs)
@@ -72293,7 +72298,7 @@ def auto_generate_pairings(db_path=None, today=None, now=None) -> list[dict]:
                     try:
                         log_agent_action("scheduler", "pairings_auto_generate",
                                          f"{ev.get('item_name')}: {seated} seated in {row['groups']} groups "
-                                         f"(random, partner requests honoured)", db_path=db_path)
+                                         f"({_m}, partner requests honoured)", db_path=db_path)
                     except Exception:
                         pass
         except Exception as e:                       # one event never blocks the rest
@@ -72403,6 +72408,9 @@ def generate_event_pairings(
             ev[f"shotgun_order_{_lg}"] = _shotgun_order_conn(conn, event_id, _lg if _sg_combo else None)
             ev[f"shotgun_caps_{_lg}"] = _shotgun_caps_conn(conn, ev, _lg)
         ev_chapter = ev.get("chapter")
+        # One race or several (Kerry 10/28: "I want it to be able to select
+        # multiple"), comma-separated in race_key / events.pairing_race_key.
+        _race_keys = [k.strip() for k in str(race_key or "").split(",") if k.strip()]
 
         fmt = (ev.get("format") or "").strip()
         is_combo = fmt == "9/18 Combo"
@@ -73060,9 +73068,34 @@ def generate_event_pairings(
             groups_players, _rnotes2 = _rules_fix(groups_players, improve=False,
                                                   trace=hlog["passes"])
             mp_notes.extend(_rnotes2)
+        elif mode == "standings" and len(_race_keys) >= 2:
+            # MULTI-RACE PODS (Kerry 10/28): composition from the races'
+            # standings, staging by pace below.
+            _maps, _enr = [], []
+            standings_points, standings_enrolled = {}, {}
+            for _rk in _race_keys:
+                _rm, _ru, _rn, _mt = _standings_rank_map(
+                    ev_chapter, _rk, event_name=ev.get("item_name"),
+                    db_path=db_path, _with_meta=True)
+                mp_notes.extend(_rn)
+                _maps.append(_rm); _enr.append(_mt.get("enrolled") or {})
+                for _k, _v in (_mt.get("points") or {}).items():
+                    standings_points.setdefault(_k, _v)
+                for _k, _v in (_mt.get("enrolled") or {}).items():
+                    standings_enrolled.setdefault(_k, _v)
+            groups_players, _snotes = _standings_pods(
+                free_players, _maps, partner_map, protect_partner_requests,
+                host_units=bound_units if protect_partner_requests else None,
+                id_map={p["customer"]: p.get("customer_id")
+                        for p in player_items if p.get("customer")},
+                enrolled_maps=_enr, max_group=max_group, seed=event_id)
+            mp_notes.extend(_snotes)
+            groups_players, _rnotes2 = _rules_fix(groups_players, improve=False,
+                                                  trace=hlog["passes"])
+            mp_notes.extend(_rnotes2)
         elif mode == "standings":
             _rank_map, _race_used, _rnotes, _meta = _standings_rank_map(
-                ev_chapter, race_key, event_name=ev.get("item_name"),
+                ev_chapter, (_race_keys[0] if _race_keys else race_key), event_name=ev.get("item_name"),
                 db_path=db_path, _with_meta=True)   # refreshes if stale
             standings_points = _meta["points"]
             standings_enrolled = _meta["enrolled"]
@@ -73199,7 +73232,8 @@ def generate_event_pairings(
         # middle instead of the front. Pace ratings are still COMPUTED and
         # shown per group as a manager read-out — they just don't move
         # anybody.
-        _standings_order = (mode == "standings" and groups_players)
+        _standings_order = (mode == "standings" and groups_players
+                            and len(_race_keys) < 2)  # pods are staged by pace
         staging_applied = bool(staging_rules.get("enabled", True)
                                and groups_players
                                and not _standings_order)
@@ -74508,6 +74542,9 @@ def pairing_race_options(chapter: str | None = None,
     the Fellowship Cup.
     """
     default = _default_pairing_race(chapter, event_name, db_path=db_path)
+    active = pairing_active_races(db_path)
+    ch = (chapter or "").strip().lower()
+    joint = ch in ("", "tgf", "national")
     out = []
     for k, cfg in _FALL_PAIRING_RACES.items():
         if k in _GG_POINTS_RACES:
@@ -74534,9 +74571,35 @@ def pairing_race_options(chapter: str | None = None,
         "contest_type": "NET (combined reset)",
         "is_default": default == FELLOWSHIP_CUP_RACE_KEY,
     })
-    # Default first, then chapter races, then the rest.
+    # ONLY ACTIVE RACES (Kerry 10/28: "only active season points races should
+    # be options"), monthly never. The default: the chapter's own active
+    # race, or every active race for a joint (TGF) event.
+    out = [r for r in out if r["race_key"] in active]
+    for r in out:
+        r["is_default"] = joint or (r.get("chapter") or "").strip().lower() == ch
     out.sort(key=lambda r: (not r["is_default"], r["label"] or ""))
     return out
+
+
+PAIRING_ACTIVE_RACES_KEY = "pairing_active_races"
+
+
+def pairing_active_races(db_path=None) -> list:
+    """The points races pairings may order by: app setting
+    `pairing_active_races` (comma list) else the races the Tracker is
+    computing this season (tracker_points.TRACKER_RACES, the Fall nets)."""
+    raw = None
+    try:
+        raw = get_app_setting(PAIRING_ACTIVE_RACES_KEY, db_path=db_path)
+    except Exception:
+        raw = None
+    if raw and raw.strip():
+        return [k.strip() for k in raw.split(",") if k.strip()]
+    try:
+        from email_parser.tracker_points import TRACKER_RACES
+        return list(TRACKER_RACES)
+    except Exception:
+        return []
 
 
 # Standings older than this are re-pulled from GG when pairings are being
@@ -74686,6 +74749,124 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
         return rank_map, key, notes, {"points": points_map,
                                       "enrolled": enrolled_map}
     return rank_map, key, notes
+
+
+def _standings_pods(players: list[str], rank_maps: list, partner_map: dict,
+                    protect_partner_requests: bool,
+                    host_units: list[list[str]] | None = None,
+                    id_map: dict | None = None,
+                    enrolled_maps: list | None = None,
+                    max_group: int = 4, seed=None) -> tuple[list, list]:
+    """MULTI-RACE STANDINGS PODS (Kerry 2026-10-28, the Fall Championship:
+    "pairings themselves would be nice to do groups going with the top 2 from
+    each city that are bought into the event going into the first pairing,
+    followed by the next two from each city who are bought in being paired
+    together. Then after one city's bought in is exhausted, it just fills the
+    next group with any other player's from the other chapter if they're
+    bought in and then randomly from there. The only caveat is if they
+    selected someone to play with as a preferred playing partner. Those can
+    trump the other rules").
+
+    `rank_maps` holds one {customer_id | name key: position} per race, in the
+    order chosen. A player counts for the first race that ranks him and is
+    in it (enrolled, when the race says). Partner requests (when protected)
+    bind first and take the slot of their best-ranked member. Composition
+    only: WHERE each group starts is the pace staging that runs after."""
+    import random as _random
+    notes: list = []
+    if not players:
+        return [], notes
+    rng = _random.Random(seed)
+    ids = {_pair_key_name(k): v for k, v in (id_map or {}).items() if v}
+
+    def rank_in(n, rm):
+        cid = ids.get(_pair_key_name(n))
+        if cid is not None and rm.get(int(cid)) is not None:
+            return rm.get(int(cid))
+        return rm.get(_pair_key_name(n))
+
+    def in_race(n, i):
+        em = (enrolled_maps or [None] * len(rank_maps))[i] or {}
+        if not em:
+            return True
+        cid = ids.get(_pair_key_name(n))
+        v = em.get(int(cid)) if cid is not None else None
+        if v is None:
+            v = em.get(_pair_key_name(n))
+        return v is not False
+
+    def home(n):
+        for i, rm in enumerate(rank_maps):
+            r = rank_in(n, rm)
+            if r is not None and in_race(n, i):
+                return i, r
+        return None, None
+
+    placed, units = set(), []
+    if protect_partner_requests:
+        for hu in (host_units or []):
+            unit = [n for n in hu if n in players and n not in placed]
+            if len(unit) >= 2:
+                units.append(unit); placed.update(unit)
+        for requester, req_text in partner_map.items():
+            if requester not in players or requester in placed:
+                continue
+            partner = _find_partner_name(req_text, players, requester)
+            if partner and partner not in placed:
+                units.append([requester, partner]); placed.update((requester, partner))
+    units.extend([p] for p in players if p not in placed)
+
+    queues = [[] for _ in rank_maps]
+    rest = []
+    for u in units:
+        best = None
+        for n in u:
+            i, r = home(n)
+            if i is not None and (best is None or (i, r) < best):
+                best = (i, r)
+        if best is None:
+            rest.append(u)
+        else:
+            queues[best[0]].append((best[1], u))
+    for q in queues:
+        q.sort(key=lambda t: t[0])
+    queues = [[u for _r, u in q] for q in queues]
+
+    # Pods: two from each race per group, in standing order; once a race
+    # runs out the others carry on; the unranked fill after, at random.
+    ordered: list = []
+    while any(queues):
+        live = [q for q in queues if q]
+        take = max(1, max_group // len(live))
+        for q in live:
+            got = 0
+            while q and got < take:
+                u = q.pop(0)
+                ordered.append(u); got += len(u)
+    rng.shuffle(rest)
+    ordered.extend(rest)
+
+    sizes = sorted(_make_group_sizes(len(players), max_group), reverse=True)
+    groups = [[] for _ in sizes]
+    gi = 0
+    for u in ordered:
+        target = next((i for i in range(gi, len(groups)) if len(groups[i]) + len(u) <= sizes[i]), None)
+        if target is None:
+            target = next((i for i in range(len(groups)) if len(groups[i]) + len(u) <= sizes[i]), None)
+        if target is None:
+            target = min(range(len(groups)), key=lambda i: len(groups[i]))
+            notes.append(f"{' + '.join(u)}: no slot fitted the pods; placed in the smallest group.")
+        groups[target].extend(u)
+        while gi < len(groups) and len(groups[gi]) >= sizes[gi]:
+            gi += 1
+    groups = [g for g in groups if g]
+    ranked = sum(1 for p in players if home(p)[0] is not None)
+    notes.append(f"Standings pods across {len(rank_maps)} races: the top 2 of each race "
+                 f"together, then the next 2, and so on; {ranked} of {len(players)} players are "
+                 f"in a race, the rest fill at random. Partner requests "
+                 f"{'kept' if protect_partner_requests else 'not used'}. Groups are then "
+                 f"started by pace, threesomes and the fastest groups at the front.")
+    return groups, notes
 
 
 def _standings_groups(players: list[str], rank_map: dict, partner_map: dict,
