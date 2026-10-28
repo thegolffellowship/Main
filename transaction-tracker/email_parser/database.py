@@ -31724,13 +31724,16 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
                 "rescheduled_to_event_id", "status_badge", "lock_override", "tee_keep"}
     shotgun_done = False
-    if isinstance(fields.get("shotgun_staging"), dict):
-        _sg = fields["shotgun_staging"]
+    _sgs = fields.get("shotgun_staging")
+    for _sg in ([_sgs] if isinstance(_sgs, dict) else (_sgs if isinstance(_sgs, list) else [])):
+        if not isinstance(_sg, dict):
+            continue
         try:
             shotgun_done = bool(set_shotgun_staging(
                 event_id, bool(_sg.get("reverse")), bool(_sg.get("locked")),
                 _sg.get("counts") or None, _sg.get("hole_order") or None,
-                db_path=db_path).get("ok"))
+                db_path=db_path, leg=_sg.get("holes"),
+                after_par3=bool(_sg.get("after_par3"))).get("ok")) or shotgun_done
         except (ValueError, TypeError):
             logger.warning("Event %s: shotgun staging %r refused", event_id, _sg)
     if "shotgun_order" in fields:
@@ -31803,8 +31806,10 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
             _b = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
             _before = dict(_b) if _b else None
             if _before is not None:
-                _before["shotgun_order"] = _shotgun_order_conn(conn, event_id)
-                _before["shotgun_caps"] = _shotgun_caps_conn(conn, _before)
+                _sgc = (_before.get("format") or "").strip() == "9/18 Combo"
+                for _lg in ("9", "18"):
+                    _before[f"shotgun_order_{_lg}"] = _shotgun_order_conn(conn, event_id, _lg if _sgc else None)
+                    _before[f"shotgun_caps_{_lg}"] = _shotgun_caps_conn(conn, _before, _lg)
 
         _validate_column_names(list(safe))
         set_clause = ", ".join(f"{col} = ?" for col in safe)
@@ -31816,8 +31821,9 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
             try:
                 _after = dict(conn.execute("SELECT * FROM events WHERE id = ?",
                                            (event_id,)).fetchone())
-                _after["shotgun_order"] = _before.get("shotgun_order", "")
-                _after["shotgun_caps"] = _shotgun_caps_conn(conn, _after)
+                for _lg in ("9", "18"):
+                    _after[f"shotgun_order_{_lg}"] = _before.get(f"shotgun_order_{_lg}", "")
+                    _after[f"shotgun_caps_{_lg}"] = _before.get(f"shotgun_caps_{_lg}", {})
                 _res = _sheet_follows_event(conn, event_id, _before, _after)
                 if _res["moved"] or _res["relabelled"]:
                     logger.info("Event %s edit: saved sheet followed (%s)", event_id, _res)
@@ -62700,8 +62706,8 @@ def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
         if holes == "9" and _nine_side(event) == "Back":
             base_hole = 10
         last_hole = base_hole + (8 if holes == "9" else 17)
-        return shotgun_hole_labels(shotgun_order_of(event), base_hole, last_hole, count,
-                                   shotgun_caps_of(event))
+        return shotgun_hole_labels(shotgun_order_of(event, holes), base_hole, last_hole, count,
+                                   shotgun_caps_of(event, holes))
 
     if not start_time:
         return [f"Group {i + 1}" for i in range(count)]
@@ -62722,17 +62728,28 @@ def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
 # SHOTGUN HOLE ORDER (Kerry 2026-10-28: "configure for different type of
 # starts and allowances for easily entering staging holes. Like I'm asking
 # about a reverse shotgun for Saturday ... I'd like to know that and enter it
-# before the generator runs so it generates correctly"). Per event, app
-# setting `shotgun_order:<event_id>`, set on Edit Event:
+# before the generator runs so it generates correctly"). Per event (per LEG on
+# a 9/18 Combo: "9 might be a shotgun while 18 could be tee times"), app
+# setting `shotgun_order:<event_id>` (combo: `shotgun_order:<event_id>:<9|18>`),
+# set by Edit Event's staging grid:
 #   blank     -> 1A, 1B, 2A, 2B ... (the standard)
-#   reverse   -> the last hole first: 18A, 18B, 17A ... (a back-nine 9: 18 ... 10)
+#   reverse   -> the first hole, then the last hole backward: 1, 18, 17 ... 2
+#                (Kerry 10/28: "Reverse shotgun would still have groups on 1,
+#                so the view would need to start there and go in reverse");
+#                a back-nine 9: 10, 18, 17 ... 11
 #   a list    -> "1 10 2 11" deals each hole A then B in that order;
 #                "18A 18B 1A 3A" uses each label exactly as typed.
 # Holes the list leaves out follow in standard order, so the generator never
 # runs short. A changed order relabels a saved sheet by position (update_event
 # -> _sheet_follows_event): group 1 keeps being the first slot.
 SHOTGUN_ORDER_KEY = "shotgun_order:{}"
+SHOTGUN_STAGING_KEY = "shotgun_staging:{}"
 _SHOTGUN_TOKEN_RE = re.compile(r"^(\d{1,2})([AB])?$")
+
+
+def _sg_key(base: str, event_id, leg=None) -> str:
+    k = base.format(int(event_id))
+    return f"{k}:{leg}" if leg in ("9", "18") else k
 
 
 def normalize_shotgun_order(value) -> str:
@@ -62760,43 +62777,74 @@ def normalize_shotgun_order(value) -> str:
     return ", ".join(out)
 
 
-def _shotgun_order_conn(conn, event_id) -> str:
+def _app_setting_conn(conn, key: str):
     try:
-        r = conn.execute("SELECT value FROM app_settings WHERE key = ?",
-                         (SHOTGUN_ORDER_KEY.format(int(event_id)),)).fetchone()
-    except (sqlite3.DatabaseError, TypeError, ValueError):
+        r = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    except sqlite3.DatabaseError:
+        return None
+    return r[0] if r else None
+
+
+def _shotgun_order_conn(conn, event_id, leg=None) -> str:
+    """The leg's own order on a combo, else the event's."""
+    try:
+        if leg in ("9", "18"):
+            v = _app_setting_conn(conn, _sg_key(SHOTGUN_ORDER_KEY, event_id, leg))
+            if v is not None:
+                return v or ""
+        return _app_setting_conn(conn, _sg_key(SHOTGUN_ORDER_KEY, event_id)) or ""
+    except (TypeError, ValueError):
         return ""
-    return (r[0] if r else "") or ""
 
 
-def shotgun_order_of(event: dict) -> str:
-    """The event's hole order: the dict's own `shotgun_order` when a caller
-    loaded it, else the app setting by id."""
+def _shotgun_meta_conn(conn, event_id, leg=None) -> dict:
+    for k in ([_sg_key(SHOTGUN_STAGING_KEY, event_id, leg)] if leg else []) + \
+             [_sg_key(SHOTGUN_STAGING_KEY, event_id)]:
+        try:
+            v = _app_setting_conn(conn, k)
+            if v:
+                d = json.loads(v)
+                if isinstance(d, dict):
+                    return d
+        except (TypeError, ValueError):
+            pass
+    return {}
+
+
+def shotgun_order_of(event: dict, holes=None) -> str:
+    """The event's (or leg's) hole order: the dict's own `shotgun_order_<leg>`
+    / `shotgun_order` when a caller loaded it, else the app setting by id."""
+    if holes and f"shotgun_order_{holes}" in event:
+        return str(event.get(f"shotgun_order_{holes}") or "")
     if "shotgun_order" in event:
         return str(event.get("shotgun_order") or "")
     eid = event.get("id")
     if not eid:
         return ""
+    combo = (event.get("format") or "").strip() == "9/18 Combo"
     try:
-        return get_app_setting(SHOTGUN_ORDER_KEY.format(int(eid))) or ""
+        with _connect(None) as conn:
+            return _shotgun_order_conn(conn, eid, holes if combo else None)
     except Exception:
         return ""
+
+
+def _reverse_seq(first: int, last: int) -> list:
+    """Reverse shotgun holes: the first hole, then the last hole backward."""
+    return [first] + list(range(last, first, -1))
 
 
 def shotgun_hole_labels(order: str, first: int, last: int, count: int,
                         caps: dict | None = None) -> list[str]:
     """`count` shotgun slot labels for holes first..last under `order`.
 
-    `caps` {hole: 1 | 2} is how many groups a hole takes (shotgun_caps_of:
-    Kerry 10/28, one on a par 3 or a par 4 under 325 yards from the <50 tees,
-    two elsewhere). A hole with no card data takes two. When the field needs
-    more groups than the caps allow, the one-group holes take a B next, in the
-    same order, before anything overflows past the last hole."""
+    `caps` {hole: 1 | 2} is how many groups a hole takes (shotgun_caps_of).
+    A hole with no card data takes two. When the field needs more groups than
+    the caps allow, the one-group holes take a B next, in the same order,
+    before anything overflows past the last hole."""
     caps = caps or {}
-    holes = list(range(first, last + 1))
     o = (order or "").strip().lower()
-    if o == "reverse":
-        holes = holes[::-1]
+    holes = _reverse_seq(first, last) if o == "reverse" else list(range(first, last + 1))
     picked: list[str] = []
     if o and o != "reverse":
         for tok in re.split(r"[\s,;]+", order.upper()):
@@ -62826,10 +62874,9 @@ def shotgun_hole_labels(order: str, first: int, last: int, count: int,
 SHORT_PAR4_YARDS = 325  # Kerry 10/28: "par 4s less than 325 yards from the <50 tees"
 
 
-def _shotgun_caps_conn(conn, ev: dict) -> dict:
-    """{hole: groups it takes} from the course card's <50 tee: 1 on a par 3
-    or a par 4 under SHORT_PAR4_YARDS, else 2. {} when the course has no
-    card (every hole then takes two, the old standard)."""
+def _shotgun_hole_info(conn, ev: dict) -> dict:
+    """{hole: (par, yards)} from the course card's <50 tee (and its sibling
+    rows of the same tee name). {} when the course has no card."""
     try:
         legend = event_tee_legend(conn, int(ev.get("id") or 0), ev)
     except Exception:
@@ -62837,6 +62884,7 @@ def _shotgun_caps_conn(conn, ev: dict) -> dict:
     pick = next((t for t in legend if t.get("band") == "<50" and t.get("tee_id")), None)
     if not pick:
         return {}
+    info: dict = {}
     try:
         row = conn.execute("SELECT course_id, tee_name, gender FROM course_tees WHERE tee_id = ?",
                            (pick["tee_id"],)).fetchone()
@@ -62846,7 +62894,6 @@ def _shotgun_caps_conn(conn, ev: dict) -> dict:
                 "SELECT tee_id FROM course_tees WHERE course_id = ? AND lower(trim(tee_name)) = lower(trim(?)) "
                 "AND COALESCE(gender, '') = COALESCE(?, '') AND tee_id != ?",
                 (row[0], row[1], row[2], pick["tee_id"]))]
-        info: dict = {}
         for tid in ids:
             for h, par, yd in conn.execute(
                     "SELECT hole_number, par, yardage FROM course_tee_holes WHERE tee_id = ?", (tid,)):
@@ -62854,34 +62901,98 @@ def _shotgun_caps_conn(conn, ev: dict) -> dict:
                     info[int(h)] = (int(par), int(yd or 0))
     except sqlite3.DatabaseError:
         return {}
-    return {h: (1 if par == 3 or (par == 4 and 0 < yd < SHORT_PAR4_YARDS) else 2)
-            for h, (par, yd) in info.items()}
+    return info
 
 
-def shotgun_caps_of(event: dict) -> dict:
+def shotgun_caps_from_info(info: dict, after_par3: bool = False) -> dict:
+    """{hole: groups it takes}. The standard (Kerry 10/28): ONE group on a par 3
+    or a par 4 under SHORT_PAR4_YARDS, two elsewhere. `after_par3` (Kerry 10/28:
+    "holes after par 3s to be 1 group, which would put 2 on a par 3, but 1 on
+    the hole after. Some courses like that, but most are 1 on par 3s"): a par 3
+    takes two and the hole played after it takes one (18 is followed by 1)."""
+    caps = {}
+    for h, (par, yd) in info.items():
+        short4 = par == 4 and 0 < yd < SHORT_PAR4_YARDS
+        caps[h] = 1 if (short4 or (par == 3 and not after_par3)) else 2
+    if after_par3:
+        for h, (par, _yd) in info.items():
+            if par == 3:
+                nxt = 1 if h == 18 else h + 1
+                if nxt in caps:
+                    caps[nxt] = 1
+    return caps
+
+
+def _shotgun_caps_conn(conn, ev: dict, leg=None) -> dict:
+    """The event's hole capacities from its course card and its staging
+    setting (`after_par3`). {} when the course has no card."""
+    after = ev.get("shotgun_after_par3")
+    if after is None:
+        try:
+            combo = (ev.get("format") or "").strip() == "9/18 Combo"
+            after = bool(_shotgun_meta_conn(conn, int(ev.get("id") or 0),
+                                            leg if combo else None).get("after_par3"))
+        except (TypeError, ValueError):
+            after = False
+    return shotgun_caps_from_info(_shotgun_hole_info(conn, ev), bool(after))
+
+
+def shotgun_caps_of(event: dict, holes=None) -> dict:
     """The event's hole capacities: the dict's own `shotgun_caps` when a
     caller loaded it, else read from the default database."""
+    if holes and f"shotgun_caps_{holes}" in event:
+        return event.get(f"shotgun_caps_{holes}") or {}
     if "shotgun_caps" in event:
         return event.get("shotgun_caps") or {}
     if not event.get("course_id"):
         return {}
     try:
         with _connect(None) as conn:
-            return _shotgun_caps_conn(conn, event)
+            return _shotgun_caps_conn(conn, event, holes)
     except Exception:
         return {}
 
 
-def set_shotgun_order(event_id: int, value, db_path=None) -> dict:
-    """The one writer: store the order and relabel a saved sheet by slot
-    position. Raises ValueError on a bad order."""
+def shotgun_train_order(labels: list, ring: int = 18) -> list:
+    """The shotgun's labels FRONT TO BACK in play order (Kerry 10/28: "Faster
+    groups just always need to be at the front of the pack ... threesomes are
+    automatically placed in front of foursomes"). Groups move to the next
+    hole, so the front of the pack is the loaded hole just before the widest
+    run of empty holes, going backward from there; on one hole A tees off
+    ahead of B. Standard 1-5 loaded: front = 5. Reverse 1, 18, 17, 16:
+    front = 1. `ring` is 18 or 9 (a nine loops on itself)."""
+    holes = sorted({int(m.group(1)) for m in (_SHOTGUN_LABEL_RE.match((x or "").strip()) for x in labels) if m})
+    if not holes:
+        return list(labels)
+    base = 10 if (ring == 9 and holes[0] >= 10) else 1
+    pos = lambda h: (h - base) % ring
+    hs = sorted(holes, key=pos)
+    gaps = [((pos(hs[(k + 1) % len(hs)]) - pos(hs[k])) % ring or ring, k) for k in range(len(hs))]
+    _, k = max(gaps)
+    front_to_back = [hs[(k - j) % len(hs)] for j in range(len(hs))]
+    rank = {h: r for r, h in enumerate(front_to_back)}
+    def key(x):
+        m = _SHOTGUN_LABEL_RE.match((x or "").strip())
+        return (rank.get(int(m.group(1)), 99), 0 if m.group(2) == "A" else 1) if m else (99, 0)
+    return sorted(labels, key=key)
+
+
+def set_shotgun_order(event_id: int, value, db_path=None, leg=None, after_par3=None) -> dict:
+    """The one writer: store the order (per leg on a combo) and relabel a
+    saved sheet by slot position. Raises ValueError on a bad order."""
     new = normalize_shotgun_order(value)
-    key = SHOTGUN_ORDER_KEY.format(int(event_id))
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
         if not row:
             return {"ok": False, "error": "event not found"}
-        old = _shotgun_order_conn(conn, event_id)
+        combo = (row["format"] or "").strip() == "9/18 Combo"
+        leg = leg if combo and leg in ("9", "18") else None
+        key = _sg_key(SHOTGUN_ORDER_KEY, event_id, leg)
+        old = _shotgun_order_conn(conn, event_id, leg)
+        before = dict(row)
+        for lg in ("9", "18"):
+            before[f"shotgun_order_{lg}"] = _shotgun_order_conn(conn, event_id, lg if combo else None)
+            before[f"shotgun_caps_{lg}"] = _shotgun_caps_conn(conn, before, lg)
         if new:
             conn.execute(
                 "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) "
@@ -62890,51 +63001,43 @@ def set_shotgun_order(event_id: int, value, db_path=None) -> dict:
         else:
             conn.execute("DELETE FROM app_settings WHERE key = ?", (key,))
         res = {"moved": None, "relabelled": 0}
-        if new != old:
-            before = {**dict(row), "shotgun_order": old}
-            before["shotgun_caps"] = _shotgun_caps_conn(conn, before)
-            res = _sheet_follows_event(conn, event_id, before, {**before, "shotgun_order": new})
+        after = dict(before)
+        if after_par3 is not None:  # the staging grid's after-par-3 option, being saved
+            for lg in ([leg] if leg else ["9", "18"]):
+                after[f"shotgun_caps_{lg}"] = _shotgun_caps_conn(
+                    conn, {**after, "shotgun_after_par3": bool(after_par3)}, lg)
+        caps_moved = any(after.get(f"shotgun_caps_{lg}") != before.get(f"shotgun_caps_{lg}") for lg in ("9", "18"))
+        if new != old or caps_moved:
+            for lg in ([leg] if leg else ["9", "18"]):
+                after[f"shotgun_order_{lg}"] = new
+            res = _sheet_follows_event(conn, event_id, before, after)
         conn.commit()
     return {"ok": True, "shotgun_order": new, "was": old, "relabelled": res["relabelled"]}
 
 
-SHOTGUN_STAGING_KEY = "shotgun_staging:{}"
-
-
 def shotgun_staging(event_id: int, holes: str | None = None, nine_side: str | None = None,
-                    reverse: bool | None = None, db_path=None) -> dict:
+                    reverse: bool | None = None, after_par3: bool | None = None,
+                    db_path=None) -> dict:
     """What Edit Event's SHOTGUN STAGING grid shows (Kerry 10/28: "a row of
-    starting holes and a row ... number of groups on each", a Reverse
-    checkbox, Lock + Edit). For holes '9' (front or back by nine_side) or
-    '18': each hole with par / <50 yards / cap, the groups the roster needs,
-    the counts the current order deals, and {reverse, locked} from app
-    setting shotgun_staging:<id>. `reverse` / `nine_side` override the saved
-    values so the grid can preview a toggle before Save."""
+    starting holes and a row ... number of groups on each", Reverse, the
+    after-par-3 option, a lock). For holes '9' (front or back by nine_side) or
+    '18': each hole in staging order with par / <50 yards / cap, the groups
+    the roster needs, the counts the current order deals, and {reverse,
+    after_par3, locked} from app setting shotgun_staging:<id>[:<leg>].
+    `reverse` / `after_par3` / `nine_side` preview a toggle before Save."""
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
         if not row:
             return {"ok": False, "error": "event not found"}
         ev = dict(row)
-        try:
-            meta = json.loads(conn.execute("SELECT value FROM app_settings WHERE key = ?",
-                                           (SHOTGUN_STAGING_KEY.format(int(event_id)),)).fetchone()[0])
-        except (TypeError, ValueError, sqlite3.DatabaseError):
-            meta = {}
-        order = _shotgun_order_conn(conn, event_id)
-        caps = _shotgun_caps_conn(conn, ev)
-        info: dict = {}
-        try:
-            legend = event_tee_legend(conn, int(event_id), ev)
-            pick = next((t for t in legend if t.get("band") == "<50" and t.get("tee_id")), None)
-            if pick:
-                for h, par, yd in conn.execute(
-                        "SELECT hole_number, par, yardage FROM course_tee_holes WHERE tee_id = ?",
-                        (pick["tee_id"],)):
-                    info[int(h)] = (par, yd)
-        except Exception:
-            info = {}
         fmt = (ev.get("format") or "").strip()
         h = holes or ("9" if fmt == "9 Holes" else "18")
+        leg = h if fmt == "9/18 Combo" else None
+        meta = _shotgun_meta_conn(conn, event_id, leg)
+        order = _shotgun_order_conn(conn, event_id, leg)
+        ap3 = bool(meta.get("after_par3")) if after_par3 is None else bool(after_par3)
+        info = _shotgun_hole_info(conn, ev)
+        caps = shotgun_caps_from_info(info, ap3)
         side = (nine_side or _nine_side(ev)).title()
         first = 10 if (h == "9" and side == "Back") else 1
         last = first + (8 if h == "9" else 17)
@@ -62953,29 +63056,29 @@ def shotgun_staging(event_id: int, holes: str | None = None, nine_side: str | No
         needed = _pairing_groups_needed(len(rows), max_group, saved_groups=saved or 0)
     rev = bool(meta.get("reverse")) if reverse is None else bool(reverse)
     locked = bool(meta.get("locked"))
-    if locked or (reverse is None and order not in ("", "reverse")):
+    previewing = reverse is not None or after_par3 is not None
+    if locked or (not previewing and order not in ("", "reverse")):
         use = order  # the saved grid
     else:
-        use = "reverse" if rev else ""  # the rule (or a Reverse toggle being previewed)
+        use = "reverse" if rev else ""  # the rule (or a toggle being previewed)
     labels = shotgun_hole_labels(use, first, last, needed, caps)
     counts: dict = {}
     for lab in labels:
         m = _SHOTGUN_TOKEN_RE.match(lab)
         if m:
             counts[int(m.group(1))] = counts.get(int(m.group(1)), 0) + 1
-    seq = list(range(first, last + 1))
-    if rev:
-        seq = seq[::-1]
+    seq = _reverse_seq(first, last) if rev else list(range(first, last + 1))
     return {"ok": True, "event_id": int(event_id), "holes": h, "nine_side": side,
-            "reverse": rev, "locked": locked, "order": order, "groups_needed": needed,
-            "players": len(rows), "labels": labels,
+            "reverse": rev, "after_par3": ap3, "locked": locked, "order": order,
+            "groups_needed": needed, "players": len(rows), "labels": labels,
             "rows": [{"hole": x, "par": (info.get(x) or (None, None))[0],
                       "yards": (info.get(x) or (None, None))[1], "cap": caps.get(x, 2),
                       "groups": counts.get(x, 0)} for x in seq]}
 
 
 def set_shotgun_staging(event_id: int, reverse: bool, locked: bool, counts: dict | None,
-                        holes_order: list | None = None, db_path=None) -> dict:
+                        holes_order: list | None = None, db_path=None, leg=None,
+                        after_par3: bool = False) -> dict:
     """The one writer for the staging grid. Locked (or counts edited) saves
     the grid as an explicit label list in its hole order (1 group = hA,
     2 = hA hB); unlocked and unedited saves the rule ('reverse' or blank).
@@ -62988,10 +63091,15 @@ def set_shotgun_staging(event_id: int, reverse: bool, locked: bool, counts: dict
             n = max(0, min(2, int(counts.get(str(x), counts.get(x, 0)) or 0)))
             toks += [f"{x}A", f"{x}B"][:n]
         order = " ".join(toks) or order
-    res = set_shotgun_order(event_id, order, db_path=db_path)
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT format FROM events WHERE id = ?", (event_id,)).fetchone()
+    combo = bool(row) and (row[0] or "").strip() == "9/18 Combo"
+    leg = leg if combo and leg in ("9", "18") else None
+    res = set_shotgun_order(event_id, order, db_path=db_path, leg=leg, after_par3=after_par3)
     if res.get("ok"):
-        set_app_setting(SHOTGUN_STAGING_KEY.format(int(event_id)),
-                        json.dumps({"reverse": bool(reverse), "locked": bool(locked)}), db_path=db_path)
+        set_app_setting(_sg_key(SHOTGUN_STAGING_KEY, event_id, leg),
+                        json.dumps({"reverse": bool(reverse), "locked": bool(locked),
+                                    "after_par3": bool(after_par3)}), db_path=db_path)
     return res
 
 
@@ -71413,7 +71521,7 @@ PAIRING_STAGING_DEFAULTS = {
 
 
 def _stage_shotgun_smalls_lead(groups: list, slots: list,
-                               pace_fn, hcp_fn=lambda g: 0.0) -> list:
+                               pace_fn, hcp_fn=lambda g: 0.0, ring: int = 18) -> list:
     """Order settled groups over the filled shotgun slots per Kerry's
     2026-07-21 rulings. TRUE play order front-to-back is (hole DESC,
     A before B) — on a shared hole the A group tees off AHEAD of the
@@ -71429,11 +71537,16 @@ def _stage_shotgun_smalls_lead(groups: list, slots: list,
     filled = [slots[i] if i < len(slots) else f"Group {i + 1}"
               for i in range(n)]
 
+    # Front to back in PLAY order (shotgun_train_order): a reverse or staged
+    # shotgun's front is not simply its highest hole number (Kerry 10/28).
+    _train = shotgun_train_order([x for x in filled if _SHOTGUN_LABEL_RE.match((x or "").strip())], ring)
+    _trank = {lab: r for r, lab in enumerate(_train)}
+
     def slot_rank(i: int):
-        m = _SHOTGUN_LABEL_RE.match((filled[i] or "").strip())
-        if m:
-            return (-int(m.group(1)), 0 if m.group(2) == "A" else 1)
-        return (-i, 0)
+        lab = (filled[i] or "").strip()
+        if lab in _trank:
+            return (_trank[lab], 0)
+        return (len(_trank) - i, 1)
 
     # Pace ties break to the LOWER total handicap (Kerry 2026-07-28):
     # among equal-pace groups the better foursome tees off first.
@@ -72275,8 +72388,10 @@ def generate_event_pairings(
         if not ev:
             raise ValueError(f"Event {event_id} not found")
         ev = dict(ev)
-        ev["shotgun_order"] = _shotgun_order_conn(conn, event_id)
-        ev["shotgun_caps"] = _shotgun_caps_conn(conn, ev)
+        _sg_combo = (ev.get("format") or "").strip() == "9/18 Combo"
+        for _lg in ("9", "18"):
+            ev[f"shotgun_order_{_lg}"] = _shotgun_order_conn(conn, event_id, _lg if _sg_combo else None)
+            ev[f"shotgun_caps_{_lg}"] = _shotgun_caps_conn(conn, ev, _lg)
         ev_chapter = ev.get("chapter")
 
         fmt = (ev.get("format") or "").strip()
@@ -73091,7 +73206,8 @@ def generate_event_pairings(
                 # hole back (Kerry 2026-07-21 clarification). Foursomes
                 # fill the rest slowest-first.
                 groups_players = _stage_shotgun_smalls_lead(
-                    groups_players, slots, _group_pace, _group_hcp)
+                    groups_players, slots, _group_pace, _group_hcp,
+                    ring=9 if holes == "9" else 18)
             elif smalls_lead:
                 # Tee times: short groups take the EARLIEST times
                 # (Kerry 2026-07-21 clarification); fastest first

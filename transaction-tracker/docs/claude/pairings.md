@@ -1248,6 +1248,22 @@ Changing it after the generator relabels the saved sheet by slot position
 (`_sheet_follows_event`): group 1 stays the first slot, its label changes.
 Guard `test_shotgun_order.py`.
 
+**Round 2 (v2.611.0, Kerry 10/28).** REVERSE keeps hole 1 and runs backward
+(1, 18, 17 … 2; a back nine 10, 18 … 11): "Reverse shotgun would still have
+groups on 1". The checkbox **1 group on the hole after a par 3**
+(`shotgun_staging:<id>` `after_par3`, `shotgun_caps_from_info`) puts two on a par
+3 and one on the hole played after it. A **9/18 Combo** has one grid per shotgun
+leg with its own keys (`shotgun_order:<id>:<leg>`, `shotgun_staging:<id>:<leg>`).
+The lock is one Locked/Unlocked button and **Save auto-locks** every grid shown.
+**Front of the pack** is worked out in PLAY order (`shotgun_train_order`): the
+loaded hole just before the widest run of empty holes, then backward; the
+staging step (`_stage_shotgun_smalls_lead`, ring 9 or 18) puts threesomes, then
+the fastest groups, there (Kerry: "Faster groups just always need to be at the
+front of the pack ... threesomes are automatically placed in front of
+foursomes"). Before this it read "front" as the highest hole number, wrong for a
+reverse or staged shotgun. seat_fill / withdrawal_fold still order shotgun holes
+by number (lowest/highest), not yet by the train.
+
 **One group on short holes (v2.607.0, Kerry 10/28):** "standard shotguns need
 to put 2 per hole starting on that side but 1 per hole on par 3s and par 4s
 less than 325 yards from the <50 tees. Same concept if reverse shotgun is

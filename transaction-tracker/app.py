@@ -7750,9 +7750,11 @@ def api_shotgun_staging(event_id):
     yards / cap, groups needed, counts per hole, reverse and lock."""
     from email_parser.database import shotgun_staging
     rv = request.args.get("reverse")
+    ap = request.args.get("after_par3")
     out = shotgun_staging(event_id, holes=request.args.get("holes") or None,
                           nine_side=request.args.get("nine_side") or None,
-                          reverse=None if rv is None else rv in ("1", "true"))
+                          reverse=None if rv is None else rv in ("1", "true"),
+                          after_par3=None if ap is None else ap in ("1", "true"))
     return jsonify(out), (200 if out.get("ok") else 404)
 
 

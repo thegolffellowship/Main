@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.610.0";
+window.TGF_VERSION = "2.611.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.611.0",
+    date: "2026-10-28",
+    title: "Shotgun staging round 2: reverse from hole 1, after-par-3 option, a grid per leg, lock icon, front of the pack; no holes in the lock-night email",
+    changes: [
+      "Kerry 10/28: \"Reverse shotgun would still have groups on 1, so the view would need to start there and go in reverse.\" Reverse now deals hole 1 first, then 18, 17, 16 ... 2 (a back nine: 10, then 18 down to 11), in the grid and in the generator.",
+      "Kerry 10/28: \"Provide a check box for holes after par 3s to be 1 group, which would put 2 on a par 3, but 1 on the hole after. Some courses like that, but most are 1 on par 3s.\" New checkbox \"1 group on the hole after a par 3\": the par 3 takes two groups and the hole played after it takes one (short par 4s still take one). Saved per event (shotgun_staging:<id> after_par3); database.shotgun_caps_from_info.",
+      "Kerry 10/28: \"9 might be a shotgun while 18 could be tee times. Need both considerations addressed.\" A 9/18 Combo gets one grid per SHOTGUN leg, each with its own order and options (app settings shotgun_order:<id>:<9|18> and shotgun_staging:<id>:<9|18>); a tee-time leg shows none.",
+      "Kerry 10/28: \"Lock could be a simple lock/unlock icon. If you click save before unlocking, then that auto-locks it.\" The lock is now one Locked/Unlocked button, and Save locks every grid shown. Entries are centered and the grid sits centered in its box.",
+      "Kerry 10/28: \"Faster groups just always need to be at the front of the pack, whether its tee times or shotguns. And threesomes are automatically placed in front of foursomes.\" The generator already does this; it read 'front' as the highest hole number, which is wrong for a reverse or staged shotgun. The front of the pack is now worked out in play order (database.shotgun_train_order: the loaded hole just before the widest run of empty holes, then backward), so on a reverse shotgun the threesome and the fastest groups start on hole 1, then 18, 17 ...",
+      "Kerry 10/28: \"For initial pairings emails we will not show hole assignments, only the start time and start format (shotgun v tee times).\" On a shotgun, every version of the lock-night tee-times email (players, open spots, course contact, manager) lists the groups as Group 1, Group 2… instead of their holes; the header states the start time and the format (\"Shotgun 8:30 AM\") and the open-spots subject says \"8:30 AM shotgun\". Tee-time events keep their times and a 9/18 Combo decides per leg. The member tee sheet the email links to hides the holes the same way until the Event Info goes, then shows them as before. Event Info, Course Files, the Starter Sheet, cart signs and scorecards still show holes; the approved email wording is unchanged. Guards: test_teetimes_email.py §9, test_event_day_email.py, test_shotgun_order.py §6."
+    ]
+  },
   {
     version: "2.610.0",
     date: "2026-10-28",

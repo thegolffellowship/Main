@@ -925,21 +925,24 @@
     @media (max-width: 560px) { .course-staff-box .cs-row { grid-template-columns: 1fr; gap: 0; padding: 4px 0; } }
 
     .sg-stage { border: 1px solid var(--border, #E5E7EB); border-radius: 10px; padding: 10px 12px; }
-    .sg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 8px; }
+    .sg-stage + .sg-stage { margin-top: 10px; }
+    .sg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 8px; }
     .sg-title { font-weight: 600; font-size: 0.82rem; margin-right: auto; }
-    .sg-opt { font-size: 0.82rem; display: inline-flex; align-items: center; gap: 5px; }
-    .sg-pen { font-size: 0.78rem; padding: 3px 10px; border-radius: 999px; border: 1px solid #9CA3AF; background: #fff; cursor: pointer; }
-    .sg-scroll { overflow-x: auto; }
-    .sg-grid { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    .sg-opt { font-size: 0.8rem; display: inline-flex; align-items: center; gap: 5px; }
+    .sg-lockbtn { font-size: 0.8rem; padding: 3px 10px; border-radius: 999px; border: 1px solid #9CA3AF; background: #fff; cursor: pointer; }
+    .sg-lockbtn.on { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
+    .sg-scroll { overflow-x: auto; display: flex; flex-direction: column; align-items: center; }
+    .sg-grid { border-collapse: collapse; font-variant-numeric: tabular-nums; margin: 0 auto; }
+    .sg-grid + .sg-grid { margin-top: 8px; }
     .sg-grid th { font-size: 0.72rem; text-align: left; width: 48px; padding: 3px 8px 3px 0; color: #6B7280; white-space: nowrap; }
     .sg-grid td { text-align: center; padding: 2px; min-width: 38px; }
-    .sg-grid + .sg-grid { margin-top: 8px; }
     .sg-row-hole td { font-weight: 700; font-size: 0.85rem; }
     .sg-row-info td { font-size: 0.66rem; color: #6B7280; line-height: 1.15; white-space: nowrap; }
     .sg-row-info td.one { color: #B4531A; font-weight: 600; }
-    .sg-grid input { width: 34px; text-align: center; padding: 3px 0; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.85rem; }
+    .sg-grid input { width: 34px; text-align: center; padding: 3px 0; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.85rem; -moz-appearance: textfield; }
+    .sg-grid input::-webkit-outer-spin-button, .sg-grid input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     .sg-grid input:disabled { background: #F3F4F6; color: #374151; }
-    .sg-total { font-size: 0.78rem; color: #6B7280; margin-top: 6px; }
+    .sg-total { font-size: 0.78rem; color: #6B7280; margin-top: 6px; text-align: center; }
     .sg-total.warn { color: #B42318; font-weight: 600; }
 </style>
 </head>
@@ -1190,16 +1193,7 @@
                 <!-- SHOTGUN STAGING — Kerry 2026-10-28: only for a Shotgun; a row of
                      starting holes and an editable row of groups on each (front or
                      back), Reverse shotgun, Lock to keep it, the pen to edit again. -->
-                <div id="edit-shotgun-staging" class="sg-stage" style="display:none; margin-top:0.75rem;">
-                    <div class="sg-head">
-                        <span class="sg-title">Shotgun staging</span>
-                        <label class="sg-opt"><input type="checkbox" id="sg-reverse"> Reverse shotgun</label>
-                        <label class="sg-opt"><input type="checkbox" id="sg-lock"> Lock</label>
-                        <button type="button" id="sg-edit" class="sg-pen" title="Unlock and edit" style="display:none;">&#9998; Edit</button>
-                    </div>
-                    <div id="sg-grids" class="sg-scroll"></div>
-                    <div id="sg-total" class="sg-total"></div>
-                </div>
+                <div id="edit-shotgun-staging" style="display:none; margin-top:0.75rem;"></div>
                 <!-- Allow fivesomes — Kerry 2026-07-31. OFF by default: a
                      fivesome only ever happens because a manager asked. ON
                      builds the whole sheet from fivesomes with FOURSOMES as
@@ -16292,115 +16286,143 @@
     });
 
     // ── SHOTGUN STAGING (Kerry 10/28) ─────────────────────────────────────
-    // Shown only when a shotgun is selected. Row 1 the starting holes (front
-    // or back, reversed by the checkbox), row 2 the groups on each (editable,
-    // 0-2), defaulted from the rule: one group on a par 3 or a par 4 under
-    // 325 from the <50 tees, two elsewhere, filled until every group has a
-    // hole. Lock freezes the grid (the generator then deals exactly it); the
-    // pen unlocks it. Saved with the modal's Save (update_event ->
-    // set_shotgun_staging).
-    const SG = { ev: null, data: null, edited: false, locked: false, reverse: false, start: null };
-    function sgLeg() {
+    // One grid per SHOTGUN leg (a 9/18 Combo can shotgun one leg and tee-time
+    // the other; each leg keeps its own order). Row 1 the starting holes,
+    // row 2 the groups on each (0-2), defaulted from the rule: one group on a
+    // par 3 or a par 4 under 325 from the <50 tees, two elsewhere; or, with
+    // "1 group on the hole after a par 3", two on the par 3 and one on the
+    // hole after. Reverse keeps hole 1 and runs 18, 17 ... backward. The lock
+    // icon freezes the counts; Save auto-locks every shown grid. Saved with
+    // the modal (update_event -> set_shotgun_staging, one entry per leg).
+    const SG = { ev: null, legs: {} };
+    function sgLegs() {
         const fmt = (document.querySelector('input[name="edit-event-format"]:checked') || {}).value || "";
         const side = (document.querySelector('input[name="edit-event-nine_side"]:checked') || {}).value || "Front";
         const val = n => (document.querySelector(`input[name="${n}"]:checked`) || {}).value;
         if (fmt === "9/18 Combo") {
-            if (val("edit-event-start_type_18") === "Shotgun") return { holes: "18", side };
-            if (val("edit-event-start_type_9") === "Shotgun") return { holes: "9", side };
-            return null;
+            const out = [];
+            if (val("edit-event-start_type_9") === "Shotgun") out.push({ holes: "9", side, label: "9-hole" });
+            if (val("edit-event-start_type_18") === "Shotgun") out.push({ holes: "18", side, label: "18-hole" });
+            return out;
         }
-        if (val("edit-event-start_type") !== "Shotgun") return null;
-        return { holes: fmt === "9 Holes" ? "9" : "18", side };
+        if (val("edit-event-start_type") !== "Shotgun") return [];
+        return [{ holes: fmt === "9 Holes" ? "9" : "18", side, label: "" }];
     }
-    async function sgLoad(previewReverse) {
-        const box = document.getElementById("edit-shotgun-staging");
-        const leg = sgLeg();
-        if (!box) return;
-        box.style.display = leg ? "" : "none";
-        if (!leg || !SG.ev) return;
+    async function sgLoadLeg(leg, preview) {
         let q = `holes=${leg.holes}&nine_side=${encodeURIComponent(leg.side)}`;
-        if (previewReverse !== undefined) q += `&reverse=${previewReverse ? 1 : 0}`;
+        if (preview) q += `&reverse=${preview.reverse ? 1 : 0}&after_par3=${preview.after_par3 ? 1 : 0}`;
         try {
             const r = await fetch(`/api/events/${SG.ev.id}/shotgun-staging?${q}`, { cache: "no-store" });
-            if (!r.ok) return;
-            SG.data = await r.json();
-        } catch (e) { return; }
-        if (previewReverse === undefined) {
-            SG.locked = !!SG.data.locked; SG.reverse = !!SG.data.reverse;
-            SG.start = JSON.stringify([SG.locked, SG.reverse, SG.data.rows.map(x => x.groups)]);
+            if (!r.ok) return null;
+            return await r.json();
+        } catch (e) { return null; }
+    }
+    async function sgLoad(previewHoles) {
+        const box = document.getElementById("edit-shotgun-staging");
+        if (!box || !SG.ev) return;
+        const legs = sgLegs();
+        box.style.display = legs.length ? "" : "none";
+        const keep = {};
+        for (const leg of legs) {
+            const cur = SG.legs[leg.holes];
+            const preview = (previewHoles === leg.holes && cur) ? { reverse: cur.reverse, after_par3: cur.after_par3 } : null;
+            const data = await sgLoadLeg(leg, preview);
+            if (!data) continue;
+            const st = cur && previewHoles !== undefined ? cur
+                : { locked: !!data.locked, reverse: !!data.reverse, after_par3: !!data.after_par3, edited: false };
+            if (!cur || previewHoles === undefined) {
+                st.start = JSON.stringify([!!data.locked, !!data.reverse, !!data.after_par3, data.rows.map(x => x.groups)]);
+            } else {
+                st.start = cur.start;
+            }
+            st.data = data; st.leg = leg;
+            if (preview) st.edited = false;
+            keep[leg.holes] = st;
         }
+        SG.legs = keep;
         sgRender();
     }
     function sgRender() {
-        const d = SG.data; if (!d) return;
-        const wrap = document.getElementById("sg-grids");
-        wrap.innerHTML = "";
-        // Nine holes to a row, so an 18 reads as the two nines it is.
-        for (let k = 0; k < d.rows.length; k += 9) {
-            const chunk = d.rows.slice(k, k + 9);
-            const tbl = document.createElement("table"); tbl.className = "sg-grid";
-            const hole = tbl.insertRow(), info = tbl.insertRow(), grp = tbl.insertRow();
-            hole.className = "sg-row-hole"; info.className = "sg-row-info"; grp.className = "sg-row-groups";
-            [[hole, "Hole"], [info, ""], [grp, "Groups"]].forEach(([tr, t]) => { const th = document.createElement("th"); th.textContent = t; tr.appendChild(th); });
-            chunk.forEach(x => {
-                hole.insertCell().textContent = x.hole;
-                const b = info.insertCell();
-                b.textContent = x.par ? `P${x.par}${x.yards ? " " + x.yards : ""}` : "";
-                if (x.cap === 1) b.className = "one";
-                const inp = document.createElement("input");
-                inp.type = "number"; inp.min = "0"; inp.max = "2"; inp.value = x.groups;
-                inp.id = `sg-g-${x.hole}`; inp.disabled = SG.locked;
-                inp.setAttribute("aria-label", `Groups on hole ${x.hole}`);
-                inp.addEventListener("input", () => { x.groups = Math.max(0, Math.min(2, parseInt(inp.value || "0", 10) || 0)); SG.edited = true; sgTotal(); });
-                grp.insertCell().appendChild(inp);
-            });
-            wrap.appendChild(tbl);
-        }
-        document.getElementById("sg-reverse").checked = SG.reverse;
-        document.getElementById("sg-reverse").disabled = SG.locked;
-        document.getElementById("sg-lock").checked = SG.locked;
-        document.getElementById("sg-lock").disabled = SG.locked;
-        document.getElementById("sg-edit").style.display = SG.locked ? "" : "none";
-        sgTotal();
+        const box = document.getElementById("edit-shotgun-staging");
+        if (!box) return;
+        box.innerHTML = "";
+        Object.values(SG.legs).forEach(st => {
+            const d = st.data, h = st.leg.holes;
+            const sec = document.createElement("div"); sec.className = "sg-stage"; sec.dataset.holes = h;
+            sec.innerHTML = `<div class="sg-head"><span class="sg-title">Shotgun staging${st.leg.label ? " · " + st.leg.label + " leg" : ""}</span>` +
+                `<label class="sg-opt"><input type="checkbox" class="sg-rev" id="sg-rev-${h}"${st.reverse ? " checked" : ""}${st.locked ? " disabled" : ""}> Reverse shotgun</label>` +
+                `<label class="sg-opt"><input type="checkbox" class="sg-ap3" id="sg-ap3-${h}"${st.after_par3 ? " checked" : ""}${st.locked ? " disabled" : ""}> 1 group on the hole after a par 3</label>` +
+                `<button type="button" class="sg-lockbtn${st.locked ? " on" : ""}" id="sg-lock-${h}" title="${st.locked ? "Locked: tap to unlock and edit" : "Unlocked: tap to lock these counts"}">${st.locked ? "&#128274; Locked" : "&#128275; Unlocked"}</button></div>` +
+                `<div class="sg-scroll"></div><div class="sg-total"></div>`;
+            const wrap = sec.querySelector(".sg-scroll");
+            // Nine holes to a row, so an 18 reads as the two nines it is.
+            for (let k = 0; k < d.rows.length; k += 9) {
+                const tbl = document.createElement("table"); tbl.className = "sg-grid";
+                const hole = tbl.insertRow(), info = tbl.insertRow(), grp = tbl.insertRow();
+                hole.className = "sg-row-hole"; info.className = "sg-row-info"; grp.className = "sg-row-groups";
+                [[hole, "Hole"], [info, ""], [grp, "Groups"]].forEach(([tr, t]) => { const th = document.createElement("th"); th.textContent = t; tr.appendChild(th); });
+                d.rows.slice(k, k + 9).forEach(x => {
+                    hole.insertCell().textContent = x.hole;
+                    const b = info.insertCell();
+                    b.textContent = x.par ? `P${x.par}${x.yards ? " " + x.yards : ""}` : "";
+                    if (x.cap === 1) b.className = "one";
+                    const inp = document.createElement("input");
+                    inp.type = "number"; inp.min = "0"; inp.max = "2"; inp.value = x.groups;
+                    inp.id = `sg-g-${h}-${x.hole}`; inp.disabled = st.locked;
+                    inp.setAttribute("aria-label", `Groups on hole ${x.hole}`);
+                    inp.addEventListener("input", () => { x.groups = Math.max(0, Math.min(2, parseInt(inp.value || "0", 10) || 0)); st.edited = true; sgTotal(sec, st); });
+                    grp.insertCell().appendChild(inp);
+                });
+                wrap.appendChild(tbl);
+            }
+            box.appendChild(sec);
+            sgTotal(sec, st);
+        });
     }
-    function sgTotal() {
-        const d = SG.data; if (!d) return;
+    function sgTotal(sec, st) {
+        const d = st.data;
         const placed = d.rows.reduce((t, x) => t + (x.groups || 0), 0);
-        const el = document.getElementById("sg-total");
         const need = d.groups_needed;
         let msg = `${placed} of ${need} group${need === 1 ? "" : "s"} placed (${d.players} player${d.players === 1 ? "" : "s"} registered now).`;
         if (placed < need) msg += ` ${need - placed} more group${need - placed === 1 ? "" : "s"} would go to the next open holes in order.`;
         if (placed > need) msg += ` ${placed - need} spot${placed - need === 1 ? "" : "s"} left empty unless the field grows.`;
-        if (!SG.locked) msg += " Lock it to keep these counts as the field changes.";
+        if (!st.locked) msg += " Save locks these counts.";
+        const el = sec.querySelector(".sg-total");
         el.textContent = msg;
         el.className = "sg-total" + (placed < need ? " warn" : "");
     }
-    function sgOpen(ev) {
-        SG.ev = ev; SG.data = null; SG.edited = false; SG.locked = false; SG.reverse = false; SG.start = null;
-        sgLoad();
-    }
+    function sgOpen(ev) { SG.ev = ev; SG.legs = {}; sgLoad(); }
     function sgChanges() {
-        if (!SG.data || !sgLeg()) return null;
-        const now = JSON.stringify([SG.locked, SG.reverse, SG.data.rows.map(x => x.groups)]);
-        if (now === SG.start) return null;
-        const out = { reverse: SG.reverse, locked: SG.locked };
-        if (SG.locked || SG.edited) {
-            out.counts = {}; out.hole_order = SG.data.rows.map(x => x.hole);
-            SG.data.rows.forEach(x => { out.counts[x.hole] = x.groups || 0; });
-        }
-        return out;
+        // Save auto-locks every shown grid (Kerry 10/28: "If you click save
+        // before unlocking, then that auto-locks it").
+        const out = [];
+        Object.values(SG.legs).forEach(st => {
+            const counts = st.data.rows.map(x => x.groups || 0);
+            if (st.locked && JSON.stringify([true, st.reverse, st.after_par3, counts]) === st.start) return;
+            const row = { holes: st.leg.holes, reverse: st.reverse, after_par3: st.after_par3, locked: true,
+                          counts: {}, hole_order: st.data.rows.map(x => x.hole) };
+            st.data.rows.forEach(x => { row.counts[x.hole] = x.groups || 0; });
+            out.push(row);
+        });
+        return out.length ? out : null;
     }
     document.addEventListener("change", e => {
         const t = e.target;
-        if (!t || !t.name && !t.id) return;
-        if (t.id === "sg-reverse") { SG.reverse = t.checked; SG.edited = false; sgLoad(SG.reverse); return; }
-        if (t.id === "sg-lock") { SG.locked = t.checked; sgRender(); return; }
-        if (/^edit-event-(format|start_type|start_type_9|start_type_18|nine_side)$/.test(t.name || "")) {
-            SG.edited = false; sgLoad(SG.locked ? undefined : SG.reverse);
+        if (!t) return;
+        const sec = t.closest && t.closest(".sg-stage");
+        if (sec && (t.classList.contains("sg-rev") || t.classList.contains("sg-ap3"))) {
+            const st = SG.legs[sec.dataset.holes]; if (!st) return;
+            if (t.classList.contains("sg-rev")) st.reverse = t.checked; else st.after_par3 = t.checked;
+            sgLoad(sec.dataset.holes);
+            return;
         }
+        if (/^edit-event-(format|start_type|start_type_9|start_type_18|nine_side)$/.test(t.name || "")) sgLoad();
     });
     document.addEventListener("click", e => {
-        if (e.target && e.target.id === "sg-edit") { SG.locked = false; sgRender(); }
+        const b = e.target && e.target.closest && e.target.closest(".sg-lockbtn");
+        if (!b) return;
+        const st = SG.legs[b.closest(".sg-stage").dataset.holes]; if (!st) return;
+        st.locked = !st.locked; sgRender();
     });
 
     function openEditEvent(eventId) {
