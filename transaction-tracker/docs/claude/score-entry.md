@@ -1145,6 +1145,10 @@ on for a member to score.
 Proof on production: `scoring-se-gate-check:<event_id>[|<chapter>]` (read-only)
 returns the status codes a chapter manager and a player link get on that event.
 
+## Closest to the pin on the hole screen (v2.605.1, Kerry 10/27)
+
+On a hole with a closest-to-the-pin contest (`card.ctp[hole].kind == "ctp"`, from `ctp_contests`), `ctpBox(hole)` in score_entry.html shows a box under the hole line: "CLOSEST TO THE PIN" and the current holder's name (green), or "No one on the green yet" (grey). Kerry's spec, in order: "Don't put LIVE or Group #", "remove the taken over note", "I don't think it needs the held since either". No distance is measured, so none is shown. The card's 15-second poll keeps it current. Guard `test_follow_sheet.py` (D).
+
 ## Links are slot numbers; the round follows the saved pairings (Kerry 2026-09-29)
 
 **The round follows the sheet until first tee (v2.605.0, Kerry 10/27, CoS #2429-2).** Silverhorn 10/27: Kerry's Monday-night consolidation (25 -> 24) took the sheet to groups 1-5 and 7, and the empty "Hole 3B" (group 6) stayed on Live Scoring because a re-seed only dropped groups numbered past the count. Kerry: "That should happen automatically if I've approved it. There was no way to manually delete it." Now:

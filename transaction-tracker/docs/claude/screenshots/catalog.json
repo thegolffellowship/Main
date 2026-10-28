@@ -818,7 +818,7 @@
      }
     }
    ],
-   "watch_hash": "de0c997a372fc36f"
+   "watch_hash": "f276d67a7ec321db"
   },
   {
    "id": "score-entry-match-pickup",
@@ -1938,7 +1938,7 @@
    "watch": [
     "templates/score_entry.html"
    ],
-   "watch_hash": "cf64c5fb80dd9345"
+   "watch_hash": "e531738fe6da5d3c"
   },
   {
    "id": "member-teesheet",

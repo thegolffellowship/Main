@@ -382,6 +382,15 @@
         .se-hole .se-top { align-items: center; }
         .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
         .se-hole .se-sub { font-size: 14px; margin-top: 2px; }
+        /* closest to the pin on the hole (Kerry 10/27) */
+        .se-ctp { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; padding: 10px 14px;
+            border: 2px solid #D1D5DB; background: #F8F8F8; border-radius: 14px; }
+        .se-ctp.on { border-color: #15803D; background: #ECFDF5; }
+        .se-ctp-flag { font-size: 24px; line-height: 1; }
+        .se-ctp-k { font: 700 12px Bitter, Georgia, serif; letter-spacing: 1.5px; text-transform: uppercase; color: #6B7280; }
+        .se-ctp.on .se-ctp-k { color: #15803D; }
+        .se-ctp-n { font: 700 19px Bitter, Georgia, serif; color: #6B7280; }
+        .se-ctp.on .se-ctp-n { color: #1B1B1B; }
         /* the hole's Par · yds · SI on the same line as its number (Kerry
            10/9: "Place hole details inline with the hole #") */
         .se-hole .se-hl { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
@@ -1281,6 +1290,21 @@
                 + subjects().filter((x) => !used.has(x.key)).map((x) => rowsByKey[x.key]).join("");
         }
 
+        // CLOSEST TO THE PIN, on the hole (Kerry 10/27: "a live who's got
+        // closest to the Pin ... for each par three"; then "Don't put LIVE or
+        // Group #", "remove the taken over note", "I don't think it needs the
+        // held since either"). Only a hole with a closest-to-the-pin contest;
+        // the label and the holder's name, nothing else. The 15-second card
+        // poll keeps it current as other groups claim.
+        function ctpBox(n) {
+            const c = (card.ctp || {})[String(n)];
+            if (!c || (c.kind && c.kind !== "ctp")) return "";
+            const flag = `<span class="se-ctp-flag" aria-hidden="true">&#9971;</span>`;
+            return c.holder_name
+                ? `<div class="se-ctp on">${flag}<div><div class="se-ctp-k">Closest to the pin</div><div class="se-ctp-n">${esc(c.holder_name)}</div></div></div>`
+                : `<div class="se-ctp">${flag}<div><div class="se-ctp-k">Closest to the pin</div><div class="se-ctp-n">No one on the green yet</div></div></div>`;
+        }
+
         function holeScreen() {
             const order = holeOrder();
             if (hole == null && store.get(K.hole, null) === "photo") hole = "photo";
@@ -1376,6 +1400,7 @@
                     <div class="se-eyebrow">${esc(eyebrow())}</div>
                     <div class="se-hl"><h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">${esc(meta)}</div></div></div>
                   </div>
+                ${ctpBox(hole)}
                 ${matchStrip()}
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}

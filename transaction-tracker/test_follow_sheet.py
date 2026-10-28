@@ -179,6 +179,15 @@ rows = ha.status_rows([P0], missing_ids=[], db_path=DB)
 check("a number the manager typed replaces Needs a number (Alex Porter, 10/27)",
       rows and rows[0]["status"] == "manager_set" and "set by manager: 18.0" in rows[0]["line"], rows)
 
+print("D. Closest to the pin on the hole (Kerry 10/27)")
+se_html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "score_entry.html")).read()
+box = se_html[se_html.index("function ctpBox("):se_html.index("function holeScreen(")]
+check("the hole screen shows the box, on contest holes only",
+      "${ctpBox(hole)}" in se_html and 'c.kind !== "ctp"' in box and "card.ctp" in box)
+check("label and name only: no LIVE, no group, no time, no takeover, no distance (Kerry 10/27)",
+      "Closest to the pin" in box and "No one on the green yet" in box
+      and not any(w in box for w in ("LIVE", "Live", "group_num", "Group", "since", "Taken over", " ft ")), box)
+
 print()
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

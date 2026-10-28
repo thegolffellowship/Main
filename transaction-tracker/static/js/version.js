@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.605.0";
+window.TGF_VERSION = "2.605.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.605.1",
+    date: "2026-10-28",
+    title: "Scoring: who's closest to the pin, on the par 3's hole screen",
+    changes: [
+      "Kerry 10/27, from Silverhorn's hole 5: \"let's make it so there's a live who's got closest to the Pin on the score for each part three whole\", then \"Don't put LIVE or Group #\", \"remove the taken over note\" and \"I don't think it needs the held since either\". On a hole with a closest-to-the-pin contest, a box under the hole line reads CLOSEST TO THE PIN and the holder's name (green), or No one on the green yet (grey). It reads the claims the Tracker already keeps, and the card's 15-second refresh keeps it current as later groups claim. No distance (none is measured), no group, no time. Screens no-show and score-entry-live retaken. Guard test_follow_sheet.py."
+    ]
+  },
   {
     version: "2.605.0",
     date: "2026-10-27",
