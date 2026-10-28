@@ -163,8 +163,14 @@ with db._connect(DB) as conn:
     conn.commit()
 
 bw = tt.build(EV_WE, db_path=DB)
-check("weekend pack line: were sent at noon today", tt.PACK_LINE["weekend"] in by(bw, "course")[0]["html"])
-check("weekend manager line in the past tense", "got the print packs at noon today" in by(bw, "manager")[0]["html"])
+# Kerry 10/28: the tee-times email goes on the LOCK night. A Saturday event
+# locks Wednesday, so its email reads "noon Saturday", never "tomorrow".
+check("weekend pack line on the Wednesday lock night: will arrive at noon Saturday",
+      "will arrive by email at noon Saturday." in by(bw, "course")[0]["html"]
+      and "tomorrow" not in by(bw, "course")[0]["html"], by(bw, "course")[0]["html"][-900:])
+check("weekend manager line names the day", "The course gets the print packs at noon Saturday" in by(bw, "manager")[0]["html"])
+check("weekend player line: Event Info at 6:00 AM Saturday",
+      all("6:00 AM Saturday" in m["html"] for m in by(bw, "player")) and by(bw, "player"))
 
 print("4. Locked until stamped AND the dial is on; once per person")
 SENT.clear()
@@ -315,13 +321,35 @@ SENT.clear()
 out = json.loads(mcp_server._scoring_dispatch("", f"scoring-teetimes-email:{EV}|send"))
 check("there is no send bridge", "error" in out and not SENT, out)
 
-print("6. The evening-before window (handoff 10/20 §4 risk 1)")
+print("6. The lock-evening window (handoff 10/20 §4 risk 1; Kerry 10/28 lock night)")
 # an approval on event morning used to send "comes at 7:00 AM tomorrow"
-check("event morning: refused", "evening before" in (tt.send_window_ok("2026-10-27", datetime(2026, 10, 27, 6, 30)) or ""))
-check("the day before at 4 PM: refused (the lock is 5 PM)", "5 PM" in (tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 16, 0)) or ""))
+check("event morning: refused", "lock evening" in (tt.send_window_ok("2026-10-27", datetime(2026, 10, 27, 6, 30)) or ""))
+check("the day before at 4 PM: refused (the lock is 5 PM)", "5:00 PM lock" in (tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 16, 0)) or ""))
 check("the day before at 5:30 PM (a manager's approval): allowed", tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 17, 30)) is None)
 check("the day before at 11:45 PM: allowed", tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 23, 45)) is None)
 check("two days before: refused", tt.send_window_ok("2026-10-27", datetime(2026, 10, 25, 19, 0)) is not None)
+check("SATURDAY: the Wednesday lock evening (5:30 PM) is allowed (Kerry 10/28: 'moved to the night of the lock')",
+      tt.send_window_ok("2026-10-31", datetime(2026, 10, 28, 17, 30)) is None)
+check("SATURDAY: Friday evening is refused now", tt.send_window_ok("2026-10-31", datetime(2026, 10, 30, 19, 0)) is not None)
+check("SATURDAY: an events row works too", tt.send_window_ok({"event_date": "2026-10-31"}, datetime(2026, 10, 28, 19, 0)) is None)
+check("a manager's lock override moves the window",
+      tt.send_window_ok({"event_date": "2026-10-31", "lock_override": "2026-10-29 17:00"}, datetime(2026, 10, 29, 18, 0)) is None
+      and tt.send_window_ok({"event_date": "2026-10-31", "lock_override": "2026-10-29 17:00"}, datetime(2026, 10, 28, 18, 0)) is not None)
+r_auto = tt.auto_check(now=datetime(2026, 10, 30, 19, 0), db_path=DB)
+check("SATURDAY: the Friday 7 PM job no longer sends it", EV_WE not in ((r_auto.get("events") or {})), r_auto)
+_ww = tt.when_words({"id": 99001, "event_date": "2026-10-31", "start_time": "08:00", "start_type": "Shotgun"},
+                    datetime(2026, 10, 28, 19, 0), DB)
+check("a MORNING Saturday seen from the Wednesday lock night: Event Info noon Friday, packs Friday, event Saturday",
+      _ww == {"event_day": "Saturday", "info_past": False, "info": "noon Friday", "packs_past": False,
+              "packs_day": "Friday"}, _ww)
+_w = {"info": "noon Friday", "info_past": False}
+check("Event Info phrase on a Wednesday lock night for a morning Saturday: 'comes at noon Friday'",
+      tt.event_info_phrase("comes at 7:00 AM tomorrow.", True, _w) == "comes at noon Friday.")
+check("...and once it went: 'went out at noon today'",
+      tt.event_info_phrase("comes at 7:00 AM tomorrow.", True, {"info": "noon today", "info_past": True})
+      == "comes at 7:00 AM tomorrow.".replace("comes at 7:00 AM tomorrow", tt.MORNING_EVENT_INFO))
+check("pack wording follows the day", tt.pack_text(tt.PACK_LINE["weekday"], {"packs_day": "Friday"}).endswith("at noon Friday.")
+      and tt.pack_key(True, {"packs_past": False}) == "weekday")
 SENT.clear()
 r = tt._deliver(EV_WE, DB, now=datetime(2026, 10, 31, 7, 0))
 check("an approval on event morning sends nothing", "refused" in r and not SENT, r)

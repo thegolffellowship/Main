@@ -1702,16 +1702,18 @@ def start_scheduler():
     logger.info("Expense email classifier scheduled every %d minutes", expense_interval)
 
     # COO daily email — runs at 7:00 AM US/Central
-    # Print packs: every active event dated TODAY, mailed to Kerry from
-    # 6 AM on the day (checked hourly 6–9 AM Central; a content hash makes
-    # it once-per-change, so the first check sends and the later ones
-    # only re-send a sheet that changed). Kerry 2026-09-21: "shouldn't be
-    # sent until 6:00a day of". A SEND PACK button on the pairings toolbar
-    # sends on demand at any time. v2.468.5 (was the evening before).
+    # Print packs for an event whose course has NO contact, mailed to Kerry
+    # (+ the chapter's recipients) at the SAME noon the Course Files go to a
+    # course that has one (Kerry 2026-10-28: "Print packs for weekend events
+    # should come day before just like if there is a course contact"): noon
+    # on course_files_noon.send_day, then hourly to 8 PM and 6-9 AM event
+    # day only to re-send a CHANGED sheet (content hash), never within an
+    # hour of the first tee. A SEND PACK button on the pairings toolbar
+    # sends on demand at any time. (Was 6 AM event day, v2.468.5.)
     scheduler.add_job(
         send_due_print_packs_job,
         "cron",
-        hour="6-9",
+        hour="6-9,12-20",
         minute=5,
         timezone="US/Central",
         id="print_packs_day_of",

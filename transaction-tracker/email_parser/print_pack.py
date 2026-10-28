@@ -1,5 +1,5 @@
 """The event PRINT PACK — every print sheet for an event bound into ONE
-PDF, and the routine that emails it the evening before (v2.465.0).
+PDF, and the routine that emails it (v2.465.0; noon on the Course Files day since v2.608.0).
 
 Kerry 2026-09-18: "Are you able to build a routine that automatically
 emails me the PDF reports for an event? Or perhaps a bound PDF with all
@@ -14,13 +14,17 @@ templates already carry). The PDF engine is imported lazily so a deploy
 without it still boots; the route and the bridge then say so instead of
 failing silently.
 
-The routine (`send_due_print_packs`) runs hourly 5–10 PM Central and
-mails the pack for every active event dated TOMORROW to
+The routine (`send_due_print_packs`, job `print_packs_day_of`) mails the
+pack for an event whose course has NO TGF contact at the same time the
+Course Files go to a course that has one (Kerry 2026-10-28): from noon on
+`course_files_noon.send_day` (event day, or the day before for a morning
+event), checked hourly 12:05-8:05 PM and 6:05-9:05 AM Central, to
 `PRINT_PACK_EMAIL_TO` (falls back to `DAILY_REPORT_TO`, then
 `EMAIL_ADDRESS`), plus the chapter's extra recipients (dial
 `print_pack_chapter_recipients`; Austin → Robert Straiton). A content hash of the rendered parts is recorded in
 `app_settings` (`print_pack_sent:<event_id>`), so a pack is sent once —
-and sent AGAIN only if the sheet changed after the first send. Kerry
+and sent AGAIN only if the sheet changed after the first send, until one
+hour before the first tee. Kerry
 sends nothing here; the pack goes to Kerry.
 """
 from __future__ import annotations
@@ -778,28 +782,51 @@ def _handicap_only_change(event_id: int, built: dict, db_path=None) -> bool:
     return bool(changed) and changed <= set(HANDICAP_PARTS)
 
 
-def print_packs_due(db_path=None) -> list[dict]:
-    """Active events dated TODAY (Central). Kerry 2026-09-21: the packs
-    "probably shouldn't be sent until 6:00a day of" — the routine runs
-    from 6 AM on the event day, not the evening before (v2.465.0)."""
+def print_packs_due(db_path=None, now=None) -> list[dict]:
+    """The events whose pack is due NOW (Central). Kerry 2026-10-28: "Print
+    packs for weekend events should come day before just like if there is a
+    course contact." So the pack goes when the Course Files would: from noon
+    on course_files_noon.send_day (event day, or the day before for a morning
+    event, first tee before 1:00 PM). Once sent, a CHANGED sheet goes again
+    (the content hash in send_due_print_packs) until one hour before the
+    first tee. (Was 6 AM on event day, Kerry 2026-09-21; for an 8:00 AM
+    shotgun that left under two hours to print.)"""
     from email_parser import database as db
-    from email_parser.timezone_utils import today_central
-    today = today_central().isoformat()
-    return [e for e in db.get_all_events(db_path)
-            if (e.get("event_date") or "")[:10] == today
-            and (e.get("status") or "active") == "active"]
+    from email_parser.timezone_utils import now_central
+    from email_parser.course_files_noon import send_day
+    from email_parser.after_lock import _first_tee
+    if now is None:
+        now = now_central()
+    today = now.date().isoformat()
+    out = []
+    for e in db.get_all_events(db_path):
+        d = (e.get("event_date") or "")[:10]
+        if not d or d < today or (e.get("status") or "active") != "active":
+            continue
+        sd = send_day(e)
+        if sd > today:
+            continue
+        if sd == today and now.hour < 12:
+            # before the noon send: only a pack already sent may go again
+            if not db.get_app_setting(f"print_pack_sent:{e['id']}", db_path=db_path):
+                continue
+        ft = _first_tee(e)
+        if ft is not None and now >= ft - timedelta(hours=1):
+            continue
+        out.append(e)
+    return out
 
 
-def send_due_print_packs(render, static_dir: str, db_path=None) -> list[dict]:
+def send_due_print_packs(render, static_dir: str, db_path=None, now=None) -> list[dict]:
     """The routine: build each due pack, send if never sent or changed."""
     from email_parser import database as db
     out = []
-    for ev in print_packs_due(db_path):
+    for ev in print_packs_due(db_path, now=now):
         # Kerry 2026-10-20: "Neither should have come because there are course
         # contacts at both courses, so the only print packs that should have
         # gone were theirs at noon with managers CCd." An event whose course
         # has a TGF contact gets its files only through Course Files (To the
-        # course, CC the managers); this morning pack is for the rest.
+        # course, CC the managers); this pack, at the same noon, is for the rest.
         try:
             _contact = course_contact_for_event(ev, db_path=db_path)
         except Exception:

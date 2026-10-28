@@ -247,7 +247,7 @@ def _flags_html(rv: dict) -> str:
 # The prompt
 # ---------------------------------------------------------------------------
 
-def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dict:
+def send_prompt(event_id: int, db_path=None, base_url: str | None = None, now=None) -> dict:
     from email_parser.event_day_email import _creds, _graph_send
     from email_parser import database as db
     rv = review(event_id, db_path)
@@ -267,12 +267,26 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
     c = rv["counts"]
     ev = rv["event"]
     sample = rv["sample"]
+    # The real times for THIS event (Kerry 10/28: "Don't know what your
+    # manager's approval email means"): a Saturday morning event's tee times
+    # go tonight at the lock, its Event Info at noon Friday.
+    from email_parser.timezone_utils import now_central as _nc
+    with db._connect(db_path) as _c:
+        _evrow = _c.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+    _evd = dict(_evrow) if _evrow else {"event_date": ev.get("date")}
+    _now = now or _nc()
+    _lock_eve = lock_evening_word(_evd, _now, db_path)
+    _ia = info_at(_evd, db_path)
+    _info_t = "noon" if is_morning_event(_evd) else info_time(db_path)
+    _info_words = (f"{_info_t} {day_word(_ia, _now)}" if _ia else f"{info_time()} on event day")
+    if is_morning_event(_evd) and _ia:
+        _info_words += ", with the Course Files"
     html_body = (
         f"<p>Hi {_e(mgr['name'] or 'there')},</p>"
         f"<p>The pairings for <b>{_e(ev['name'])}</b> ({_e(ev['date'])}, {_e(ev['course'])}) are ready. "
         f"Please review and approve them. When you approve, the tee-times email goes to the players, "
-        f"the course and you (at 7:00 PM the evening before play if nobody approves); "
-        f"their full Event Info email goes at {info_time()} on event day: "
+        f"the course and you (at 7:00 PM {_lock_eve} if nobody approves); "
+        f"their full Event Info email goes at {_info_words}: "
         f"<b>{c.get('ready', 0)} players</b>"
         + (f", {c.get('held')} held" if c.get("held") else "") + ".</p>"
         # One tap approves (Kerry 10/19: "This should show two buttons:
@@ -290,7 +304,7 @@ def send_prompt(event_id: int, db_path=None, base_url: str | None = None) -> dic
         f"<p style=\"color:#6B7280;font-size:13px;\">You'll be asked to log in to the Tracker.</p>"
         + _flags_html(rv)
         + "<p><b>The groups:</b></p>" + _groups_html(rv["groups"])
-        + (f'<hr style="border:0;border-top:2px solid #E87C3E"><p><b>Sample: the {info_time()} Event Info email</b> (not tonight\'s tee-times email) '
+        + (f'<hr style="border:0;border-top:2px solid #E87C3E"><p><b>Sample: the {_info_t} Event Info email</b> ({_info_words.split(", with")[0]}; not the tee-times email) '
            f"(to {_e(sample['name'])}):</p>" + sample["html"] if sample else ""))
     subject = f"Pairings ready to approve: {ev['name']}"
     creds = _creds()
@@ -364,7 +378,7 @@ def prompt_check(now=None, db_path=None) -> dict:
                 continue
             if eid in near:
                 ensure_live_scoring(eid, db_path=db_path)
-            out[eid] = send_prompt(eid, db_path)
+            out[eid] = send_prompt(eid, db_path, now=now)
         except Exception as exc:
             logger.exception("pairings approval prompt failed for %s", eid)
             out[eid] = {"error": str(exc)}
@@ -490,9 +504,15 @@ def send_plan(event_id: int, db_path=None, after: bool = False) -> dict:
         _evd = datetime.strptime(str(ev["event_date"])[:10], "%Y-%m-%d").date()
     except ValueError:
         _evd = None
-    eve = _evd - _td(days=1) if _evd else None
+    # The tee-times email goes on the LOCK evening (Kerry 10/28: "moved to
+    # the night of the lock and pairings generation...same as Tuesday
+    # events"): a Saturday event's lock is Wednesday 5:00 PM.
+    _lk = db.event_lock_at(ev, db_path)
+    eve = _lk.date() if _lk is not None else (_evd - _td(days=1) if _evd else None)
     now_ok = eve is None or today_central() >= eve
     eve_name = eve.strftime("%A") if eve else ""
+    from email_parser.timezone_utils import clock12 as _c12
+    lock_clock = _c12(_lk) if _lk is not None else "5:00 PM"
     # Tee times go once per person per event (teetimes_email._sent). A sheet
     # re-approved after they went sends nothing new, so the line says so
     # (Kerry 10/26, Silverhorn re-approved 9:59 PM, nothing went); the
@@ -507,7 +527,7 @@ def send_plan(event_id: int, db_path=None, after: bool = False) -> dict:
         s1 = f"{verb} to all {n} players{course_clause} and to you."
     else:
         verb = "Tee times go" if after else "Approving sends tee times"
-        s1 = f"{verb} to all {n} players{course_clause} and to you at 5:00 PM {eve_name}."
+        s1 = f"{verb} to all {n} players{course_clause} and to you at {lock_clock} {eve_name}."
     s_open = (f"Invitees who haven't registered get the open-spots email ({spots} spot{'s' if spots != 1 else ''} open)."
               if inv > 0 and spots > 0 and not already else "")
     morning = is_morning_event(ev)
@@ -529,11 +549,16 @@ def send_plan(event_id: int, db_path=None, after: bool = False) -> dict:
         confirm = (f"Approve these pairings? Tee times already went at {already} and are not sent again. "
                    + s_info)
     else:
-        confirm = (f"Approve these pairings? Tee times go {'now' if now_ok else 'at 5:00 PM ' + eve_name} to {n} players"
+        confirm = (f"Approve these pairings? Tee times go {'now' if now_ok else 'at ' + lock_clock + ' ' + eve_name} to {n} players"
                    + (f", {course} and you" if has_contact else " and you")
                    + (f", and the open-spots email to {inv} invitee{'s' if inv != 1 else ''}." if inv > 0 and spots > 0 else "."))
     auto_line = ("If you don't approve, this all goes automatically at 7:00 PM."
                  if now_ok else f"If you don't approve, this all goes automatically at 7:00 PM {eve_name}.")
+    if morning:
+        # A morning event's Event Info and Course Files keep their own time
+        # (noon the day before); only the tee times go at 7:00 PM.
+        auto_line = ("If you don't approve, the tee times go automatically at 7:00 PM"
+                     + ("" if now_ok else f" {eve_name}") + f"; the Event Info still goes at noon {dname}.")
     if already:
         auto_line = "Nothing else goes tonight."
     return {"line": line, "auto_line": auto_line,
@@ -717,9 +742,21 @@ def check_parts(event_id: int, db_path=None) -> dict:
     if rv.get("error"):
         return rv
     sample = rv.get("sample")
+    head = SAMPLE_HEAD.replace('7:00 AM', info_time(db_path))
+    try:
+        from email_parser import database as db
+        with db._connect(db_path) as conn:
+            _r = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        if _r and is_morning_event(dict(_r)):
+            # a morning event's Event Info goes at noon the day before (Kerry 10/26)
+            head = (SAMPLE_HEAD.replace("the 7:00 AM Event Info email each player gets on event day",
+                                        "the Event Info email each player gets at noon the day before")
+                    .replace("the full email that follows in the morning",
+                             "the full email that follows at noon the day before"))
+    except Exception:
+        pass
     return {"flags_html": _flags_html(rv),
-            "sample_html": ((SAMPLE_HEAD.replace('7:00 AM', info_time(db_path)) + '<div class="sample">'
-                             + sample["html"] + '</div>') if sample else "")}
+            "sample_html": ((head + '<div class="sample">' + sample["html"] + '</div>') if sample else "")}
 
 
 # ---------------------------------------------------------------------------
@@ -759,6 +796,44 @@ def info_time_for_id(event_id, db_path=None) -> str:
         return info_time(db_path)
 
 
+def info_at(ev: dict, db_path=None):
+    """When this event's Event Info goes, as a naive Central datetime: noon
+    the day before for a morning event, else the event_info_hour on event day.
+    None without a readable date."""
+    try:
+        d = datetime.strptime(str(ev.get("event_date") or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+    if is_morning_event(ev):
+        return (d - timedelta(days=1)).replace(hour=12)
+    return d.replace(hour=info_hour(db_path))
+
+
+def day_word(d, ref) -> str:
+    """'today' / 'tomorrow' / the day name ('Friday'), seen from `ref` (a
+    date or datetime): how a date reads in an email sent on `ref`'s day."""
+    d = d.date() if isinstance(d, datetime) else d
+    ref = ref.date() if isinstance(ref, datetime) else ref
+    n = (d - ref).days
+    if n == 0:
+        return "today"
+    if n == 1:
+        return "tomorrow"
+    if 1 < n < 7:
+        return d.strftime("%A")
+    return d.strftime("%A, %B %-d")
+
+
+def lock_evening_word(ev: dict, ref, db_path=None) -> str:
+    """'tonight' when the lock is on `ref`'s day, else 'Wednesday evening'."""
+    from email_parser import database as db
+    lk = db.event_lock_at(ev, db_path)
+    if lk is None:
+        return "the evening of the lock"
+    w = day_word(lk, ref)
+    return "tonight" if w == "today" else ("tomorrow evening" if w == "tomorrow" else f"{w} evening")
+
+
 def auto_send_check(now=None, db_path=None) -> dict:
     """Two moments (Kerry 10/19: "just sending tee times tonight and then the
     full event info email at 7:00am"):
@@ -777,7 +852,7 @@ def auto_send_check(now=None, db_path=None) -> dict:
         from email_parser.timezone_utils import now_central
         now = now_central()
     today = now.date()
-    lock_day = (today + timedelta(days=1)).isoformat() if now.hour >= AUTO_HOUR else None
+    lock_day = now.hour >= AUTO_HOUR
     send_day = today.isoformat() if info_hour(db_path) <= now.hour < 12 else None
     # A MORNING event (first tee before 1:00 PM: the noon Course Files job's
     # own test, course_files_noon.send_day) gets its Event Info at NOON THE
@@ -785,13 +860,17 @@ def auto_send_check(now=None, db_path=None) -> dict:
     # event info like Fall Champ needs to go out one day prior at noon, same
     # time as course files."). It has no separate 7 PM auto-approve: the noon
     # send approves the sheet as it stands.
+    # THE 7 PM AUTO-APPROVE IS ON THE LOCK NIGHT for every event (Kerry
+    # 10/28: the tee-times email goes "the night of the lock and pairings
+    # generation...same as Tuesday events"): a Saturday event locks Wednesday
+    # 5 PM, so its sheet is signed off Wednesday 7 PM with its tee times.
     from email_parser.course_files_noon import send_day as _cf_day
     from email_parser.after_lock import _first_tee
-    tomorrow = (today + timedelta(days=1)).isoformat()
     with db._connect(db_path) as conn:
         cand = [dict(r) for r in conn.execute(
-            "SELECT * FROM events WHERE substr(event_date, 1, 10) IN (?, ?) "
-            "AND COALESCE(status, 'active') = 'active'", (today.isoformat(), tomorrow)).fetchall()]
+            "SELECT * FROM events WHERE substr(event_date, 1, 10) >= ? AND substr(event_date, 1, 10) <= ? "
+            "AND COALESCE(status, 'active') = 'active'",
+            (today.isoformat(), (today + timedelta(days=7)).isoformat())).fetchall()]
     rows = []
     for r in cand:
         d = str(r["event_date"])[:10]
@@ -799,13 +878,16 @@ def auto_send_check(now=None, db_path=None) -> dict:
             ft = _first_tee(r)
             if _cf_day(r) == today.isoformat() and now.hour >= 12:
                 rows.append({**r, "_mode": "send"})
-            elif d == today.isoformat() and (ft is None or now < ft):
+                continue
+            if d == today.isoformat() and (ft is None or now < ft):
                 rows.append({**r, "_mode": "send"})        # a failed noon send keeps retrying
-            continue
-        if d == lock_day:
-            rows.append({**r, "_mode": "lock"})
+                continue
         elif d == send_day:
             rows.append({**r, "_mode": "send"})
+            continue
+        _lk = db.event_lock_at(r, db_path)
+        if lock_day and _lk is not None and _lk.date() == today and d > today.isoformat():
+            rows.append({**r, "_mode": "lock"})
     if not rows:
         return {"status": "not yet"}
     out = {}
@@ -830,7 +912,7 @@ def auto_send_check(now=None, db_path=None) -> dict:
                 else:
                     _put(eid, db_path, approved_fp=fp, approved_by="auto 7 PM (no manager approval)",
                          approved_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
-                    out[eid] = {"status": "auto-approved", "sends_at": info_time(db_path)}
+                    out[eid] = {"status": "auto-approved", "sends_at": info_time_for(r, db_path)}
                 continue
             # event day, 7 AM to noon: the Event Info send
             last_fail = st.get("auto_failed_at")

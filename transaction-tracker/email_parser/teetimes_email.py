@@ -322,11 +322,66 @@ MORNING_EVENT_INFO = "went out at noon today"
 MORNING_NONREG = "follows as soon as we place you"
 
 
-def event_info_phrase(body: str, morning: bool = False) -> str:
+def when_words(ev: dict, now: datetime, db_path=None) -> dict:
+    """The day words this send needs, seen from the day it goes (Kerry 10/28:
+    the tee-times email moves to the LOCK night, so a Saturday event's email
+    goes Wednesday and "tomorrow" would be wrong). Event Info: noon the day
+    before (morning event) or the event_info_hour on event day; print packs /
+    Course Files: noon on course_files_noon.send_day; the event day itself."""
+    from email_parser.pairings_approval import info_at, day_word, is_morning_event, info_time
+    from email_parser.course_files_noon import send_day
+    out = {"event_day": "tomorrow", "info_past": False, "info": None, "packs_past": False,
+           "packs_day": "tomorrow"}
+    try:
+        ed = datetime.strptime(str(ev.get("event_date") or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        return out
+    out["event_day"] = day_word(ed, now)
+    ia = info_at(ev, db_path)
+    if ia is not None:
+        t = "noon" if is_morning_event(ev) else info_time(db_path)
+        out["info_past"] = ia <= now
+        out["info"] = f"{t} {day_word(ia, now)}"
+    try:
+        pk = datetime.strptime(send_day(ev), "%Y-%m-%d").replace(hour=12)
+        out["packs_past"] = pk <= now
+        out["packs_day"] = day_word(pk, now)
+    except ValueError:
+        pass
+    return out
+
+
+def pack_text(text: str, when: dict | None) -> str:
+    """A PACK_LINE / MANAGER_LINE sentence with its day word for this send:
+    the stamped text says "noon tomorrow" / "noon today"; a Saturday event's
+    Wednesday email reads "noon Friday"."""
+    if not when:
+        return text
+    dw = when.get("packs_day") or "tomorrow"
+    return text.replace("noon tomorrow", f"noon {dw}").replace("noon today", f"noon {dw}")
+
+
+def pack_key(weekend: bool, when: dict | None) -> str:
+    """Which stamped variant reads true: the future one ("will arrive", "come
+    to you") until the noon send has passed, then the past one."""
+    if not when:
+        return "weekend" if weekend else "weekday"
+    return "weekend" if when.get("packs_past") else "weekday"
+
+
+def event_info_phrase(body: str, morning: bool = False, when: dict | None = None) -> str:
     """The stamped line names when Event Info comes. A morning event's Event
     Info went at noon the day before, with the Course Files (Kerry 10/26,
     CoS #2355), before this evening email; everyone else's comes at the
-    event_info_hour dial's time tomorrow. The template keeps its words and hash."""
+    event_info_hour dial's time tomorrow. The template keeps its words and hash.
+    With `when` (when_words) the line says the real day: on the lock night of
+    a Saturday event, "comes at noon Friday"."""
+    if when and when.get("info"):
+        if when.get("info_past"):
+            past = MORNING_EVENT_INFO if when["info"] == "noon today" else f"went out at {when['info']}"
+            return (body.replace("comes at 7:00 AM tomorrow", past)
+                        .replace("follows at 7:00 AM tomorrow", MORNING_NONREG))
+        return body.replace("at 7:00 AM tomorrow", f"at {when['info']}")
     if morning:
         return (body.replace("comes at 7:00 AM tomorrow", MORNING_EVENT_INFO)
                     .replace("follows at 7:00 AM tomorrow", MORNING_NONREG))
@@ -348,7 +403,7 @@ def _render(version: str, tpl: dict, values: dict) -> tuple[str, str, list]:
     body = normalize_email_html(render_msg_template(html_body, values))
     # The Event Info time follows its dial (Kerry 10/26: "Move event info
     # email to 6:00am"); the stamped template keeps its words and hash.
-    body = event_info_phrase(body, values.get("_morning"))
+    body = event_info_phrase(body, values.get("_morning"), values.get("_when"))
     return subject, body, _guard(subject, body, used, values)
 
 
@@ -417,8 +472,10 @@ def _open_seats(pack: dict) -> dict:
 
 
 def _open_message(pack: dict, open_list: dict, first: str, reg_url: str, stop_url: str,
-                  short: str) -> tuple[str, str, list]:
-    """(subject, body, why) for one invitee. Every word from OPEN."""
+                  short: str, event_day: str = "tomorrow") -> tuple[str, str, list]:
+    """(subject, body, why) for one invitee. Every word from OPEN; the day
+    word follows the send (Kerry 10/28: a Saturday event's open-spots email
+    goes Wednesday, so it reads "Saturday", not "tomorrow")."""
     from email_parser.invitations import _button
     ev = pack.get("event") or {}
     n = sum(open_list.values())
@@ -435,6 +492,8 @@ def _open_message(pack: dict, open_list: dict, first: str, reg_url: str, stop_ur
     subj_start = (f"{clock} shotgun" if "shotgun" in st else f"first tee {clock}") if clock else start
     subject = (OPEN["subject_one"] if n == 1 else OPEN["subject_many"]).format(n=n, short=short,
                                                                               start=subj_start)
+    if event_day != "tomorrow":
+        subject = subject.replace(" tomorrow,", f" {event_day},")
     groups = [g for g in pack.get("groups") or []
               if any((p.get("name") or "").strip() for p in g.get("players") or [])]
     hk = sorted({str(g.get("holes")) for g in groups if g.get("holes")}) or [pack.get("holes_key") or ""]
@@ -466,7 +525,10 @@ def _open_message(pack: dict, open_list: dict, first: str, reg_url: str, stop_ur
     table = (f'<table {T} style="border:1px solid #E5E7EB;border-radius:8px;margin:0 0 12px;font-size:15px;">'
              f'<tr><td colspan="2" bgcolor="#1B1B1B" style="background:#1B1B1B;color:#ffffff;padding:10px;'
              f'font-weight:bold;">{_e(OPEN["table_head"])}</td></tr>' + "".join(rows) + '</table>')
-    body = (f'<p>{_e(OPEN["lead"].format(first_name=first or "there", short=short))}</p>' + box + table
+    lead = OPEN["lead"].format(first_name=first or "there", short=short)
+    if event_day != "tomorrow":
+        lead = lead.replace("tomorrow's field", f"{event_day[:1].upper()}{event_day[1:]}'s field")
+    body = (f'<p>{_e(lead)}</p>' + box + table
             + f'<p>{_e(OPEN["under"])}</p>'
             + f'<p style="font-size:13px;color:#6B7280;">{_e(OPEN["footer"].format(short=short))} '
               f'<a href="{_e(stop_url)}" style="color:#6B7280;">{_e(OPEN["stop"])}</a></p>')
@@ -552,7 +614,26 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
             _evr = _c.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
         common["_morning"] = bool(_evr and is_morning_event(dict(_evr)))
     except Exception:
+        _evr = None
         common["_morning"] = False
+    # The day words for the day this goes out (Kerry 10/28: lock night). With
+    # no `now` (a preview, or the approval path) the words are read as of
+    # 7:00 PM on the lock night, the moment it goes by default; a real send
+    # only ever happens that evening (send_window_ok).
+    try:
+        _ref = now
+        if _ref is None:
+            _lk = db.event_lock_at(dict(_evr) if _evr else dict(evp), db_path)
+            if _lk is not None:
+                _ref = _lk.replace(hour=max(_lk.hour, SEND_HOUR), minute=0)
+            else:
+                from email_parser.timezone_utils import now_central as _ncw
+                _ref = _ncw()
+        common["_when"] = when_words(dict(_evr) if _evr else dict(evp), _ref, db_path)
+    except Exception:
+        logger.exception("teetimes: day words unavailable for %s", event_id)
+        common["_when"] = None
+    wk = pack_key(weekend, common["_when"])
     ready, held, skipped = [], [], []
 
     def add(version, key, cid, name, email, subject_body_why, cc=None, extra=None):
@@ -658,7 +739,9 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
                        if reg_url_on else "")
                 stop = inv.rsvp_url(inv.make_token(cid, int(event_id), "unsub", evd, preview=preview))
                 first = ((c[0] if c else "") or "").strip()
-                subject, body, why = _open_message(pack, open_list, first, reg, stop, short)
+                subject, body, why = _open_message(pack, open_list, first, reg, stop, short,
+                                                   ((common.get("_when") or {}).get("event_day")
+                                                    or "tomorrow"))
                 if sheet_why:
                     why = [f"tee sheet: {w}" for w in sheet_why] + why
                 row = {"version": OPEN_VERSION, "key": key, "customer_id": cid, "name": full, "email": email,
@@ -690,7 +773,8 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
             held.append({"version": "course", "key": key, "customer_id": cid, "name": rec.get("to_name"),
                          "email": rec["to"], "reason": "template missing"})
         else:
-            vals = {**common, "first_name": _e(first), "pack_line": _t(PACK_LINE[wk])}
+            vals = {**common, "first_name": _e(first),
+                    "pack_line": _t(pack_text(PACK_LINE[wk], common["_when"]))}
             # THE RELEASED TEE TIMES (Kerry 10/26, CoS #2331 A / #2332: "let
             # the course know which ones"): rendered by code under the tee
             # sheet, inside {tee_sheet}, so the stamped template and its hash
@@ -725,7 +809,8 @@ def build(event_id: int, db_path=None, preview: bool = False, now: datetime | No
     else:
         mcid = mgr.get("customer_id")
         key = f"manager:{mcid or mgr['email'].lower()}"
-        closing = "<p>" + _t(MANAGER_LINE[("contact" if has_contact else "none", wk)]) + "</p>"
+        closing = "<p>" + _t(pack_text(MANAGER_LINE[("contact" if has_contact else "none", wk)],
+                                       common["_when"])) + "</p>"
         if not has_contact:
             url = f"{_base_url()}/courses" + (f"?course={int(rec['course_id'])}" if rec.get("course_id") else "")
             closing += "<p>" + ADD_CONTACT_LINE.format(add_contact_url=_e(url)) + "</p>"
@@ -844,22 +929,32 @@ def send_preview(event_id: int, to_address=None, db_path=None) -> dict:
 # The send (only the 7 PM job calls this)
 # ---------------------------------------------------------------------------
 
-def send_window_ok(event_date, now: datetime | None = None) -> str | None:
-    """None when the tee-times email may go now, else why not. It is the
-    evening-before email ("comes at 7:00 AM tomorrow"): only from the 5 PM
-    lock to midnight Central on the day before the event (handoff 10/20 §4
-    risk 1: an approval on event morning sent it with that wording)."""
+def send_window_ok(event, now: datetime | None = None, db_path=None) -> str | None:
+    """None when the tee-times email may go now, else why not. It goes on the
+    LOCK evening (Kerry 10/28: "That would need to be moved to the night of
+    the lock and pairings generation...same as Tuesday events"): from the
+    event's lock (database.event_lock_at: 5:00 PM the day before a Tuesday,
+    Wednesday 5:00 PM for a Saturday) to midnight that day, and never on event
+    day (handoff 10/20 §4 risk 1: an approval on event morning sent it).
+    `event` is the events row (a dict) or, for older callers, its date."""
+    from email_parser import database as db
+    from email_parser.timezone_utils import clock12
     if now is None:
         from email_parser.timezone_utils import now_central
         now = now_central()
+    ev = event if isinstance(event, dict) else {"event_date": str(event or "")[:10]}
     try:
-        ev_day = datetime.strptime(str(event_date)[:10], "%Y-%m-%d").date()
+        ev_day = datetime.strptime(str(ev.get("event_date") or "")[:10], "%Y-%m-%d").date()
     except (TypeError, ValueError):
         return "event date unreadable"
-    if ev_day != now.date() + timedelta(days=1):
-        return "the tee-times email goes only the evening before the event (5 PM to midnight)"
-    if now.hour < OPEN_HOUR:
-        return "the tee-times email goes from the 5 PM lock, not before"
+    lock = db.event_lock_at(ev, db_path)
+    if lock is None:
+        return "event date unreadable"
+    when = f"{lock.strftime('%A')} from the {clock12(lock)} lock to midnight"
+    if now.date() >= ev_day or now.date() != lock.date():
+        return f"the tee-times email goes only on the lock evening ({when})"
+    if now < lock:
+        return f"the tee-times email goes from the {clock12(lock)} lock, not before"
     return None
 
 
@@ -921,11 +1016,11 @@ def _deliver(event_id: int, db_path=None, now: datetime | None = None) -> dict:
     # every sender comes through here (the 7 PM job and a manager's approval),
     # so the evening-before window is checked once, for all of them
     with db._connect(db_path) as conn:
-        _r = conn.execute("SELECT event_date FROM events WHERE id = ?", (int(event_id),)).fetchone()
-    _why = send_window_ok(_r["event_date"] if _r else None, now)
+        _r = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+    _why = send_window_ok(dict(_r) if _r else None, now, db_path)
     if _why:
         return {"refused": _why}
-    built = build(event_id, db_path=db_path)
+    built = build(event_id, db_path=db_path, now=now)
     if built.get("error"):
         return built
     creds = _creds()
@@ -989,11 +1084,14 @@ def auto_check(now: datetime | None = None, db_path=None) -> dict:
     # approved sheet goes at once; at 7 PM every sheet goes.
     if now.hour < OPEN_HOUR:
         return {"status": "not yet"}
-    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    # Events whose LOCK is tonight (Kerry 10/28): a Tuesday event the evening
+    # before, a Saturday event on Wednesday.
     with db._connect(db_path) as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT id, item_name, event_date, status FROM events WHERE substr(event_date, 1, 10) = ? "
-            "AND COALESCE(status, 'active') = 'active'", (tomorrow,)).fetchall()]
+            "SELECT * FROM events WHERE substr(event_date, 1, 10) > ? AND substr(event_date, 1, 10) <= ? "
+            "AND COALESCE(status, 'active') = 'active'",
+            (now.date().isoformat(), (now.date() + timedelta(days=7)).isoformat())).fetchall()]
+    rows = [r for r in rows if send_window_ok(r, now, db_path) is None]
     out = {}
     for ev in rows:
         eid = int(ev["id"])

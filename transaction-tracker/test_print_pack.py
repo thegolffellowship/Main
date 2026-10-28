@@ -72,15 +72,30 @@ check("GET /events/<id>/print-pack.pdf serves the PDF", r.status_code == 200 and
 print("3. The routine and the mail")
 from email_parser import timezone_utils as tz
 from datetime import timedelta
-with db._connect(DB) as conn:
-    conn.execute("UPDATE events SET event_date = ? WHERE id = 9001", ((tz.today_central() + timedelta(days=1)).isoformat(),))
-    conn.commit()
-check("an event dated TOMORROW is no longer due — packs go out the morning of (Kerry 2026-09-21)",
-      [e["id"] for e in pp.print_packs_due()] == [])
-with db._connect(DB) as conn:
-    conn.execute("UPDATE events SET event_date = ? WHERE id = 9001", (tz.today_central().isoformat(),))
-    conn.commit()
-check("an event dated today is due", [e["id"] for e in pp.print_packs_due()] == [9001])
+from datetime import datetime as _dt, time as _time
+TOD = tz.today_central()
+NOON = _dt.combine(TOD, _time(12, 30))
+_SHEET = db.get_event_pairings(9001)
+def _set_date(d, start="8:10 AM"):
+    # the first tee is read from the saved sheet, so the slot follows the start
+    with db._connect(DB) as conn:
+        conn.execute("UPDATE events SET event_date = ?, start_time = ? WHERE id = 9001", (d.isoformat(), start))
+        conn.commit()
+    db.save_event_pairings(9001, {"18": [{**g, "slot_label": start} for g in _SHEET["18"]]})
+# Kerry 2026-10-28: "Print packs for weekend events should come day before
+# just like if there is a course contact" -> noon on the Course Files day.
+_set_date(TOD + timedelta(days=1))
+check("a MORNING event (8:10 AM) dated tomorrow is due at noon today, the Course Files day (Kerry 10/28)",
+      [e["id"] for e in pp.print_packs_due(now=NOON)] == [9001])
+check("...but not before noon", [e["id"] for e in pp.print_packs_due(now=NOON.replace(hour=11))] == [])
+_set_date(TOD + timedelta(days=1), "4:30 PM")
+check("an EVENING event dated tomorrow is not due yet (its pack goes at noon event day)",
+      [e["id"] for e in pp.print_packs_due(now=NOON)] == [])
+_set_date(TOD, "4:30 PM")
+check("an evening event dated today is due at noon", [e["id"] for e in pp.print_packs_due(now=NOON)] == [9001])
+check("...and not within the hour before its first tee",
+      [e["id"] for e in pp.print_packs_due(now=NOON.replace(hour=15, minute=45))] == [])
+_set_date(TOD + timedelta(days=1))
 sent = []
 def fake_send(**kw):
     sent.append(kw); return True
@@ -89,8 +104,8 @@ orig = fetcher.send_mail_graph; fetcher.send_mail_graph = fake_send
 for k, v in (("AZURE_TENANT_ID", "t"), ("AZURE_CLIENT_ID", "c"), ("AZURE_CLIENT_SECRET", "s"),
              ("EMAIL_ADDRESS", "tracker@example.test"), ("PRINT_PACK_EMAIL_TO", "kerry@example.test")):
     os.environ[k] = v
-res = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)
-check("the routine sends today's pack once", len(sent) == 1 and res and res[0].get("sent") is True, res)
+res = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder, now=NOON)
+check("the routine sends the pack once", len(sent) == 1 and res and res[0].get("sent") is True, res)
 check("…as a PDF attachment to the configured recipient",
       sent and sent[0]["to_address"] == "kerry@example.test"
       and sent[0]["attachments"][0][2] == "application/pdf" and sent[0]["attachments"][0][1][:4] == b"%PDF")
@@ -105,11 +120,11 @@ check("the per-chapter list is a DIAL (app_settings JSON), de-duplicated against
       and pp.print_pack_recipient({"chapter": "Austin"}) == "kerry@example.test",
       pp.print_pack_recipient({"chapter": "San Antonio"}))
 db.set_app_setting(pp.PRINT_PACK_CHAPTER_RECIPIENTS_KEY, "")
-res2 = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)
+res2 = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder, now=NOON)
 check("an unchanged sheet is not sent again", len(sent) == 1 and res2[0].get("why") == "unchanged since last send", res2)
 db.save_event_pairings(9001, {"18": [{"group_num": 1, "slot_label": "8:20 AM", "players": [
     {"name": "Jeff Rideout", "cart_pos": 1, "customer_id": 777001, "tee_choice": "50-64", "handicap_index": None}]}]})
-res3 = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)
+res3 = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder, now=NOON)
 check("a changed sheet is sent again", len(sent) == 2 and res3[0].get("sent") is True, res3)
 c2 = appmod.app.test_client()
 with c2.session_transaction() as s_:
@@ -118,14 +133,14 @@ r_send = c2.post("/events/9001/print-pack/send".replace("/events/", "/api/events
 check("SEND PACK on demand: POST /api/events/<id>/print-pack/send mails it now",
       r_send.status_code == 200 and r_send.get_json().get("sent") is True and len(sent) == 3, (r_send.status_code, r_send.get_data()[:200]))
 check("…and the routine then leaves that sheet alone",
-      pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)[0].get("why") == "unchanged since last send")
+      pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder, now=NOON)[0].get("why") == "unchanged since last send")
 check("the pairings toolbar offers the button", 'onclick="sendPrintPack(${ev.id}, this)"' in open("templates/events.html").read())
 _orig_cc = pp.course_contact_for_event
 pp.course_contact_for_event = lambda ev, db_path=None: "justin@course.test"
 _n = len(sent)
 db.save_event_pairings(9001, {"18": [{"group_num": 1, "slot_label": "8:30 AM", "players": [
     {"name": "Jeff Rideout", "cart_pos": 1, "customer_id": 777001, "tee_choice": "50-64", "handicap_index": None}]}]})
-r_cc = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)
+r_cc = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder, now=NOON)
 check("a course with a contact gets no morning pack, even after a change (Kerry 10/20)",
       len(sent) == _n and "course contact on file" in (r_cc[0].get("why") or ""), r_cc)
 pp.course_contact_for_event = _orig_cc
@@ -139,7 +154,7 @@ print("4. Graph attachments")
 src = open("email_parser/fetcher.py", encoding="utf-8").read()
 check("send_mail_graph takes attachments as fileAttachment", "#microsoft.graph.fileAttachment" in src and "attachments: list | None = None" in src)
 asrc = open("app.py", encoding="utf-8").read()
-check("the routine is scheduled the MORNING OF, 6–9 AM Central (Kerry 2026-09-21)", 'id="print_packs_day_of"' in asrc and 'hour="6-9"' in asrc and 'print_packs_evening_before' not in asrc)
+check("the routine runs from noon on the Course Files day, plus 6-9 AM change re-sends (Kerry 10/28)", 'id="print_packs_day_of"' in asrc and 'hour="6-9,12-20"' in asrc and 'print_packs_evening_before' not in asrc)
 try: os.unlink(DB)
 except OSError: pass
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))

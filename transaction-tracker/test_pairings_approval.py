@@ -129,6 +129,10 @@ pa.prompt_check(datetime(2026, 10, 21, 16, 55), DB)
 check("Wednesday 4:55 PM: not yet", not pa.event_state(WE, DB).get("prompted_at"))
 r_we = pa.prompt_check(datetime(2026, 10, 21, 17, 5), DB)
 check("Wednesday 5:05 PM: the Saturday event's manager is prompted", bool(pa.event_state(WE, DB).get("prompted_at")), r_we.get("events", {}).get(WE))
+_pw = next((x for x in SENT if "s18.60 SA SATURDAY" in x.get("subject", "")), {}).get("html_body", "")
+check("the Saturday prompt says tee times at 7:00 PM tonight and Event Info at noon Friday (Kerry 10/28)",
+      "at 7:00 PM tonight if nobody approves" in _pw and "goes at noon Friday, with the Course Files" in _pw
+      and "evening before play" not in _pw, _pw[:700])
 print("2d. A morning event's Event Info goes at noon the day before (Kerry 10/26, #2355)")
 with db._connect(DB) as conn:
     for cid, name in ((990101, "Ann Able"), (990102, "Bob Baker")):
@@ -138,6 +142,24 @@ with db._connect(DB) as conn:
     conn.commit()
 _ev_we = dict(db.get_connection(DB).execute("SELECT * FROM events WHERE id = ?", (WE,)).fetchone())
 check("an 8:00 AM Saturday round is a morning event", pa.is_morning_event(_ev_we) and pa.info_time_for(_ev_we) == "noon the day before")
+# Kerry 10/28: tee times go "the night of the lock and pairings
+# generation...same as Tuesday events", so the 7 PM auto-approve runs on the
+# Saturday event's Wednesday lock night, and the plan names Wednesday.
+r_wed = pa.auto_send_check(datetime(2026, 10, 21, 19, 0), DB)
+check("Wednesday 7 PM (the lock night): the Saturday sheet is auto-approved, nothing emailed",
+      (r_wed.get("events", {}).get(WE) or {}).get("status") == "auto-approved" and pa.emails_sent(WE, DB) == 0,
+      r_wed.get("events", {}).get(WE))
+check("...and Thursday 7 PM does not (it is not the lock night)",
+      WE not in (pa.auto_send_check(datetime(2026, 10, 22, 19, 0), DB).get("events") or {}))
+import email_parser.timezone_utils as _tzu0
+_rt0 = _tzu0.today_central
+_tzu0.today_central = lambda: __import__("datetime").date(2026, 10, 20)
+pl_we = pa.send_plan(WE, DB)
+_tzu0.today_central = _rt0
+check("the plan for a Saturday morning event: tee times Wednesday at the lock, Event Info noon Friday",
+      "at 5:00 PM Wednesday" in pl_we["line"] and "noon Friday" in pl_we["line"]
+      and pl_we["auto_line"] == "If you don't approve, the tee times go automatically at 7:00 PM Wednesday; "
+                                "the Event Info still goes at noon Friday.", pl_we)
 pa.auto_send_check(datetime(2026, 10, 23, 11, 50), DB)
 check("Friday 11:50 AM: no Event Info yet", pa.emails_sent(WE, DB) == 0)
 r_noon = pa.auto_send_check(datetime(2026, 10, 23, 12, 0), DB)

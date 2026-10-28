@@ -5994,7 +5994,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # scoring-print-pack-pdf:<event_id>[|send[|<to>]] — build the bound
             # PDF (parts + page counts + hash); "send" mails it as an
             # attachment to <to> or the configured recipient and records
-            # the hash. scoring-print-pack-pdf:due lists tomorrow's events.
+            # the hash. scoring-print-pack-pdf:due lists the events due now (noon on the Course Files day).
             from email_parser.print_pack import (print_packs_due,
                                                  send_event_print_pack)
             if (arg or "").strip().lower() == "due":

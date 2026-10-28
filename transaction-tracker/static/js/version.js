@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.607.0";
+window.TGF_VERSION = "2.608.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.608.0",
+    date: "2026-10-28",
+    title: "Tee times on the lock night, no-contact print packs at the Course Files noon, real times in the approval email",
+    changes: [
+      "Kerry 10/28: \"The 5:00p Friday shorter tee-times email makes zero sense. That would need to be moved to the night of the lock and pairings generation...same as Tuesday events.\" The tee-times email (players, open spots, course, manager) now goes on the event's lock night for every event: from the 5:00 PM lock on the manager's approval, or at 7:00 PM. A Tuesday event is unchanged (Monday evening). A Saturday event's goes Wednesday evening (was Friday 5:00 PM). The 7:00 PM auto-approve runs on the lock night for morning events too. Event Info keeps its time (noon the day before a morning event, 6:00 AM event day otherwise).",
+      "Every \"tomorrow\" in those emails now says the right day for when it goes, filled in at send time without changing the approved wording: a Wednesday email for a Saturday event reads \"Event Info comes at noon Friday\", \"print packs will arrive by email at noon Friday\", \"spots open at ... Saturday\". A Tuesday event's Monday email reads exactly as before.",
+      "Kerry 10/28: \"Print packs for weekend events should come day before just like if there is a course contact.\" When the course has no contact on file, the print pack now goes to Kerry (and the chapter's recipients) at noon on the Course Files day: the day before for a morning event, event day otherwise. A changed sheet is re-sent until one hour before the first tee. It used to go at 6:05 AM on event day, under two hours before an 8:00 AM shotgun.",
+      "Kerry 10/28: \"Don't know what your manager's approval email means.\" The \"Pairings ready to approve\" email to the manager and the approve page now give the event's real times: for a Saturday morning event, tee times at 7:00 PM tonight (the lock night) if nobody approves, and the Event Info at noon Friday with the Course Files. Before, they said \"7:00 PM the evening before play\" and \"6:00 AM on event day\", which was wrong for morning events."
+    ]
+  },
   {
     version: "2.607.0",
     date: "2026-10-28",

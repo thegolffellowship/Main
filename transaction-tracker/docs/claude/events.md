@@ -137,7 +137,9 @@ Kerry: "Monday thru Thursday: 1 day before at 5:00p / Friday: 2 days before at 5
 - The standard is the dial `pairings_auto_weekdays`, default (and production value) `mon:1,tue:1,wed:1,thu:1,fri:2,sat:3,sun:3`. It applies to every event on that weekday, scheduled or not.
 - The override: `events.lock_override` (migration 0038), 'YYYY-MM-DD HH:MM' Central, set on Edit Event ("Lock (blank = standard)") by a manager or admin; blank goes back to the standard. `update_event` ignores a malformed value.
 - ONE reader, `database.event_lock_at(ev)`. It drives the 5:00 PM pairings run (now every 15 minutes, each event once per lock at its own lock, `pairings_auto_done:<event_id>`; an event with no override still needs its weekday in the dial), the RSVP deadline emails, the payment-reminder stop at lock (`payment_reminder.lock_at`) and seat-fill.
-- The manager's approve prompt follows it too (v2.596.0): `pairings_approval.prompt_check` prompts any event whose lock has passed, so a Saturday event's manager is prompted Wednesday after 5:00 PM. Approving early only signs off the sheet: the tee-times email still goes the evening before play (its `send_window_ok`), and the Event Info at 6:00 AM on event day. Course Connect (course contacts setting it) is a Platform item.
+- The manager's approve prompt follows it too (v2.596.0): `pairings_approval.prompt_check` prompts any event whose lock has passed, so a Saturday event's manager is prompted Wednesday after 5:00 PM. Course Connect (course contacts setting it) is a Platform item.
+- **The tee-times email goes on the LOCK night (v2.608.0, Kerry 10/28):** "The 5:00p Friday shorter tee-times email makes zero sense. That would need to be moved to the night of the lock and pairings generation...same as Tuesday events." `teetimes_email.send_window_ok(event)` allows the send from `event_lock_at` to midnight that day (never on event day); `auto_check` picks the events whose lock is tonight; `pairings_approval.auto_send_check` auto-approves at 7:00 PM on the lock night for every event, morning events included. Tuesday 4:30 PM event: Monday from 5:00 PM (approval) or 7:00 PM, unchanged. Saturday 8:00 AM event: Wednesday from 5:00 PM / 7:00 PM (was Friday 5:00 PM). The Event Info times do not move (noon the day before for a morning event, 6:00 AM event day otherwise). Every "tomorrow" in the tee-times emails is filled at render time for the day it goes (`when_words`, `event_info_phrase(..., when)`, `pack_text`, `pack_key`, the open-spots subject and lead), so a Wednesday email for a Saturday event reads "Event Info comes at noon Friday", "print packs will arrive at noon Friday", "3 spots open at KT Saturday". The stamped templates and their hashes are unchanged. The manager's approve prompt and the approve page's plan name the real times too (`lock_evening_word`, `info_at`, `day_word`).
+- **Print pack with no course contact: the Course Files time (v2.608.0, Kerry 10/28):** "Print packs for weekend events should come day before just like if there is a course contact." `print_pack.print_packs_due` makes a pack due from noon on `course_files_noon.send_day` (the day before for a morning event, event day otherwise), and a changed sheet re-sends until one hour before the first tee; job `print_packs_day_of` runs 6:05-9:05 AM and 12:05-8:05 PM. Was 6:05 AM on event day.
 - **Who:** everyone the Events page shows as RSVP-only (`payment_reminder.rsvp_only_people`), minus known mail scanners (`invitations.known_scanner`) and anyone with no email.
 - **WARN, from 1:00 PM:** one email: pay by 5:00 PM or the spot is released. It uses the payment reminder's frame, variables and holds.
 - **RELEASE, 4:50-4:59 PM, before the pairings run:** anyone still RSVP-only who WAS warned is taken off the roster and gets one email. The roster mark is the Events page's own `rsvp_email_overrides` not_playing, so nothing is deleted and it can be undone on the page. A later registration puts them back as registered.
@@ -3438,7 +3440,9 @@ guard `test_games_sheet.py`.
 - **No green anywhere** (CD #967 §8): money is ink, section totals orange
   on black. The test fails on any green hex.
 
-## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
+## The event PRINT PACK — one bound PDF (v2.465.0; mailed at noon on the Course Files day since v2.608.0)
+
+**Current timing (v2.608.0, Kerry 10/28):** for a course with NO TGF contact the pack goes to Kerry (+ the chapter's recipients) at noon on `course_files_noon.send_day`, the same time a course with a contact gets its Course Files; a changed sheet re-sends until one hour before the first tee. The timing notes below are history.
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could
 print, rather than each separately" / "Build the PDF routine and have it
@@ -3778,8 +3782,11 @@ does, the member send refuses.**
 
 ## The 7:00 PM TEE-TIMES EMAIL, three versions (CMO #2076 copy, #2101 build, 2026-10-19, LOCKED until Kerry stamps)
 
-`email_parser/teetimes_email.py`. At 7:00 PM Central the day before (E-1),
-for every active event dated tomorrow with a saved sheet, three emails go at
+`email_parser/teetimes_email.py`. **Since v2.608.0 (Kerry 10/28) it goes on
+the event's LOCK night** (`event_lock_at`; the evening before for a Tuesday,
+Wednesday for a Saturday), not always the day before; see "Lock days". At
+7:00 PM Central on that night (or on the manager's approval from the lock),
+for every active event with a saved sheet, three emails go at
 the same moment. Job `teetimes_email` (every 15 min, 7 PM to midnight) sits
 BESIDE the pairing auto-send (`pairings_approval.auto_send_check`), never in
 place of it.
