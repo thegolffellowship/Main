@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.616.0";
+window.TGF_VERSION = "2.617.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.617.0",
+    date: "2026-10-28",
+    title: "Fall race prizes and champions record themselves at the Fall Championship's closeout",
+    changes: [
+      "Kerry 10/28 (#2473): \"Yes record fall prizes at closeout, City Net ladder - We're already showing projected winnings.\" and \"Tied titles split the winnings and the title. That's The Golf Fellowship\". At the finale's CLOSEOUT START (the scoring-window job; a FALL CHAMPIONSHIP ends the SA and Austin Fall Nets, app setting race_finales overrides) email_parser/race_close.py checks the finale's cards have published into the points and are not HELD, rebuilds each race from the Tracker, records the prizes as unpaid TGF PAYOUTS rows (category Fall Net, by customer_id, code = the race label) from the same City Net ladder and entrant count the board projects, tied places splitting their combined money, then declares the race final so the board shows WON and names the champion(s): co-champions on a tie, never a tiebreak. Nothing is paid; the rows sit on Payouts with the usual Pay buttons. A hold records nothing, raises one COO item and is retried each run. Read-only dry run: bridge scoring-race-close:<event_id>.",
+      "The champion's Spotlight header carries the title, e.g. \"San Antonio Fall Net - 2026 Champion\" (cup_titles), once the race is final. Guard test_race_close.py."
+    ]
+  },
   {
     version: "2.616.0",
     date: "2026-10-28",

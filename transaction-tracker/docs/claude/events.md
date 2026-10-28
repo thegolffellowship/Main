@@ -1269,6 +1269,24 @@ becomes `transferred` (a WD keeps `wd` with `credit_amount` cleared) with
 buyer has used it. Logged `credit-buyer` / `credit_to_buyer`. Both Credit modals show "Credit goes to: <buyer>" (or "Credit on hold") from `GET /api/items/<id>/credit-to` (v2.615.1). Read-only bridge
 `scoring-coupon-owners`. Guard `test_credit_buyer.py`.
 
+## Fall race prizes + champions at the finale (v2.617.0, Kerry 2026-10-28, #2473)
+
+"Yes record fall prizes at closeout, City Net ladder" / "Tied titles split the
+winnings and the title". `email_parser/race_close.py`, run by
+`scoring_window.tick` once the finale's `closeout_start:<id>` is set and
+retried until `race_close_done:<id>`: `finale_races(ev)` (a FALL CHAMPIONSHIP
+→ `tracker_points.TRACKER_RACES`; app setting `race_finales` {event_id:
+[keys]} overrides) → the finale must appear in `tracker_points.event_lines`
+and not be HELD → `refresh_points_race_standings(rk)` → `season_race_payout_rows`
+(City Net ladder on the board's entrant count, `_split_down_ladder` ties) →
+`record_season_contest_payouts(label, chapter, rows, append_category="Fall
+Net")` with customer_id → `gg_points_race_final[rk] = event_date` (board WON +
+`champions` via `_race_champions`, co-champions on a tie). Holds raise one COO
+item "RACE PRIZES HELD"; a mailbox post (topic closeout) lists the rows.
+Spotlight: `cup_titles.CUP_NAMES` carries the two fall keys and
+`_spotlight_cup_titles` passes their champions once final. Bridge
+`scoring-race-close:<event_id>[|apply]`. Guard `test_race_close.py`.
+
 ## Who did it: the UI action log (v2.615.0, Kerry 2026-10-28)
 
 "Sounds like we need a log of clicks and who did it so you can easily see that

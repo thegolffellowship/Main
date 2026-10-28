@@ -17078,9 +17078,12 @@ def _spotlight_cup_titles(customer_id: int, gross_d: dict | None,
             return [c.get("customer_id") for c in ((d or {}).get("champions") or [])
                     if c.get("customer_id") is not None]
 
-        return cup_titles(customer_id, today_central().year,
-                          {"players_cup": ids(gross_d),
-                           "fellowship_cup": ids(cup_d)})
+        current = {"players_cup": ids(gross_d), "fellowship_cup": ids(cup_d)}
+        # Fall race champions (Kerry 10/28, #2473): only once a race is final.
+        for rk in ("san_antonio_fall_net", "austin_fall_net"):
+            if _points_race_final(rk):
+                current[rk] = ids(get_points_race_live(rk))
+        return cup_titles(customer_id, today_central().year, current)
     except Exception:
         logger.warning("spotlight cup titles failed", exc_info=True)
         return []

@@ -26,8 +26,14 @@ CUP_CHAMPION_HISTORY = {
 }
 
 CUP_NAMES = {"fellowship_cup": "The Fellowship Cup",
-             "players_cup": "The Players Cup"}
-CUP_ORDER = ("fellowship_cup", "players_cup")   # Fellowship above Players (Kerry 2026-07-12)
+             "players_cup": "The Players Cup",
+             # Fall points-race champions (Kerry 10/28, #2473: "Tied titles split the
+             # winnings and the title"), current season only, from the race's
+             # declared champions once the finale makes it final.
+             "san_antonio_fall_net": "San Antonio Fall Net",
+             "austin_fall_net": "Austin Fall Net"}
+CUP_ORDER = ("fellowship_cup", "players_cup",   # Fellowship above Players (Kerry 2026-07-12)
+             "san_antonio_fall_net", "austin_fall_net")
 
 
 def _years_text(years: list) -> str:

@@ -4208,6 +4208,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _r = _us.refresh() if "refresh" in [x.lower() for x in _a] else None
             return json.dumps({"hours": _h, "refresh": _r, "rows": _us.recent(hours=_h)},
                               indent=2, default=str)
+        if cmd == "scoring-race-close":
+            # "<event_id>[|apply]" (Kerry 10/28, #2473): the fall race prizes
+            # and champions a finale's CLOSEOUT START records. Dry run shows
+            # the rows; |apply is the same call the scoring-window job makes.
+            from email_parser import race_close as _rc
+            _a, _, _m = (arg or "").partition("|")
+            if not _a.strip().isdigit():
+                return json.dumps({"error": "usage: scoring-race-close:<event_id>[|apply]"})
+            return json.dumps(_rc.run(int(_a), apply=_m.strip().lower() == "apply"),
+                              indent=2, default=str)
         if cmd == "scoring-coupon-owners":
             # Read-only: every personal coupon code (tgf-<name>) on orders,
             # its order count and owner on file (app setting coupon_owners;

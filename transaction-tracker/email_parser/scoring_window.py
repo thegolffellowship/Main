@@ -175,6 +175,18 @@ def tick(now=None, db_path=None) -> dict:
             except Exception:
                 logger.exception("scoring window: could not post the closeout start for %s", eid)
             did["closeout_start"] = True
+        # FALL RACE PRIZES + CHAMPIONS at the finale's CLOSEOUT START (Kerry
+        # 10/28, #2473). Retried every run until recorded; holds raise a COO item.
+        if db.get_app_setting(CLOSEOUT_KEY.format(eid), db_path=db_path):
+            try:
+                from email_parser import race_close as _rc
+                with db._connect(db_path) as conn:
+                    _ev = conn.execute("SELECT id, item_name FROM events WHERE id = ?", (eid,)).fetchone()
+                if (_ev and _rc.finale_races(dict(_ev), db_path=db_path)
+                        and not db.get_app_setting(_rc.DONE_KEY.format(eid), db_path=db_path)):
+                    did["race_close"] = _rc.run(eid, apply=True, db_path=db_path).get("done")
+            except Exception:
+                logger.exception("scoring window: race close failed for %s", eid)
         if did:
             out[eid] = did
     return {"status": "ran", "events": out}
