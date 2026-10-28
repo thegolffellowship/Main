@@ -2707,8 +2707,12 @@ Kerry: "Option A, but I want player list and REGISTER button on expanded view."
 season's dated events from today on that are not already listed as played or
 live, soonest first, filtered by chapter (joint events show under both) and the
 pilot codes. Past seasons get none. Each upcoming card shows:
-- `registered` and `players` [{customer_id, first, last}], from
-  `_event_roster_players` (the pairings roster), sorted by last name;
+- `registered` (PAID players only), `rsvp_only` (the RSVP-only count) and
+  `players` [{customer_id, first, last, rsvp_only}], from
+  `_event_roster_players` (the pairings roster), sorted by last name. The card
+  lists the paid players under REGISTERED and the RSVP-only players apart under
+  RSVP'D, NOT YET PAID (Kerry 10/28: "REGISTERED and then RSVP'd so everyone is
+  shown but not in the same list"; v2.609.0, guard `test_upcoming_rsvp_split.py`);
 - `pairings_set`, `first_tee` and `strip_text`;
 - `register_url`: the event's `registration_url`, or None when there is none
   or its status is `expired`.

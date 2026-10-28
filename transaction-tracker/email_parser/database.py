@@ -14725,8 +14725,14 @@ def _evlb_upcoming(today: str, chapter, codes, listed_ids, db_path=None) -> list
                 if not (first or last):
                     bits = (p.get("name") or "").strip().split()
                     first, last = (" ".join(bits[:-1]), bits[-1]) if len(bits) > 1 else ("", " ".join(bits))
-                players.append({"customer_id": p.get("customer_id"), "first": first, "last": last})
+                players.append({"customer_id": p.get("customer_id"), "first": first, "last": last,
+                                "rsvp_only": bool(p.get("rsvp_only"))})
             players.sort(key=lambda x: (x["last"].lower(), x["first"].lower()))
+            # Kerry 10/28: "This registered list should not include those
+            # unpaid. It should have REGISTERED and then RSVP'd so everyone
+            # is shown but not in the same list." `registered` counts paid
+            # players only; RSVP-only players are counted and listed apart.
+            n_rsvp = sum(1 for x in players if x["rsvp_only"])
             try:
                 paired = bool(conn.execute("SELECT 1 FROM event_pairings WHERE event_id = ? LIMIT 1",
                                            (ev["id"],)).fetchone())
@@ -14743,7 +14749,8 @@ def _evlb_upcoming(today: str, chapter, codes, listed_ids, db_path=None) -> list
             out.append({"id": ev["id"], "item_name": ev["item_name"], "event_date": ev["event_date"],
                         "course": ev.get("course"), "chapter": ev.get("chapter"),
                         "chapter_color": EVLB_CHAPTER_COLORS.get(ch, EVLB_CHAPTER_COLOR_JOINT),
-                        "board_state": "upcoming", "registered": len(players), "players": players,
+                        "board_state": "upcoming", "registered": len(players) - n_rsvp,
+                        "rsvp_only": n_rsvp, "players": players,
                         "pairings_set": paired, "first_tee": first_tee, "strip_text": text,
                         "register_url": url if open_ else None})
     return out

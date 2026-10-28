@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.608.0";
+window.TGF_VERSION = "2.609.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.609.0",
+    date: "2026-10-28",
+    title: "Member LEADERBOARD upcoming card: REGISTERED and RSVP'D in separate lists",
+    changes: [
+      "Kerry 10/28 (screenshot of the Fall Championship card): \"This registered list should not include those unpaid. It should have REGISTERED and then RSVP'd so everyone is shown but not in the same list.\" The upcoming event card on the member LEADERBOARD now lists paid players under REGISTERED and RSVP-only players (RSVP'd, not paid) under their own heading, RSVP'D, NOT YET PAID. The card's count line reads \"N registered · M RSVP'd\", and `registered` in the payload counts paid players only (_evlb_upcoming adds rsvp_only per player and a rsvp_only count). Guard test_upcoming_rsvp_split.py."
+    ]
+  },
   {
     version: "2.608.0",
     date: "2026-10-28",

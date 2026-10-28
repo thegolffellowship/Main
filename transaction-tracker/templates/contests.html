@@ -4090,17 +4090,22 @@
     //    registered (First LAST, by last name) and REGISTER while the
     //    registration link is open. Built from the list payload: no fetch.
     function evlbUpcomingCardHtml(ev) {
-        const ps = ev.players || [];
-        const list = ps.length
-            ? `<div class="evlb-uplist">${ps.map(p => `<div><span class="f">${escapeHtml(p.first || "")}</span> <span class="l">${escapeHtml((p.last || "").toUpperCase())}</span></div>`).join("")}</div>`
-            : `<div class="evlb-upnone">No one has registered yet.</div>`;
+        // Paid players and RSVP-only players in two lists (Kerry 10/28:
+        // "REGISTERED and then RSVP'd so everyone is shown but not in the
+        // same list").
+        const all = ev.players || [];
+        const ps = all.filter(p => !p.rsvp_only);
+        const rs = all.filter(p => p.rsvp_only);
+        const names = arr => `<div class="evlb-uplist">${arr.map(p => `<div><span class="f">${escapeHtml(p.first || "")}</span> <span class="l">${escapeHtml((p.last || "").toUpperCase())}</span></div>`).join("")}</div>`;
+        const list = (ps.length ? names(ps) : `<div class="evlb-upnone">No one has registered yet.</div>`) +
+            (rs.length ? `<div class="evlb-uph">RSVP'D, NOT YET PAID &middot; ${rs.length}</div>${names(rs)}` : "");
         const reg = ev.register_url
             ? `<div class="evlb-upreg"><a class="evlb-regbtn" href="${escapeHtml(ev.register_url)}">REGISTER</a></div>` : "";
         return `<details class="evlb-ev evlb-card evlb-upcard" data-ev="${escapeHtml(ev.item_name)}" data-up="1">` +
             `<summary><span class="bar" style="background:${escapeHtml(ev.chapter_color || "#374151")}"></span>` +
             `<span class="chev tgf-exp">&#9654;&#xFE0E;</span>` +
             `<div class="ttl"><div class="nm">${escapeHtml(ev.item_name)}</div>` +
-            `<div class="meta">${evlbDayDate(ev.event_date)}${ev.course ? `<span class="crs"> &middot; ${escapeHtml(ev.course)}</span>` : ""} &middot; ${ev.registered || 0} registered</div></div>` +
+            `<div class="meta">${evlbDayDate(ev.event_date)}${ev.course ? `<span class="crs"> &middot; ${escapeHtml(ev.course)}</span>` : ""} &middot; ${ev.registered || 0} registered${rs.length ? ` &middot; ${rs.length} RSVP'd` : ""}</div></div>` +
             `<span class="evlb-chip-st s-upcoming"><i></i>${EVLB_STATE_WORD.upcoming || "UPCOMING"}</span>` +
             `<div class="pot none">&mdash;<span class="s">POT</span></div>` +
             `</summary><div class="evlb-body evlb-upbody">` +
