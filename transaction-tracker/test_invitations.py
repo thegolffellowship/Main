@@ -135,6 +135,9 @@ os.environ.setdefault("ADMIN_PIN", "4242")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
     import app as _app
 cl = _app.app.test_client()
+# A person's phone (Kerry 10/26 fingerprint guard): browser UA + language.
+cl.environ_base.update({"HTTP_USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+                        "HTTP_ACCEPT_LANGUAGE": "en-US,en;q=0.9"})
 from datetime import date
 tok_in = inv.make_token(770001, EV, "in", date(2026, 12, 15))
 rg = cl.get(f"/rsvp/{tok_in}")
@@ -207,8 +210,12 @@ print("6c. Kerry 10/13: Can't make it is one tap, with change-my-mind, remove an
 tok_out = inv.make_token(770002, EV, "out", date(2026, 12, 15))
 pg = cl.get(f"/rsvp/{tok_out}").get_data(as_text=True)
 check("Can't make it lands on Thanks, with I'm in, Remove me and the optional reasons",
-      "Thanks for letting us know" in pg and "Changed my mind" in pg and "Remove me from invitations" in pg
+      "Thanks for letting us know" in pg and "Changed my mind" in pg and "Remove me from ALL event invitations" in pg
       and "Mind sharing why" in pg, pg[:200])
+_rm = pg.split("Remove me from ALL event invitations")[0].rsplit("<a ", 1)[-1]
+check("Remove me is a small grey text link below the reasons, not a button (Kerry 10/25)",
+      "border-radius" not in _rm and "#6B7280" in _rm
+      and pg.index("Remove me from ALL event invitations") > pg.index("Mind sharing why"), _rm)
 cl.post(f"/rsvp/{tok_out}", headers={"X-Requested-With": "fetch"})
 with db._connect(DB) as conn:
     r = conn.execute("SELECT response FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770002",)).fetchone()
@@ -262,6 +269,38 @@ with db._connect(DB) as conn:
 check("restore puts them back on, clears the no and the reason", done_.get("applied")
       and 770002 not in inv._opted_out(DB) and left == 0
       and all(x["customer_id"] != 770002 for x in inv.decline_reasons(EV, db_path=DB)["rows"]), done_)
+print("6f1. Kerry 10/26: take back an I'm in a mail scanner gave (Logan Billeaud)")
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE email_uid = ?", (f"tracker:{EV}:770001",))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, event_date, customer_id) "
+                 "VALUES (?, 'Ann Test', 'PLAYING', '2026-10-26T12:06:00Z', 's9.98 INVITE LINKS', '2026-12-15', 770001)",
+                 (f"tracker:{EV}:770001",))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, event_date, customer_id) "
+                 "VALUES (?, 'Ann Test', 'PLAYING', '2025-01-01T12:00:00Z', 's9.01 OLD LINKS', '2025-01-01', 770001)",
+                 (f"tracker:{OLD}:770001",))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, event_date, customer_id) "
+                 "VALUES (?, 'Fay Test', 'PLAYING', '2026-10-26T12:06:00Z', 's9.98 INVITE LINKS', '2026-12-15', 770006)",
+                 (f"tracker:{EV}:770006",))
+    conn.execute("INSERT INTO rsvps (email_uid, player_name, response, received_at, matched_event, event_date, customer_id) "
+                 "VALUES ('gg-keep-1', 'Ann Test', 'PLAYING', '2026-10-01T12:00:00Z', 's9.98 INVITE LINKS', '2026-12-15', 770001)")
+    conn.commit()
+db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), json.dumps({"770001": "2026-10-26T12:06:00Z"}), db_path=DB)
+check("unplay refuses without Kerry's word", "refused" in inv.remove_playing([770001], 999999, True, db_path=DB))
+_d = inv.remove_playing([770001], kpost, db_path=DB)
+check("unplay dry run lists the Tracker row only", _d.get("dry_run")
+      and [r["email_uid"] for r in _d["playing_rows_removed"]] == [f"tracker:{EV}:770001"], _d)
+_a = inv.remove_playing([770001], kpost, confirm=True, db_path=DB)
+with db._connect(DB) as conn:
+    _left = [r[0] for r in conn.execute("SELECT email_uid FROM rsvps WHERE customer_id = 770001 AND response = 'PLAYING'")]
+check("unplay removes the upcoming Tracker PLAYING row and the click; a past row and a Golf Genius RSVP stay",
+      _a.get("applied") and sorted(_left) == ["gg-keep-1", f"tracker:{OLD}:770001"]
+      and "770001" not in json.loads(db.get_app_setting(inv.CLICKS_KEY.format(event_id=EV), db_path=DB) or "{}"), (_a, _left))
+_reg = inv.remove_playing([770006], kpost, db_path=DB)
+check("an event the person is registered for is left alone and reported",
+      not _reg["playing_rows_removed"] and len(_reg["left_registered"]) == 1, _reg)
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE email_uid IN ('gg-keep-1', ?, ?)",
+                 (f"tracker:{OLD}:770001", f"tracker:{EV}:770006")); conn.commit()
 print("6f2. Kerry 10/20: restore with keep_answers leaves the real answers")
 db.set_app_setting(inv.OPTOUT_KEY, json.dumps([770002]), db_path=DB)
 cl.post(f"/rsvp/{inv.make_token(770002, EV, 'out', date(2026, 12, 15))}", headers={"X-Requested-With": "fetch"})
@@ -284,6 +323,7 @@ def _np(cid):
     with db._connect(DB) as conn:
         return conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'NOT PLAYING'",
                             (f"tracker:{EV}:{cid}",)).fetchone()[0]
+db.set_app_setting(inv.SCANNER_KNOWN_DIAL, "99", db_path=DB)   # these taps test the grace/burst rules alone
 now_ = int(_time.time())
 fresh = {a: inv.make_token(770003, EV, a, date(2026, 12, 15), sent_at=now_) for a in inv.ACTIONS}
 cl.post(f"/rsvp/{fresh['out']}", headers={"X-Requested-With": "fetch"})
@@ -309,6 +349,43 @@ cl.post(f"/rsvp/{old['unsub']}")
 check("…but Remove me right after Can't make it still works (a person does that)",
       770003 in inv._opted_out(DB))
 db.set_app_setting(inv.OPTOUT_KEY, json.dumps(sorted(inv._opted_out(DB) - {770003})), db_path=DB)
+db.set_app_setting(inv.SCANNER_KNOWN_DIAL, "", db_path=DB)
+print("6h. Kerry 10/26: known scanners and non-browser taps confirm with one button (Logan Billeaud)")
+def _pl_rows(cid):
+    with db._connect(DB) as conn:
+        return conn.execute("SELECT COUNT(*) FROM rsvps WHERE email_uid = ? AND response = 'PLAYING'",
+                            (f"tracker:{EV}:{cid}",)).fetchone()[0]
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE customer_id = 770004"); conn.commit()
+_old4 = {a: inv.make_token(770004, EV, a, date(2026, 12, 15), sent_at=int(_time.time()) - 600) for a in inv.ACTIONS}
+_bot = cl.get(f"/rsvp/{_old4['in']}", headers={"User-Agent": "Mozilla/5.0 (compatible; Mimecast URL Protect)"})
+_bp = _bot.get_data(as_text=True)
+check("a scanner user agent: I'm in records nothing and asks for one tap",
+      _bot.status_code == 200 and "One more tap" in _bp and "fetch(" not in _bp and _pl_rows(770004) == 0, _bp[:300])
+_nolang = cl.get(f"/rsvp/{_old4['in']}", headers={"Accept-Language": ""})
+check("no Accept-Language counts as not a browser", _nolang.status_code == 200 and _pl_rows(770004) == 0)
+_yes = cl.post(f"/rsvp/{_old4['in']}")
+check("...the button records PLAYING and goes on to registration",
+      _yes.status_code == 302 and _yes.headers["Location"] == "https://shop.example.test/e" and _pl_rows(770004) == 1,
+      (_yes.status_code, _yes.headers.get("Location"), _pl_rows(770004)))
+check("after two catches the person is a known scanner", inv.known_scanner(770004, DB))
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM rsvps WHERE customer_id = 770004"); conn.commit()
+_known = cl.get(f"/rsvp/{_old4['in']}")
+check("a known scanner's tap from a real browser still needs the button",
+      _known.status_code == 200 and "One more tap" in _known.get_data(as_text=True) and _pl_rows(770004) == 0)
+_out = cl.get(f"/rsvp/{_old4['out']}").get_data(as_text=True)
+check("...and their Can't make it asks too instead of saving itself",
+      "Confirm: I can't make it" in _out and "fetch(location.href" not in _out, _out[:300])
+db.set_app_setting(inv.SCANNER_GUARD_DIAL, "off", db_path=DB)
+_off = cl.get(f"/rsvp/{_old4['in']}")
+check("dial invite_scanner_guard=off restores the one-tap I'm in", _off.status_code == 302 and _pl_rows(770004) == 1)
+db.set_app_setting(inv.SCANNER_GUARD_DIAL, "", db_path=DB)
+with db._connect(DB) as conn:
+    _taps = conn.execute("SELECT COUNT(*) FROM agent_action_log WHERE action_type = 'event_invite_tap' "
+                         "AND description LIKE '% customer 770004 %ua=%'").fetchone()[0]
+    conn.execute("DELETE FROM rsvps WHERE customer_id = 770004"); conn.commit()
+check("every bare link open is logged with its fingerprint", _taps >= 4, _taps)
 db.set_app_setting(inv.CLICKS_KEY.format(event_id=EV), "{}", db_path=DB)
 print("6e. Kerry 10/14: preview buttons record nothing")
 with db._connect(DB) as conn:
@@ -422,7 +499,7 @@ check("...the email security filter reason is there, and no one else gets it",
       "email security filter" in _m["html"] and "email security filter" not in _m2["html"] and not _m["held"])
 _mu = inv.build_message(_ev, {"customer_id": 770001, "first_name": "Ann"}, "lastcall", DB, clarify="unsub")
 check("after Remove me the note names it and says they are still on the list",
-      "Remove me from invitations" in _mu["html"] and "still on our invitation list" in _mu["html"])
+      "Remove me from ALL event invitations" in _mu["html"] and "still on our invitation list" in _mu["html"])
 check("the note does not change the approved invitation wording stamp",
       inv.template_hash() == inv.approval_state(DB)["template_hash"])
 cl.get(f"/rsvp/{inv.make_token(770001, EV, 'in', date(2026, 12, 15), sent_at=int(_time.time()) - 3600)}")

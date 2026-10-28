@@ -858,7 +858,7 @@ def _email_shell(body_html: str) -> str:
 def _renew_button(label: str = "Renew Membership — $75") -> str:
     url = _renewal_url()
     return f"""<p style="margin:1.25rem 0;">
-  <a href="{url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.4rem; border-radius:6px; text-decoration:none; font-weight:600;">{label}</a>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-table;margin:0 6px 6px 0;"><tr><td bgcolor="#16a34a" style="background:#16a34a;border-radius:6px;"><a href="{url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.4rem; border-radius:6px; text-decoration:none; font-weight:600;">{label}</a></td></tr></table>
 </p>
 <p style="font-size:0.82rem; color:#6b7280; margin-top:-0.5rem;">Or paste this link into your browser: <a href="{url}" style="color:#2563eb;">{url}</a></p>"""
 
@@ -883,8 +883,8 @@ def _roster_buttons_block(term: dict) -> str:
     keep_url, remove_url = _roster_action_urls(term)
     return f"""<p><strong>Still want the weekly invites?</strong> We send event invitations through Golf Genius every week. If that's still working for you, great. If not, just let us know and we'll take care of it:</p>
 <p style="margin:1.25rem 0;">
-  <a href="{keep_url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600; margin-right:0.5rem;">✓ Keep me on the invite list</a>
-  <a href="{remove_url}" style="display:inline-block; background:#6b7280; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600;">No need to keep me posted</a>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-table;margin:0 6px 6px 0;"><tr><td bgcolor="#16a34a" style="background:#16a34a;border-radius:6px;"><a href="{keep_url}" style="display:inline-block; background:#16a34a; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600; margin-right:0.5rem;">✓ Keep me on the invite list</a></td></tr></table>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-table;margin:0 6px 6px 0;"><tr><td bgcolor="#6b7280" style="background:#6b7280;border-radius:6px;"><a href="{remove_url}" style="display:inline-block; background:#6b7280; color:#fff; padding:0.7rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600;">No need to keep me posted</a></td></tr></table>
 </p>
 <p style="font-size:0.82rem; color:#6b7280;">If the buttons don't work in your email client:<br>
   Keep me on the invite list: <a href="{keep_url}" style="color:#2563eb;">{keep_url}</a><br>

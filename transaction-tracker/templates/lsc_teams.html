@@ -193,6 +193,7 @@
             <a href="/admin/test-center">Test Center</a>
             <a href="/admin/lsc-teams" class="active">Cup Teams</a>
             <a href="/admin/advisors">Advisors</a>
+            <a href="/admin/screens">Screens</a>
         </nav>
         <div class="lsct-head"><h2>Lone Star Cup Teams</h2><span class="sub" id="lsct-sub">Rosters, alternates, deposits, lodging and declined invitations. Staff only.</span></div>
         <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading rosters&hellip;</p></div>
@@ -463,7 +464,7 @@
                 // Staff-only breadcrumb (frozen_at is stripped from
                 // member payloads): the page is serving the hardened
                 // final-roster snapshot, not the live projection.
-                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Final roster snapshot (frozen ${escapeHtml(d.frozen_at)}) &mdash; deposits stay live; ask Claude to re-freeze after a roster change (scoring-lsc-freeze).</p>`
+                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Final roster snapshot (frozen ${escapeHtml((window.tgfTime12 || (s => s))(d.frozen_at))}) &mdash; deposits stay live; ask Claude to re-freeze after a roster change (scoring-lsc-freeze).</p>`
                 : "");
             // chevron fold: tap a seat row to reveal how they qualified
             box.querySelectorAll(".lsc-seat.has-earn").forEach(el =>

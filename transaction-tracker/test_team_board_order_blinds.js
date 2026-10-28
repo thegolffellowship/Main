@@ -22,6 +22,8 @@ eval('const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g
   + ' evlbTeamNamesHtml, evlbTeamSection});');
 
 let fails = 0;
+// the names render as First/LAST spans (Batch 1 R6); read them as text
+const txt = h => String(h).replace(/<[^>]+>/g, '');
 const ck = (l, c, d) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${c ? '' : '  ' + (d ?? '')}`); if (!c) fails++; };
 
 const PAR = {1: 4, 2: 3, 3: 5};
@@ -52,7 +54,7 @@ console.log('== 1. order ==');
      rows.map(x => x.t.team_num).join(',') === '2,3,1', rows.map(x => x.t.team_num).join(','));
   ck('no position before any score', rows.every(x => !x.pos));
   const html = evlbTeamPanel(d, { key: 'team', rows: [] }, '');
-  const firsts = ['Zed Young', 'Kerry Niester', 'Adam Baker'].map(n => html.indexOf(n));
+  const firsts = ['Zed Young', 'Kerry Niester', 'Adam Baker'].map(n => txt(html).indexOf(n));
   ck('the rendered panel lists the rows in tee-time order', firsts.every((v, i) => v > 0 && (i === 0 || v > firsts[i - 1])), firsts.join(','));
 
   // scored: team 1 leads; teams 2 and 3 tie -> their tee-time order breaks the tie
@@ -75,7 +77,7 @@ console.log('== 2. left alignment ==');
   ck('no phone rule re-centres it', !/tr\.evlb-tsum-row td\.nm \{[^}]*text-align:\s*center/.test(src));
   const d = mkd(emptyCards, pre());
   const html = evlbTeamPanel(d, { key: 'team', rows: [] }, '');
-  ck('the chevron sits first in the names cell', /<td class="nm"><span class="tchev tgf-exp">/.test(html));
+  ck('the chevron sits first in the names cell', /<td class="nm"><div class="tnm"><span class="tchev tgf-exp">/.test(html));
 }
 
 console.log('== 3. blinds ==');
@@ -83,8 +85,9 @@ console.log('== 3. blinds ==');
   const d = mkd(emptyCards, pre());
   const t3 = d.teams[2];
   const h = evlbTeamNamesHtml(d, t3);
-  ck('the pending blind is the 4th name', /Dan Stich.*Reggie Johnson/.test(h), h);
-  ck('…tagged BLIND in its own colour class', /<span class="evlb-tmem blind"[^>]*><span class="evlb-blind">BLIND<\/span>Reggie Johnson/.test(h), h);
+  ck('the pending blind is the 4th name', /Dan Stich.*Reggie Johnson/.test(txt(h)), h);
+  // the BLIND chip is the only thing before a name (#2150)
+  ck('…tagged BLIND in its own colour class, chip first', /<span class="evlb-tmem blind"[^>]*><span class="evlb-blind">BLIND<\/span><span class="f">Reggie<\/span> <span class="l">Johnson<\/span>/.test(h), h);
   ck('the blind style is a different colour + italic', /\.evlb-tmem\.blind \{[^}]*font-style:\s*italic;[^}]*color:/.test(src));
   ck('members are not marked', (h.match(/evlb-tmem blind/g) || []).length === 1);
   ck('names (sort + band label) carry the blind', evlbTeamNames(t3).join(', ') === 'Kerry Niester, Nic Skinner, Dan Stich, Reggie Johnson (blind)', evlbTeamNames(t3).join(', '));
@@ -93,8 +96,8 @@ console.log('== 3. blinds ==');
     P(8, 'Bl[Reggie Johnson]', { blind: true })],
     blinds_pending: [{ customer_id: 999, name: 'Reggie Johnson' }] };
   const h2 = evlbTeamNamesHtml(d, t);
-  ck('a carded blind shows bare-named and tagged BLIND', /<span class="evlb-blind">BLIND<\/span>Reggie Johnson/.test(h2) && !/Bl\[/.test(h2), h2);
-  ck('…once, not twice', (h2.match(/Reggie Johnson/g) || []).length === 1, h2);
+  ck('a carded blind shows bare-named and tagged BLIND', /<span class="evlb-blind">BLIND<\/span><span class="f">Reggie<\/span>/.test(h2) && !/Bl\[/.test(h2), h2);
+  ck('…once, not twice', (txt(h2).match(/Reggie Johnson/g) || []).length === 1, h2);
   ck('the expanded band label names the blind', evlbTeamSection({}, t).label.includes('Reggie Johnson (blind)'));
   const noBl = { team_num: 5, players: [P(1, 'A B'), P(2, 'C D')] };
   ck('a team with no blind is unchanged', !/BLIND/.test(evlbTeamNamesHtml(d, noBl)));

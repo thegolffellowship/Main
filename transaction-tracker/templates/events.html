@@ -571,6 +571,21 @@
         }
         .roster-hcp-prelim:hover { background: #ffedd5; border-color: #fb923c; }
         .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.6rem; text-align: center; flex-shrink: 0; }
+        /* Manager tee change (Kerry 10/27): the tee is a tap target */
+        button.tee-pick { font: inherit; color: inherit; background: none; border: 0; border-bottom: 1px dashed #9CA3AF;
+            padding: 0 2px; cursor: pointer; min-height: 0; border-radius: 0; }
+        button.tee-pick:hover { color: var(--primary); border-bottom-color: var(--primary); }
+        button.tee-pick.mc-type { border: 1px dashed #9CA3AF; border-radius: 999px; padding: 1px 8px; }
+        .tee-pick-menu { position: fixed; z-index: 10000; background: #fff; border: 1px solid #E5E7EB; border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 6px; display: flex; flex-direction: column; min-width: 150px; }
+        .tee-pick-menu .tee-pick-head { font-size: 0.72rem; color: #6B7280; padding: 4px 8px 6px; }
+        .tee-pick-menu button { text-align: left; background: none; border: 0; padding: 10px 12px; border-radius: 8px;
+            font-size: 0.95rem; cursor: pointer; min-height: 44px; }
+        .tee-pick-menu button:hover { background: #FFF4EC; color: var(--primary); }
+        .tee-pick-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 10001;
+            background: #1B1B1B; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 0.9rem;
+            max-width: calc(100vw - 32px); }
+        .tee-pick-toast.bad { background: #b91c1c; }
         .pairing-role-badge {
             flex-shrink: 0; font: 700 8.5px/1 'Bitter', serif; letter-spacing: 0.04em;
             padding: 2px 4px; border-radius: 9999px; margin-left: 0.1rem; min-width: 1.1rem;
@@ -1079,6 +1094,8 @@
                         </select>
                     </label>
                     <label title="Where the group meets after this event. Fills {fellowship_spot} in the Fellowship preset; the send refuses while it is blank.">Fellowship spot<input type="text" id="edit-event-fellowship_spot" class="modal-input" placeholder="e.g. Clubhouse (on site), or the restaurant's name"></label>
+                    <label title="Kerry 10/26: the standard lock is 5:00 PM the day before (Monday to Thursday events), two days before (Friday), three days before (Saturday, Sunday). Set a date and time here only to change it for this event; clear it to go back to the standard.">Lock (blank = standard)<input type="datetime-local" id="edit-event-lock_override" class="modal-input"></label>
+                    <label title="Kerry 10/26: when an event holds more tee times than its groups need, a weeknight event keeps the LATEST times and gives back the earliest; a weekend event keeps the EARLIEST and gives back the latest. The tee-times email to the course names each released time. Shotguns are not affected.">Unused tee times<select id="edit-event-tee_keep" class="modal-input"><option value="">Default (weeknight: keep latest, weekend: keep earliest)</option><option value="latest">Keep latest</option><option value="earliest">Keep earliest</option></select></label>
                 </div>
                 <!-- Format -->
                 <div style="margin-top:0.75rem;">
@@ -2946,7 +2963,7 @@
                     if (owed > 0) {
                         const si = (balanceDueSendMap[ev.item_name] || {})[String(r.id)];
                         const sent = !!(si && si.status === 'sent');
-                        const tipDate = sent && si.sent_at ? ` (last sent ${si.sent_at}, ${si.count}x)` : '';
+                        const tipDate = sent && si.sent_at ? ` (last sent ${(window.tgfTime12 || (s => s))(si.sent_at)}, ${si.count}x)` : '';
                         items.push({cls: 'btn-venmo-email', label: sent ? 'Remind' : 'Send Venmo Email',
                             attrs: `data-item-id="${r.id}"`,
                             title: sent ? `Send another reminder${tipDate}` : 'Preview & send Venmo balance-due email'});
@@ -3135,7 +3152,8 @@
     const HCP_ASK_CHIP = {
         set: ["Set from GHIN", "#DCFCE7", "#15803D"], confirmed: ["Checked", "#DCFCE7", "#15803D"],
         check: ["Check this one", "#FEF3C7", "#92400E"], need: ["Needs a number", "#FEE2E2", "#B91C1C"],
-        asked: ["Asked, no answer", "#E5E7EB", "#374151"]};
+        asked: ["Asked, no answer", "#E5E7EB", "#374151"],
+        rule: ["Set by rule", "#DCFCE7", "#15803D"], manager_set: ["Set by manager", "#DCFCE7", "#15803D"]};
     function hcpAskRowsHtml(asks) {
         if (!asks || !asks.length) return '';
         const rows = asks.map(a => {
@@ -3501,9 +3519,9 @@
             // One-off events: PAID players get no Remind and no badge
             // (Kerry 2026-09-22) — mobile mirror of the white row.
             if (_ooPaidM && (isRsvpOnly || isGgRsvp)) tag = '';
-            else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
-            else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
-            else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+            else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+            else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
+            else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
             else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
             else if (txStatus === "refunded") tag = '<span class="status-tag status-tag-refunded">Refunded</span>';
@@ -3579,7 +3597,7 @@
             const sideGameLabel = (sideGame === "NO GAMES" || sideGame === "NO" || sideGame === "—") ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
             const holes = rowHoles(ev, r);
-            const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}${sideGameLabel !== "NONE" ? `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>` : ''}${tee ? `<span class="mc-type mc-tee">${escapeHtml(tee)}</span>` : ''}`;
+            const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}${sideGameLabel !== "NONE" ? `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>` : ''}${tee || (!r.parent_item_id && r.customer_id) ? teePickHtml(ev.id, r.parent_item_id ? null : r.customer_id, tee, "mc-type mc-tee") : ''}`;
 
             // Full desktop action parity on mobile (Kerry 2026-07-16):
             // same shared builder, rendered as buttons.
@@ -3883,7 +3901,7 @@
                             <div class="ev-actions-menu">
                                 <button class="ev-menu-item btn-add-player" data-event-name="${escapeHtml(ev.item_name)}">+ Add Player</button>
                                 <button class="ev-menu-item btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}">+ Add Payment</button>
-                                ${mRsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${mRsvpOnlyCount})</button>` : ''}
+                                ${mRsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-id="${ev.id}" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${mRsvpOnlyCount})</button>` : ''}
                                 <div class="ev-menu-divider"></div>
                                 <button class="ev-menu-item btn-message-players" data-event-name="${escapeHtml(ev.item_name)}">Message Players</button>
                                 <button class="ev-menu-item btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}">Audit RSVPs</button>
@@ -4682,6 +4700,78 @@
     // Column visibility: a saved pref wins; a column never toggled falls
     // back to its own default (lets oo_chapter default to hidden while
     // everything else defaults to shown — saved prefs predate oo_ keys).
+    // MANAGER TEE CHANGE (Kerry 10/27, CoS #2429-3: "There's no tool to
+    // manually update the tee on the ROSTER or PAIRINGS."). Every tee a
+    // manager sees on ROSTER (desktop + phone) or PAIRINGS is a tap target:
+    // four bands, saved at once by POST /api/events/<id>/tee, which answers
+    // with the player's new playing / team handicap; the live scoring round
+    // follows on the server. Same picker everywhere.
+    const TEE_BANDS = ["<50", "50-64", "65+", "Forward"];
+    function teePickHtml(evId, cid, label, cls) {
+        const txt = escapeHtml(label || "\u2014");
+        if (!(currentRole === "admin" || currentRole === "manager") || !cid || !evId) {
+            return `<span class="${cls || ''}">${txt}</span>`;
+        }
+        return `<button type="button" class="tee-pick ${cls || ''}" data-ev-id="${evId}" data-cid="${cid}" title="Change this player's tee for this event">${txt}</button>`;
+    }
+    function closeTeeMenu() {
+        const m = document.getElementById("tee-pick-menu");
+        if (m) m.remove();
+        if (window.tgfOverlayDrop) window.tgfOverlayDrop();
+    }
+    document.addEventListener("click", async function (e) {
+        const opt = e.target.closest && e.target.closest("#tee-pick-menu [data-tee]");
+        if (opt) {
+            e.preventDefault(); e.stopPropagation();
+            const menu = document.getElementById("tee-pick-menu");
+            const evId = menu.dataset.evId, cid = menu.dataset.cid, band = opt.dataset.tee;
+            opt.textContent = "Saving\u2026";
+            try {
+                const r = await fetch(`/api/events/${evId}/tee`, {method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({customer_id: +cid, tee: band})});
+                const d = await r.json();
+                if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
+                document.querySelectorAll(`.tee-pick[data-ev-id="${evId}"][data-cid="${cid}"]`)
+                    .forEach(b => { b.textContent = b.classList.contains("pairing-tee") && typeof abbrevTee === "function" ? abbrevTee(band) : band; });
+                (window.tgfTeeState = window.tgfTeeState || {})[`${evId}:${cid}`] = band;
+                const ph = d.playing_handicap != null ? ` \u00b7 playing handicap ${d.playing_handicap}` : "";
+                const th = d.team_handicap != null ? ` \u00b7 team ${d.team_handicap}` : "";
+                closeTeeMenu();
+                teeToast(`${d.name}: ${d.before || "\u2014"} \u2192 ${band}${ph}${th}`);
+            } catch (err) {
+                closeTeeMenu();
+                teeToast("Tee not changed: " + err.message, true);
+            }
+            return;
+        }
+        const btn = e.target.closest && e.target.closest(".tee-pick");
+        if (btn) {
+            e.preventDefault(); e.stopPropagation();
+            closeTeeMenu();
+            const m = document.createElement("div");
+            m.id = "tee-pick-menu";
+            m.className = "tee-pick-menu";
+            m.dataset.evId = btn.dataset.evId; m.dataset.cid = btn.dataset.cid;
+            m.innerHTML = '<div class="tee-pick-head">Tee for this event</div>'
+                + TEE_BANDS.map(b => `<button type="button" data-tee="${escapeHtml(b)}">${escapeHtml(b)}</button>`).join("");
+            document.body.appendChild(m);
+            const rc = btn.getBoundingClientRect();
+            const top = Math.min(rc.bottom + 4, window.innerHeight - m.offsetHeight - 8);
+            const left = Math.min(Math.max(8, rc.left), window.innerWidth - m.offsetWidth - 8);
+            m.style.top = top + "px"; m.style.left = left + "px";
+            return;
+        }
+        if (!(e.target.closest && e.target.closest("#tee-pick-menu"))) closeTeeMenu();
+    }, true);
+    function teeToast(msg, bad) {
+        const t = document.createElement("div");
+        t.className = "tee-pick-toast" + (bad ? " bad" : "");
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 4000);
+    }
+
     function colVisible(c) {
         const saved = detailVisibleColumns[c.key];
         if (saved !== undefined) return saved !== false;
@@ -6088,7 +6178,7 @@
                         ok = true;
                         // The response IS the board as it now reads.
                         if (Array.isArray(data.games)) flightsBoards[ev.id] = data;
-                        showToast(act === "freeze" ? `Flights FROZEN${data.freeze && data.freeze.taken_at_local ? " " + data.freeze.taken_at_local : ""} — the selection is the record; pots keep recomputing until settlement` : act === "settle" ? "Flights SETTLED — the record is stored with the delta since the freeze" : "Board back to LIVE — the snapshot is voided but kept", "success");
+                        showToast(act === "freeze" ? `Flights FROZEN${data.freeze && data.freeze.taken_at_local ? " " + (window.tgfTime12 || (s => s))(data.freeze.taken_at_local) : ""} — the selection is the record; pots keep recomputing until settlement` : act === "settle" ? "Flights SETTLED — the record is stored with the delta since the freeze" : "Board back to LIVE — the snapshot is voided but kept", "success");
                     }
                 } catch (err) {
                     showToast(`Could not ${act}: ${err && err.message || err}`, "error");
@@ -6275,7 +6365,7 @@
         </div>`;
         if (board.freeze) {
             html += `<div style="width:0;min-width:100%;box-sizing:border-box;font-size:0.74rem;color:#78350f;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:0.35rem 0.6rem;margin:0.35rem 0 0;">
-                Frozen ${escapeHtml(board.freeze.taken_at_local || board.freeze.taken_at || "")} by ${escapeHtml(board.freeze.taken_by || "")}${board.freeze.note ? ` &mdash; ${escapeHtml(board.freeze.note)}` : ""}.
+                Frozen ${escapeHtml((window.tgfTime12 || (s => s))(board.freeze.taken_at_local || board.freeze.taken_at || ""))} by ${escapeHtml(board.freeze.taken_by || "")}${board.freeze.note ? ` &mdash; ${escapeHtml(board.freeze.note)}` : ""}.
                 ${board.settled ? ` Settled ${escapeHtml(board.settled.taken_at_local || board.settled.taken_at || "")} by ${escapeHtml(board.settled.taken_by || "")} &mdash; this board is the record and no longer recomputes.` : " Selection is locked; pots and places keep recomputing from actual buyers until the closeout settles the board (automatic, the night of the event)."}
             </div>`;
         }
@@ -7171,6 +7261,10 @@
             state.lastSavedAt = new Date();
             state.autosaveError = null;
             state.isDirty = state.histIdx !== idxAtSend;   // changed again while saving → still dirty
+            // An approved sheet that was just edited needs approving again (CoS #2393-5).
+            if (state.approval && state.approval.approval === 'approved') {
+                state.approval = Object.assign({}, state.approval, {approval: 'changed', label: 'Changed since approval · Approve again'});
+            }
         } catch (err) {
             state.saving = false;
             if (attempt < 2) {
@@ -7193,7 +7287,7 @@
         if (state.autosaveError) return `Auto-save failed (${state.autosaveError}) — click Save`;
         if (state.isDirty) return 'Auto-saves in a moment';
         const t = state.lastSavedAt instanceof Date ? state.lastSavedAt : null;
-        return t ? `Saved ${t.getHours() % 12 || 12}:${String(t.getMinutes()).padStart(2, '0')}` : 'Saved';
+        return t ? `Saved ${t.getHours() % 12 || 12}:${String(t.getMinutes()).padStart(2, '0')} ${t.getHours() >= 12 ? 'PM' : 'AM'}` : 'Saved';
     }
     function paintPairingsSaveStamp(ev, state) {
         document.querySelectorAll(`.pair-save-stamp[data-ev-id="${ev.id}"]`).forEach(el => {
@@ -7722,7 +7816,16 @@
                 // APPROVE from here after editing (Kerry 10/19: "takes me to
                 // the PAIRINGS view in the EVENT. Then it would ALSO need an
                 // APPROVE button"). Opens the review page for the saved sheet.
-                html += `<a class="pairings-action-btn" href="/events/${ev.id}/approve-pairings" style="background:#E87C3E;color:#fff;text-decoration:none;" title="Review the saved sheet and approve it: the tee-times email goes out">&#x2713; Approve</a>`;
+                // THREE STATES (Kerry 10/26 via CoS #2378/#2393): Approve (orange)
+                // / APPROVED · who · time (green) / Changed since approval ·
+                // Approve again (amber). The time is 12-hour Central.
+                const apv = state.approval || {};
+                const apvStyle = apv.approval === 'approved' ? 'background:#2f7d4a;color:#fff;'
+                    : apv.approval === 'changed' ? 'background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;'
+                    : 'background:#E87C3E;color:#fff;';
+                const apvText = apv.approval === 'approved' || apv.approval === 'changed'
+                    ? escapeHtml(apv.label || '') : '&#x2713; Approve';
+                html += `<a class="pairings-action-btn pairings-approve-btn" data-approval="${escapeHtml(apv.approval || 'none')}" href="/events/${ev.id}/approve-pairings" style="${apvStyle}text-decoration:none;" title="Review the saved sheet and approve it: the tee-times email goes out">${apvText}</a>`;
             }
         }
         html += '</div>'; // .pairings-actions
@@ -8284,7 +8387,7 @@
                         : `<span class="pairing-points" title="${escapeHtml(ptsTitle)}">${pts}</span>`;
                 }
                 html += `<span class="pairing-hcp">${hcp}</span>`;
-                html += `<span class="pairing-tee">${escapeHtml(abbrevTee(player.tee_choice))}</span>`;
+                html += teePickHtml(ev.id, player.customer_id, abbrevTee(player.tee_choice), "pairing-tee");
                 // Pace sits LAST (Kerry 2026-07-31) — it is staging
                 // information, not something you read a player by.
                 if (player.name) {
@@ -8501,6 +8604,7 @@
             state.pairCounts = data.pair_counts || {};
             state.rodeCounts = data.rode_counts || {};
             state.blindPool = data.blind_pool || null;
+            state.approval = data.approval || null;
             state.isDirty = false;
             state.loaded = true;
             seedPairHistory(state);   // undo starts from what was saved
@@ -9535,7 +9639,7 @@
             <div class="ev-actions-menu">
                 <button class="ev-menu-item btn-add-player" data-event-name="${escapeHtml(ev.item_name)}">+ Add Player</button>
                 <button class="ev-menu-item btn-add-payment" data-event-name="${escapeHtml(ev.item_name)}">+ Add Payment</button>
-                ${rsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${rsvpOnlyCount})</button>` : ''}
+                ${rsvpOnlyCount > 0 ? `<div class="ev-menu-divider"></div><button class="ev-menu-item btn-remind-all" data-event-id="${ev.id}" data-event-name="${escapeHtml(ev.item_name)}">Remind All (${rsvpOnlyCount})</button>` : ''}
                 <div class="ev-menu-divider"></div>
                 <button class="ev-menu-item btn-message-players" data-event-name="${escapeHtml(ev.item_name)}">Message Players</button>
                 <button class="ev-menu-item btn-audit-rsvps" data-event-name="${escapeHtml(ev.item_name)}">Audit RSVPs</button>
@@ -9690,9 +9794,9 @@
                     // and the Remind is removed") — no tag at all, the
                     // row reads like any other paid registration.
                     if (ooPaidRow && (isRsvpOnly || isGgRsvp)) tag = "";
-                    else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
-                    else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
-                    else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+                    else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+                    else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
+                    else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-id="${r.customer_id ?? ''}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
                     else if (txStatus === "transferred") tag = '<span class="status-tag status-tag-transferred">Transferred</span>';
                     else if (txStatus === "refunded") tag = '<span class="status-tag status-tag-refunded">Refunded</span>';
@@ -10059,6 +10163,8 @@
                             ? ` <span style="color:#dc2626;font-weight:700;" title="Owes $${+lg.cost} for lodging">owes</span>` : "";
                         html += `<td style="${style}"><select class="oo-lodging-select" data-event-id="${ev.id}" data-cid="${r.customer_id}" title="${escapeHtml((lg && lg.note) || 'Lodging \u2014 pick a bed or Own plans')}" style="font-size:0.78rem; padding:2px 4px; border:1px solid #d1d5db; border-radius:6px; cursor:pointer; max-width:170px; background:${lg ? '#ECFDF5' : '#fff'};">${lgHtml}</select>${owes}</td>`;
                     }
+                } else if (c.key === "tee_choice") {
+                    html += `<td style="${style}">${teePickHtml(ev.id, r.parent_item_id ? null : r.customer_id, r.tee_choice, "")}</td>`;
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
                 }
@@ -10741,6 +10847,7 @@
 
                 const itemId = tag.dataset.itemId;
                 const email = tag.dataset.customerEmail || "";
+                const customerId = tag.dataset.customerId || "";
                 const isGgRsvp = String(itemId).startsWith("gg-rsvp");
                 const item = isGgRsvp ? null : allItems.find(r => r.id === parseInt(itemId));
                 // Get player name from the adjacent link or parent
@@ -10775,16 +10882,18 @@
                 const remindBtn = document.createElement("button");
                 remindBtn.className = "rsvp-popover-btn";
                 remindBtn.textContent = "Send Reminder";
-                if (email) {
+                if (email || customerId) {
                     remindBtn.addEventListener("click", async (ev2) => {
                         ev2.stopPropagation();
                         pop.remove();
-                        if (!confirm(`Send payment reminder to ${playerName} (${email})?`)) return;
+                        if (!confirm(`Send payment reminder to ${playerName}${email ? ` (${email})` : ""}?`)) return;
                         try {
                             const resp = await fetch("/api/events/send-reminder", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ to_email: email, player_name: playerName, event_name: eventName })
+                                body: JSON.stringify({ event_id: eventId, event_name: eventName,
+                                    customer_id: customerId ? parseInt(customerId) : null,
+                                    to_email: email, player_name: playerName })
                             });
                             const result = await resp.json();
                             if (resp.ok) alert("Reminder sent!");
@@ -11287,11 +11396,16 @@
                     const resp = await fetch("/api/events/send-reminder-all", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ event_name: eventName }),
+                        body: JSON.stringify({ event_id: btn.dataset.eventId ? parseInt(btn.dataset.eventId) : null,
+                                               event_name: eventName }),
                     });
                     const data = await resp.json();
                     if (!resp.ok) throw new Error(data.error || "Failed");
-                    alert(`Reminders sent: ${data.sent} succeeded, ${data.failed} failed (${data.total} total)`);
+                    let msg = `Reminders sent: ${data.sent} succeeded, ${data.failed} failed (${data.total} total)`;
+                    if (data.already_today_count) msg += `\n${data.already_today_count} already reminded today`;
+                    if (data.no_email_count) msg += `\n${data.no_email_count} with no email on file`;
+                    if (data.held_count) msg += `\n${data.held_count} held: ` + [...new Set(data.held.flatMap(h => h.why))].join("; ");
+                    alert(msg);
                 } catch (err) {
                     alert("Failed: " + err.message);
                 }
@@ -12735,7 +12849,7 @@
                 html += paceBadge(state, player.name);
             }
             html += `<span class="pairing-hcp">${hcp}</span>`;
-            html += `<span class="pairing-tee">${escapeHtml(player.tee_choice || '—')}</span>`;
+            html += teePickHtml(ev.id, player.customer_id, player.tee_choice || '—', "pairing-tee");
             html += '</div>';
         });
         html += '</div></div>';
@@ -16090,7 +16204,7 @@
         const [label, color, hint] = REG_URL_STATE_LABELS[state] || REG_URL_STATE_LABELS.missing;
         let html = `<span style="display:inline-block; padding:0.05rem 0.45rem; border-radius:999px; font-weight:700; font-size:0.68rem; color:#fff; background:${color};">${label}</span> <span style="color:var(--text-muted);">${hint}</span>`;
         if (ev.registration_url_checked_at && state !== "expired") {
-            html += ` <span style="color:var(--text-muted);">Checked ${escapeHtml(String(ev.registration_url_checked_at).slice(0, 16))} UTC.</span>`;
+            html += ` <span style="color:var(--text-muted);">Checked ${escapeHtml((window.tgfTime12 || (s => s))(String(ev.registration_url_checked_at).slice(0, 16)))} UTC.</span>`;
         }
         if (!ev.registration_url && ev.registration_url_suggested) {
             html += `<div style="margin-top:0.25rem;">Suggested: <code style="font-size:0.72rem;">${escapeHtml(ev.registration_url_suggested)}</code> <button type="button" class="btn btn-secondary" id="edit-event-registration_url-use" style="font-size:0.7rem; padding:0.1rem 0.45rem;">Use</button></div>`;
@@ -16207,6 +16321,10 @@
         renderRegistrationUrlStatus(ev);
         const editSpot = document.getElementById("edit-event-fellowship_spot");
         if (editSpot) editSpot.value = ev.fellowship_spot || "";
+        const editLock = document.getElementById("edit-event-lock_override");
+        if (editLock) editLock.value = (ev.lock_override || "").replace(" ", "T").slice(0, 16);  // 24h-ok: datetime-local input value
+        const editKeep = document.getElementById("edit-event-tee_keep");
+        if (editKeep) editKeep.value = ev.tee_keep || "";
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -16378,6 +16496,13 @@
             const spotVal = spotEl.value.trim();
             if (spotVal !== (ev.fellowship_spot || "")) changes.fellowship_spot = spotVal;
         }
+        const lockEl = document.getElementById("edit-event-lock_override");
+        if (lockEl) {
+            const lockVal = (lockEl.value || "").replace("T", " ").slice(0, 16);  // 24h-ok: stored value
+            if (lockVal !== (ev.lock_override || "").slice(0, 16)) changes.lock_override = lockVal;  // 24h-ok: stored value
+        }
+        const keepEl = document.getElementById("edit-event-tee_keep");
+        if (keepEl && keepEl.value !== (ev.tee_keep || "")) changes.tee_keep = keepEl.value;
 
         // Pricing fields — depends on format
         if (isCombo) {

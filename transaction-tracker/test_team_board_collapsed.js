@@ -1,8 +1,11 @@
 // TEAM tab (Kerry 10/19, leaderboard review 11.6 / 12.4 / 12.6 / 13):
 //   B9  Team Net 1-, 2- and 3-ball: each hole sums the N lowest nets
 //   B5  every ball that counted is green; a tie at the cutoff greens all tied
-//   B8  collapsed by default — one row a team (# | TEAM | THRU | NET | ± | WON),
-//       tap to open today's full board, Expand all / Collapse all
+//   B8  collapsed by default — one row a team, tap to open, Expand all /
+//       Collapse all. Since Batch 1 (design-claude #2147 §4-§5, Kerry-approved
+//       10/20): # | TEAM | ± | THRU | WON/PROJ. (Net and ± merged, PGA
+//       style); a finished team shows only its number in THRU; the opened
+//       team is its card (HOLE / PAR / players / TEAM NET, N ± USED).
 // Runs the PAGE's own renderer region headless.
 // Run: node test_team_board_collapsed.js
 const fs = require('fs');
@@ -16,7 +19,8 @@ eval('const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g
   + lines.slice(a, b).join('\n')
   + '\nObject.assign(globalThis, {evlbTeamMins, evlbTeamCounted, evlbTeamSummary, evlbTeamRows,'
   + ' evlbTeamPanel, evlbTeamDialLabel, evlbTeamSetOpen, evlbTeamToggleAll, evlbTeamAllOpen,'
-  + ' evlbTeamSyncAll, evlbTeamThru, evlbTeamBalls});');
+  + ' evlbTeamSyncAll, evlbTeamThru, evlbTeamBalls, evlbTeamGrid, evlbSplitName, evlbNameFL});');
+const txt = h => String(h).replace(/<[^>]+>/g, '');
 
 let fails = 0;
 const ck = (l, c, d) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${c ? '' : '  ' + (d ?? '')}`); if (!c) fails++; };
@@ -116,25 +120,45 @@ console.log('== B8: collapsed row values ==');
   const rows = evlbTeamRows(d);
   ck('ranked on ±: team A (-1) before team B (+6)', rows[0].i === 0 && rows[1].i === 1);
   ck('positions 1 and 2', rows[0].pos === '1' && rows[1].pos === '2', rows.map(r => r.pos).join());
+  d.board_state = 'final';
   const html = evlbTeamPanel(d, { game: 'team', gameCol: false, grossCol: false, sort: 'keep', holesOnLanding: true, noCard: true });
   const r0 = (html.match(/<tr class="evlb-tsum-row[\s\S]*?<\/tr>/) || [''])[0];
   const cells = (r0.match(/<td[^>]*>[\s\S]*?<\/td>/g) || []);
-  ck('six cells: # | TEAM | THRU | NET | ± | WON', cells.length === 6, cells.length);
+  ck('five cells: # | TEAM | ± | THRU | WON', cells.length === 5, cells.length);
   ck('# is 1', />1<\/td>/.test(cells[0]), cells[0]);
-  ck('TEAM names every player', ['Player 1', 'Player 2', 'Player 3', 'Player 4'].every(n => cells[1].includes(n)), cells[1]);
-  ck('finished: THRU reads F and the team net', /F <b>23<\/b>/.test(cells[2]), cells[2]);
-  ck('NET 23', /<b>23<\/b>/.test(cells[3]), cells[3]);
-  ck('± -1', />-1</.test(cells[4]), cells[4]);
-  ck('WON is the team purse', /\$120\.00/.test(cells[5]), cells[5]);
-  ck('heading reads the dial', html.includes('Team Net · best 2 of 4 · 85% allowance'),
+  ck('TEAM names every player', ['Player 1', 'Player 2', 'Player 3', 'Player 4'].every(n => txt(cells[1]).includes(n)), cells[1]);
+  ck('± is the big number, a true minus: −1', /class="tp red">−1</.test(cells[2]), cells[2]);
+  ck('finished: THRU shows ONLY the team net, no F (Kerry 10/20)', txt(cells[3]) === '23' && !/F/.test(txt(cells[3])), cells[3]);
+  ck('WON is the team purse, two decimals, FINAL green', /class="won fin">\$120\.00/.test(cells[4]), cells[4]);
+  ck('heading reads the dial', html.includes('Team Net · best 2 of 4 · 85%') && !html.includes('allowance'),
      (html.match(/evlb-tdial-l">[^<]*/) || [])[0]);
-  ck('every team row is followed by its hidden full board',
+  ck('every team row is followed by its hidden card',
      (html.match(/<tr class="evlb-tsum-exp" data-ti="\d+" hidden>/g) || []).length === 2);
-  ck('the expansion is the standard team board with its TEAM NET row',
-     /evlb-tsum-exp[\s\S]*?<table class="evlb-holes evlb-ovr[\s\S]*?class="teamrow"/.test(html));
-  ck('Expand all control is there', /data-evlb-team-all[^>]*>Expand all</.test(html));
-  const held = Object.assign({}, d, { _moneyHeld: true });
-  ck('WON column hides while money is held', /<table class="evlb-tsum no-won"/.test(evlbTeamPanel(held, { game: 'team' })));
+  ck('the opened team is its card: HOLE, PAR, players, TEAM NET',
+     /evlb-tsum-exp[\s\S]*?<table class="evlb-tgx">[\s\S]*?<tr class="hd">[\s\S]*?<tr class="par">[\s\S]*?<tr class="pl[\s\S]*?<tr class="tn">/.test(html));
+  ck('no black band inside the opened team, no pot line repeated', !/evlb-band/.test(html.split('evlb-tsum-exp')[1] || '') && !/evlb-potline/.test(html));
+  ck('Expand all control is there', /data-evlb-team-all[^>]*>EXPAND ALL</.test(html));
+  const upd = Object.assign({}, d, { board_state: 'upcoming' });
+  ck('WON column hides while UPCOMING', /<table class="evlb-tsum no-won"/.test(evlbTeamPanel(upd, { game: 'team' })));
+  const lv = Object.assign({}, d, { board_state: 'live' });
+  const lh = evlbTeamPanel(lv, { game: 'team' });
+  ck('LIVE: the header reads PROJ. and the cells are grey italic', /<th class="won">PROJ\.<\/th>/.test(lh) && /class="won proj"/.test(lh));
+  const rv = evlbTeamPanel(Object.assign({}, d, { board_state: 'in_review' }), { game: 'team' });
+  ck('IN REVIEW: WON cells are marked (italic amber class)', /class="won rev"/.test(rv));
+  // the card's numbers: team A, best 2, holes 1-3: team net 6 / 6 / 11 = 23 vs 24
+  const m = evlbTeamMins(d, d.teams[0]);
+  const g = evlbTeamGrid(d, d.teams[0], m);
+  const tn = (g.match(/<tr class="tn">[\s\S]*?<\/tr>/) || [''])[0];
+  const tnc = (tn.match(/<td[^>]*>[\s\S]*?<\/td>/g) || []).map(txt);
+  ck('TEAM NET row: per-hole team net, N, ±, USED blank', tnc.join('|') === 'TEAM NET|6|6|11|23|−1|', tnc.join('|'));
+  ck('TEAM NET: a hole under the team par is red (6 vs 8)', /<td class="red">6<\/td>/.test(tn), tn);
+  const cnt = (g.match(/class="cnt"/g) || []).length;
+  ck('every counted ball is green: 2 + 2 + 3 (a tie at the cutoff on 3 counts all tied)', cnt === 7, cnt);
+  const p1 = (g.match(/<tr class="pl">[\s\S]*?<\/tr>/) || [''])[0];
+  const p1c = (p1.match(/<td[^>]*>[\s\S]*?<\/td>/g) || []).map(txt);
+  ck('player row: gross per hole, N, ±, USED', p1c.slice(-3).join('|') === '12|E|2', p1c.join('|'));
+  ck('the fill runs edge to edge (#2149): PAR and TEAM NET rows fill every cell', /tr\.par td \{ background: #F3F1EC/.test(src) && /tr\.tn td \{ background: #F3F1EC/.test(src));
+  ck('a 2px black rule sits before N', /td\.rule \{ border-left: 2px solid #1B1B1B/.test(src));
 
   // mid-round: team B has played more holes at the same ±
   const mid = Object.assign({}, baseCards, {
@@ -151,7 +175,8 @@ console.log('== B8: collapsed row values ==');
   const tu = teams(); tu[0].start_line = '3:40 PM | Hole 1'; tu[0].purse = null;
   const du = mkd(1, up, tu);
   const ru = evlbTeamRows(du);
-  ck('UPCOMING: THRU shows the team start', /3:40 PM \| Hole 1/.test(evlbTeamThru(du.teams[0], ru[0].s)));
+  ck('UPCOMING: THRU shows the team start, "4:30 PM · 1" form', /class="lf">3:40 PM · 1</.test(evlbTeamThru(du.teams[0], ru[0].s)), evlbTeamThru(du.teams[0], ru[0].s));
+  ck('…with a short form for the phone', /class="sf">3:40 · 1</.test(evlbTeamThru(du.teams[0], ru[0].s)));
   ck('UPCOMING: no rank, no net', ru.every(r => r.pos === '' && r.s.net == null));
 
   // GG era keeps GG's order and positions
@@ -179,15 +204,35 @@ console.log('== B8: expand / collapse ==');
   ck('tapping one team opens only that team', !exps[1].hidden && exps[0].hidden && exps[2].hidden
      && rows[1].classList.contains('open') && rows[1].attrs['aria-expanded'] === 'true');
   evlbTeamSyncAll(panel);
-  ck('with one open the control still says Expand all', btn.textContent === 'Expand all');
+  ck('with one open the control still says Expand all', btn.textContent === 'EXPAND ALL');
   evlbTeamToggleAll(panel, true);
   ck('Expand all opens every team', exps.every(x => !x.hidden) && evlbTeamAllOpen(panel));
-  ck('…and the control flips to Collapse all', btn.textContent === 'Collapse all');
+  ck('…and the control flips to Collapse all', btn.textContent === 'COLLAPSE ALL');
   evlbTeamSetOpen(rows[0], false);
   ck('one team closes on its own', exps[0].hidden && !exps[1].hidden && !exps[2].hidden);
   evlbTeamToggleAll(panel, false);
-  ck('Collapse all closes every team', exps.every(x => x.hidden) && btn.textContent === 'Expand all');
+  ck('Collapse all closes every team', exps.every(x => x.hidden) && btn.textContent === 'EXPAND ALL');
 }
+
+console.log('== #2147 §5 sample: thru 7, best 2 nets 7·5·8·7·7·8·5 = 47 vs 54 -> −7 ==');
+{
+  const par = [4, 3, 4, 4, 4, 5, 3, 4, 5];
+  const nets = [[3,3,4,4,4,4,3], [4,2,5,5,3,6,4], [5,4,4,3,5,5,4], [5,4,6,5,5,4,2]];
+  const cards = {}; nets.forEach((ns, i) => { cards[i + 1] = par.map((p, h) => [h + 1, h < 7 ? ns[h] : null, 0]); });
+  const hp = {}; par.forEach((p, i) => { hp[String(i + 1)] = p; });
+  const ds = { hole_cols: [1,2,3,4,5,6,7,8,9], hole_par: hp, team_balls: 2, team_unit: 'team', cards,
+    teams: [{ players: [1, 2, 3, 4].map(r => ({ scoring_round_id: r, player_name: 'P ' + r })) }] };
+  const ms = evlbTeamMins(ds, ds.teams[0]);
+  ck('per-hole team nets 7·5·8·7·7·8·5', [1,2,3,4,5,6,7].map(n => ms[n]).join('·') === '7·5·8·7·7·8·5');
+  const ss = evlbTeamSummary(ds, ds.teams[0], ms);
+  ck('the collapsed row\'s ± is −7, thru 7, net 47', ss.toPar === -7 && ss.thru === 7 && ss.net === 47, JSON.stringify(ss));
+}
+
+console.log('== names ==');
+ck('First LAST splits on the last word', JSON.stringify(evlbSplitName('Michelle DelCARMEN')) === '{"first":"Michelle","last":"DelCARMEN"}');
+// Kerry 10/21: a Golf Genius-era name "JONES, James" showed as "James"
+ck('a GG "LAST, First" name reads First LAST', JSON.stringify(evlbSplitName('JONES, James')) === '{"first":"James","last":"JONES"}'
+   && txt(evlbNameFL('JONES, James')) === 'James JONES', txt(evlbNameFL('JONES, James')));
 
 console.log('== page wiring ==');
 ck('the TEAM panel replaces the always-open board',

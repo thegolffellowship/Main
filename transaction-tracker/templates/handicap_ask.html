@@ -74,7 +74,7 @@
         {% elif done.starting is not none %}
             <p class="mut">{{ done_label }}</p>
             <div class="big">{{ done.starting_text }}</div>
-            <p class="mut">{{ done_check if done.status == 'check' else done_set }}</p>
+            <p class="mut">{{ done_check if done.status == 'check' else (done_rule if done.status == 'rule' else done_set) }}</p>
             <p class="temp">{{ done_temp }}</p>
         {% else %}
             <p class="mut">{{ done_need }}</p>

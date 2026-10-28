@@ -70,8 +70,10 @@ check("another service must be one of the list",
       ha.validate({"kind": "other", "service": "Made Up", "index": "10"}).get("error"))
 check("Other needs a name", ha.validate({"kind": "other", "service": "Other", "index": "10"}).get("error"))
 check("no handicap asks a RANGE for 18 holes (Kerry: between x and x)",
-      ha.validate({"kind": "none", "score_low": "45", "score_high": "50"}).get("error")
+      ha.validate({"kind": "none", "score_low": "20", "score_high": "22"}).get("error")
       and ha.validate({"kind": "none", "score_low": "90", "score_high": "100"}).get("score_high") == 100)
+check("a 9-hole range is taken as 9 holes (CoS #2426: doubled before the rule)",
+      ha.validate({"kind": "none", "score_low": "45", "score_high": "50"}).get("nine") is True)
 check("a range typed backwards is put right", ha.validate(
       {"kind": "none", "score_low": "105", "score_high": "95"}).get("score_low") == 95)
 
@@ -154,9 +156,10 @@ check("no Venmo yet: told to tap the same email button later, with the link",
       b"tap the button in our email again" in r.data and b"Get Venmo" in r.data)
 check("no doubled Thanks", b"Thanks. The chapter" not in r.data)
 
-check("no handicap: manager will set it", r.status_code == 200 and b"chapter manager will set" in r.data)
-check("...and nothing was set", con.execute("SELECT starting_handicap_18 FROM customers WHERE customer_id = 3")
-      .fetchone()[0] is None)
+check("no handicap: low score minus 72 is set (Kerry 10/27, #2426)",
+      r.status_code == 200 and b"From the 90 you usually shoot for 18, minus 72." in r.data, r.data[-600:])
+_n = con.execute("SELECT starting_handicap_18, starting_handicap_set_by FROM customers WHERE customer_id = 3").fetchone()
+check("...18.0, set by the rule", _n[0] == 18.0 and _n[1] == "rule:low_score_minus_72", _n)
 pg = cl.get(f"/handicap/{tok[3]}").data.decode()
 check("back on the same link: only the Venmo question", "Add your Venmo" in pg
       and "I have a GHIN number" not in pg, pg[-800:])
@@ -167,10 +170,10 @@ check("adding Venmo later saves it to the profile", r.status_code == 200
 m = hw.missing_handicaps(9001, db_path=DB)
 st = {a["customer_id"]: a["status"] for a in m["asks"]}
 check("the manager banner: Set from GHIN / Check this one / Needs a number",
-      st == {1: "set", 2: "check", 3: "need"}, m["asks"])
-check("Nora (score only) is still in the missing list", [p["customer_id"] for p in m["players"]] == [3, 5]
-      or {p["customer_id"] for p in m["players"]} == {3, 5}, m["players"])
-check("the banner line names the range", "usually shoots 90–100 for 18" in
+      st == {1: "set", 2: "check", 3: "rule"}, m["asks"])
+check("Nora (score only) now has a number, so only Ned is missing",
+      {p["customer_id"] for p in m["players"]} == {5}, m["players"])
+check("the banner line names the range and the rule", "usually shoots 90-100 for 18" in
       next(a["line"] for a in m["asks"] if a["customer_id"] == 3))
 check("the banner shows Venmo or that they have none",
       "Venmo @Gus-Ghin-7" in next(a["line"] for a in m["asks"] if a["customer_id"] == 1)
@@ -221,6 +224,23 @@ check("one reminder, 2 days before, only to who has not answered",
 SENT.clear()
 ha.auto_check(now=near, db_path=DB, sender=fake)
 check("never a second reminder", not SENT)
+
+print("lock-day reminder (Kerry 10/26: an hour before the lock, 4:00 PM)")
+_ev = dict(db.get_connection(DB).execute("SELECT * FROM events WHERE id = 9001").fetchone())
+_lock = db.event_lock_at(_ev, DB)
+SENT.clear()
+ha.auto_check(now=_lock - timedelta(minutes=61), db_path=DB, sender=fake)
+check("not before the hour before the lock", not any(s[0] == "p6@example.com" for s in SENT), SENT)
+SENT.clear()
+ha.auto_check(now=_lock - timedelta(minutes=55), db_path=DB, sender=fake)
+check("in the hour before the lock: the reminder again, to who has not answered",
+      [s[0] for s in SENT] == ["p6@example.com"] and SENT[0][1].startswith("Reminder"), SENT)
+SENT.clear()
+ha.auto_check(now=_lock - timedelta(minutes=30), db_path=DB, sender=fake)
+check("once per person per event", not SENT, SENT)
+SENT.clear()
+ha.auto_check(now=_lock + timedelta(minutes=5), db_path=DB, sender=fake)
+check("nothing after the lock", not SENT, SENT)
 
 print("source guards")
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "handicap_ask.html")).read()

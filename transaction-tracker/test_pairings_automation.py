@@ -70,6 +70,7 @@ with db._connect(DB) as conn:
     conn.commit()
 
 print("1. The 5 PM day-before routine")
+db.set_app_setting(db.PAIRINGS_AUTO_WEEKDAYS_KEY, "tue:1,sat:2", db_path=DB)   # the cases below were written on it
 res = db.auto_generate_pairings(DB, today=monday)
 by = {r["event_id"]: r for r in res}
 check("BLINDS ride the routine (Kerry 2026-09-22): the hand-paired sheet's open seat gets the one eligible card",
@@ -86,15 +87,17 @@ check("an event Kerry already paired is left exactly as it was ('Only if they ar
       and [p["name"] for p in db.get_event_pairings(9202, DB)["9"][0]["players"]] == ["P9 Test9202", "P10 Test9202"], by.get(9202))
 res2 = db.auto_generate_pairings(DB, today=monday)
 check("a second run changes nothing", all(r.get("generated") is False for r in res2), res2)
-check("…and draws no second blind ('only if they aren't run already')",
-      all(r.get("blinds") == 0 for r in res2) and {r["event_id"]: r.get("blinds_why") for r in res2}[9202] == "already drawn", res2)
+check("…and draws no second blind ('only if they aren't run already'): each event runs once per lock",
+      res2 == [] and db._event_has_blinds(9202, DB), res2)
 check("a Tuesday 'today' (Wednesday event) is outside the dial — nothing runs", db.auto_generate_pairings(DB, today=tuesday) == [])
 db.set_app_setting(db.PAIRINGS_AUTO_WEEKDAYS_KEY, "tue, wed", db_path=DB)
 res3 = db.auto_generate_pairings(DB, today=tuesday)
 check("the weekdays are a DIAL — adding wed covers the Wednesday event without code", [r["event_id"] for r in res3] == [9203] and res3[0].get("generated") is True, res3)
 db.set_app_setting(db.PAIRINGS_AUTO_WEEKDAYS_KEY, db.PAIRINGS_AUTO_WEEKDAYS_DEFAULT, db_path=DB)
-check("the default dial is tue:1, sat:2 (Kerry: 'Add sat… but make it for Thursday nights at 5:00p')",
-      db.pairings_auto_weekdays(DB) == {"tue": 1, "sat": 2}, db.pairings_auto_weekdays(DB))
+check("the default dial is Kerry's 10/26 lock days: Mon-Thu 1, Fri 2, Sat/Sun 3",
+      db.pairings_auto_weekdays(DB) == {"mon": 1, "tue": 1, "wed": 1, "thu": 1, "fri": 2, "sat": 3, "sun": 3},
+      db.pairings_auto_weekdays(DB))
+db.set_app_setting(db.PAIRINGS_AUTO_WEEKDAYS_KEY, "tue:1,sat:2", db_path=DB)   # the cases below were written on it
 saturday = date(2026, 9, 26); thursday = saturday - timedelta(days=2); friday = saturday - timedelta(days=1)
 with db._connect(DB) as conn:
     conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_time, start_type, course) VALUES (9204, 's18.12 Saturday', ?, 'San Antonio', 'active', '18 Holes', '8:00 AM', 'Tee Times', 'Somewhere')", (saturday.isoformat(),))
@@ -107,8 +110,26 @@ with db._connect(DB) as conn:
 check("Friday's run does NOT touch Saturday (its lead is two days)", db.auto_generate_pairings(DB, today=friday) == [])
 res4 = db.auto_generate_pairings(DB, today=thursday)
 check("Thursday's run pairs Saturday", [r["event_id"] for r in res4] == [9204] and res4[0].get("generated") is True, res4)
-check("the routine is registered in the scheduler at 5:00 PM Central",
-      'id="pairings_auto_generate"' in open("app.py").read() and "hour=17," in open("app.py").read().split('id="pairings_auto_generate"')[0][-400:])
+check("the routine is registered every 15 minutes, so each event pairs at its own lock (v2.591.0)",
+      'id="pairings_auto_generate"' in open("app.py").read() and 'minute="0-59/15"' in open("app.py").read().split('id="pairings_auto_generate"')[0][-400:])
+print("1b. A manager's lock override (Kerry 10/26)")
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_time, start_type, course, lock_override) "
+                 "VALUES (9206, 's9.99 Override', '2026-12-17', 'San Antonio', 'active', '9-hole', '4:00 PM', 'Tee Times', 'Somewhere', '2026-12-15 12:00')")
+    conn.commit()
+from datetime import datetime as _dtm
+_c = db.get_connection(DB); _e = _c.execute("SELECT * FROM events WHERE id = 9206").fetchone()
+check("event_lock_at reads the override", db.event_lock_at(dict(_e), DB) == _dtm(2026, 12, 15, 12, 0))
+check("11:45 AM on the override day: not yet", db.auto_generate_pairings(DB, now=_dtm(2026, 12, 15, 11, 45)) == [])
+_r = db.auto_generate_pairings(DB, now=_dtm(2026, 12, 15, 12, 0))
+check("12:00 PM: paired at its own lock, even on an undialled weekday", [x["event_id"] for x in _r] == [9206], _r)
+check("the standard 5:00 PM that day does not pair it again", db.auto_generate_pairings(DB, now=_dtm(2026, 12, 16, 17, 0)) == [])
+check("update_event stores a valid override and clears a blank one",
+      db.update_event(9206, {"lock_override": "2026-12-16T15:30"}, db_path=DB)
+      and db.get_connection(DB).execute("SELECT lock_override FROM events WHERE id = 9206").fetchone()[0] == "2026-12-16 15:30"
+      and db.update_event(9206, {"lock_override": ""}, db_path=DB)
+      and db.get_connection(DB).execute("SELECT lock_override FROM events WHERE id = 9206").fetchone()[0] is None)
+check("a malformed override is ignored", not db.update_event(9206, {"lock_override": "Tuesday noon"}, db_path=DB))
 
 print("2. A profile fact on an RSVP-only row")
 with db._connect(DB) as conn:

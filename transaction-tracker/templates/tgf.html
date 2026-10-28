@@ -2320,7 +2320,12 @@
 
         // ── Init ─────────────────────────────────────────────────
         document.addEventListener("DOMContentLoaded", () => {
-            loadData();
+            // ?view=unpaid|refunds opens that queue: the same-night admin
+            // report links here (Kerry 2026-10-26: "a link to PAYMENTS").
+            loadData().then(() => {
+                const v = new URLSearchParams(location.search).get("view");
+                if (v === "unpaid" || v === "refunds") { payFilter = v; applyPayView(); }
+            });
             // resume the verify poll if a payment was mid-confirmation
             // when the page (or app) was reloaded
             if (_anyVerifyingActive()) ensurePayPolling();

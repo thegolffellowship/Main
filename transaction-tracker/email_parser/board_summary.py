@@ -295,7 +295,12 @@ def attach(lb: dict, db_path=None) -> dict:
         preview_final = bool(pv and pv.get("final"))
     except Exception:
         preview_final = False
-    state = board_state(lb, recorded, preview_final)
+    # ONE state value (R2, design-claude #2147; pain point 1): the board
+    # payload already carries it from database.evlb_state, the same rule
+    # the strip, the list chip and the tab landing read. Recomputing it
+    # here is how a LIVE-coloured strip could read UPCOMING, or a held
+    # board turn FINAL. Only a payload without one falls back.
+    state = lb.get("board_state") or board_state(lb, recorded, preview_final)
     lb["board_state"] = state
     lb["money_recorded"] = recorded > 0
     lb["projected"] = None

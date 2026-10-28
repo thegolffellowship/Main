@@ -164,6 +164,15 @@ def event_lines(db_path=None, through: str | None = None) -> tuple[list, list]:
                 if not c.get("customer_id"):
                     warnings.append(f"{ev['item_name']}: {c.get('name')} has no customer_id — no points")
                     continue
+                if c.get("incomplete_round"):
+                    # A SHORT ROUND (late arrival, WD; Kerry 10/26: "A short
+                    # round should still count toward points races"): net
+                    # Stableford on the holes he played, zero on the rest.
+                    from .score_entry import incomplete_round_plays
+                    if not incomplete_round_plays("points"):
+                        warnings.append(f"{ev['item_name']}: {c.get('name')} short round — no points "
+                                        f"(INCOMPLETE_ROUND_GAMES points is off)")
+                        continue
                 if not c.get("complete"):
                     warnings.append(f"{ev['item_name']}: {c.get('name')} card not complete — no points")
                     continue

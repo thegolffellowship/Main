@@ -123,6 +123,8 @@ check("tee sheet: header, cart pairs together, preliminary line, member tee shee
       "Test Links GC" in m["html"] and "Ann Able &amp; Bob Baker" in m["html"]
       and tt.PRELIM_LINE in m["html"] and f"/member/teesheet/{EV}" in m["html"]
       and "First tee 3:40 PM" in m["html"], m["text"][:400])
+check("the Event Info line says 6:00 AM (Kerry 10/26), never 7:00 AM",
+      "comes at 6:00 AM tomorrow" in m["html"] and "7:00 AM" not in m["html"], m["text"][-300:])
 check("no money, phone numbers or emails in the tee sheet",
       "$" not in m["text"] and "@" not in m["text"].replace(m["email"], ""), m["text"])
 check("no registered player sees the spots box", all(not x["spots_box"] for x in by(b, "player"))
@@ -203,6 +205,39 @@ with db._connect(DB) as conn:
                         "WHERE sent_by LIKE 'teetimes_%' AND sent_by <> 'teetimes_email'").fetchall()
 check("every send logged with event_id and customer_id",
       len(rows) == 6 and all(x[0] == EV and x[1] for x in rows), [tuple(x) for x in rows])
+# 10/26 5:16 PM: the approval and the job delivered the same approved sheet
+# at once and every Silverhorn email went twice. Two senders racing now send
+# each message exactly once.
+import threading, time as _time
+key = tt.SENT_KEY.format(event_id=EV)
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM app_settings WHERE key = ? OR key LIKE ?", (key, f"teetimes_claim:{EV}:%"))
+    conn.commit()
+SENT.clear()
+def slow_send(**kw):
+    _time.sleep(0.05)
+    SENT.append(kw)
+    return True
+fetcher.send_mail_graph = slow_send
+ths = [threading.Thread(target=tt._deliver, args=(EV, DB), kwargs={"now": datetime(2026, 10, 26, 19, 0)})
+       for _ in range(2)]
+[t.start() for t in ths]
+[t.join() for t in ths]
+fetcher.send_mail_graph = fake_send
+to = sorted(s["to_address"] for s in SENT)
+check("two senders at once: each email goes exactly once (10/26 double send)",
+      to == sorted(["ann@example.test", "bob@example.test", "cal@example.test", "eve@example.test",
+                    "kerry@thegolffellowship.com", "chris@course.example.test"]), to)
+check("and the sent map records all six", len(tt._sent(EV, DB)) == 6, tt._sent(EV, DB))
+SENT.clear()
+fetcher.send_mail_graph = lambda **kw: False
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM app_settings WHERE key = ? OR key LIKE ?", (key, f"teetimes_claim:{EV}:%"))
+    conn.commit()
+tt._deliver(EV, DB, now=datetime(2026, 10, 26, 19, 0))
+fetcher.send_mail_graph = fake_send
+tt._deliver(EV, DB, now=datetime(2026, 10, 26, 19, 15))
+check("a failed send gives its claim back, so the next run sends it", len(SENT) == 6, len(SENT))
 # An edit to the wording voids the stamp.
 with db._connect(DB) as conn:
     conn.execute("UPDATE message_templates SET subject = subject || '!' WHERE name = ?", (tt.TEMPLATES["player"],))
@@ -222,13 +257,27 @@ check("dial off: the unpaid I'm-in gets nothing", not any(x["customer_id"] == LE
 db.set_app_setting(tt.SPOTS_DIAL, "rsvp_in", db_path=DB)
 b = tt.build(EV, db_path=DB)
 lee = [x for x in b["messages"] if x["customer_id"] == LEAD[0]]
-check("dial rsvp_in: the unpaid I'm-in gets the sheet WITH the box",
-      len(lee) == 1 and lee[0]["spots_box"] and "There are 3 spots still open" in lee[0]["html"]
-      and "/rsvp/" in lee[0]["html"], lee and lee[0]["text"])
+check("dial rsvp_in: the unpaid I'm-in gets the OPEN-SPOTS email (Kerry 10/26, CoS #2387)",
+      len(lee) == 1 and lee[0]["version"] == "open_spots" and "3 spots open" in lee[0]["html"]
+      and "/rsvp/" in lee[0]["html"] and lee[0]["subject"].startswith("3 spots open at TEST LINKS tomorrow")
+      and "Open spot" in lee[0]["html"] and "Stop event invitations" in lee[0]["html"],
+      lee and (lee[0]["subject"], lee[0]["text"]))
+check("…the open seats listed equal the open seats on the sheet (1 + 2)",
+      lee and lee[0]["html"].count(">Open spot<") == 3, lee and lee[0]["html"].count(">Open spot<"))
+check("…its stamp is the hash of the approved words in code",
+      tt.approval_state(DB)["open_spots"]["template_hash"] == tt.open_spots_hash())
 check("…the Register link goes through the scanner filter (/rsvp/<token>, not the shop URL)",
       lee and "shop.example.test" not in lee[0]["html"])
 check("…and registered players still never see it",
       all(not x["spots_box"] for x in b["messages"] if x["version"] == "player" and x["customer_id"] != LEAD[0]))
+# Someone already seated never gets the open-spots email.
+_g2 = {"9": [GROUPS["9"][0], {**GROUPS["9"][1], "players": GROUPS["9"][1]["players"]
+                              + [{"name": "Lee Lead", "cart_pos": 3, "customer_id": LEAD[0]}]}]}
+db.save_event_pairings(EV, _g2, db_path=DB)
+b = tt.build(EV, db_path=DB)
+check("a seated invitee gets no open-spots email",
+      not any(x["customer_id"] == LEAD[0] and x["version"] == "open_spots" for x in b["messages"]))
+db.save_event_pairings(EV, GROUPS, db_path=DB)
 # Full field: no box for anyone.
 with db._connect(DB) as conn:
     for cid in (880106, 880107, 880108):
@@ -237,6 +286,14 @@ with db._connect(DB) as conn:
                      "order_date, order_id, email_uid, merchant) VALUES (?, ?, 's9.27 TEST LINKS', ?, '9', "
                      "'active', '2026-10-20', ?, ?, 'GoDaddy')", (f"X P{cid}", cid, EV, f"R{cid}", f"manual-{cid}"))
     conn.commit()
+db.save_event_pairings(EV, {"9": [
+    {"group_num": 1, "slot_label": "3:40 PM", "players": [
+        {"name": n, "cart_pos": i + 1, "customer_id": c} for i, (c, n) in enumerate(
+            [(880101, "Ann Able"), (880102, "Bob Baker"), (880103, "Cal Cole"), (880106, "X P880106")])]},
+    {"group_num": 2, "slot_label": "3:50 PM", "players": [
+        {"name": n, "cart_pos": i + 1, "customer_id": c} for i, (c, n) in enumerate(
+            [(880104, "Dee Dunn"), (880105, "Eve East"), (880107, "X P880107"), (880108, "X P880108")])]}]},
+    db_path=DB)
 b = tt.build(EV, db_path=DB)
 check("event full (8): spots 0 and no spots-box message",
       b["spots_left"] == 0 and not any(x.get("spots_box") for x in b["messages"]), b["spots_left"])
@@ -257,6 +314,19 @@ check("preview goes to staff only, one message",
 SENT.clear()
 out = json.loads(mcp_server._scoring_dispatch("", f"scoring-teetimes-email:{EV}|send"))
 check("there is no send bridge", "error" in out and not SENT, out)
+
+print("6. The evening-before window (handoff 10/20 §4 risk 1)")
+# an approval on event morning used to send "comes at 7:00 AM tomorrow"
+check("event morning: refused", "evening before" in (tt.send_window_ok("2026-10-27", datetime(2026, 10, 27, 6, 30)) or ""))
+check("the day before at 4 PM: refused (the lock is 5 PM)", "5 PM" in (tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 16, 0)) or ""))
+check("the day before at 5:30 PM (a manager's approval): allowed", tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 17, 30)) is None)
+check("the day before at 11:45 PM: allowed", tt.send_window_ok("2026-10-27", datetime(2026, 10, 26, 23, 45)) is None)
+check("two days before: refused", tt.send_window_ok("2026-10-27", datetime(2026, 10, 25, 19, 0)) is not None)
+SENT.clear()
+r = tt._deliver(EV_WE, DB, now=datetime(2026, 10, 31, 7, 0))
+check("an approval on event morning sends nothing", "refused" in r and not SENT, r)
+_pa = open("email_parser/pairings_approval.py", encoding="utf-8").read()
+check("the approval path goes through the same _deliver", "from email_parser.teetimes_email import _deliver" in _pa)
 
 try:
     os.unlink(DB)

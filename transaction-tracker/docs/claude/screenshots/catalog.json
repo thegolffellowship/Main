@@ -1,0 +1,2042 @@
+{
+ "_about": "The Screens catalogue (Kerry 2026-10-26). Owned by the Librarian. Each sequence is one folder under docs/claude/screenshots/; steps show in order. Each step's shots map a device (desktop, tablet, mobile, or any for prints and cart signs) to a file; the page's toggle picks the device and says when one hasn't been shot yet. status: current = what members/managers see now; built = on a branch, not live; mockup = a proposal; superseded = kept for history; reference = taken at build time, may have moved on; needed = a screen we should have and don't yet. demo = links the page opens in a device-sized frame to test drive (read-only or preview only). A step's own state overrides the sequence's. The /admin/screens page reads this file; files in a folder but not listed here show as Not catalogued.",
+ "areas": [
+  "Invitations & member emails",
+  "Member pages",
+  "Leaderboard",
+  "Live scoring",
+  "Lone Star Cup",
+  "Reports",
+  "Back-end pages",
+  "Mockups"
+ ],
+ "sequences": [
+  {
+   "id": "invitations",
+   "title": "Event invitation, from the email to the answer",
+   "area": "Invitations & member emails",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.580.2",
+   "taken": "2026-10-26",
+   "folder": "invitations-2026-10-26",
+   "source_doc": "docs/claude/events.md (Tracker event invitations + RSVPs)",
+   "notes": "Kerry 10/26: Remove me moved to a small link reading \"Remove me from ALL event invitations\". Buttons carry a bgcolor cell so Outlook keeps their colour.",
+   "steps": [
+    {
+     "file": "1-invite-email.png",
+     "caption": "The 7 AM invitation email",
+     "shots": {
+      "mobile": "1-invite-email.png",
+      "tablet": "1-invite-email.tablet.png",
+      "desktop": "1-invite-email.desktop.png"
+     },
+     "capture": {
+      "render": "invitation_email"
+     }
+    },
+    {
+     "file": "2-last-call-email.png",
+     "caption": "Last call email (sent the morning of the event)",
+     "shots": {
+      "mobile": "2-last-call-email.png",
+      "tablet": "2-last-call-email.tablet.png",
+      "desktop": "2-last-call-email.desktop.png"
+     },
+     "capture": {
+      "render": "lastcall_email"
+     }
+    },
+    {
+     "file": "3-one-more-tap.png",
+     "caption": "One more tap: shown to a known mail scanner or a non-browser opening I'm in",
+     "shots": {
+      "mobile": "3-one-more-tap.png",
+      "tablet": "3-one-more-tap.tablet.png",
+      "desktop": "3-one-more-tap.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_one_more_tap"
+     }
+    },
+    {
+     "file": "4-cant-make-it-thanks.png",
+     "caption": "Can't make it: thanks page, with the small Remove me link",
+     "shots": {
+      "mobile": "4-cant-make-it-thanks.png",
+      "tablet": "4-cant-make-it-thanks.tablet.png",
+      "desktop": "4-cant-make-it-thanks.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_cant_make_it"
+     }
+    },
+    {
+     "file": "4-old-cant-make-it-thanks.png",
+     "caption": "Before v2.579.3: Remove me was a big grey button",
+     "state": "superseded",
+     "shots": {
+      "mobile": "4-old-cant-make-it-thanks.png",
+      "tablet": "4-old-cant-make-it-thanks.tablet.png",
+      "desktop": "4-old-cant-make-it-thanks.desktop.png"
+     }
+    },
+    {
+     "file": "5-reason-thanks.png",
+     "caption": "After they tap a reason",
+     "shots": {
+      "mobile": "5-reason-thanks.png",
+      "tablet": "5-reason-thanks.tablet.png",
+      "desktop": "5-reason-thanks.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_reason_thanks"
+     }
+    },
+    {
+     "file": "6-remove-me-confirm.png",
+     "caption": "Remove me: the confirm page",
+     "shots": {
+      "mobile": "6-remove-me-confirm.png",
+      "tablet": "6-remove-me-confirm.tablet.png",
+      "desktop": "6-remove-me-confirm.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_remove_confirm"
+     }
+    },
+    {
+     "file": "7-remove-me-done.png",
+     "caption": "Remove me: done",
+     "shots": {
+      "mobile": "7-remove-me-done.png",
+      "tablet": "7-remove-me-done.tablet.png",
+      "desktop": "7-remove-me-done.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_remove_done"
+     }
+    }
+   ],
+   "demo": [
+    {
+     "label": "The invitation, as a preview",
+     "url": "/admin/screens/demo/invitation",
+     "note": "Preview links: tapping I'm in or Can't make it opens the real pages and records nothing."
+    }
+   ],
+   "watch": [
+    "email_parser/invitations.py",
+    "email_parser/event_day_email.py",
+    "app.py::public_event_rsvp",
+    "app.py::public_event_rsvp_reason",
+    "app.py::_public_page",
+    "app.py::_rsvp_confirm_page"
+   ],
+   "watch_hash": "463213b104c42e94"
+  },
+  {
+   "id": "payment-reminder",
+   "title": "Payment reminder email",
+   "area": "Invitations & member emails",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.581.0 (live 10/26)",
+   "taken": "2026-10-26",
+   "folder": "payment-reminder-2026-10-26",
+   "source_doc": "docs/claude/events.md (Payment reminder)",
+   "notes": "One email for the Remind tag, Remind All, the 6 AM job and the composer. Kerry chose mockup 3 and asked for a plain roster link.",
+   "steps": [
+    {
+     "file": "1-reminder-email.png",
+     "caption": "The reminder as built (v2.581.0)",
+     "shots": {
+      "mobile": "1-reminder-email.png",
+      "tablet": "1-reminder-email.tablet.png",
+      "desktop": "1-reminder-email.desktop.png"
+     },
+     "capture": {
+      "render": "payment_reminder"
+     }
+    },
+    {
+     "file": "mockup-3.png",
+     "caption": "Mockup 3, the one Kerry picked",
+     "state": "mockup",
+     "shots": {
+      "mobile": "mockup-3.png",
+      "tablet": "mockup-3.tablet.png",
+      "desktop": "mockup-3.desktop.png"
+     }
+    },
+    {
+     "file": "old-1-remind-tag-email.png",
+     "caption": "Before: what the Remind tag sent (no link)",
+     "state": "superseded",
+     "shots": {
+      "mobile": "old-1-remind-tag-email.png",
+      "tablet": "old-1-remind-tag-email.tablet.png",
+      "desktop": "old-1-remind-tag-email.desktop.png"
+     }
+    },
+    {
+     "file": "old-2-template-email.png",
+     "caption": "Before: the Messages template version",
+     "state": "superseded",
+     "shots": {
+      "mobile": "old-2-template-email.png",
+      "tablet": "old-2-template-email.tablet.png",
+      "desktop": "old-2-template-email.desktop.png"
+     }
+    }
+   ],
+   "demo": [
+    {
+     "label": "The reminder for the next event",
+     "url": "/admin/screens/demo/payment-reminder",
+     "note": "Rendered only; nothing is sent."
+    }
+   ],
+   "watch": [
+    "email_parser/payment_reminder.py",
+    "email_parser/event_day_email.py",
+    "email_parser/event_links.py"
+   ],
+   "watch_hash": "5a8ec5f5690881f8"
+  },
+  {
+   "id": "rsvp-deadline",
+   "title": "RSVP payment deadline: 1:00 PM warning and 4:50 PM release",
+   "area": "Invitations & member emails",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.583.0",
+   "taken": "2026-10-26",
+   "folder": "rsvp-deadline-2026-10-26",
+   "source_doc": "docs/claude/events.md (RSVP payment deadline)",
+   "notes": "Kerry 10/26: the lock-day warning to unpaid RSVP-only players, and the release email if payment isn't in. Sent by the Tracker (email_parser/rsvp_deadline.py).",
+   "steps": [
+    {
+     "file": "1-warning-1pm.png",
+     "caption": "1:00 PM on the lock day: pay by 5:00 PM or the spot is released",
+     "shots": {
+      "mobile": "1-warning-1pm.png",
+      "tablet": "1-warning-1pm.tablet.png",
+      "desktop": "1-warning-1pm.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_deadline_warn"
+     }
+    },
+    {
+     "file": "2-released-450pm.png",
+     "caption": "4:50 PM, still unpaid: the spot is released",
+     "shots": {
+      "mobile": "2-released-450pm.png",
+      "tablet": "2-released-450pm.tablet.png",
+      "desktop": "2-released-450pm.desktop.png"
+     },
+     "capture": {
+      "render": "rsvp_deadline_release"
+     }
+    }
+   ],
+   "watch": [
+    "email_parser/rsvp_deadline.py",
+    "email_parser/payment_reminder.py",
+    "email_parser/event_day_email.py"
+   ],
+   "watch_hash": "f97f3c5d7810d67a"
+  },
+  {
+   "id": "events-leaderboard-batch1",
+   "title": "Events leaderboard, batch 1",
+   "area": "Leaderboard",
+   "audience": "member",
+   "status": "archived",
+   "version": "v2.576.0+",
+   "taken": "2026-10-21",
+   "folder": "events-leaderboard-batch1",
+   "source_doc": "static/js/version.js v2.576.0",
+   "notes": "L = the build before deploy, PROD = live, UP = the Upcoming section. Archived 2026-10-26: shows screens no longer live; the current pictures are member-pages (steps 1 and 6), retaken after every deploy.",
+   "steps": [
+    {
+     "file": "L_phone_list.png",
+     "caption": "The month list",
+     "shots": {
+      "mobile": "L_phone_list.png",
+      "desktop": "L_desk_list.png"
+     }
+    },
+    {
+     "file": "L_phone_sheet.png",
+     "caption": "The how-it-works sheet",
+     "shots": {
+      "mobile": "L_phone_sheet.png"
+     }
+    },
+    {
+     "file": "L_phone_team.png",
+     "caption": "An open event on the TEAM tab, one team expanded",
+     "shots": {
+      "mobile": "L_phone_team.png",
+      "desktop": "L_desk_team.png"
+     }
+    },
+    {
+     "file": "PROD_phone_team.png",
+     "caption": "TEAM tab, live",
+     "shots": {
+      "mobile": "PROD_phone_team.png"
+     }
+    },
+    {
+     "file": "UP_phone.png",
+     "caption": "Upcoming events with one open",
+     "shots": {
+      "mobile": "UP_phone.png",
+      "desktop": "UP_desk.png"
+     }
+    }
+   ],
+   "demo": [
+    {
+     "label": "Live leaderboard",
+     "url": "/member"
+    }
+   ]
+  },
+  {
+   "id": "leaderboard-review-2026-10-19",
+   "title": "Leaderboard review, 10/19",
+   "area": "Leaderboard",
+   "audience": "member",
+   "status": "superseded",
+   "version": "v2.571.24",
+   "taken": "2026-10-19",
+   "folder": "leaderboard-review-2026-10-19",
+   "source_doc": "docs/claude/handoff-2026-10-19-leaderboard-review.md",
+   "steps": [
+    {
+     "file": "event-board-net-fullpage.png",
+     "caption": "Event board net fullpage",
+     "shots": {
+      "mobile": "event-board-net-fullpage.png"
+     }
+    },
+    {
+     "file": "event-board-overall-phone.png",
+     "caption": "Event board overall phone",
+     "shots": {
+      "mobile": "event-board-overall-phone.png"
+     }
+    },
+    {
+     "file": "how-to-read-modal-phone.png",
+     "caption": "How to read modal phone",
+     "shots": {
+      "mobile": "how-to-read-modal-phone.png"
+     }
+    },
+    {
+     "file": "lsc-skins-phone.png",
+     "caption": "Lsc skins phone",
+     "shots": {
+      "mobile": "lsc-skins-phone.png"
+     }
+    },
+    {
+     "file": "season-contests-monthly-phone.png",
+     "caption": "Season contests monthly phone",
+     "shots": {
+      "mobile": "season-contests-monthly-phone.png"
+     }
+    }
+   ],
+   "automation": "not automated: superseded"
+  },
+  {
+   "id": "score-entry-9",
+   "title": "Live scoring on the phone, 9 holes",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "archived",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-join.png",
+     "caption": "Join",
+     "shots": {
+      "mobile": "1-join.png"
+     }
+    },
+    {
+     "file": "2-hole.png",
+     "caption": "Hole",
+     "shots": {
+      "mobile": "2-hole.png"
+     }
+    },
+    {
+     "file": "3-ctp.png",
+     "caption": "Ctp",
+     "shots": {
+      "mobile": "3-ctp.png"
+     }
+    },
+    {
+     "file": "4-second-phone.png",
+     "caption": "Second phone",
+     "shots": {
+      "mobile": "4-second-phone.png"
+     }
+    },
+    {
+     "file": "5-weak-signal.png",
+     "caption": "Weak signal",
+     "shots": {
+      "mobile": "5-weak-signal.png"
+     }
+    },
+    {
+     "file": "6-sign.png",
+     "caption": "Sign",
+     "shots": {
+      "mobile": "6-sign.png"
+     }
+    },
+    {
+     "file": "6b-every-hole-in.png",
+     "caption": "Every hole in",
+     "shots": {
+      "mobile": "6b-every-hole-in.png"
+     }
+    },
+    {
+     "file": "7-keeper-done.png",
+     "caption": "Keeper done",
+     "shots": {
+      "mobile": "7-keeper-done.png"
+     }
+    },
+    {
+     "file": "8-cart-sign-qr.png",
+     "caption": "Cart sign qr",
+     "shots": {
+      "any": "8-cart-sign-qr.png"
+     }
+    }
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
+  },
+  {
+   "id": "score-entry-18",
+   "title": "Live scoring, 18 holes and shotgun on 10",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "archived",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25-18h",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-join.png",
+     "caption": "Join",
+     "shots": {
+      "mobile": "1-join.png"
+     }
+    },
+    {
+     "file": "2-hole-14-back-nine.png",
+     "caption": "Hole 14 back nine",
+     "shots": {
+      "mobile": "2-hole-14-back-nine.png"
+     }
+    },
+    {
+     "file": "3-the-turn.png",
+     "caption": "The turn",
+     "shots": {
+      "mobile": "3-the-turn.png"
+     }
+    },
+    {
+     "file": "4-ctp-hole-16.png",
+     "caption": "Ctp hole 16",
+     "shots": {
+      "mobile": "4-ctp-hole-16.png"
+     }
+    },
+    {
+     "file": "5-sign-your-card-out-in-total.png",
+     "caption": "Sign your card out in total",
+     "shots": {
+      "mobile": "5-sign-your-card-out-in-total.png"
+     }
+    },
+    {
+     "file": "5b-every-hole-in.png",
+     "caption": "Every hole in",
+     "shots": {
+      "mobile": "5b-every-hole-in.png"
+     }
+    },
+    {
+     "file": "6-scorekeeper-finish.png",
+     "caption": "Scorekeeper finish",
+     "shots": {
+      "mobile": "6-scorekeeper-finish.png"
+     }
+    },
+    {
+     "file": "7-shotgun-start-hole-10.png",
+     "caption": "Shotgun start hole 10",
+     "shots": {
+      "mobile": "7-shotgun-start-hole-10.png"
+     }
+    }
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
+  },
+  {
+   "id": "score-entry-card-check",
+   "title": "Live scoring: checking and signing the card",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "archived",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25-card-check",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-check-front.png",
+     "caption": "Check front",
+     "shots": {
+      "mobile": "1-check-front.png"
+     }
+    },
+    {
+     "file": "2-check-front-tap-a-number.png",
+     "caption": "Check front tap a number",
+     "shots": {
+      "mobile": "2-check-front-tap-a-number.png"
+     }
+    },
+    {
+     "file": "3-check-front-changed-and-help.png",
+     "caption": "Check front changed and help",
+     "shots": {
+      "mobile": "3-check-front-changed-and-help.png"
+     }
+    },
+    {
+     "file": "4-check-back.png",
+     "caption": "Check back",
+     "shots": {
+      "mobile": "4-check-back.png"
+     }
+    },
+    {
+     "file": "5-photo-me-note.png",
+     "caption": "Photo me note",
+     "shots": {
+      "mobile": "5-photo-me-note.png"
+     }
+    },
+    {
+     "file": "6-photo-taken.png",
+     "caption": "Photo taken",
+     "shots": {
+      "mobile": "6-photo-taken.png"
+     }
+    },
+    {
+     "file": "7-submitted.png",
+     "caption": "Submitted",
+     "shots": {
+      "mobile": "7-submitted.png"
+     }
+    },
+    {
+     "file": "8-mark-signed-for-him.png",
+     "caption": "Mark signed for him",
+     "shots": {
+      "mobile": "8-mark-signed-for-him.png"
+     }
+    }
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
+  },
+  {
+   "id": "score-entry-flag",
+   "title": "Live scoring: flagging a problem",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "archived",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25-flag",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-join.png",
+     "caption": "Join",
+     "shots": {
+      "mobile": "1-join.png"
+     }
+    },
+    {
+     "file": "2-hole.png",
+     "caption": "Hole",
+     "shots": {
+      "mobile": "2-hole.png"
+     }
+    },
+    {
+     "file": "3-ctp.png",
+     "caption": "Ctp",
+     "shots": {
+      "mobile": "3-ctp.png"
+     }
+    },
+    {
+     "file": "4-second-phone.png",
+     "caption": "Second phone",
+     "shots": {
+      "mobile": "4-second-phone.png"
+     }
+    },
+    {
+     "file": "5-weak-signal.png",
+     "caption": "Weak signal",
+     "shots": {
+      "mobile": "5-weak-signal.png"
+     }
+    },
+    {
+     "file": "6-sign.png",
+     "caption": "Sign",
+     "shots": {
+      "mobile": "6-sign.png"
+     }
+    },
+    {
+     "file": "6b-every-hole-in.png",
+     "caption": "Every hole in",
+     "shots": {
+      "mobile": "6b-every-hole-in.png"
+     }
+    },
+    {
+     "file": "6c-sign-tap-hole.png",
+     "caption": "Sign tap hole",
+     "shots": {
+      "mobile": "6c-sign-tap-hole.png"
+     }
+    },
+    {
+     "file": "6d-sign-somethings-wrong.png",
+     "caption": "Sign somethings wrong",
+     "shots": {
+      "mobile": "6d-sign-somethings-wrong.png"
+     }
+    },
+    {
+     "file": "7-keeper-done.png",
+     "caption": "Keeper done",
+     "shots": {
+      "mobile": "7-keeper-done.png"
+     }
+    }
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
+  },
+  {
+   "id": "no-show",
+   "title": "Live scoring: a player missing (no-show)",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.603.0 (not deployed)",
+   "taken": "2026-10-26",
+   "folder": "no-show-2026-10-26",
+   "source_doc": "docs/claude/score-entry.md (No-show)",
+   "notes": "Kerry 9/30 (#1021) and 10/26: the red Player missing button, Who's missing?, tap everyone who is missing at once, the answers (now with Left the course), off the card with its Rule 15 blind, + Player for a late arrival or another player, the NOT PLAYED holes, the make-up question after the regular holes, and the TGF-branded course notice with player-count totals (and its UPDATED version). Rendered from the real score page and card on a throwaway round; nothing is saved or sent.",
+   "watch": [
+    "templates/score_entry.html",
+    "email_parser/no_show_notice.py",
+    "email_parser/score_entry.py::mark_player_missing",
+    "email_parser/score_entry.py::_card_no_shows",
+    "email_parser/score_entry.py::_card_partials",
+    "email_parser/score_entry.py::add_player_to_card",
+    "email_parser/score_entry.py::partial_rounds"
+   ],
+   "steps": [
+    {
+     "file": "1-hole-screen.png",
+     "caption": "Every hole screen: the red Player missing button above Save & Go",
+     "shots": {
+      "mobile": "1-hole-screen.png",
+      "tablet": "1-hole-screen.tablet.png",
+      "desktop": "1-hole-screen.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_hole"
+     }
+    },
+    {
+     "file": "2-whos-missing.png",
+     "caption": "Who's missing? Tap everyone who isn't here (the card's players, never another card's)",
+     "shots": {
+      "mobile": "2-whos-missing.png",
+      "tablet": "2-whos-missing.tablet.png",
+      "desktop": "2-whos-missing.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_who"
+     }
+    },
+    {
+     "file": "2b-two-missing.png",
+     "caption": "Two players tapped: Next (2 missing), then one question per player, in turn (Kerry 10/26)",
+     "shots": {
+      "mobile": "2b-two-missing.png",
+      "tablet": "2b-two-missing.tablet.png",
+      "desktop": "2b-two-missing.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_multi"
+     }
+    },
+    {
+     "file": "3-is-he-coming.png",
+     "caption": "Is Ned coming? The three answers",
+     "shots": {
+      "mobile": "3-is-he-coming.png",
+      "tablet": "3-is-he-coming.tablet.png",
+      "desktop": "3-is-he-coming.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_ask"
+     }
+    },
+    {
+     "file": "4-off-the-card.png",
+     "caption": "Off this card: no row, never holds the card; the Rule 15 blind is drawn by itself; + Player",
+     "shots": {
+      "mobile": "4-off-the-card.png",
+      "tablet": "4-off-the-card.tablet.png",
+      "desktop": "4-off-the-card.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_absent"
+     }
+    },
+    {
+     "file": "5-course-notice.png",
+     "caption": "The course notice after 3 holes: TGF branded, player-count totals, manager and admin CC'd",
+     "shots": {
+      "mobile": "5-course-notice.png",
+      "tablet": "5-course-notice.tablet.png",
+      "desktop": "5-course-notice.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_course_notice"
+     }
+    },
+    {
+     "file": "6-left-the-course.png",
+     "caption": "A fourth answer for a player who has played: Left the course (WD)",
+     "shots": {
+      "mobile": "6-left-the-course.png",
+      "tablet": "6-left-the-course.tablet.png",
+      "desktop": "6-left-the-course.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_wd"
+     }
+    },
+    {
+     "file": "7-add-player.png",
+     "caption": "+ Player: add a registered player or move one from another card",
+     "shots": {
+      "mobile": "7-add-player.png",
+      "tablet": "7-add-player.tablet.png",
+      "desktop": "7-add-player.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_add"
+     }
+    },
+    {
+     "file": "8-late-arrival-not-played.png",
+     "caption": "Shows up on hole 4: holes 1-3 Not played, the blind plays them",
+     "shots": {
+      "mobile": "8-late-arrival-not-played.png",
+      "tablet": "8-late-arrival-not-played.tablet.png",
+      "desktop": "8-late-arrival-not-played.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_late"
+     }
+    },
+    {
+     "file": "9-late-arrival-hole-4.png",
+     "caption": "Joined on hole 4: he scores from here",
+     "shots": {
+      "mobile": "9-late-arrival-hole-4.png",
+      "tablet": "9-late-arrival-hole-4.tablet.png",
+      "desktop": "9-late-arrival-hole-4.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_late_hole"
+     }
+    },
+    {
+     "file": "10-course-notice-updated.png",
+     "caption": "UPDATED course notice when a reported no-show arrives",
+     "shots": {
+      "mobile": "10-course-notice-updated.png",
+      "tablet": "10-course-notice-updated.tablet.png",
+      "desktop": "10-course-notice-updated.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_course_notice_updated"
+     }
+    },
+    {
+     "file": "11-make-up-holes.png",
+     "caption": "After the regular holes: will he make up holes 1-3?",
+     "shots": {
+      "mobile": "11-make-up-holes.png",
+      "tablet": "11-make-up-holes.tablet.png",
+      "desktop": "11-make-up-holes.desktop.png"
+     },
+     "capture": {
+      "render": "no_show_makeup"
+     }
+    }
+   ],
+   "watch_hash": "de0c997a372fc36f"
+  },
+  {
+   "id": "score-entry-match-pickup",
+   "title": "Live scoring: match play and picked-up balls",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "archived",
+   "taken": "2026-09-25",
+   "folder": "score-entry-2026-09-25-match-pickup",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-hole-match-tags-and-max-notice.png",
+     "caption": "Hole match tags and max notice",
+     "shots": {
+      "mobile": "1-hole-match-tags-and-max-notice.png"
+     }
+    },
+    {
+     "file": "2-ball-in-hole-or-picked-up.png",
+     "caption": "Ball in hole or picked up",
+     "shots": {
+      "mobile": "2-ball-in-hole-or-picked-up.png"
+     }
+    },
+    {
+     "file": "3-picked-up-chosen-with-help.png",
+     "caption": "Picked up chosen with help",
+     "shots": {
+      "mobile": "3-picked-up-chosen-with-help.png"
+     }
+    },
+    {
+     "file": "4-check-card-ringed-pickup.png",
+     "caption": "Check card ringed pickup",
+     "shots": {
+      "mobile": "4-check-card-ringed-pickup.png"
+     }
+    },
+    {
+     "file": "5-hole-9-match-standing.png",
+     "caption": "Hole 9 match standing",
+     "shots": {
+      "mobile": "5-hole-9-match-standing.png"
+     }
+    },
+    {
+     "file": "6-the-turn-holes-under-names.png",
+     "caption": "The turn holes under names",
+     "shots": {
+      "mobile": "6-the-turn-holes-under-names.png"
+     }
+    },
+    {
+     "file": "7-check-card-back-same-columns.png",
+     "caption": "Check card back same columns",
+     "shots": {
+      "mobile": "7-check-card-back-same-columns.png"
+     }
+    },
+    {
+     "file": "8-your-card-my-row-and-flag-to-fix.png",
+     "caption": "Your card my row and flag to fix",
+     "shots": {
+      "mobile": "8-your-card-my-row-and-flag-to-fix.png"
+     }
+    }
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are score-entry-live, retaken after every deploy."
+  },
+  {
+   "id": "score-entry-cup",
+   "title": "Live scoring: Lone Star Cup formats",
+   "area": "Lone Star Cup",
+   "audience": "member",
+   "status": "archived",
+   "taken": "2026-09-26",
+   "folder": "score-entry-2026-09-26-cup",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-foursomes-one-row-per-team-and-X.png",
+     "caption": "Foursomes one row per team and x",
+     "shots": {
+      "mobile": "1-foursomes-one-row-per-team-and-X.png"
+     }
+    },
+    {
+     "file": "2-austin-leads-banner-in-austin-colour.png",
+     "caption": "Austin leads banner in austin colour",
+     "shots": {
+      "mobile": "2-austin-leads-banner-in-austin-colour.png"
+     }
+    },
+    {
+     "file": "3-san-antonio-leads-banner-in-sa-colour.png",
+     "caption": "San antonio leads banner in sa colour",
+     "shots": {
+      "mobile": "3-san-antonio-leads-banner-in-sa-colour.png"
+     }
+    },
+    {
+     "file": "4-check-card-X-and-won-in-team-colour.png",
+     "caption": "Check card x and won in team colour",
+     "shots": {
+      "mobile": "4-check-card-X-and-won-in-team-colour.png"
+     }
+    }
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are lone-star-cup-live; the 2026 Cup is over."
+  },
+  {
+   "id": "score-entry-admin",
+   "title": "Live scoring: admin page and cart sign",
+   "area": "Back-end pages",
+   "audience": "admin",
+   "status": "archived",
+   "taken": "2026-09-26",
+   "folder": "score-entry-2026-09-26-admin",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "cart-sign.png",
+     "caption": "Cart sign",
+     "shots": {
+      "any": "cart-sign.png"
+     }
+    },
+    {
+     "file": "live-scoring-page.png",
+     "caption": "Live scoring page",
+     "shots": {
+      "desktop": "live-scoring-page.png"
+     }
+    }
+   ],
+   "notes": "Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed. Archived 2026-10-26: older than the live panels."
+  },
+  {
+   "id": "score-entry-manager-panel",
+   "title": "Live scoring: the manager panel",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "archived",
+   "taken": "2026-09-28",
+   "folder": "score-entry-2026-09-28-manager-panel",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "2-phone.png",
+     "caption": "The manager panel",
+     "shots": {
+      "mobile": "2-phone.png",
+      "desktop": "1-desktop.png"
+     }
+    }
+   ],
+   "notes": "Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed. Archived 2026-10-26: older than the live panels."
+  },
+  {
+   "id": "score-entry-pairings-panel",
+   "title": "Live scoring: the pairings panel",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "archived",
+   "taken": "2026-09-28",
+   "folder": "score-entry-2026-09-28-pairings-panel",
+   "source_doc": "docs/claude/score-entry.md",
+   "steps": [
+    {
+     "file": "1-desktop-before-seed.png",
+     "caption": "Before seeding",
+     "shots": {
+      "desktop": "1-desktop-before-seed.png"
+     }
+    },
+    {
+     "file": "3-phone-seeded.png",
+     "caption": "Seeded, with the QR code",
+     "shots": {
+      "mobile": "3-phone-seeded.png",
+      "desktop": "2-desktop-seeded-qr.png"
+     }
+    },
+    {
+     "file": "4-phone-closed.png",
+     "caption": "Closed",
+     "shots": {
+      "mobile": "4-phone-closed.png"
+     }
+    }
+   ],
+   "notes": "Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed. Archived 2026-10-26: older than the live panels."
+  },
+  {
+   "id": "lsc-preview",
+   "title": "Lone Star Cup: splash, landing, draw, board and cart signs",
+   "area": "Lone Star Cup",
+   "audience": "member",
+   "status": "archived",
+   "taken": "2026-10-08",
+   "folder": "lsc-preview",
+   "source_doc": "docs/claude/lone-star-cup-board.md",
+   "steps": [
+    {
+     "file": "00-landing-held.png",
+     "caption": "Landing held",
+     "shots": {
+      "mobile": "00-landing-held.png"
+     }
+    },
+    {
+     "file": "00-landing.png",
+     "caption": "Landing",
+     "shots": {
+      "mobile": "00-landing.png"
+     }
+    },
+    {
+     "file": "00-preview-shell-folded.png",
+     "caption": "Preview shell folded",
+     "shots": {
+      "mobile": "00-preview-shell-folded.png"
+     }
+    },
+    {
+     "file": "00-preview-shell.png",
+     "caption": "Preview shell",
+     "shots": {
+      "mobile": "00-preview-shell.png"
+     }
+    },
+    {
+     "file": "00-splash.png",
+     "caption": "Splash",
+     "shots": {
+      "mobile": "00-splash.png"
+     }
+    },
+    {
+     "file": "01-landing.png",
+     "caption": "Landing",
+     "shots": {
+      "mobile": "01-landing.png"
+     }
+    },
+    {
+     "file": "01-who.png",
+     "caption": "Who",
+     "shots": {
+      "mobile": "01-who.png"
+     }
+    },
+    {
+     "file": "02-fb.png",
+     "caption": "Fb",
+     "shots": {
+      "mobile": "02-fb.png"
+     }
+    },
+    {
+     "file": "02-held.png",
+     "caption": "Held",
+     "shots": {
+      "mobile": "02-held.png"
+     }
+    },
+    {
+     "file": "03-fs.png",
+     "caption": "Fs",
+     "shots": {
+      "mobile": "03-fs.png"
+     }
+    },
+    {
+     "file": "04-s.png",
+     "caption": "S",
+     "shots": {
+      "mobile": "04-s.png"
+     }
+    },
+    {
+     "file": "05-qr.png",
+     "caption": "Qr",
+     "shots": {
+      "mobile": "05-qr.png"
+     }
+    },
+    {
+     "file": "06-who.png",
+     "caption": "Who",
+     "shots": {
+      "mobile": "06-who.png"
+     }
+    },
+    {
+     "file": "07-held.png",
+     "caption": "Held",
+     "shots": {
+      "mobile": "07-held.png"
+     }
+    },
+    {
+     "file": "08-board.png",
+     "caption": "Board",
+     "shots": {
+      "mobile": "08-board.png"
+     }
+    },
+    {
+     "file": "09-open.png",
+     "caption": "Open",
+     "shots": {
+      "mobile": "09-open.png"
+     }
+    },
+    {
+     "file": "10-info-foursomes.png",
+     "caption": "Info foursomes",
+     "shots": {
+      "mobile": "10-info-foursomes.png"
+     }
+    },
+    {
+     "file": "10-info-schedule.png",
+     "caption": "Info schedule",
+     "shots": {
+      "mobile": "10-info-schedule.png"
+     }
+    },
+    {
+     "file": "10-info-teams.png",
+     "caption": "Info teams",
+     "shots": {
+      "mobile": "10-info-teams.png"
+     }
+    },
+    {
+     "file": "20-draw-start.png",
+     "caption": "Draw start",
+     "shots": {
+      "mobile": "20-draw-start.png"
+     }
+    },
+    {
+     "file": "21-draw-four-landed.png",
+     "caption": "Draw four landed",
+     "shots": {
+      "mobile": "21-draw-four-landed.png"
+     }
+    },
+    {
+     "file": "22-draw-singles.png",
+     "caption": "Draw singles",
+     "shots": {
+      "mobile": "22-draw-singles.png"
+     }
+    },
+    {
+     "file": "30-cart-sign-sat-am.png",
+     "caption": "Cart sign sat am",
+     "shots": {
+      "any": "30-cart-sign-sat-am.png"
+     }
+    },
+    {
+     "file": "30-cart-sign-sun.png",
+     "caption": "Cart sign sun",
+     "shots": {
+      "any": "30-cart-sign-sun.png"
+     }
+    },
+    {
+     "file": "40-skins-pane.png",
+     "caption": "Skins pane",
+     "shots": {
+      "mobile": "40-skins-pane.png"
+     }
+    },
+    {
+     "file": "50-logo-cart-sign.png",
+     "caption": "Logo cart sign",
+     "shots": {
+      "any": "50-logo-cart-sign.png"
+     }
+    },
+    {
+     "file": "51-logo-event-info.png",
+     "caption": "Logo event info",
+     "shots": {
+      "mobile": "51-logo-event-info.png"
+     }
+    },
+    {
+     "file": "52-logo-splash.png",
+     "caption": "Logo splash",
+     "shots": {
+      "mobile": "52-logo-splash.png"
+     }
+    },
+    {
+     "file": "53-splash-shimmer-a.png",
+     "caption": "Splash shimmer a",
+     "shots": {
+      "mobile": "53-splash-shimmer-a.png"
+     }
+    },
+    {
+     "file": "53-splash-shimmer-b.png",
+     "caption": "Splash shimmer b",
+     "shots": {
+      "mobile": "53-splash-shimmer-b.png"
+     }
+    },
+    {
+     "file": "chapman-hole4.png",
+     "caption": "Chapman hole4",
+     "shots": {
+      "mobile": "chapman-hole4.png"
+     }
+    },
+    {
+     "file": "chapman-match-open.png",
+     "caption": "Chapman match open",
+     "shots": {
+      "mobile": "chapman-match-open.png"
+     }
+    },
+    {
+     "file": "cup-board-follow.png",
+     "caption": "Cup board follow",
+     "shots": {
+      "mobile": "cup-board-follow.png"
+     }
+    },
+    {
+     "file": "cup-cart-signs-sat-am.pdf",
+     "caption": "Cup cart signs sat am",
+     "shots": {
+      "any": "cup-cart-signs-sat-am.pdf"
+     }
+    },
+    {
+     "file": "cup-cart-signs-sun.pdf",
+     "caption": "Cup cart signs sun",
+     "shots": {
+      "any": "cup-cart-signs-sun.pdf"
+     }
+    },
+    {
+     "file": "fourball-hole4.png",
+     "caption": "Fourball hole4",
+     "shots": {
+      "mobile": "fourball-hole4.png"
+     }
+    },
+    {
+     "file": "fourball-match-open.png",
+     "caption": "Fourball match open",
+     "shots": {
+      "mobile": "fourball-match-open.png"
+     }
+    },
+    {
+     "file": "singles-hole4.png",
+     "caption": "Singles hole4",
+     "shots": {
+      "mobile": "singles-hole4.png"
+     }
+    },
+    {
+     "file": "singles-match-open.png",
+     "caption": "Singles match open",
+     "shots": {
+      "mobile": "singles-match-open.png"
+     }
+    }
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are lone-star-cup-live; the 2026 Cup is over."
+  },
+  {
+   "id": "cup-day2",
+   "title": "Lone Star Cup, day 2 board",
+   "area": "Lone Star Cup",
+   "audience": "member",
+   "status": "archived",
+   "taken": "2026-10-07",
+   "folder": "cup-2026-10-07-d2",
+   "source_doc": "docs/claude/lone-star-cup-board.md",
+   "steps": [
+    {
+     "file": "00-landing.png",
+     "caption": "Landing",
+     "shots": {
+      "mobile": "00-landing.png"
+     }
+    },
+    {
+     "file": "chapman-hole4.png",
+     "caption": "Chapman hole4",
+     "shots": {
+      "mobile": "chapman-hole4.png"
+     }
+    },
+    {
+     "file": "cup-board-follow.png",
+     "caption": "Cup board follow",
+     "shots": {
+      "mobile": "cup-board-follow.png"
+     }
+    },
+    {
+     "file": "fourball-hole4.png",
+     "caption": "Fourball hole4",
+     "shots": {
+      "mobile": "fourball-hole4.png"
+     }
+    },
+    {
+     "file": "fourball-match-open.png",
+     "caption": "Fourball match open",
+     "shots": {
+      "mobile": "fourball-match-open.png"
+     }
+    },
+    {
+     "file": "singles-hole4.png",
+     "caption": "Singles hole4",
+     "shots": {
+      "mobile": "singles-hole4.png"
+     }
+    }
+   ],
+   "notes": "Archived 2026-10-26: shows screens no longer live; the current pictures are lone-star-cup-live; the 2026 Cup is over."
+  },
+  {
+   "id": "member-pages",
+   "title": "Member pages, live",
+   "area": "Member pages",
+   "audience": "member",
+   "status": "current",
+   "version": "v2.580.2 (live)",
+   "taken": "2026-10-26",
+   "folder": "member-pages-2026-10-26",
+   "notes": "Taken from the live site at the top of each page. Spotlight is the base for the player dashboard when member logins come.",
+   "demo": [
+    {
+     "label": "Leaderboard",
+     "url": "/member/results"
+    },
+    {
+     "label": "Season contests",
+     "url": "/member/contests"
+    },
+    {
+     "label": "Handicaps",
+     "url": "/member/handicaps"
+    },
+    {
+     "label": "Spotlight",
+     "url": "/member/spotlight?player=18"
+    },
+    {
+     "label": "Live scoring guide",
+     "url": "/member/live-scoring"
+    }
+   ],
+   "steps": [
+    {
+     "file": "1-leaderboard.png",
+     "caption": "Leaderboard (events), the month list",
+     "shots": {
+      "mobile": "1-leaderboard.png",
+      "tablet": "1-leaderboard.tablet.png",
+      "desktop": "1-leaderboard.desktop.png"
+     },
+     "capture": {
+      "url": "/member/results"
+     }
+    },
+    {
+     "file": "2-season-contests.png",
+     "caption": "Season contests",
+     "shots": {
+      "mobile": "2-season-contests.png",
+      "tablet": "2-season-contests.tablet.png",
+      "desktop": "2-season-contests.desktop.png"
+     },
+     "capture": {
+      "url": "/member/contests"
+     }
+    },
+    {
+     "file": "3-handicaps.png",
+     "caption": "Handicaps",
+     "shots": {
+      "mobile": "3-handicaps.png",
+      "tablet": "3-handicaps.tablet.png",
+      "desktop": "3-handicaps.desktop.png"
+     },
+     "capture": {
+      "url": "/member/handicaps"
+     }
+    },
+    {
+     "file": "4-spotlight.png",
+     "caption": "Player Spotlight, one player (Kerry). The future player dashboard once members sign in",
+     "shots": {
+      "mobile": "4-spotlight.png",
+      "tablet": "4-spotlight.tablet.png",
+      "desktop": "4-spotlight.desktop.png"
+     },
+     "capture": {
+      "url": "/member/spotlight?player=18"
+     }
+    },
+    {
+     "file": "5-live-scoring-guide.png",
+     "caption": "The live scoring guide page",
+     "shots": {
+      "mobile": "5-live-scoring-guide.png",
+      "tablet": "5-live-scoring-guide.tablet.png",
+      "desktop": "5-live-scoring-guide.desktop.png"
+     },
+     "capture": {
+      "url": "/member/live-scoring"
+     }
+    },
+    {
+     "file": "6-leaderboard-event-open.png",
+     "caption": "Leaderboard, the latest event opened",
+     "shots": {
+      "mobile": "6-leaderboard-event-open.png",
+      "tablet": "6-leaderboard-event-open.tablet.png",
+      "desktop": "6-leaderboard-event-open.desktop.png"
+     },
+     "capture": {
+      "url": "/member/results",
+      "click": [
+       "details.evlb-ev > summary"
+      ],
+      "wait": 3500
+     }
+    }
+   ],
+   "watch": [
+    "templates/contests.html",
+    "templates/handicaps.html",
+    "templates/spotlight.html",
+    "templates/live_scoring_guide.html"
+   ],
+   "watch_hash": "1f347c463b87c539"
+  },
+  {
+   "id": "live-scoring-guide-pictures",
+   "title": "Live scoring how-to, the pictures members see",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "current",
+   "taken": "2026-10-13",
+   "base": "static",
+   "folder": "live-scoring",
+   "source_doc": "templates/live_scoring_guide.html",
+   "notes": "In use: these pictures are the member guide (/member/live-scoring) and the 10/13 how-to email. They live in static/img/live-scoring; the catalogue points at them, it does not copy them. Not automated on purpose: these files ARE the guide, curated one full iPhone screen each; score-entry-live retakes the same screens from the code after every deploy for comparison.",
+   "demo": [
+    {
+     "label": "Guide page",
+     "url": "/member/live-scoring"
+    }
+   ],
+   "steps": [
+    {
+     "file": "00-email.jpg",
+     "caption": "The how-to email",
+     "shots": {
+      "mobile": "00-email.jpg"
+     }
+    },
+    {
+     "file": "00-cart-sign.jpg",
+     "caption": "The cart sign QR",
+     "shots": {
+      "mobile": "00-cart-sign.jpg"
+     }
+    },
+    {
+     "file": "00-scorecard.jpg",
+     "caption": "The scorecard",
+     "shots": {
+      "mobile": "00-scorecard.jpg"
+     }
+    },
+    {
+     "file": "01-open.jpg",
+     "caption": "Open the link",
+     "shots": {
+      "mobile": "01-open.jpg"
+     }
+    },
+    {
+     "file": "02-name.jpg",
+     "caption": "Pick your name",
+     "shots": {
+      "mobile": "02-name.jpg"
+     }
+    },
+    {
+     "file": "03-hole.jpg",
+     "caption": "Enter a hole",
+     "shots": {
+      "mobile": "03-hole.jpg"
+     }
+    },
+    {
+     "file": "04-ctp.jpg",
+     "caption": "Closest to the pin",
+     "shots": {
+      "mobile": "04-ctp.jpg"
+     }
+    },
+    {
+     "file": "05-check.jpg",
+     "caption": "Check the card",
+     "shots": {
+      "mobile": "05-check.jpg"
+     }
+    },
+    {
+     "file": "06-fix.jpg",
+     "caption": "Fix a number",
+     "shots": {
+      "mobile": "06-fix.jpg"
+     }
+    },
+    {
+     "file": "07-photo.jpg",
+     "caption": "Photo of the card",
+     "shots": {
+      "mobile": "07-photo.jpg"
+     }
+    },
+    {
+     "file": "08-keeper-signs.jpg",
+     "caption": "The scorekeeper signs",
+     "shots": {
+      "mobile": "08-keeper-signs.jpg"
+     }
+    },
+    {
+     "file": "09-follow.jpg",
+     "caption": "Follow the board",
+     "shots": {
+      "mobile": "09-follow.jpg"
+     }
+    },
+    {
+     "file": "10-sign.jpg",
+     "caption": "Sign your card",
+     "shots": {
+      "mobile": "10-sign.jpg"
+     }
+    }
+   ],
+   "automation": "not automated: the guide's own pictures"
+  },
+  {
+   "id": "mockups-card-check",
+   "title": "Card check options A-D (mockups)",
+   "area": "Mockups",
+   "audience": "member",
+   "status": "mockup",
+   "taken": "2026-09-25",
+   "base": "mockups",
+   "folder": "",
+   "source_doc": "docs/claude/mockups/card-check-options.html",
+   "demo": [
+    {
+     "label": "Open the options page",
+     "url": "/admin/mockups/card-check-options.html"
+    }
+   ],
+   "steps": [
+    {
+     "file": "card-check-A.png",
+     "caption": "Option A",
+     "shots": {
+      "mobile": "card-check-A.png"
+     }
+    },
+    {
+     "file": "card-check-B.png",
+     "caption": "Option B",
+     "shots": {
+      "mobile": "card-check-B.png"
+     }
+    },
+    {
+     "file": "card-check-C.png",
+     "caption": "Option C",
+     "shots": {
+      "mobile": "card-check-C.png"
+     }
+    },
+    {
+     "file": "card-check-D.png",
+     "caption": "Option D",
+     "shots": {
+      "mobile": "card-check-D.png"
+     }
+    }
+   ],
+   "automation": "not automated: mockup"
+  },
+  {
+   "id": "mockups-leaderboard",
+   "title": "Leaderboard mockups",
+   "area": "Mockups",
+   "audience": "member",
+   "status": "mockup",
+   "taken": "2026-09-26",
+   "base": "mockups",
+   "folder": "",
+   "source_doc": "docs/claude/mockups/",
+   "demo": [
+    {
+     "label": "Leaderboard mockup (Tracker page)",
+     "url": "/admin/mockups/leaderboard"
+    },
+    {
+     "label": "Board mockup",
+     "url": "/admin/mockups/leaderboard-board.html"
+    },
+    {
+     "label": "Team names mockup",
+     "url": "/admin/mockups/leaderboard-team-names.html"
+    }
+   ],
+   "steps": [
+    {
+     "file": "leaderboard-9-hole.png",
+     "caption": "9-hole board",
+     "shots": {
+      "mobile": "leaderboard-9-hole.png"
+     }
+    },
+    {
+     "file": "leaderboard-18-hole.png",
+     "caption": "18-hole board",
+     "shots": {
+      "mobile": "leaderboard-18-hole.png"
+     }
+    },
+    {
+     "file": "leaderboard-page-9.png",
+     "caption": "9-hole page",
+     "shots": {
+      "mobile": "leaderboard-page-9.png"
+     }
+    },
+    {
+     "file": "leaderboard-page-18.png",
+     "caption": "18-hole page",
+     "shots": {
+      "mobile": "leaderboard-page-18.png"
+     }
+    },
+    {
+     "file": "leaderboard-team-names.png",
+     "caption": "Team names",
+     "shots": {
+      "mobile": "leaderboard-team-names.png"
+     }
+    }
+   ],
+   "automation": "not automated: mockup"
+  },
+  {
+   "id": "report-manager-event",
+   "title": "Manager event report (with the pace addition, still to be designed)",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "report-daily-digest",
+   "title": "Daily digest email to Kerry",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "report-event-day",
+   "title": "Event-day email (Add Handicap box)",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "report-pairings-approval",
+   "title": "Pairings approval email to the manager",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "report-membership",
+   "title": "Membership renewal and roster notices",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "report-starter-sheet",
+   "title": "Starter sheet and cart signs (print)",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "report-finance",
+   "title": "Finance: event financial summary, payouts, sales tax",
+   "area": "Reports",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices. Not automated: PII. A report carries member names and money; it gets a render recipe from a throwaway database when it is built.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "be-events",
+   "title": "Events page (manager view): roster, Remind, Message Players",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "be-messages",
+   "title": "Messages composer and templates",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "be-customers",
+   "title": "Customers and the customer profile",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "be-transactions",
+   "title": "Transactions",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "be-accounting",
+   "title": "Accounting and the admin pages",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "be-pairings",
+   "title": "Pairings and the Tee Time Advisor",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "be-test-center",
+   "title": "Test Center (practice scoring)",
+   "area": "Back-end pages",
+   "audience": "manager",
+   "status": "needed",
+   "folder": "",
+   "steps": [],
+   "notes": "Not shot yet. Librarian / UI-UX Review: take it on all three devices against the test database or with member details covered. Not automated: PII. A back-end page shows member names, emails and money; it is never captured from production, and the demo runner has no signed-in admin session yet. Taken by hand from a scratch database when needed.",
+   "demo": [
+    {
+     "label": "Test Center",
+     "url": "/admin/test-center",
+     "note": "Practice rounds write only to test tables."
+    }
+   ],
+   "automation": "not automated: PII"
+  },
+  {
+   "id": "score-entry-live",
+   "title": "Live scoring on the phone, from the code",
+   "area": "Live scoring",
+   "audience": "member",
+   "status": "current",
+   "version": "retaken every deploy",
+   "taken": "2026-10-26",
+   "folder": "score-entry-live",
+   "source_doc": "docs/claude/score-entry.md",
+   "notes": "A demo event on a throwaway database (made-up people, never production), served by the Tracker's own code (tools/screens_demo.py).",
+   "demo": [
+    {
+     "label": "Live scoring guide",
+     "url": "/member/live-scoring"
+    }
+   ],
+   "steps": [
+    {
+     "file": "1-join.png",
+     "caption": "The group link opened",
+     "shots": {
+      "mobile": "1-join.png",
+      "tablet": "1-join.tablet.png",
+      "desktop": "1-join.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/score?t={t}"
+     }
+    },
+    {
+     "file": "2-who-are-you.png",
+     "caption": "Score this group: pick your name",
+     "shots": {
+      "mobile": "2-who-are-you.png",
+      "tablet": "2-who-are-you.tablet.png",
+      "desktop": "2-who-are-you.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/score?t={t}",
+      "click": [
+       "[data-act=\"gate-score\"]"
+      ]
+     }
+    },
+    {
+     "file": "3-hole.png",
+     "caption": "The hole screen",
+     "shots": {
+      "mobile": "3-hole.png",
+      "tablet": "3-hole.tablet.png",
+      "desktop": "3-hole.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/score?t={t}",
+      "click": [
+       "[data-act=\"gate-score\"]",
+       "[data-act=\"pick\"]"
+      ],
+      "wait": 3500
+     }
+    },
+    {
+     "file": "4-board.png",
+     "caption": "The scorer's leaderboard",
+     "shots": {
+      "mobile": "4-board.png",
+      "tablet": "4-board.tablet.png",
+      "desktop": "4-board.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/score/board?t={t}"
+     }
+    }
+   ],
+   "watch": [
+    "templates/score_entry.html"
+   ],
+   "watch_hash": "cf64c5fb80dd9345"
+  },
+  {
+   "id": "member-teesheet",
+   "title": "Member tee sheet",
+   "area": "Member pages",
+   "audience": "member",
+   "status": "current",
+   "version": "retaken every deploy",
+   "taken": "2026-10-26",
+   "folder": "member-teesheet",
+   "source_doc": "docs/claude/events.md",
+   "notes": "The public tee sheet the event-day email links to, for a demo event on a throwaway database.",
+   "steps": [
+    {
+     "file": "1-teesheet.png",
+     "caption": "The tee sheet",
+     "shots": {
+      "mobile": "1-teesheet.png",
+      "tablet": "1-teesheet.tablet.png",
+      "desktop": "1-teesheet.desktop.png"
+     },
+     "capture": {
+      "demo": "event",
+      "path": "/member/teesheet/{event}"
+     }
+    }
+   ],
+   "watch": [
+    "email_parser/member_teesheet.py"
+   ],
+   "watch_hash": "05bc17305797a63c"
+  },
+  {
+   "id": "lone-star-cup-live",
+   "title": "Lone Star Cup member pages, live",
+   "area": "Lone Star Cup",
+   "audience": "member",
+   "status": "current",
+   "version": "retaken every deploy",
+   "taken": "2026-10-26",
+   "folder": "lone-star-cup-live",
+   "source_doc": "docs/claude/lone-star-cup-board.md",
+   "notes": "The Cup pages as members see them on the live site.",
+   "demo": [
+    {
+     "label": "The Cup",
+     "url": "/member/lonestarcup"
+    }
+   ],
+   "steps": [
+    {
+     "file": "1-cup.png",
+     "caption": "The Cup board",
+     "shots": {
+      "mobile": "1-cup.png",
+      "tablet": "1-cup.tablet.png",
+      "desktop": "1-cup.desktop.png"
+     },
+     "capture": {
+      "url": "/member/lonestarcup"
+     }
+    },
+    {
+     "file": "2-info.png",
+     "caption": "Event info: schedule, teams, formats",
+     "shots": {
+      "mobile": "2-info.png",
+      "tablet": "2-info.tablet.png",
+      "desktop": "2-info.desktop.png"
+     },
+     "capture": {
+      "url": "/member/lonestarcup/info"
+     }
+    },
+    {
+     "file": "3-draw.png",
+     "caption": "The draw",
+     "shots": {
+      "mobile": "3-draw.png",
+      "tablet": "3-draw.tablet.png",
+      "desktop": "3-draw.desktop.png"
+     },
+     "capture": {
+      "url": "/member/cup-draw"
+     }
+    }
+   ],
+   "watch": [
+    "templates/lsc_info.html",
+    "templates/_lsc_info_body.html",
+    "templates/cup_draw.html"
+   ],
+   "watch_hash": "9ebc70dad4f77f9c"
+  }
+ ],
+ "devices": [
+  "desktop",
+  "tablet",
+  "mobile"
+ ]
+}

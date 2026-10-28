@@ -52,6 +52,7 @@ DEFAULT_PREVIEW_TO = "kerry@thegolffellowship.com"
 INTRO_PCT = 0.75
 LOOKAHEAD_DAYS = 21
 REMIND_DAYS_BEFORE = 2
+LOCK_REMIND_MINUTES = 60      # Kerry 10/26 (#2307 item 5): one more at 4:00 PM, an hour before the lock
 TOKEN_DAYS = 60
 SEND_HOURS = (7, 20)          # Central; reminders only by day
 SERVICES = ("TheGrint", "Club handicap", "Golf Genius", "18Birdies", "Other")
@@ -87,6 +88,10 @@ VENMO_ONLY_HEAD = "Add your Venmo"
 VENMO_ONLY = "We have your handicap answer. Add your Venmo username so we can pay any winnings."
 DONE_LABEL = "Your temporary starting handicap"
 DONE_SET = "75% of the {index} index you entered."
+# Kerry 10/27 (CoS #2426), the no-index rule. Deliberately OUTSIDE
+# template_hash(): adding it to the hash would lock the live ask until
+# re-stamped. Kerry reviews it with the build.
+DONE_RULE = "From the {low} you usually shoot for 18, minus 72."
 DONE_CHECK = "75% of the {index} index you entered. The chapter manager will confirm it before {day}."
 DONE_TEMP = ("This is temporary. After 27 holes with TGF, your own TGF handicap replaces it, "
              "figured from your rounds with us.")
@@ -208,6 +213,37 @@ def starting_from_index(index: float) -> float:
     return float(-v if index < 0 else v)
 
 
+RULE_SET_BY = "rule:low_score_minus_72"
+
+
+def starting_from_scores(ans: dict) -> float | None:
+    """THE NO-INDEX RULE (Kerry 10/27, CoS #2426: "I want you to go with the
+    low score minus 72 to establish their starting handicap with TGF."): the
+    LOW end of the usual 18-hole score minus 72. A single score is the low
+    end; a 9-hole score is doubled first. None when there is no number. A
+    stated index always wins (the ghin / other answers never come here)."""
+    lo = ans.get("score_low")
+    if lo is None:
+        return None
+    eighteen = int(lo) * (2 if ans.get("nine") else 1)
+    return float(eighteen - 72)
+
+
+def answer_words(ans: dict) -> str:
+    """The player's answer in plain words, quoted in the note and the email."""
+    k = ans.get("kind")
+    if k == "ghin":
+        return f"GHIN {ans.get('ghin')}, index {ans.get('index')}"
+    if k == "other":
+        svc = ans.get("service") + (f" ({ans['service_name']})" if ans.get("service_name") else "")
+        return f"{svc}, index {ans.get('index')}"
+    if ans.get("score_low") is None:
+        return "no handicap, and no usual score given"
+    rng = (f"{ans['score_low']}" if ans["score_low"] == ans.get("score_high")
+           else f"{ans['score_low']}-{ans['score_high']}")
+    return f"usually shoots {rng} for {'9' if ans.get('nine') else '18'}"
+
+
 def validate(form: dict) -> dict:
     """The page's form -> a clean answer, or {"error": ...}."""
     kind = (form.get("kind") or "").strip()
@@ -233,16 +269,26 @@ def validate(form: dict) -> dict:
     if kind == "none":
         # A RANGE for 18 holes (Kerry 10/16: "I typically shoot between x and x").
         msg = "Please enter the range you usually shoot for 18 holes, for example 90 to 100."
+        rounds = str(form.get("rounds_year") or "").strip()[:20]
+        lo_s = str(form.get("score_low") or "").strip()
+        hi_s = str(form.get("score_high") or "").strip()
+        if not lo_s and not hi_s:
+            # No number at all: nothing is set and the manager is told (#2426).
+            return {"kind": "none", "score_low": None, "score_high": None, "rounds_year": rounds}
         try:
-            lo = int(str(form.get("score_low") or "").strip())
-            hi = int(str(form.get("score_high") or "").strip() or lo)
+            lo = int(lo_s or hi_s)
+            hi = int(hi_s or lo_s)
         except ValueError:
             return {"error": msg}
         lo, hi = min(lo, hi), max(lo, hi)
-        if not (60 <= lo <= 160 and 60 <= hi <= 160):
+        # A 9-hole score is doubled before the rule (CoS #2426 reading).
+        nine = hi < 60
+        if not ((25 <= lo <= 80 and 25 <= hi <= 80) if nine else (60 <= lo <= 160 and 60 <= hi <= 160)):
             return {"error": msg}
-        rounds = str(form.get("rounds_year") or "").strip()[:20]
-        return {"kind": "none", "score_low": lo, "score_high": hi, "rounds_year": rounds}
+        out = {"kind": "none", "score_low": lo, "score_high": hi, "rounds_year": rounds}
+        if nine:
+            out["nine"] = True
+        return out
     return {"error": "Please pick one of the three choices."}
 
 
@@ -314,12 +360,14 @@ def candidates(today: str | None = None, db_path=None) -> list[dict]:
         conn.close()
 
 
-def plan(today: str | None = None, db_path=None) -> dict:
-    """What the job would send now: first asks and reminders."""
+def plan(today: str | None = None, db_path=None, now: datetime | None = None) -> dict:
+    """What the job would send now: first asks, reminders, and the lock-day
+    reminder (an hour before the event's lock: 4:00 PM for a 5:00 PM lock)."""
+    from email_parser import database as db
     from email_parser.timezone_utils import today_central_str
     today = today or today_central_str()
     state = load_state(db_path)
-    asks, reminders, skipped = [], [], []
+    asks, reminders, skipped, lock_reminders = [], [], [], []
     for c in candidates(today, db_path):
         rec = state.get(str(c["customer_id"])) or {}
         if rec.get("answer"):
@@ -330,13 +378,26 @@ def plan(today: str | None = None, db_path=None) -> dict:
         if not rec.get("sent_at"):
             asks.append(c)
             continue
+        # THE LOCK-DAY REMINDER (Kerry 10/26, CoS #2307 item 5: "an automated
+        # reminder at E-1 4:00 PM to anyone registered without a handicap";
+        # #2341: "I approve today's handicap reminder email."). Same reminder
+        # wording and signed link, once per person per event, in the hour
+        # before that event's lock (database.event_lock_at).
+        if now is not None:
+            ev = _event_row(c["event_id"], db_path)
+            lock = db.event_lock_at(ev, db_path) if ev else None
+            key = f"lock_reminded_{c['event_id']}"
+            if (lock is not None and not rec.get(key)
+                    and lock - timedelta(minutes=LOCK_REMIND_MINUTES) <= now < lock):
+                lock_reminders.append(c)
+                continue
         days_out = (date.fromisoformat(c["event_date"]) - date.fromisoformat(today)).days
         sent_day = str(rec.get("sent_at"))[:10]
         if (not rec.get("reminded_at") and days_out <= REMIND_DAYS_BEFORE
                 and sent_day < today):
             reminders.append(c)
     return {"today": today, "asks": asks, "reminders": reminders, "skipped": skipped,
-            **approval_state(db_path)}
+            "lock_reminders": lock_reminders, **approval_state(db_path)}
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +470,7 @@ def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:
         ev = _event_row(p["event_id"], db_path)
         if not ev:
             continue
-        msg = build_message(p, ev, kind, db_path=db_path)
+        msg = build_message(p, ev, "reminder" if kind == "lock" else kind, db_path=db_path)
         if msg["held"]:
             held.append({"customer_id": p["customer_id"], "why": msg["held"]})
             continue
@@ -423,7 +484,10 @@ def _deliver(people: list[dict], kind: str, db_path=None, sender=None) -> dict:
             state = load_state(db_path)
             rec = state.setdefault(str(p["customer_id"]), {})
             rec["event_id"] = p["event_id"]
-            rec["sent_at" if kind == "ask" else "reminded_at"] = _now_iso()
+            if kind == "lock":
+                rec[f"lock_reminded_{p['event_id']}"] = _now_iso()
+            else:
+                rec["sent_at" if kind == "ask" else "reminded_at"] = _now_iso()
             _save_state(state, db_path)
         try:
             db.log_message({"event_name": p.get("event"), "channel": "email",
@@ -446,14 +510,16 @@ def auto_check(now: datetime | None = None, db_path=None, sender=None) -> dict:
     if not approval_state(db_path)["approved"]:
         return {"skipped": "wording not approved"}
     now = now or now_central()
-    pl = plan(now.date().isoformat(), db_path)
+    pl = plan(now.date().isoformat(), db_path, now=now)
     # The first ask goes the moment the registration lands, any hour (Kerry
     # 10/16: "as soon as we get a registration"); a reminder only by day.
     a = _deliver(pl["asks"], "ask", db_path, sender) if pl["asks"] else {}
     by_day = SEND_HOURS[0] <= now.hour < SEND_HOURS[1]
     r = (_deliver(pl["reminders"], "reminder", db_path, sender)
          if pl["reminders"] and by_day else {})
-    return {"asks": a, "reminders": r}
+    lk = (_deliver(pl["lock_reminders"], "lock", db_path, sender)
+          if pl["lock_reminders"] else {})
+    return {"asks": a, "reminders": r, "lock_reminders": lk}
 
 
 def resend(customer_id: int, kerry_ok_post, confirm: bool = False, db_path=None) -> dict:
@@ -558,8 +624,9 @@ def record(token: str, form: dict, db_path=None) -> dict:
     ans["venmo"] = venmo
     ans["no_venmo"] = no_venmo
     cid = info["customer_id"]
-    start = starting_from_index(ans["index"]) if "index" in ans else None
-    status = {"ghin": "set", "other": "check", "none": "need"}[ans["kind"]]
+    start = (starting_from_index(ans["index"]) if "index" in ans
+             else starting_from_scores(ans) if ans["kind"] == "none" else None)
+    status = {"ghin": "set", "other": "check", "none": "rule" if start is not None else "need"}[ans["kind"]]
     out = {"ok": True, "status": status, "starting": start, "answer": ans,
            "day": info["day"], "event_id": info["event_id"], "preview": info["preview"]}
     if info["preview"]:
@@ -574,14 +641,17 @@ def record(token: str, form: dict, db_path=None) -> dict:
             conn.close()
         # A number a manager typed is never overwritten by the player's answer.
         by = (r[1] if r else "") or ""
-        if r is None or r[0] is None or by.startswith("handicap_ask"):
+        if r is None or r[0] is None or by.startswith("handicap_ask") or by.startswith(RULE_SET_BY):
+            set_by = "handicap_ask (player)"
             if ans["kind"] == "ghin":
                 note = f"Player: GHIN {ans['ghin']}, index {ans['index']}, 75%"
+            elif ans["kind"] == "none":
+                set_by = RULE_SET_BY
+                note = f'Player: "{answer_words(ans)}"; low score minus 72 (Kerry 10/27)'
             else:
                 svc = ans["service"] + (f" ({ans['service_name']})" if ans.get("service_name") else "")
                 note = f"Player: {svc}, index {ans['index']}, 75%, manager to check"
-            res = db.set_starting_handicap(cid, start, set_by="handicap_ask (player)", note=note,
-                                           db_path=db_path)
+            res = db.set_starting_handicap(cid, start, set_by=set_by, note=note, db_path=db_path)
             applied = not res.get("error")
         else:
             out["kept_manager_value"] = r[0]
@@ -608,13 +678,99 @@ def record(token: str, form: dict, db_path=None) -> dict:
     try:
         db.log_agent_action("handicap-ask", "handicap_ask_answer",
                             f"customer {cid}: {ans['kind']}"
-                            + (f", index {ans['index']} -> starting {start}" if start is not None
-                               else f", usually shoots {ans.get('score_low')}-{ans.get('score_high')} for 18")
+                            + f", {answer_words(ans)}"
+                            + (f" -> starting {start}" if start is not None else ", nothing set")
                             + (f", venmo @{venmo}" if venmo else (", no Venmo yet" if no_venmo else "")),
                             db_path=db_path)
     except Exception:
         pass
+    try:
+        out["manager_email"] = notify_manager(cid, info["event_id"], ans, start,
+                                              applied=applied, kept=out.get("kept_manager_value"),
+                                              db_path=db_path)
+    except Exception:
+        logger.exception("handicap ask: manager email failed for cid %s", cid)
     return out
+
+
+ADMIN_CC = "kerry@thegolffellowship.com"
+
+
+def manager_message(name: str, ev: dict, ans: dict, start, applied: bool, kept=None,
+                    base_url: str = "") -> dict:
+    """The manager's email for one answer (Kerry 10/27, CoS #2425/#2426):
+    what the player said in their own words, what was set, and a one-tap
+    link to change it on the roster. No number: says nothing was set."""
+    words = answer_words(ans)
+    link = f"{base_url}/events?event={int(ev['id'])}"
+    if kept is not None:
+        head = f"{name}: kept the starting handicap you set ({kept})"
+        line = f'They answered "{words}". Your number stays.'
+    elif start is None:
+        head = f"{name}: no handicap, NOTHING SET"
+        line = (f'They answered "{words}". No starting handicap was set. '
+                "Set one before the lock, or they play as a blind for their team.")
+    elif ans.get("kind") == "none":
+        head = f"{name}: starting handicap {start} from \"{words}\""
+        line = (f"Low score minus 72{' (9-hole score doubled)' if ans.get('nine') else ''} "
+                f"= {start}{'' if applied else ' (not applied)'}.")
+    elif ans.get("kind") == "other":
+        head = f"{name}: starting handicap {start}, please check it"
+        line = f'They answered "{words}". 75% of that index = {start}.'
+    else:
+        head = f"{name}: starting handicap {start} from GHIN"
+        line = f'They answered "{words}". 75% of that index = {start}.'
+    subject = f"Handicap answer for {ev.get('item_name') or 'your event'}: {head}"
+    html = (f'<div style="font-family:Helvetica,Arial,sans-serif;color:#1B1B1B;max-width:560px;">'
+            f'<p style="margin:0 0 1em;font:bold 18px Georgia,serif;">{_e(head)}</p>'
+            f'<p style="margin:0 0 1em;">{_e(line)}</p>'
+            f'<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
+            f'<td bgcolor="#E87C3E" style="border-radius:999px;">'
+            f'<a href="{_e(link)}" style="display:inline-block;padding:12px 22px;color:#ffffff;'
+            f'font:bold 16px Georgia,serif;text-decoration:none;">Change it on the roster</a></td></tr></table>'
+            f'<p style="font-size:12px;color:#6B7280;margin-top:1.5em;">{_e(ev.get("item_name") or "")} · '
+            f'set it from the HCP cell on ROSTER.</p></div>')
+    return {"subject": subject, "html": html, "head": head, "link": link}
+
+
+def notify_manager(customer_id: int, event_id: int, ans: dict, start, applied: bool = False,
+                   kept=None, db_path=None, sender=None) -> dict:
+    """Email the event's chapter manager, Kerry CC'd, for EVERY answer
+    (Alex Porter answered Monday 5:30 PM and nobody saw it, #2425)."""
+    from email_parser import database as db
+    from email_parser.pairings_approval import manager_for
+    ev = _event_row(event_id, db_path)
+    if not ev:
+        return {"skipped": "no event"}
+    with db._connect(db_path) as conn:
+        r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                         (int(customer_id),)).fetchone()
+    name = (" ".join(x for x in ((r[0] if r else ""), (r[1] if r else "")) if x)).strip() or f"Player {customer_id}"
+    mgr = manager_for(ev.get("chapter"), db_path)
+    to = (mgr.get("email") or ADMIN_CC).strip()
+    cc = None if to.lower() == ADMIN_CC else ADMIN_CC
+    try:
+        from email_parser.invitations import _base_url
+        base = _base_url()
+    except Exception:
+        base = ""
+    msg = manager_message(name, ev, ans, start, applied, kept, base)
+    if sender is None:
+        from email_parser.event_day_email import _creds, _graph_send
+        creds = _creds()
+        if not creds:
+            return {"error": "Email credentials not configured on server"}
+        sender = lambda t, s, h, c: _graph_send(creds, t, s, h, cc=c)   # noqa: E731
+    ok = bool(sender(to, msg["subject"], msg["html"], cc))
+    try:
+        db.log_message({"event_name": ev.get("item_name"), "channel": "email",
+                        "recipient_name": mgr.get("name") or "manager", "recipient_address": to,
+                        "subject": msg["subject"], "body_preview": "handicap answer (manager)",
+                        "status": "sent" if ok else "failed", "sent_by": "handicap_ask_manager",
+                        "event_id": int(event_id), "customer_id": int(customer_id)}, db_path=db_path)
+    except Exception:
+        pass
+    return {"to": to, "cc": cc, "sent": ok, "subject": msg["subject"]}
 
 
 def record_venmo(token: str, form: dict, db_path=None) -> dict:
@@ -711,15 +867,34 @@ def status_rows(customer_ids, missing_ids=(), db_path=None) -> list[dict]:
             line = (f"{svc} · index {a.get('index')} → starting "
                     f"{starting_from_index(a['index'])} (applied)")
         elif a.get("kind") == "none":
-            rng = (f"{a['score_low']}–{a['score_high']}" if a.get("score_low") is not None
-                   else str(a.get("score18")))
-            line = (f"No handicap · usually shoots {rng} for 18"
+            line = (f"No handicap · {answer_words(a)}"
                     + (f" · plays {a['rounds_year']} rounds a year" if a.get("rounds_year") else ""))
+            if st == "rule" and a.get("score_low") is not None:
+                line += f" → starting {starting_from_scores(a)} (low score minus 72)"
         else:
             line = ""
+        # A number the manager typed since the answer settles it (Alex Porter
+        # read "Needs a number" after Kerry set 18.0 by hand, 10/27).
+        if st in ("need", "check", "rule") and int(cid) not in missing:
+            mv = _manager_value(int(cid), db_path)
+            if mv is not None:
+                st = "manager_set"
+                line += f" · set by manager: {mv}"
         if a.get("venmo"):
             line += f" · Venmo @{a['venmo']}"
         elif a.get("no_venmo"):
             line += " · no Venmo yet"
         rows.append({"customer_id": int(cid), "status": st, "line": line})
     return rows
+
+
+def _manager_value(customer_id: int, db_path=None):
+    """The starting handicap when a person (not the ask, not the rule) set it."""
+    from email_parser import database as db
+    with db._connect(db_path) as conn:
+        r = conn.execute("SELECT starting_handicap_18, starting_handicap_set_by FROM customers "
+                         "WHERE customer_id = ?", (int(customer_id),)).fetchone()
+    if not r or r[0] is None:
+        return None
+    by = r[1] or ""
+    return None if by.startswith("handicap_ask") or by.startswith(RULE_SET_BY) else r[0]

@@ -178,13 +178,14 @@ def pay_button_html(url: str, label: str = PAY_BUTTON_LABEL) -> str:
     if not url:
         return ""
     return (
-        '<p style="margin:18px 0;text-align:center;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" '
+        'style="margin:18px auto;"><tr><td bgcolor="#E87C3E" style="background:#E87C3E;border-radius:999px;">'
         '<a href="%s" '
         'style="display:inline-block;background:#E87C3E;color:#ffffff;'
         'font-weight:700;font-size:16px;line-height:1;'
         'padding:14px 28px;border-radius:999px;'
         'text-decoration:none;font-family:Helvetica,Arial,sans-serif;">'
-        '%s</a></p>' % (url, label)
+        '%s</a></td></tr></table>' % (url, label)
     )
 
 

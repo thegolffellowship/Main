@@ -111,8 +111,10 @@ def publish_eligibility(rnd: dict, player: dict) -> tuple[bool, str | None]:
         return False, "no customer_id"
     scores = player.get("scores") or {}
     holes = _round_holes(rnd)
+    # NOT PLAYED holes (late arrival, WD; Kerry 10/26) are not missing.
+    _np = {int(h) for h in player.get("not_played") or []}
     if holes:
-        missing = [h for h in holes if scores.get(str(h)) is None]
+        missing = [h for h in holes if scores.get(str(h)) is None and h not in _np]
         if missing:
             return False, f"card incomplete: no gross on hole(s) {missing}"
     elif len([v for v in scores.values() if v is not None]) != int(rnd.get("holes") or 0):
@@ -356,8 +358,20 @@ def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=No
     changed_any = False
     for p in rnd.get("players") or []:
         cid = p.get("customer_id")
-        ok, why = publish_eligibility(rnd, p)
         name = names.get(cid) or (p.get("name") or "").strip() or f"customer {cid}"
+        if p.get("incomplete_round") and not se._publish_incomplete():
+            # AN INCOMPLETE ROUND stays out of the record (Kerry 10/26): the
+            # record feeds Individual Net / Gross, points and the handicap
+            # round, and score_entry.INCOMPLETE_ROUND_GAMES keeps him out of
+            # those. Not a hold: nothing is waited on. Skins, MVP and Team
+            # Net read his entered card (event_engine_state, the board).
+            out.setdefault("incomplete_round", []).append(
+                {"customer_id": cid, "name": name,
+                 "not_played": p.get("not_played"),
+                 "reason": "incomplete round (holes not played): out of Individual Net / Gross, "
+                           "points and the handicap round"})
+            continue
+        ok, why = publish_eligibility(rnd, p)
         if ok and cid and round_date:
             # An UNLINKED GG card (event_id NULL) for this player on this
             # date would double him in every date-keyed reader.
@@ -645,6 +659,7 @@ def _publish(event_id: int, round_id, apply: bool, db_path, provisional: bool = 
         "held": sum(len(r["held"]) for r in rounds),
         "tee_unresolved": sum(len(r["tee_unresolved"]) for r in rounds),
         "stale": sum(len(r["stale"]) for r in rounds),
+        "incomplete_round": sum(len(r.get("incomplete_round") or []) for r in rounds),
         "dots_unresolved": sum(len(r.get("dots_unresolved") or []) for r in rounds)}
     if out["applied"] and changed and ev.get("item_name"):
         # Same follow-on the GG import runs when scores land: refresh the
