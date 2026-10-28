@@ -229,9 +229,8 @@ def _with_ids(rows: list, read: dict, db_path=None) -> list:
 
 def _event_final(read: dict) -> tuple[bool, str | None]:
     """(every card final, when the last one is/was final)."""
-    gs = [g for r in read.get("rounds") or [] for g in r.get("groups") or []
-          if any(p.get("group_id") == g.get("group_id") for p in r.get("players") or [])
-          or any(t.get("group_id") == g.get("group_id") for t in r.get("teams") or [])]
+    from email_parser.score_entry import scored_groups
+    gs = [g for r in read.get("rounds") or [] for g in scored_groups(r)]
     if not gs or any(not g.get("final_at") for g in gs):
         return False, None
     return all(g.get("final") for g in gs), max(g["final_at"] for g in gs)

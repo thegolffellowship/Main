@@ -83,9 +83,12 @@ def event_state(event_id: int, now=None, db_path=None) -> dict:
     first = _first_tee(ev)
     opens = first - timedelta(minutes=_minutes(ON_DIAL, 60, db_path)) if first else None
     read = se.get_entered_scores(int(event_id), db_path=db_path)
+    # Only groups that hold a card: an empty group never goes final and
+    # used to hold scoring-closed and CLOSEOUT START forever (s9.29 Silverhorn,
+    # 10/27, #2457).
     groups = [g for rd in read.get("rounds") or []
               if not str(rd.get("label") or "").startswith(se.PREVIEW_LABEL)
-              for g in rd.get("groups") or []]
+              for g in se.scored_groups(rd)]
     last_utc = max((g["last_write_at"] for g in groups if g.get("last_write_at")), default=None)
     last = to_central(last_utc) if last_utc else None
     all_final = bool(groups) and all(g.get("final") for g in groups)

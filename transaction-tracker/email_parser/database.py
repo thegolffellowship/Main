@@ -22316,6 +22316,42 @@ def project_playing_handicaps(event_query: str, allowance: float = 1.0,
     }
 
 
+def _flights_before_handicaps(event_names: list, dry_run: bool = True, db_path=None) -> dict:
+    """Bring each Tracker-scored (untethered) event's flights board to FROZEN
+    before its handicap rounds post. A live board is closed out first
+    (close_event_flights: freeze + settle). Dry run says what would happen.
+    Any failure refuses the post: nothing is written. Golf Genius-era events
+    are left alone (their flights were GG's)."""
+    from email_parser.gg_untether import gg_allowed
+    out, refused = [], None
+    with _connect(db_path) as conn:
+        evs = [dict(r) for n in event_names for r in conn.execute(
+            "SELECT id, item_name, event_date FROM events WHERE item_name = ?", (n,))]
+        state = {}
+        for ev in evs:
+            if gg_allowed(ev["event_date"], db_path=db_path):
+                continue
+            snaps = _active_flight_snapshots(conn, ev["id"])
+            state[ev["id"]] = "settled" if snaps["settled"] else ("frozen" if snaps["frozen"] else "live")
+    for ev in evs:
+        st = state.get(ev["id"])
+        if st is None:
+            continue
+        row = {"event_id": ev["id"], "event": ev["item_name"], "flights": st}
+        if st == "live":
+            if dry_run:
+                row["would"] = "freeze + settle the flights before posting"
+            else:
+                r = close_event_flights(ev["id"], by="handicap-post", trigger="before_handicap_post",
+                                        db_path=db_path)
+                row["closed"] = r.get("steps")
+                if not r.get("ok"):
+                    refused = (f"{ev['item_name']}: flights could not be frozen ({r.get('error')}); "
+                               "handicaps are not posted until they are (Kerry 10/28)")
+        out.append(row)
+    return {"events": out, "refused": refused}
+
+
 def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
                                         db_path: str | Path = DB_PATH) -> dict:
     """Write handicap_rounds for one event from OUR scorecards — the
@@ -22346,6 +22382,15 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
     preview = get_scoring_handicap_preview(event_query, db_path=db_path)
     if preview.get("error"):
         return preview
+    # FLIGHTS BEFORE HANDICAPS, a hard order (Kerry 10/28 via Event Ops #2462:
+    # "Definitely need to make sure flights are frozen before handicaps are
+    # posted an updated"). Posting moves the index the live flights board
+    # reads, so a board still live after the post would re-cut the flights.
+    gate = _flights_before_handicaps(preview.get("events_matched") or [],
+                                     dry_run=dry_run, db_path=db_path)
+    if gate.get("refused"):
+        return {"event_query": event_query, "dry_run": dry_run, "error": gate["refused"],
+                "flights": gate["events"]}
     plan: list = []
     skipped: list = []
     with _connect(db_path) as conn:
@@ -22465,6 +22510,7 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
     return {"event_query": event_query,
             "events_matched": preview["events_matched"],
             "dry_run": dry_run,
+            "flights_first": gate["events"],
             "would_write" if dry_run else "written": plan,
             "skipped": skipped,
             "recap_email": recap,

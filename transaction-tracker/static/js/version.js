@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.615.3";
+window.TGF_VERSION = "2.616.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.616.0",
+    date: "2026-10-28",
+    title: "Saturday safety: empty groups never hold closeout; CTP by hole-save time; flights frozen before handicaps",
+    changes: [
+      "Kerry 10/28 via Event Ops #2457: an EMPTY group never holds scoring-closed or CLOSEOUT START (\"the system needs to resolve that and not be held up by it\"). On s9.29 Silverhorn (10/27) a regroup left a \"Hole 3B\" group with 0 players; it never went final, so scoring never closed and CLOSEOUT START never fired. score_entry.scored_groups (groups holding a player or a team) is now the one reading of 'the event's cards', used by the scoring window and auto payouts alike. Guard test_empty_group_closeout.py.",
+      "Kerry 10/28 (#2462-C, #2466-C, ratified #2467-C \"Sounds good\"): closest to the pin is decided by HOLE-SAVE time. The question is asked when the group saves the hole (as it already was); a claim counts at that group's FIRST save of the hole, so a claim entered or edited later keeps the time the group played it, and the latest claim by that time holds the hole. No manager confirm and no takeover hold: ctp_takeover is retired, so a takeover no longer holds the prize money, and the phone no longer says \"Your manager confirms a change before it's paid\". A manager ruling still settles a hole at its own time. Guards test_ctp_hole_save_time.py (the 10/20 Wade/Pat case), test_score_entry.py.",
+      "Kerry 10/28 (#2462): \"Definitely need to make sure flights are frozen before handicaps are posted an updated.\" Posting handicap rounds for a Tracker-scored event now closes out its flights board first (freeze + settle, close_event_flights); if that fails, nothing posts and the reason is returned. A dry run says it would. Golf Genius-era events are left alone. Guard test_flights_before_handicaps.py.",
+      "The who-did-it log no longer records the Events page's own refresh (POST /api/events/sync) on every load."
+    ]
+  },
   {
     version: "2.615.3",
     date: "2026-10-28",

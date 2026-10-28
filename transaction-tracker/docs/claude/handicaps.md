@@ -390,6 +390,11 @@ our WHS derivation is the correction, not the deviation.
 
 `derive_handicap_rounds_from_scoring(event_query, dry_run=True)`
 (bridge: `scoring-hcp-import:<event>` dry-run / `<event>|apply` write)
+**FLIGHTS FIRST, a hard order (v2.616.0, Kerry 10/28 #2462):** for a
+Tracker-scored (untethered) event the apply first brings the flights board
+to frozen/settled (`_flights_before_handicaps` → `close_event_flights`); if
+that fails nothing posts. The dry run reports `flights_first`. Guard
+`test_flights_before_handicaps.py`.
 writes one handicap_rounds row per eligible 9-hole scoring round of the
 event: adjusted_score = WHS NDB adjusted gross via the formula layer,
 slope/rating from the round's OWN tee row, differential computed,

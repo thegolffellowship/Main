@@ -4110,15 +4110,48 @@ def ctp_contests(conn, round_id: int, db_path=None) -> dict:
             "notes": list(rep.get("notes") or [])}
 
 
+def _hole_save_at(conn, group_id: int, hole: int) -> str | None:
+    """When the group FIRST saved a score on this hole (se_audit 'write'),
+    the time a CTP claim from that group counts at (Kerry 10/28, #2466-C /
+    #2467-C, "Sounds good"). A later edit never moves it."""
+    best = None
+    for a in conn.execute("SELECT detail, at FROM se_audit WHERE group_id = ? AND kind = 'write' "
+                          "AND result = 'ok' ORDER BY id", (group_id,)):
+        try:
+            d = json.loads(a["detail"] or "{}")
+            if int(d.get("hole")) != int(hole) or d.get("gross") is None:
+                continue
+        except (TypeError, ValueError):
+            continue
+        if best is None or a["at"] < best:
+            best = a["at"]
+    return best
+
+
 def _ctp_current(conn, round_id: int, hole: int):
-    """The current holder is the latest claim naming a person (a manager
-    ruling included); 'No one closer' answers never unseat a holder."""
-    return conn.execute(
-        "SELECT c.customer_id, c.group_id, c.kind, c.at, p.display_name, g.group_num "
+    """The current holder (Kerry 10/28: "Just needs to be based on timestamp
+    entry and not have anything to do with starting sequence"): the LATEST
+    claim naming a person, where a phone claim counts at its group's first
+    save of the hole (so a claim entered or edited later keeps the time the
+    group played the hole) and a manager ruling at its own time. 'No one
+    closer' answers never unseat a holder. Ties: the later entry."""
+    rows = conn.execute(
+        "SELECT c.id, c.customer_id, c.group_id, c.kind, c.at, p.display_name, g.group_num "
         "FROM se_ctp_claims c LEFT JOIN se_players p ON p.round_id = c.round_id "
         "AND p.customer_id = c.customer_id LEFT JOIN se_groups g ON g.id = c.group_id "
         "WHERE c.round_id = ? AND c.hole_number = ? AND c.kind IN ('claim', 'manager') "
-        "ORDER BY c.id DESC LIMIT 1", (round_id, hole)).fetchone()
+        "ORDER BY c.id", (round_id, hole)).fetchall()
+    if not rows:
+        return None
+    saved: dict = {}
+
+    def eff(r):
+        if r["kind"] == "claim" and r["group_id"] is not None:
+            if r["group_id"] not in saved:
+                saved[r["group_id"]] = _hole_save_at(conn, r["group_id"], hole)
+            return saved[r["group_id"]] or r["at"]
+        return r["at"]
+    return max(rows, key=lambda r: (eff(r), r["id"]))
 
 
 _UNSET = object()
@@ -4140,7 +4173,14 @@ def ctp_takeover(conn, round_id: int, hole: int) -> dict | None:
     Dan Stich when Pat Youngs was closer: "We need to add a verification
     step"). A hole NEEDS THE MANAGER'S CONFIRMATION when its current holder
     came from a phone claim that took it away from a player in ANOTHER group
-    (a manager ruling counts as confirmed). Returns {from, to} or None."""
+    (a manager ruling counts as confirmed). Returns {from, to} or None.
+
+    RETIRED (Kerry 10/28, #2462-C / #2467-C): "The unseating is how a CTP
+    naturally happens ... there shouldn't be disputes". The latest claim by
+    hole-save time holds the hole with no manager step, so nothing needs
+    confirming and a takeover no longer holds the money. Kept so callers and
+    the manager panel read None."""
+    return None
     claims = [c for c in ctp_history(conn, round_id, hole) if c["kind"] in ("claim", "manager")]
     if not claims or claims[-1]["kind"] != "claim":
         return None
@@ -5047,6 +5087,17 @@ def event_ctp_holders(event_id: int, db_path=None) -> list[dict]:
                             "name": cur["display_name"] if cur else None,
                             "needs_confirm": ctp_takeover(conn, rid, int(hole))})
     return out
+
+
+def scored_groups(rd: dict) -> list:
+    """The groups of one entered round that hold a card: at least one player
+    (not marked absent) or a team. An EMPTY group (0 players, e.g. s9.29's
+    "Hole 3B" left behind by a regroup) is never final and must never hold
+    scoring-closed, CLOSEOUT START or the money (Kerry 10/28 via Event Ops
+    #2457: "the system needs to resolve that and not be held up by it")."""
+    held = ({p.get("group_id") for p in rd.get("players") or []}
+            | {t.get("group_id") for t in rd.get("teams") or []})
+    return [g for g in rd.get("groups") or [] if g.get("group_id") in held]
 
 
 def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None) -> dict:

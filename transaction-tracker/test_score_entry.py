@@ -684,14 +684,13 @@ check("a claim that saw the current holder is taken",
       se.claim_ctp(sg2, "sk2", 6, 104, seen_holder=102).get("ok"))
 _conn6 = se._conn(None)
 _tk = se.ctp_takeover(_conn6, sr, 6)
-check("taking a hole from another group needs the manager's confirmation",
-      _tk and _tk["from"]["customer_id"] == 102 and _tk["to"]["customer_id"] == 104
-      and _tk["from"]["group_num"] == 1 and _tk["to"]["group_num"] == 2, _tk)
+check("taking a hole from another group needs NO confirmation (retired, Kerry 10/28 #2467-C)",
+      _tk is None, _tk)
 check("the claim history lists every answer in order",
       [h["customer_id"] for h in se.ctp_history(_conn6, sr, 6)] == [102, 104])
 _conn6.close()
 _h6 = [h for h in se.event_ctp_holders(900) if h["hole"] == 6 and h["round_id"] == sr]
-check("the payouts' holder list carries the confirm flag", _h6 and _h6[0]["needs_confirm"], _h6)
+check("the payouts' holder list carries no confirm hold", _h6 and not _h6[0]["needs_confirm"], _h6)
 se.rule_ctp(sr, 6, 104)
 _conn6 = se._conn(None)
 check("the manager's Confirm (a ruling on the same player) clears it", se.ctp_takeover(_conn6, sr, 6) is None)

@@ -32,6 +32,7 @@ LOGGED_ROLES = ("admin", "manager", "view-only")
 SKIP_PREFIXES = (
     "/api/score-entry/", "/api/member-metric", "/api/login", "/api/logout",
     "/api/auth", "/api/coo/chat", "/api/chat", "/api/support",
+    "/api/events/sync",   # the Events page's own refresh on every load, not a change
 )
 ITEM_PATH = re.compile(r"^/api/(?:items|events/delete-manual-player)/(\d+)(?:/|$)")
 EVENT_PATH = re.compile(r"^/api/events/(\d+)(?:/|$)")

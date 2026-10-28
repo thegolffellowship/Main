@@ -1011,6 +1011,9 @@ window. So:
   "CLOSEOUT START: <event>" once every card is final and the last score is
   `closeout_start_minutes` old (default 15). The routine reads that post. It
   also records `se_event_closed:<event_id>` and logs `live_scoring_closed`.
+  Only groups holding a player or a team count (`score_entry.scored_groups`,
+  v2.616.0): an EMPTY group never holds scoring-closed or CLOSEOUT START
+  (s9.29's "Hole 3B", #2457). Guard `test_empty_group_closeout.py`.
 - Read-only bridge `scoring-scoring-window:<event_id>`. Guard
   `test_live_scoring_timing.py`.
 
@@ -1424,7 +1427,8 @@ layouts changes.
 - **CTP VERIFICATION (v2.562.5, Kerry 2026-10-13, "Yes, build all three after close-out").** At The Quarry, hole 16 went to Dan Stich (group 3) when Pat Youngs (group 6) was closer.
   1. **A stale screen never overwrites a claim.** The phone sends `seen_holder` (the holder it showed) with every CTP answer. If another group has claimed since, `claim_ctp` writes nothing and returns `{stale, holder}` (HTTP 409). The phone shows "X (Group N) claimed this hole while you were playing it" and asks again. A request without `seen_holder` (an old phone) is taken as before.
   2. **The question names the marker:** "Is anyone in your group closer than X's marker?" / "No one closer than X". The copy says not to pick the closest in your own group.
-  3. **The manager confirms takeovers.** `ctp_takeover(conn, round, hole)` is set when the current holder came from a phone claim that took the hole from a player in another group. A change within the same group, or a manager ruling, is not a takeover. The Live Scoring manager panel shows a "Confirm <name>" button (a manager ruling on the same player) and the hole's claim history (`ctp_history`). `event_ctp_holders` carries `needs_confirm`. Record Payouts (`_tracker_team_and_ctp_rows`) skips an unconfirmed hole with a note, and the EVENTS board shows it as "to be confirmed" with no dollar.
+  3. **RETIRED v2.616.0 (Kerry 10/28, #2462-C / #2467-C): no manager confirm, no takeover hold.** The holder is the latest claim by HOLE-SAVE time: `_ctp_current` counts a phone claim at its group's first save of that hole (`_hole_save_at`, se_audit 'write'), so a claim entered or edited later keeps the time the group played the hole; a manager ruling counts at its own time; ties go to the later entry. `ctp_takeover` returns None, so `needs_confirm` is always empty and nothing holds the money. Guard `test_ctp_hole_save_time.py`. The text below is the retired design.
+  3a. (retired) **The manager confirms takeovers.** `ctp_takeover(conn, round, hole)` is set when the current holder came from a phone claim that took the hole from a player in another group. A change within the same group, or a manager ruling, is not a takeover. The Live Scoring manager panel shows a "Confirm <name>" button (a manager ruling on the same player) and the hole's claim history (`ctp_history`). `event_ctp_holders` carries `needs_confirm`. Record Payouts (`_tracker_team_and_ctp_rows`) skips an unconfirmed hole with a note, and the EVENTS board shows it as "to be confirmed" with no dollar.
   4. No schema: everything is read from `se_ctp_claims`.
   5. Guards: test_score_entry.py, test_untethered_payouts.py, test_board_phone_ctp.py.
 
