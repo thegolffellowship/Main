@@ -1214,8 +1214,12 @@ only (`pairing_active_races`, app setting `pairing_active_races`, default
 2 bought-in players of each race, then the next 2; when a race runs out the
 others carry on, then everyone else at random; a partner request (when the
 Partner Requests box is on) binds first and takes its best member's place. The
-groups are then STAGED BY PACE (threesomes and the fastest at the front of the
-pack); leaders-last ordering does not apply to pods. The 5:00 PM lock run
+groups are then STAGED BY PACE on a shotgun (threesomes and the fastest at the
+front of the pack). **Leaders off last only on TEE TIMES (v2.614.1, Kerry
+10/28: "In the case of a shotgun, group pace ratings dictate order")**: on tee
+times one race keeps leaders last and pods send the top pod out last; on a
+shotgun every standings sheet is staged by pace. v2.614.1 also fixed
+`is_shotgun` for a plain 18 (it read `start_type_18`, which only a Combo fills). The 5:00 PM lock run
 (`auto_generate_pairings`) now uses the event's saved `pairing_mode` /
 `pairing_race_key` (comma list) instead of always Random. Kerry: partner
 requests trump "for this event (not TGF Championship or Prime Time City

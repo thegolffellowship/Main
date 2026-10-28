@@ -73189,7 +73189,9 @@ def generate_event_pairings(
                 {"cost": _cost_view(sc), "groups": gs}
                 for sc, gs in alts[:3]]
 
-        is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
+        # A plain 18 keeps its start type in start_type; only a 9/18 Combo's
+        # 18 leg uses start_type_18 (the same rule as _pairing_time_slots).
+        is_shotgun = (ev.get("start_type_18" if (is_combo and holes == "18") else "start_type") == "Shotgun")
 
         # ── STAGING (task #23): order settled groups by aggregate pace.
         # HARD RULE: pace never dictates composition — the groups above
@@ -73232,8 +73234,15 @@ def generate_event_pairings(
         # middle instead of the front. Pace ratings are still COMPUTED and
         # shown per group as a manager read-out — they just don't move
         # anybody.
+        # LEADERS OFF LAST ONLY ON TEE TIMES (Kerry 10/28: "We only want to
+        # honor leaders off last if it's tee times. In the case of a shotgun,
+        # group pace ratings dictate order."). On a shotgun every standings
+        # sheet, one race or several, is staged by pace like any other.
         _standings_order = (mode == "standings" and groups_players
-                            and len(_race_keys) < 2)  # pods are staged by pace
+                            and not is_shotgun)
+        if _standings_order and len(_race_keys) >= 2:
+            # Pods come out top pod first; on tee times the leaders go LAST.
+            groups_players = list(reversed(groups_players))
         staging_applied = bool(staging_rules.get("enabled", True)
                                and groups_players
                                and not _standings_order)

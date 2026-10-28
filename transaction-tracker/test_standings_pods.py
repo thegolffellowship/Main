@@ -57,6 +57,24 @@ src = inspect.getsource(db.auto_generate_pairings)
 check("auto run passes the saved pairing_mode and race keys",
       'ev.get("pairing_mode")' in src and 'ev.get("pairing_race_key")' in src)
 
+print("4. Shotgun: pace decides the order; tee times: leaders last (Kerry 10/28)")
+with db._connect(DB) as c:
+    c.execute("INSERT INTO events (id,item_name,event_date,chapter,status,format,start_type,start_time,tee_time_count,course) "
+              "VALUES (77,'s18.97 SG','2099-12-19','TGF','active','18 Holes','Shotgun','08:30',0,'T')")
+    for i in range(10):
+        c.execute("INSERT INTO customers (customer_id,first_name,last_name,current_player_status) VALUES (?,?,'Q','active_member')", (970 + i, f"Q{i}"))
+        c.execute("INSERT INTO items (customer,customer_id,item_name,event_id,holes,transaction_status,order_date,order_id,email_uid,merchant) "
+                  "VALUES (?,?,'s18.97 SG',77,'18','active','2099-12-01',?,?,'GoDaddy')", (f"Q{i} Q", 970 + i, f"RQ{i}", f"manual-q{i}"))
+    c.commit()
+for mode, rk in (("random", None), ("standings", "san_antonio_fall_net"), ("standings", "san_antonio_fall_net,austin_fall_net")):
+    r = db.generate_event_pairings(77, mode=mode, race_key=rk, db_path=DB, save_log=False)
+    sizes = {g["slot_label"]: len(g["players"]) for g in r.get("18", [])}
+    check(f"an 18-hole shotgun ({mode}{', ' + rk if rk else ''}): threesomes lead the pack (2A, 1A), the foursome behind (1B)",
+          sizes == {"2A": 3, "1A": 3, "1B": 4}, sizes)
+import inspect
+src = inspect.getsource(db.generate_event_pairings)
+check("leaders-last only when not a shotgun", "and not is_shotgun)" in src)
+
 try:
     os.remove(DB)
 except OSError:

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.614.0";
+window.TGF_VERSION = "2.614.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.614.1",
+    date: "2026-10-28",
+    title: "Leaders off last only on tee times; shotguns are ordered by group pace (and a plain 18's shotgun is recognised)",
+    changes: [
+      "Kerry 10/28: \"We only want to honor leaders off last if it's tee times. In the case of a shotgun, group pace ratings dictate order.\" STANDINGS on a shotgun, one race or several, is now staged by group pace like any other shotgun sheet (threesomes and the fastest groups at the front of the pack). On tee times the standings order holds: one race keeps leaders last, and several races send the top pod out last.",
+      "Found on the way: the generator read a plain 18-hole event's start type from start_type_18, which only a 9/18 Combo fills, so an 18-hole shotgun was staged as if it were tee times (threesomes on 1A, 1B instead of at the front of the pack). It now reads start_type for a plain 18, the same rule as the slot labels. Guard test_standings_pods.py section 4."
+    ]
+  },
   {
     version: "2.614.0",
     date: "2026-10-28",
