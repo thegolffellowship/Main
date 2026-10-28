@@ -1169,6 +1169,11 @@
                         <label class="seg-option"><input type="radio" name="edit-event-nine_side" value="Back"> Back 9</label>
                     </div>
                 </div>
+                <!-- Shotgun hole order — Kerry 2026-10-28: a reverse shotgun or the
+                     course's staging holes, entered before the 5:00 PM generator. -->
+                <div id="edit-shotgun-order" style="margin-top:0.75rem;">
+                    <label title="Shotgun events only. Blank = 1A, 1B, 2A, 2B and on. Type reverse for the last hole first (18A, 18B, 17A…). Or list the holes in the order the course stages them: 1 10 2 11 gives each hole an A and a B group in that order; 18A 18B 1A 3A uses each label exactly as typed. Holes you leave out follow in the standard order. Changing it relabels a saved sheet: group 1 stays the first slot." style="font-weight:600; font-size:0.82rem; display:block;">Shotgun hole order<input type="text" id="edit-event-shotgun_order" class="modal-input" placeholder="blank = 1A, 1B, 2A…  ·  reverse  ·  or e.g. 1 10 2 11"></label>
+                </div>
                 <!-- Allow fivesomes — Kerry 2026-07-31. OFF by default: a
                      fivesome only ever happens because a manager asked. ON
                      builds the whole sheet from fivesomes with FOURSOMES as
@@ -3489,6 +3494,7 @@
         // Full event list INCLUDING child +PAY rows — the callers pass a
         // parent-only filtered list, but effective-games needs the children.
         const fullRegs = getRegistrants(ev.item_name);
+        const oneHoleOption = singleHoleOption(ev, fullRegs);
         // HCP display rule: 9-only or mixed → show 9-hole net; 18-only →
         // show 18-hole. 36 and 54 are 18-hole play, so they count here too.
         const evCount9 = registrants.filter(rr => rowHoles(ev, rr) === "9").length;
@@ -3596,7 +3602,7 @@
             const sideGame = mAxisVal || getEffectiveGameType(r, fullRegs);
             const sideGameLabel = (sideGame === "NO GAMES" || sideGame === "NO" || sideGame === "—") ? "NONE" : sideGame;
             const tee = (r.tee_choice || "").trim();
-            const holes = rowHoles(ev, r);
+            const holes = oneHoleOption ? "" : rowHoles(ev, r);
             const topTags = `${holes ? `<span class="mc-type mc-holes">${escapeHtml(holes)}h</span>` : ''}${sideGameLabel !== "NONE" ? `<span class="mc-type">${escapeHtml(sideGameLabel)}</span>` : ''}${tee || (!r.parent_item_id && r.customer_id) ? teePickHtml(ev.id, r.parent_item_id ? null : r.customer_id, tee, "mc-type mc-tee") : ''}`;
 
             // Full desktop action parity on mobile (Kerry 2026-07-16):
@@ -4150,6 +4156,18 @@
     // not holes — the order carries 18 (one round) while the player bought
     // two or three of them, so the package is the truth when there is one
     // (Kerry 2026-08-07).
+    // ONE HOLE OPTION, NO HOLES COLUMN (Kerry 2026-10-28: "For events that
+    // only have one hole option, like yesterday's 9 only events and
+    // saturday's 18 only event, that column does not need to show on the
+    // tracker event roster"). A 9/18 Combo always shows it; any other event
+    // shows it only when its roster actually holds two hole counts (a
+    // package event's 36 / 54 days).
+    function singleHoleOption(ev, regs) {
+        if ((ev.format || "").includes("Combo")) return false;
+        const seen = new Set((regs || []).map(r => rowHoles(ev, r)).filter(Boolean));
+        return seen.size <= 1;
+    }
+
     function rowHoles(ev, r) {
         // An RSVP is not a purchase — it has no hole count and must never
         // pick one up from a package (a $0 package would match its blank
@@ -9397,6 +9415,7 @@
         const INACTIVE_FOR_DEDUP = ["credited", "refunded", "transferred", "wd"];
         const activeRegs = registrants.filter(r => !INACTIVE_FOR_DEDUP.includes(r.transaction_status));
         const inactiveRegs = registrants.filter(r => INACTIVE_FOR_DEDUP.includes(r.transaction_status));
+        if (singleHoleOption(ev, activeRegs)) DCOLS = DCOLS.filter(c => c.key !== "holes");
         const regEmails = new Set(activeRegs.map(r => (r.customer_email || "").toLowerCase()).filter(Boolean));
         const regNames = new Set(activeRegs.map(r => (r.customer || "").toLowerCase()).filter(Boolean));
         // NOT PLAYING: exclude anyone who has since registered (active transaction), and dedup by email/name
@@ -16325,6 +16344,8 @@
         if (editLock) editLock.value = (ev.lock_override || "").replace(" ", "T").slice(0, 16);  // 24h-ok: datetime-local input value
         const editKeep = document.getElementById("edit-event-tee_keep");
         if (editKeep) editKeep.value = ev.tee_keep || "";
+        const editShotgun = document.getElementById("edit-event-shotgun_order");
+        if (editShotgun) editShotgun.value = ev.shotgun_order || "";
 
         // Pricing fields — single format
         document.getElementById("edit-event-tgf_markup").value = ev.tgf_markup != null ? ev.tgf_markup : "";
@@ -16503,6 +16524,8 @@
         }
         const keepEl = document.getElementById("edit-event-tee_keep");
         if (keepEl && keepEl.value !== (ev.tee_keep || "")) changes.tee_keep = keepEl.value;
+        const sgEl = document.getElementById("edit-event-shotgun_order");
+        if (sgEl && sgEl.value.trim() !== (ev.shotgun_order || "")) changes.shotgun_order = sgEl.value.trim();
 
         // Pricing fields — depends on format
         if (isCombo) {
@@ -16596,12 +16619,15 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(changes),
             });
-            if (!res.ok) throw new Error("Save failed");
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || "Save failed");
+            }
             Object.assign(ev, changes);
             closeEditEvent();
             renderEvents();
         } catch (err) {
-            alert("Failed to save changes.");
+            alert("Failed to save changes. " + (err && err.message && err.message !== "Save failed" ? err.message : ""));
         }
     }
 

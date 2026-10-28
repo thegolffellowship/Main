@@ -31549,8 +31549,16 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
                         "date": _fd[0] if _fd else None, "drawn": None, "of": None})
         except Exception:
             logger.exception("Non-fatal: Cup rounds unavailable for the events list")
+        _shotgun_orders = {}
+        try:
+            for _k, _v in conn.execute(
+                    "SELECT key, value FROM app_settings WHERE key LIKE 'shotgun_order:%'"):
+                _shotgun_orders[_k.split(":", 1)[1]] = _v or ""
+        except sqlite3.DatabaseError:
+            pass
         for r in rows:
             d = dict(r)
+            d["shotgun_order"] = _shotgun_orders.get(str(d["id"]), "")
             if d["id"] in _rounds_by_event:
                 d["report_rounds"] = _rounds_by_event[d["id"]]
             d["games_offered"] = _offers.get(d["id"], ["NET", "GROSS", "BOTH"] if _event_games_fee(d) > 0 else [])
@@ -31708,6 +31716,15 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "course_surcharge", "per_game_addon",
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
                 "rescheduled_to_event_id", "status_badge", "lock_override", "tee_keep"}
+    shotgun_done = False
+    if "shotgun_order" in fields:
+        # Not an events column: an app setting with its own writer, which
+        # relabels a saved sheet. A bad order is refused at the route.
+        try:
+            shotgun_done = bool(set_shotgun_order(event_id, fields["shotgun_order"],
+                                                  db_path=db_path).get("ok"))
+        except ValueError:
+            logger.warning("Event %s: shotgun order %r refused", event_id, fields["shotgun_order"])
     safe = {k: v for k, v in fields.items() if k in allowed}
     if "tee_keep" in safe:
         _tk = str(safe["tee_keep"] or "").strip().lower()
@@ -31730,7 +31747,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
         if "lock_override" in safe:
             safe["lock_override"] = _lo or None
     if not safe:
-        return False
+        return shotgun_done
 
     with _connect(db_path) as conn:
 
@@ -31769,6 +31786,8 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
         if any(k in safe for k in _SHEET_FIELDS):
             _b = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
             _before = dict(_b) if _b else None
+            if _before is not None:
+                _before["shotgun_order"] = _shotgun_order_conn(conn, event_id)
 
         _validate_column_names(list(safe))
         set_clause = ", ".join(f"{col} = ?" for col in safe)
@@ -31780,6 +31799,7 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
             try:
                 _after = dict(conn.execute("SELECT * FROM events WHERE id = ?",
                                            (event_id,)).fetchone())
+                _after["shotgun_order"] = _before.get("shotgun_order", "")
                 _res = _sheet_follows_event(conn, event_id, _before, _after)
                 if _res["moved"] or _res["relabelled"]:
                     logger.info("Event %s edit: saved sheet followed (%s)", event_id, _res)
@@ -62661,8 +62681,8 @@ def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
         base_hole = 1
         if holes == "9" and _nine_side(event) == "Back":
             base_hole = 10
-        return [f"{(i // 2) + base_hole}{'A' if i % 2 == 0 else 'B'}"
-                for i in range(count)]
+        last_hole = base_hole + (8 if holes == "9" else 17)
+        return shotgun_hole_labels(shotgun_order_of(event), base_hole, last_hole, count)
 
     if not start_time:
         return [f"Group {i + 1}" for i in range(count)]
@@ -62678,6 +62698,121 @@ def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
         label = t.strftime("%I:%M %p").lstrip("0") or "12:00 AM"
         slots.append(label)
     return slots
+
+
+# SHOTGUN HOLE ORDER (Kerry 2026-10-28: "configure for different type of
+# starts and allowances for easily entering staging holes. Like I'm asking
+# about a reverse shotgun for Saturday ... I'd like to know that and enter it
+# before the generator runs so it generates correctly"). Per event, app
+# setting `shotgun_order:<event_id>`, set on Edit Event:
+#   blank     -> 1A, 1B, 2A, 2B ... (the standard)
+#   reverse   -> the last hole first: 18A, 18B, 17A ... (a back-nine 9: 18 ... 10)
+#   a list    -> "1 10 2 11" deals each hole A then B in that order;
+#                "18A 18B 1A 3A" uses each label exactly as typed.
+# Holes the list leaves out follow in standard order, so the generator never
+# runs short. A changed order relabels a saved sheet by position (update_event
+# -> _sheet_follows_event): group 1 keeps being the first slot.
+SHOTGUN_ORDER_KEY = "shotgun_order:{}"
+_SHOTGUN_TOKEN_RE = re.compile(r"^(\d{1,2})([AB])?$")
+
+
+def normalize_shotgun_order(value) -> str:
+    """The stored form of a manager's hole order, or ValueError naming the
+    problem. '' (standard), 'reverse', or labels joined by ', '."""
+    v = str(value or "").strip()
+    if v.lower() in ("", "standard", "sequential", "default"):
+        return ""
+    if v.lower() in ("reverse", "reverse shotgun"):
+        return "reverse"
+    out, seen = [], set()
+    for tok in re.split(r"[\s,;]+", v.upper()):
+        if not tok:
+            continue
+        m = _SHOTGUN_TOKEN_RE.match(tok)
+        if not m or not 1 <= int(m.group(1)) <= 18:
+            raise ValueError(f"'{tok}' is not a hole (1 to 18, optionally with A or B)")
+        hole = str(int(m.group(1)))
+        labels = [hole + m.group(2)] if m.group(2) else [hole + "A", hole + "B"]
+        for lab in labels:
+            if lab in seen:
+                raise ValueError(f"{lab} is listed twice")
+            seen.add(lab)
+        out.append(hole + (m.group(2) or ""))
+    return ", ".join(out)
+
+
+def _shotgun_order_conn(conn, event_id) -> str:
+    try:
+        r = conn.execute("SELECT value FROM app_settings WHERE key = ?",
+                         (SHOTGUN_ORDER_KEY.format(int(event_id)),)).fetchone()
+    except (sqlite3.DatabaseError, TypeError, ValueError):
+        return ""
+    return (r[0] if r else "") or ""
+
+
+def shotgun_order_of(event: dict) -> str:
+    """The event's hole order: the dict's own `shotgun_order` when a caller
+    loaded it, else the app setting by id."""
+    if "shotgun_order" in event:
+        return str(event.get("shotgun_order") or "")
+    eid = event.get("id")
+    if not eid:
+        return ""
+    try:
+        return get_app_setting(SHOTGUN_ORDER_KEY.format(int(eid))) or ""
+    except Exception:
+        return ""
+
+
+def shotgun_hole_labels(order: str, first: int, last: int, count: int) -> list[str]:
+    """`count` shotgun slot labels for holes first..last under `order`."""
+    holes = list(range(first, last + 1))
+    o = (order or "").strip().lower()
+    if o == "reverse":
+        holes = holes[::-1]
+    picked: list[str] = []
+    if o and o != "reverse":
+        for tok in re.split(r"[\s,;]+", order.upper()):
+            m = _SHOTGUN_TOKEN_RE.match(tok)
+            if not m or int(m.group(1)) not in holes:
+                continue
+            for lab in ([tok] if m.group(2) else [m.group(1) + "A", m.group(1) + "B"]):
+                if lab not in picked:
+                    picked.append(lab)
+    for h in holes:
+        for x in ("A", "B"):
+            if f"{h}{x}" not in picked:
+                picked.append(f"{h}{x}")
+    i = last + 1
+    while len(picked) < count:  # more groups than two per hole: the old overflow
+        picked += [f"{i}A", f"{i}B"]
+        i += 1
+    return picked[:count]
+
+
+def set_shotgun_order(event_id: int, value, db_path=None) -> dict:
+    """The one writer: store the order and relabel a saved sheet by slot
+    position. Raises ValueError on a bad order."""
+    new = normalize_shotgun_order(value)
+    key = SHOTGUN_ORDER_KEY.format(int(event_id))
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not row:
+            return {"ok": False, "error": "event not found"}
+        old = _shotgun_order_conn(conn, event_id)
+        if new:
+            conn.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+                (key, new))
+        else:
+            conn.execute("DELETE FROM app_settings WHERE key = ?", (key,))
+        res = {"moved": None, "relabelled": 0}
+        if new != old:
+            before = {**dict(row), "shotgun_order": old}
+            res = _sheet_follows_event(conn, event_id, before, {**before, "shotgun_order": new})
+        conn.commit()
+    return {"ok": True, "shotgun_order": new, "was": old, "relabelled": res["relabelled"]}
 
 
 def tee_keep_mode(ev: dict) -> str:
@@ -71960,6 +72095,7 @@ def generate_event_pairings(
         if not ev:
             raise ValueError(f"Event {event_id} not found")
         ev = dict(ev)
+        ev["shotgun_order"] = _shotgun_order_conn(conn, event_id)
         ev_chapter = ev.get("chapter")
 
         fmt = (ev.get("format") or "").strip()

@@ -7822,6 +7822,13 @@ def api_update_event(event_id):
             return jsonify({"error": "games_offered must be a list of bundle keys"}), 400
         from email_parser.database import set_event_bundle_offers
         set_event_bundle_offers(event_id, offers)
+    if "shotgun_order" in data:
+        # Kerry 10/28: reverse shotgun / staging holes, before the generator.
+        from email_parser.database import normalize_shotgun_order
+        try:
+            normalize_shotgun_order(data["shotgun_order"])
+        except ValueError as e:
+            return jsonify({"error": f"Shotgun hole order: {e}"}), 400
     if not data:
         return jsonify({"status": "ok"})
     if update_event(event_id, data):

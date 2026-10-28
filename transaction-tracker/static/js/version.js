@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.605.2";
+window.TGF_VERSION = "2.606.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.606.0",
+    date: "2026-10-28",
+    title: "Shotgun hole order (reverse or the course's staging holes) and no Holes column on one-option events",
+    changes: [
+      "Kerry 10/28: \"configure for different type of starts and allowances for easily entering staging holes. Like I'm asking about a reverse shotgun for Saturday ... I'd like to know that and enter it before the generator runs so it generates correctly.\" Edit Event now has a Shotgun hole order box. Blank keeps 1A, 1B, 2A; reverse starts on the last hole (18A, 18B, 17A); a list such as 1 10 2 11 deals each hole an A and a B group in that order, and labels typed with a letter (18A 1A 3A) are used exactly as typed. Holes left out follow in the standard order, so the generator never runs short. The 5:00 PM generator deals it, and changing it after the sheet is saved relabels the sheet by slot position (group 1 stays the first slot). Stored as app setting shotgun_order:<event_id>, no schema change; tee-time events ignore it. A bad entry (hole 19, a label listed twice) is refused with the reason. Guard test_shotgun_order.py.",
+      "Kerry 10/28: \"For events that only have one hole option, like yesterday's 9 only events and saturday's 18 only event, that column does not need to show on the tracker event roster.\" The event roster drops the Holes column (desktop table, its Columns menu, and the phone's 9h / 18h tag) when the event is not a 9/18 Combo and its roster holds only one hole count. A package event whose roster mixes counts (36 / 54) keeps it.",
+      "Edit Event's save now shows the server's reason when a change is refused, instead of only \"Failed to save changes\"."
+    ]
+  },
   {
     version: "2.605.2",
     date: "2026-10-28",

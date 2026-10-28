@@ -1205,6 +1205,30 @@ GET passes the roster split by normalised holes + the saved sheet's group
 count, so the seed picker and the saved sheet offer the same holes.
 Guard: `test_pairing_slots.py`.
 
+## Shotgun hole order (v2.606.0, Kerry 2026-10-28)
+
+Kerry: "configure for different type of starts and allowances for easily
+entering staging holes. Like I'm asking about a reverse shotgun for Saturday
+from Rafe ... I'd like to know that and enter it before the generator runs so
+it generates correctly."
+
+Edit Event → **Shotgun hole order** (shotgun events only; tee-time events
+ignore it). Stored per event as app setting `shotgun_order:<event_id>` (not an
+events column, no migration); `database.normalize_shotgun_order` validates,
+`set_shotgun_order` is the one writer, `shotgun_hole_labels` deals the labels
+inside `_pairing_time_slots`, so the 5:00 PM generator, the seed picker and the
+saved sheet all agree.
+- blank: 1A, 1B, 2A, 2B … (the standard).
+- `reverse`: the last hole first, 18A, 18B, 17A … (a back-nine 9: 18 … 10; a
+  front-nine 9: 9 … 1).
+- a list: `1 10 2 11` deals each hole an A and a B group in that order;
+  `18A 18B 1A 3A` uses each label exactly as typed. Holes left out follow in the
+  standard order, so the generator never runs short. A hole off the leg's nine
+  is skipped.
+Changing it after the generator relabels the saved sheet by slot position
+(`_sheet_follows_event`): group 1 stays the first slot, its label changes.
+Guard `test_shotgun_order.py`.
+
 ## Bullpen X (v2.413.0)
 
 > *"Need the ability to remove a player. Maybe just a simple red X to be
