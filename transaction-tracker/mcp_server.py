@@ -6676,9 +6676,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if str(_ev["event_date"] or "") < today_central_str() or db._event_started(dict(_ev)):
                 return json.dumps({"refused": "event has started or is past; its sheet is frozen",
                                    "event": _ev["item_name"], "event_date": _ev["event_date"]})
-            res = db.generate_event_pairings(_eid, mode="random", protect_partner_requests=True)
+            # The event's SAVED mode and races, exactly as the 5:00 PM run
+            # (Kerry 10/28: "redo the pairings for Saturday to ensure they're
+            # auto-generating how I want"); Random only when none is saved.
+            with db._connect() as _c:
+                _pm = _c.execute("SELECT pairing_mode, pairing_race_key FROM events WHERE id = ?",
+                                 (_eid,)).fetchone()
+            _mode = ((_pm["pairing_mode"] if _pm else None) or "random").strip().lower()
+            _mode = _mode if _mode in ("random", "abcd", "standings") else "random"
+            _rk = ((_pm["pairing_race_key"] if _pm else None) or None) if _mode == "standings" else None
+            res = db.generate_event_pairings(_eid, mode=_mode, race_key=_rk, protect_partner_requests=True)
             sets = {h: res[h] for h in ("9", "18") if res.get(h)}
             out = {"event_id": _eid, "event": _ev["item_name"], "applied": False,
+                   "mode": _mode, "race_key": _rk,
                    "notes": res.get("mp_notes") or [],
                    "groups": {h: [{"slot": g.get("slot_label"),
                                    "players": [p["name"] for p in sorted(g["players"], key=lambda p: p["cart_pos"])]}

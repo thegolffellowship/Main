@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.615.1";
+window.TGF_VERSION = "2.615.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.615.2",
+    date: "2026-10-28",
+    title: "Lane regenerate uses the event's saved pairing mode",
+    changes: [
+      "Kerry 10/28: \"redo the pairings for Saturday to ensure they're auto-generating how I want.\" scoring-pairings-generate:<id>[|apply] always generated Random; it now uses the event's saved pairing_mode and races, the same as the 5:00 PM run (Random only when none is saved), so a lane redo matches what the lock would have built."
+    ]
+  },
   {
     version: "2.615.1",
     date: "2026-10-28",
