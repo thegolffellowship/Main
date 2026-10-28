@@ -20,10 +20,10 @@ def check(label, cond, detail=""):
 slots = db._pairing_time_slots
 print("\n== count unset: the roster sizes the sheet ==")
 sg = {"start_type": "Shotgun", "start_time": "17:00", "tee_time_count": 0}
-check("shotgun, 5 groups needed -> 1A 1B 2A 2B 3A",
-      slots(sg, "9", needed=5) == ["1A", "1B", "2A", "2B", "3A"], str(slots(sg, "9", needed=5)))
+check("shotgun, 5 groups needed -> 1A 1B 2A 2B 3 (one group: no letter)",
+      slots(sg, "9", needed=5) == ["1A", "1B", "2A", "2B", "3"], str(slots(sg, "9", needed=5)))
 check("shotgun on the BACK nine starts at 10A",
-      slots({**sg, "nine_side": "Back"}, "9", needed=3) == ["10A", "10B", "11A"],
+      slots({**sg, "nine_side": "Back"}, "9", needed=3) == ["10A", "10B", "11"],
       str(slots({**sg, "nine_side": "Back"}, "9", needed=3)))
 tt = {"start_type": "Tee Times", "start_time": "17:00", "tee_time_count": 0, "tee_time_interval": 10}
 check("tee times with a start time -> clock slots",

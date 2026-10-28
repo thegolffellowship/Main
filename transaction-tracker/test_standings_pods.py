@@ -70,10 +70,15 @@ for mode, rk in (("random", None), ("standings", "san_antonio_fall_net"), ("stan
     r = db.generate_event_pairings(77, mode=mode, race_key=rk, db_path=DB, save_log=False)
     sizes = {g["slot_label"]: len(g["players"]) for g in r.get("18", [])}
     check(f"an 18-hole shotgun ({mode}{', ' + rk if rk else ''}): threesomes lead the pack (2A, 1A), the foursome behind (1B)",
-          sizes == {"2A": 3, "1A": 3, "1B": 4}, sizes)
+          sizes == {"2": 3, "1A": 3, "1B": 4}, sizes)
 import inspect
 src = inspect.getsource(db.generate_event_pairings)
 check("leaders-last only when not a shotgun", "and not is_shotgun)" in src)
+
+print("5. The PAIRINGS tab reads the SAVED races (Kerry 10/28: both Fall races green, POINTS toggle)")
+_app_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")).read()
+check("GET /pairings falls back to the event's pairing_race_key, not the chapter default",
+      'request.args.get("race_key") or ev.get("pairing_race_key")' in _app_src)
 
 try:
     os.remove(DB)

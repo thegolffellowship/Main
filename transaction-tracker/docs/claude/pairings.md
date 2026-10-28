@@ -1238,6 +1238,8 @@ fixed is reported ("the standings pods were kept"). Guard
 and races, returns the passes). Choosing STANDINGS turns the points on the
 cards on.
 
+**One group on a hole: no letter (v2.615.3, Kerry 10/28: "if there aren't two group on a hole then it shouldn't have an A/B").** `shotgun_hole_labels` ends with `_single_group_plain`: 18A alone becomes 18; 1A + 1B stay. Every label reader accepts a bare number as the hole's only group (`_SHOTGUN_LABEL_RE`, seat_fill / withdrawal_fold `_SHOTGUN`, `shiftShotgunLabel` on the page). The saved staging list (`shotgun_order:<id>`) keeps explicit A/B tokens. The PAIRINGS GET reads the event's saved `pairing_race_key` when the page sends no race_key (v2.615.3), so every chosen race colours and shows points.
+
 ## Shotgun hole order (v2.606.0, Kerry 2026-10-28)
 
 Kerry: "configure for different type of starts and allowances for easily

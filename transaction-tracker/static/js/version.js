@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.615.2";
+window.TGF_VERSION = "2.615.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.615.3",
+    date: "2026-10-28",
+    title: "PAIRINGS shows both chosen races' points; one group on a hole has no A/B",
+    changes: [
+      "Kerry 10/28 (screenshot of 3305): \"Why aren't those in points for both Austin & San Antonio Fall points showing in green and why isn't the POINTS view toggle showing?\" The PAIRINGS tab asks the server for the standings without naming a race, and the server then used the event's DEFAULT race: for a TGF championship that is the Fellowship Cup, so only its members went green and no points came back (the Points toggle only appears when points do). It now falls back to the races saved on the event (pairing_race_key), the two Fall races here, so everyone in either race is green with their points and the toggle shows. Guard test_standings_pods.py section 5.",
+      "Kerry 10/28: \"if there aren't two group on a hole then it shouldn't have an A/B\". A shotgun hole with one group is now labelled by its number alone (18, not 18A); a hole with two keeps 1A / 1B. database._single_group_plain runs on every label shotgun_hole_labels deals, and every reader of a hole label (the pack order, seat-fill, the withdrawal fold, the nine-side shift, the page) takes a bare number as that hole's only group. The saved staging list keeps its explicit A/B tokens. Guards test_shotgun_order.py 5b, test_pairing_slots.py, test_standings_pods.py."
+    ]
+  },
   {
     version: "2.615.2",
     date: "2026-10-28",

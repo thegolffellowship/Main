@@ -63,7 +63,7 @@ STATE_KEY = "withdrawal_fold_seen:{}"
 RAISED_KEY = "withdrawal_fold_raised:{}"
 TEAM = 4
 MIN_GROUP = 3
-_SHOTGUN = re.compile(r"^\s*(\d+)\s*([AB])\s*$", re.I)
+_SHOTGUN = re.compile(r"^\s*(\d+)\s*([AB])?\s*$", re.I)  # one group on a hole = no letter
 
 
 def _on(db_path=None) -> bool:
@@ -77,7 +77,7 @@ def _is_shotgun(groups: list) -> bool:
 
 def _hole_key(g: dict):
     m = _SHOTGUN.match(g.get("slot_label") or "")
-    return (int(m.group(1)), 0 if m.group(2).upper() == "B" else 1) if m else (0, 0)
+    return (int(m.group(1)), 0 if (m.group(2) or "A").upper() == "B" else 1) if m else (0, 0)
 
 
 def donor_order(groups: list) -> list:

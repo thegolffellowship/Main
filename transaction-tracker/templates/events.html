@@ -7092,11 +7092,11 @@
     // Tee-time labels (and labels already on the target side) pass
     // through unchanged.
     function shiftShotgunLabel(label, toBack) {
-        const m = /^(\d{1,2})([AB])$/.exec((label || '').trim());
+        const m = /^(\d{1,2})([AB])?$/.exec((label || '').trim());
         if (!m) return label;
         const hole = parseInt(m[1], 10) + (toBack ? 9 : -9);
         if (hole < 1 || hole > 18) return label;
-        return `${hole}${m[2]}`;
+        return `${hole}${m[2] || ''}`;
     }
 
     // Pace lookup for badges + live group averages. Map built lazily

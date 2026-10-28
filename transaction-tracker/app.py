@@ -7366,7 +7366,13 @@ def api_get_pairings(event_id):
         standings_points, standings_enrolled = {}, {}
         try:
             from email_parser.database import _standings_rank_map
-            _rks = [k.strip() for k in (request.args.get("race_key") or "").split(",") if k.strip()] or [None]
+            # No race_key from the page = the races SAVED on the event (Kerry
+            # 10/28: "Why aren't those in points for both Austin & San Antonio
+            # Fall points showing in green"). The page never sends one, so a
+            # TGF event fell to its default race (the Fellowship Cup) instead
+            # of the two Fall races the manager ticked.
+            _rk_arg = request.args.get("race_key") or ev.get("pairing_race_key") or ""
+            _rks = [k.strip() for k in _rk_arg.split(",") if k.strip()] or [None]
             for _rk in _rks:  # one race or several (Kerry 10/28)
                 _, _, _, _meta = _standings_rank_map(
                     ev.get("chapter"), _rk, max_age_hours=10 ** 6,

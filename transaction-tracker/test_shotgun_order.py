@@ -31,10 +31,10 @@ check("blank is the standard 1A, 1B, 2A", L("", 1, 18, 4) == ["1A", "1B", "2A", 
 check("reverse keeps hole 1, then 18 backward (Kerry 10/28)", L("reverse", 1, 18, 4) == ["1A", "1B", "18A", "18B"])
 check("reverse on a back nine: 10, then 18 backward to 11", L("reverse", 10, 18, 18)[:4] == ["10A", "10B", "18A", "18B"]
       and L("reverse", 10, 18, 18)[-2:] == ["11A", "11B"])
-check("reverse on a front nine: 1, then 9", L("reverse", 1, 9, 3) == ["1A", "1B", "9A"])
+check("reverse on a front nine: 1, then 9", L("reverse", 1, 9, 3) == ["1A", "1B", "9"])
 check("a hole list deals A then B per hole", L(N("1 10 2 11"), 1, 18, 6) == ["1A", "1B", "10A", "10B", "2A", "2B"])
 check("typed labels are used as typed, the rest follow in order",
-      L(N("18A 18B 1A 3A"), 1, 18, 6) == ["18A", "18B", "1A", "3A", "1B", "2A"])
+      L(N("18A 18B 1A 3A"), 1, 18, 6) == ["18A", "18B", "1A", "3", "1B", "2"])
 check("a hole off this nine is skipped", L(N("12 1"), 1, 9, 2) == ["1A", "1B"])
 check("never runs short of groups", len(L(N("5"), 1, 9, 20)) == 20 and len(set(L(N("5"), 1, 9, 20))) == 20)
 
@@ -73,17 +73,17 @@ check("entered before the generator", db.update_event(SG, {"shotgun_order": "rev
 res = db.generate_event_pairings(SG, db_path=DB, save_log=False)
 db.save_event_pairings(SG, {"18": res.get("18") or []}, db_path=DB)
 got = labels(SG)
-check("the generator deals 1A, 1B, 18A", got == ["1A", "1B", "18A"], got)
+check("the generator deals 1A, 1B, 18 (one group on 18: no letter, Kerry 10/28)", got == ["1A", "1B", "18"], got)
 check("the events list carries the order for Edit Event",
       next(e for e in db.get_all_events(DB) if e["id"] == SG).get("shotgun_order") == "reverse")
 
 r = db.set_shotgun_order(SG, "1 10", db_path=DB)
 got = labels(SG)
 check("changed after the generator: the saved sheet relabels by position",
-      got == ["1A", "1B", "10A"] and r["relabelled"] == 1, (got, r))
+      got == ["1A", "1B", "10"] and r["relabelled"] == 1, (got, r))
 db.update_event(SG, {"shotgun_order": ""}, db_path=DB)
 got = labels(SG)
-check("cleared: back to the standard", got == ["1A", "1B", "2A"], got)
+check("cleared: back to the standard", got == ["1A", "1B", "2"], got)
 check("cleared removes the setting", db.get_app_setting("shotgun_order:%d" % SG, db_path=DB) is None)
 
 db.update_event(TT, {"shotgun_order": "reverse"}, db_path=DB)
@@ -116,16 +116,16 @@ check("short holes take one: 1 (305), 2, 4, 9 (320), 12, 15, 18 (283)",
 check("a 345-yard par 4 takes two", caps.get(10) == 2)
 e["shotgun_caps"], e["shotgun_order"] = caps, ""
 got = db._pairing_time_slots(e, "18")
-check("standard: 1A, 2A, 3A, 3B, 4A, 5A, 5B", got == ["1A", "2A", "3A", "3B", "4A", "5A", "5B"], got)
+check("standard: 1, 2, 3A, 3B, 4, 5A, 5B (one group, no letter)", got == ["1", "2", "3A", "3B", "4", "5A", "5B"], got)
 e["shotgun_order"] = "reverse"
 got = db._pairing_time_slots(e, "18")
 check("reverse: hole 1 takes two by default (Kerry 10/28), then 18 down",
-      got == ["1A", "1B", "18A", "17A", "17B", "16A", "16B"], got)
-check("a listed short hole still takes one", L(N("2 3"), 1, 18, 3, caps) == ["2A", "3A", "3B"])
+      got == ["1A", "1B", "18", "17A", "17B", "16A", "16B"], got)
+check("a listed short hole still takes one", L(N("2 3"), 1, 18, 3, caps) == ["2", "3A", "3B"])
 check("a typed B on a short hole is used as typed", L(N("2A 2B"), 1, 18, 2, caps) == ["2A", "2B"])
 check("a full course: the short holes take a B before any overflow",
       len(L("", 1, 18, 30, caps)) == 30 and L("", 1, 18, 30, caps)[-1] == "1B" and "19A" not in L("", 1, 18, 36, caps))
-check("no card: every hole takes two (the old standard)", L("", 1, 18, 3, {}) == ["1A", "1B", "2A"])
+check("no card: every hole takes two (the old standard)", L("", 1, 18, 3, {}) == ["1A", "1B", "2"])
 
 print("5. The staging grid on Edit Event (Kerry 10/28)")
 for i in range(28):
@@ -154,11 +154,16 @@ check("Lock keeps the manager's counts", st["locked"] and
       {r["hole"]: r["groups"] for r in st["rows"] if r["groups"]} == {1: 2, 2: 1, 10: 2, 11: 2}, st["rows"])
 check("the generator deals the locked grid",
       db.shotgun_hole_labels(db.shotgun_order_of({"id": KTE, "shotgun_order": st["order"]}), 1, 18, 7, caps)
-      == ["1A", "1B", "2A", "10A", "10B", "11A", "11B"], st["order"])
+      == ["1A", "1B", "2", "10A", "10B", "11A", "11B"], st["order"])
 db.update_event(KTE, {"shotgun_staging": {"reverse": True, "locked": False}}, db_path=DB)
 st = db.shotgun_staging(KTE, db_path=DB)
 check("unlocked + Reverse goes back to the rule, reversed", st["order"] == "reverse" and not st["locked"]
-      and st["labels"][:3] == ["1A", "1B", "18A"], st)
+      and st["labels"][:3] == ["1A", "1B", "18"], st)
+
+print("5b. One group on a hole carries no letter (Kerry 10/28)")
+check("18A alone reads 18; a pair keeps A and B", db._single_group_plain(["1A", "1B", "18A", "17A", "17B"]) == ["1A", "1B", "18", "17A", "17B"])
+check("a bare hole label parses as that hole's only group", db._SHOTGUN_LABEL_RE.match("18") is not None)
+check("the pack order reads bare labels", db.shotgun_train_order(["1A", "1B", "18", "17A"], 18) == ["1A", "1B", "18", "17A"])
 
 print("6. After par 3s, one group (Kerry 10/28) and the front of the pack")
 info = {h: v for h, v in KT.items()}

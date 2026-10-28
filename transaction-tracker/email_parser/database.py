@@ -62937,7 +62937,16 @@ def shotgun_hole_labels(order: str, first: int, last: int, count: int,
     while len(picked) < count:  # more groups than two per hole: the old overflow
         picked += [f"{i}A", f"{i}B"]
         i += 1
-    return picked[:count]
+    return _single_group_plain(picked[:count])
+
+
+def _single_group_plain(labels: list) -> list:
+    """A hole with ONE group carries no letter (Kerry 10/28: "if there aren't
+    two group on a hole then it shouldn't have an A/B"): 18A alone -> 18;
+    1A + 1B stay as they are."""
+    has_b = {lab[:-1] for lab in labels if lab.upper().endswith("B")}
+    return [lab[:-1] if lab.upper().endswith("A") and lab[:-1] not in has_b else lab
+            for lab in labels]
 
 
 SHORT_PAR4_YARDS = 325  # Kerry 10/28: "par 4s less than 325 yards from the <50 tees"
@@ -63042,7 +63051,7 @@ def shotgun_train_order(labels: list, ring: int = 18) -> list:
     rank = {h: r for r, h in enumerate(front_to_back)}
     def key(x):
         m = _SHOTGUN_LABEL_RE.match((x or "").strip())
-        return (rank.get(int(m.group(1)), 99), 0 if m.group(2) == "A" else 1) if m else (99, 0)
+        return (rank.get(int(m.group(1)), 99), 0 if (m.group(2) or "A") == "A" else 1) if m else (99, 0)
     return sorted(labels, key=key)
 
 
@@ -68869,7 +68878,8 @@ def delete_event_pairings(event_id: int, db_path=None) -> None:
         conn.commit()
 
 
-_SHOTGUN_LABEL_RE = re.compile(r"^(\d{1,2})([AB])$")
+# The letter is optional: a hole with one group is just its number (Kerry 10/28).
+_SHOTGUN_LABEL_RE = re.compile(r"^(\d{1,2})([AB])?$")
 
 
 def switch_event_pairings_side(event_id: int, db_path=None) -> dict:
@@ -68905,7 +68915,7 @@ def switch_event_pairings_side(event_id: int, db_path=None) -> dict:
                     continue  # label already on the target side — leave it
                 conn.execute(
                     "UPDATE event_pairings SET slot_label = ? WHERE id = ?",
-                    (f"{hole}{m.group(2)}", r["id"]))
+                    (f"{hole}{m.group(2) or ''}", r["id"]))
                 relabeled += 1
         conn.commit()
         return {"nine_side": new_side, "relabeled": relabeled}

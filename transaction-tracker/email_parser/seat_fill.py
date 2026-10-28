@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 DIAL = "seat_fill_auto"
 RAISED_KEY = "seat_fill_unseated:{}"
 TEAM_SIZE = 4
-_SHOTGUN = re.compile(r"^\s*(\d+)\s*([AB])\s*$", re.I)
+_SHOTGUN = re.compile(r"^\s*(\d+)\s*([AB])?\s*$", re.I)  # one group on a hole = no letter
 
 
 def _on(db_path=None) -> bool:
@@ -76,7 +76,7 @@ def shotgun_back_key(groups: list):
     rank = shotgun_train_rank([g.get("slot_label") or "" for g in groups])
     def key(g):
         m = _SHOTGUN.match(g.get("slot_label") or "")
-        return (-rank.get(int(m.group(1)), 0), 0 if m.group(2).upper() == "B" else 1)
+        return (-rank.get(int(m.group(1)), 0), 0 if (m.group(2) or "A").upper() == "B" else 1)
     return key
 
 
@@ -86,7 +86,7 @@ def shotgun_front_key(groups: list):
     rank = shotgun_train_rank([g.get("slot_label") or "" for g in groups])
     def key(g):
         m = _SHOTGUN.match(g.get("slot_label") or "")
-        return (rank.get(int(m.group(1)), 0), 0 if m.group(2).upper() == "B" else 1)
+        return (rank.get(int(m.group(1)), 0), 0 if (m.group(2) or "A").upper() == "B" else 1)
     return key
 
 
