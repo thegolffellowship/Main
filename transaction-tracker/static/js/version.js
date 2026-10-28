@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.609.0";
+window.TGF_VERSION = "2.610.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.610.0",
+    date: "2026-10-28",
+    title: "Edit Event: the shotgun staging grid (holes, groups per hole, Reverse, Lock, Edit)",
+    changes: [
+      "Kerry 10/28, on the v2.606.0 text box: \"The shotgun staging is not what I want. 1. It should only pop up when Shotgun is selected 2. It should show a row of starting holes and a row (right below that is editable) number of groups on each based on it being front or back starts 3. There should be a checkbox for reverse shotgun that automatically changes the hole numbers. 4. There should be a checkbox to click to the right to lock it and remain in modal. But then a PEN (Edit) button to unlock and edit.\" The text box is replaced by a SHOTGUN STAGING grid that appears only while a shotgun is selected. Row 1 is the starting holes (the front or back nine for a 9-hole event, all 18 in two rows of nine otherwise) with each hole's par and <50 yardage, short holes in orange; row 2 is the groups on each hole (0 to 2), filled by default from the rule (one group on a par 3 or a par 4 under 325, two elsewhere) until every group the roster needs has a hole. A line under it counts groups placed against groups needed. Reverse shotgun re-numbers the holes from the last hole and re-deals the default. Lock keeps the counts (the generator deals exactly those; any extra groups go to the next open holes in order) and the pen unlocks them. Saved with the modal's Save; a saved sheet relabels by slot. New read GET /api/events/<id>/shotgun-staging, writer database.set_shotgun_staging, app setting shotgun_staging:<id>. Guard test_shotgun_order.py section 5."
+    ]
+  },
   {
     version: "2.609.0",
     date: "2026-10-28",

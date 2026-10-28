@@ -125,6 +125,39 @@ check("a full course: the short holes take a B before any overflow",
       len(L("", 1, 18, 30, caps)) == 30 and L("", 1, 18, 30, caps)[-1] == "1B" and "19A" not in L("", 1, 18, 36, caps))
 check("no card: every hole takes two (the old standard)", L("", 1, 18, 3, {}) == ["1A", "1B", "2A"])
 
+print("5. The staging grid on Edit Event (Kerry 10/28)")
+for i in range(28):
+    cid = 895000 + i
+    with db._connect(DB) as conn:
+        conn.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) "
+                     "VALUES (?, ?, 'Stage', 'active_member')", (cid, f"S{i}"))
+        conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, transaction_status, "
+                     "order_date, order_id, email_uid, merchant) VALUES (?, ?, 's18.83 KT', ?, '18', 'active', "
+                     "'2099-12-01', ?, ?, 'GoDaddy')", (f"S{i} Stage", cid, KTE, f"RG{i}", f"manual-g{i}"))
+        conn.commit()
+st = db.shotgun_staging(KTE, db_path=DB)
+check("28 players need 7 groups", st["groups_needed"] == 7, st["groups_needed"])
+check("the grid shows 18 holes in order with par and yards",
+      [r["hole"] for r in st["rows"]] == list(range(1, 19)) and st["rows"][1]["par"] == 3 and st["rows"][0]["yards"] == 305)
+check("default counts follow the rule: 1,1,2,1,2 then 0",
+      [r["groups"] for r in st["rows"]][:6] == [1, 1, 2, 1, 2, 0], [r["groups"] for r in st["rows"]][:6])
+rv = db.shotgun_staging(KTE, reverse=True, db_path=DB)
+check("Reverse previews 18 first: 18,17,16,15,14",
+      [(r["hole"], r["groups"]) for r in rv["rows"]][:5] == [(18, 1), (17, 2), (16, 2), (15, 1), (14, 1)])
+db.update_event(KTE, {"shotgun_staging": {"reverse": False, "locked": True,
+                                           "counts": {"1": 2, "2": 1, "10": 2, "11": 2},
+                                           "hole_order": list(range(1, 19))}}, db_path=DB)
+st = db.shotgun_staging(KTE, db_path=DB)
+check("Lock keeps the manager's counts", st["locked"] and
+      {r["hole"]: r["groups"] for r in st["rows"] if r["groups"]} == {1: 2, 2: 1, 10: 2, 11: 2}, st["rows"])
+check("the generator deals the locked grid",
+      db.shotgun_hole_labels(db.shotgun_order_of({"id": KTE, "shotgun_order": st["order"]}), 1, 18, 7, caps)
+      == ["1A", "1B", "2A", "10A", "10B", "11A", "11B"], st["order"])
+db.update_event(KTE, {"shotgun_staging": {"reverse": True, "locked": False}}, db_path=DB)
+st = db.shotgun_staging(KTE, db_path=DB)
+check("unlocked + Reverse goes back to the rule, reversed", st["order"] == "reverse" and not st["locked"]
+      and st["labels"][:3] == ["18A", "17A", "17B"], st)
+
 try:
     os.remove(DB)
 except OSError:

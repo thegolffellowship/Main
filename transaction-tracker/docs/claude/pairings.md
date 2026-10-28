@@ -1212,8 +1212,27 @@ entering staging holes. Like I'm asking about a reverse shotgun for Saturday
 from Rafe ... I'd like to know that and enter it before the generator runs so
 it generates correctly."
 
-Edit Event → **Shotgun hole order** (shotgun events only; tee-time events
-ignore it). Stored per event as app setting `shotgun_order:<event_id>` (not an
+**Edit Event → SHOTGUN STAGING grid (v2.610.0, Kerry 10/28, replaces the
+v2.606.0 text box):** "It should only pop up when Shotgun is selected. It
+should show a row of starting holes and a row (right below that is editable)
+number of groups on each based on it being front or back starts. There should
+be a checkbox for reverse shotgun that automatically changes the hole numbers.
+There should be a checkbox to click to the right to lock it and remain in
+modal. But then a PEN (Edit) button to unlock and edit." Shown only while a
+shotgun is selected (9 holes: front or back nine; 18 and Combo: all 18, nine to
+a row). Row 1 the holes with par and <50 yards (short holes in orange), row 2
+the groups on each (0-2), defaulted from the rule below and filled until every
+group the roster needs has a hole; a running "N of M groups placed" line.
+Reverse reorders the holes and re-deals the default. Lock keeps the counts
+(the generator deals exactly them; groups beyond them go to the next open holes
+in order); the pen unlocks. Saved with the modal: `update_event` field
+`shotgun_staging` {reverse, locked, counts, hole_order} →
+`database.set_shotgun_staging` (explicit labels when locked or edited, else the
+rule) + app setting `shotgun_staging:<id>` {reverse, locked}; read by
+`GET /api/events/<id>/shotgun-staging` (`database.shotgun_staging`).
+
+The underlying order (still accepted by the API as `shotgun_order`; shotgun
+events only; tee-time events ignore it). Stored per event as app setting `shotgun_order:<event_id>` (not an
 events column, no migration); `database.normalize_shotgun_order` validates,
 `set_shotgun_order` is the one writer, `shotgun_hole_labels` deals the labels
 inside `_pairing_time_slots`, so the 5:00 PM generator, the seed picker and the

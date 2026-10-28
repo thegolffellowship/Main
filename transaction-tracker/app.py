@@ -7743,6 +7743,19 @@ def api_gg_points_identity_audit():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/shotgun-staging")
+@require_role("manager")
+def api_shotgun_staging(event_id):
+    """Edit Event's shotgun staging grid (Kerry 10/28): holes with par / <50
+    yards / cap, groups needed, counts per hole, reverse and lock."""
+    from email_parser.database import shotgun_staging
+    rv = request.args.get("reverse")
+    out = shotgun_staging(event_id, holes=request.args.get("holes") or None,
+                          nine_side=request.args.get("nine_side") or None,
+                          reverse=None if rv is None else rv in ("1", "true"))
+    return jsonify(out), (200 if out.get("ok") else 404)
+
+
 @app.route("/api/events/<int:event_id>/tee", methods=["POST"])
 @require_role("manager")
 def api_event_tee(event_id):

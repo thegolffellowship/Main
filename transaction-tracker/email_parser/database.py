@@ -31724,6 +31724,15 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
                 "rescheduled_to_event_id", "status_badge", "lock_override", "tee_keep"}
     shotgun_done = False
+    if isinstance(fields.get("shotgun_staging"), dict):
+        _sg = fields["shotgun_staging"]
+        try:
+            shotgun_done = bool(set_shotgun_staging(
+                event_id, bool(_sg.get("reverse")), bool(_sg.get("locked")),
+                _sg.get("counts") or None, _sg.get("hole_order") or None,
+                db_path=db_path).get("ok"))
+        except (ValueError, TypeError):
+            logger.warning("Event %s: shotgun staging %r refused", event_id, _sg)
     if "shotgun_order" in fields:
         # Not an events column: an app setting with its own writer, which
         # relabels a saved sheet. A bad order is refused at the route.
@@ -62887,6 +62896,103 @@ def set_shotgun_order(event_id: int, value, db_path=None) -> dict:
             res = _sheet_follows_event(conn, event_id, before, {**before, "shotgun_order": new})
         conn.commit()
     return {"ok": True, "shotgun_order": new, "was": old, "relabelled": res["relabelled"]}
+
+
+SHOTGUN_STAGING_KEY = "shotgun_staging:{}"
+
+
+def shotgun_staging(event_id: int, holes: str | None = None, nine_side: str | None = None,
+                    reverse: bool | None = None, db_path=None) -> dict:
+    """What Edit Event's SHOTGUN STAGING grid shows (Kerry 10/28: "a row of
+    starting holes and a row ... number of groups on each", a Reverse
+    checkbox, Lock + Edit). For holes '9' (front or back by nine_side) or
+    '18': each hole with par / <50 yards / cap, the groups the roster needs,
+    the counts the current order deals, and {reverse, locked} from app
+    setting shotgun_staging:<id>. `reverse` / `nine_side` override the saved
+    values so the grid can preview a toggle before Save."""
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not row:
+            return {"ok": False, "error": "event not found"}
+        ev = dict(row)
+        try:
+            meta = json.loads(conn.execute("SELECT value FROM app_settings WHERE key = ?",
+                                           (SHOTGUN_STAGING_KEY.format(int(event_id)),)).fetchone()[0])
+        except (TypeError, ValueError, sqlite3.DatabaseError):
+            meta = {}
+        order = _shotgun_order_conn(conn, event_id)
+        caps = _shotgun_caps_conn(conn, ev)
+        info: dict = {}
+        try:
+            legend = event_tee_legend(conn, int(event_id), ev)
+            pick = next((t for t in legend if t.get("band") == "<50" and t.get("tee_id")), None)
+            if pick:
+                for h, par, yd in conn.execute(
+                        "SELECT hole_number, par, yardage FROM course_tee_holes WHERE tee_id = ?",
+                        (pick["tee_id"],)):
+                    info[int(h)] = (par, yd)
+        except Exception:
+            info = {}
+        fmt = (ev.get("format") or "").strip()
+        h = holes or ("9" if fmt == "9 Holes" else "18")
+        side = (nine_side or _nine_side(ev)).title()
+        first = 10 if (h == "9" and side == "Back") else 1
+        last = first + (8 if h == "9" else 17)
+        try:
+            rows = _event_roster_rows(conn, int(event_id))
+        except Exception:
+            rows = []
+        if fmt == "9/18 Combo":
+            rows = [r for r in rows if str(r.get("holes") or "").strip() == h]
+        try:
+            saved = conn.execute("SELECT COUNT(DISTINCT group_num) FROM event_pairings "
+                                 "WHERE event_id = ? AND holes = ?", (event_id, h)).fetchone()[0]
+        except sqlite3.DatabaseError:
+            saved = 0
+        max_group = 5 if int(ev.get("allow_fivesomes") or 0) else 4
+        needed = _pairing_groups_needed(len(rows), max_group, saved_groups=saved or 0)
+    rev = bool(meta.get("reverse")) if reverse is None else bool(reverse)
+    locked = bool(meta.get("locked"))
+    if locked or (reverse is None and order not in ("", "reverse")):
+        use = order  # the saved grid
+    else:
+        use = "reverse" if rev else ""  # the rule (or a Reverse toggle being previewed)
+    labels = shotgun_hole_labels(use, first, last, needed, caps)
+    counts: dict = {}
+    for lab in labels:
+        m = _SHOTGUN_TOKEN_RE.match(lab)
+        if m:
+            counts[int(m.group(1))] = counts.get(int(m.group(1)), 0) + 1
+    seq = list(range(first, last + 1))
+    if rev:
+        seq = seq[::-1]
+    return {"ok": True, "event_id": int(event_id), "holes": h, "nine_side": side,
+            "reverse": rev, "locked": locked, "order": order, "groups_needed": needed,
+            "players": len(rows), "labels": labels,
+            "rows": [{"hole": x, "par": (info.get(x) or (None, None))[0],
+                      "yards": (info.get(x) or (None, None))[1], "cap": caps.get(x, 2),
+                      "groups": counts.get(x, 0)} for x in seq]}
+
+
+def set_shotgun_staging(event_id: int, reverse: bool, locked: bool, counts: dict | None,
+                        holes_order: list | None = None, db_path=None) -> dict:
+    """The one writer for the staging grid. Locked (or counts edited) saves
+    the grid as an explicit label list in its hole order (1 group = hA,
+    2 = hA hB); unlocked and unedited saves the rule ('reverse' or blank).
+    Relabels a saved sheet through set_shotgun_order."""
+    order = "reverse" if reverse else ""
+    if counts:
+        seq = [int(x) for x in (holes_order or sorted(int(k) for k in counts))]
+        toks = []
+        for x in seq:
+            n = max(0, min(2, int(counts.get(str(x), counts.get(x, 0)) or 0)))
+            toks += [f"{x}A", f"{x}B"][:n]
+        order = " ".join(toks) or order
+    res = set_shotgun_order(event_id, order, db_path=db_path)
+    if res.get("ok"):
+        set_app_setting(SHOTGUN_STAGING_KEY.format(int(event_id)),
+                        json.dumps({"reverse": bool(reverse), "locked": bool(locked)}), db_path=db_path)
+    return res
 
 
 def tee_keep_mode(ev: dict) -> str:
