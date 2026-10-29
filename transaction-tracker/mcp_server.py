@@ -4208,6 +4208,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _r = _us.refresh() if "refresh" in [x.lower() for x in _a] else None
             return json.dumps({"hours": _h, "refresh": _r, "rows": _us.recent(hours=_h)},
                               indent=2, default=str)
+        if cmd == "scoring-season-lock":
+            # "<race_key>|<through YYYY-MM-DD>[|apply]" or "<race_key>|clear"
+            # (Kerry 10/28: "The regular season is over as of yesterday so the
+            # current scores (best 6) should be locked"). Dry run shows the
+            # totals that would lock.
+            from email_parser import tracker_points as _tp
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) >= 2 and _p[1].lower() == "clear":
+                return json.dumps(_tp.unlock_season(_p[0]))
+            if len(_p) < 2:
+                return json.dumps({"error": "usage: scoring-season-lock:<race_key>|<YYYY-MM-DD>[|apply] or <race_key>|clear"})
+            return json.dumps(_tp.lock_season(_p[0], _p[1], apply=len(_p) > 2 and _p[2].lower() == "apply"),
+                              indent=2, default=str)
         if cmd == "scoring-race-close":
             # "<event_id>[|apply]" (Kerry 10/28, #2473): the fall race prizes
             # and champions a finale's CLOSEOUT START records. Dry run shows

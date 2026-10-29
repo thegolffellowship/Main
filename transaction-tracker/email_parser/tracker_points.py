@@ -108,7 +108,8 @@ def held_events(warnings: list) -> list:
     return [w for w in warnings or [] if str(w).startswith(HELD_PREFIX)]
 
 
-def event_lines(db_path=None, through: str | None = None) -> tuple[list, list]:
+def event_lines(db_path=None, through: str | None = None,
+                since: str | None = None) -> tuple[list, list]:
     """Every Tracker points line from the cutover on: [{customer_id,
     player_name, chapter (race chapter), date, event_id, code, nine,
     points, member}] plus warnings. Read-only."""
@@ -121,9 +122,9 @@ def event_lines(db_path=None, through: str | None = None) -> tuple[list, list]:
     with db._connect(db_path) as conn:
         evs = [dict(r) for r in conn.execute(
             "SELECT id, item_name, event_date, chapter FROM events "
-            "WHERE event_date >= ? AND event_date <= ? "
+            "WHERE event_date >= ? AND event_date <= ? AND event_date > ? "
             "AND lower(COALESCE(status, 'active')) NOT IN ('cancelled', 'canceled') "
-            "ORDER BY event_date, id", (cutover(), upto)).fetchall()]
+            "ORDER BY event_date, id", (cutover(), upto, since or "")).fetchall()]
     for ev in evs:
         m = EVENT_CODE_RE.match(ev["item_name"] or "")
         if not m:
@@ -274,9 +275,17 @@ def build_race(race_key: str, db_path=None, tracker_lines: list | None = None) -
     chapter = race.get("chapter")
     base = (_load(FALL_FILE).get("races") or {}).get(race_key) or {}
     warnings: list = []
+    # THE REGULAR SEASON LOCK (Kerry 10/28: "The regular season is over as of
+    # yesterday so the current scores (best 6) should be locked. So there's an
+    # automatic starting point that won't update"). With a lock, every line up
+    # to its date comes from the lock and only later events (the finale) are
+    # read, so a rebuild is one event's work.
+    lock = season_lock(race_key, db_path=db_path)
     if tracker_lines is None:
-        tracker_lines, w = event_lines(db_path=db_path)
+        tracker_lines, w = event_lines(db_path=db_path, since=(lock or {}).get("through"))
         warnings += w
+    elif lock:
+        tracker_lines = [l for l in tracker_lines if str(l.get("date") or "") > lock["through"]]
     # Season races move live only at a finale (Kerry #2462-F: "Regular season
     # events ... would only show post event updates (as opposed to season
     # finales like the City Championships and Fall City Championships which
@@ -305,7 +314,12 @@ def build_race(race_key: str, db_path=None, tracker_lines: list | None = None) -
             for c in cards:
                 if c and s["customer_id"] is not None:
                     card_cid[str(c)] = int(s["customer_id"])
-        for p in base.get("players") or []:
+        for lp in (lock or {}).get("people") or []:
+            key = lp["customer_id"] if lp.get("customer_id") is not None else f"n:{(lp.get('player_name') or '').lower()}"
+            people[key] = {"customer_id": lp.get("customer_id"), "player_name": lp.get("player_name"),
+                           "cards": list(lp.get("cards") or []),
+                           "lines": [dict(l) for l in lp.get("lines") or []]}
+        for p in ([] if lock else base.get("players") or []):
             card = str(p.get("member_card_id") or "")
             cid = card_cid.get(card)
             if cid is None:
@@ -540,3 +554,64 @@ def bundle_detail(race_key: str, card: str, db_path=None) -> dict | None:
                 return {"tables": p["raw_tables"], "headings": p.get("headings") or [],
                         "source": f"gg capture {d.name}"}
     return None
+
+
+
+LOCK_KEY = "race_season_lock:{}"
+
+
+def season_lock(race_key: str, db_path=None) -> dict | None:
+    """The race's locked regular season: {through, at, people: [{customer_id,
+    player_name, cards, lines}]} or None."""
+    from . import database as db
+    raw = db.get_app_setting(LOCK_KEY.format(race_key), db_path=db_path)
+    if not raw:
+        return None
+    try:
+        d = json.loads(raw)
+        return d if d.get("through") else None
+    except Exception:
+        logger.warning("season lock for %s unreadable; ignored", race_key)
+        return None
+
+
+def lock_season(race_key: str, through: str, apply: bool = False, db_path=None) -> dict:
+    """Lock the regular season through `through` (YYYY-MM-DD): every player's
+    lines up to that date, as built now. Refuses while any of those events
+    is HELD (its points are not settled). Dry run shows the totals."""
+    from . import database as db
+    from .timezone_utils import now_central
+    if race_key not in TRACKER_RACES:
+        return {"error": f"{race_key} is not a Tracker race"}
+    lines, warnings = event_lines(db_path=db_path, through=through)
+    held = held_events(warnings)
+    if held:
+        return {"error": "events are HELD; their points are not settled", "held": held}
+    with db._connect(db_path) as conn:
+        cur = conn.execute("SELECT 1 FROM app_settings WHERE key = ?",
+                           (LOCK_KEY.format(race_key),)).fetchone()
+    if cur and apply:
+        db.set_app_setting(LOCK_KEY.format(race_key), "", db_path=db_path)  # rebuild unlocked first
+    built = build_race(race_key, db_path=db_path, tracker_lines=lines)
+    people = [{"customer_id": r["customer_id"], "player_name": r["player_name"],
+               "cards": r.get("cards") or [],
+               "lines": [{k: l.get(k) for k in ("date", "event", "tournament", "position",
+                                                "points", "source", "championship")}
+                         for l in r["lines"]]} for r in built["rows"]]
+    out = {"race_key": race_key, "through": through, "apply": apply,
+           "players": len(people),
+           "top": [(r["rank"], r["player_name"], r["total_points"]) for r in built["rows"][:8]],
+           "warnings": warnings}
+    if apply:
+        db.set_app_setting(LOCK_KEY.format(race_key), json.dumps(
+            {"through": through, "at": now_central().strftime("%Y-%m-%d %H:%M"),
+             "people": people}), db_path=db_path)
+        db.log_agent_action("tracker-points", "season_locked",
+                            f"{race_key} locked through {through}: {len(people)} players", db_path=db_path)
+    return out
+
+
+def unlock_season(race_key: str, db_path=None) -> dict:
+    from . import database as db
+    db.set_app_setting(LOCK_KEY.format(race_key), "", db_path=db_path)
+    return {"race_key": race_key, "unlocked": True}

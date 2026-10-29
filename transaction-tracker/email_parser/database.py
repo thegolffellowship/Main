@@ -8898,10 +8898,14 @@ def refresh_points_race_standings(race_key: str,
         if race_key in _tp.TRACKER_RACES and _tp.tracker_source_on(db_path):
             n = _tp.write_race(race_key, _tp.build_race(race_key, db_path=db_path),
                                db_path=db_path)
-            try:
-                _tp.rebuild_monthly(db_path=db_path, apply=True)
-            except Exception:
-                logger.exception("tracker monthly rebuild failed (non-fatal)")
+            # A LOCKED race rebuilds from one event (the finale), so it can
+            # refresh every minute; Monthly reads the whole month and stays on
+            # the 5-minute job (scoring_window.refresh_live_points).
+            if not _tp.season_lock(race_key, db_path=db_path):
+                try:
+                    _tp.rebuild_monthly(db_path=db_path, apply=True)
+                except Exception:
+                    logger.exception("tracker monthly rebuild failed (non-fatal)")
             return n
         raise RuntimeError(POINTS_PAUSED)
 
@@ -10778,6 +10782,16 @@ def get_points_race_standings(race_key: str,
                 (snap_day, today_central_str())).fetchone()
         window_hours = (_POINTS_EVENT_DAY_REFRESH_HOURS if played_since
                         else auto_refresh_hours)
+        # A locked Tracker race (regular season over, Kerry 10/28) rebuilds
+        # from the finale alone: on an event day it refreshes every minute,
+        # close to the live event leaderboard.
+        if played_since:
+            try:
+                from email_parser import tracker_points as _tpl
+                if race_key in _tpl.TRACKER_RACES and _tpl.season_lock(race_key, db_path=db_path):
+                    window_hours = min(window_hours, 1 / 60)
+            except Exception:
+                logger.warning("season lock check failed for %s", race_key, exc_info=True)
         stale = (
             stat["n"] == 0
             or stat["fetched_at"] is None

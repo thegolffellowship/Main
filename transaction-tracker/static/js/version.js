@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.618.0";
+window.TGF_VERSION = "2.619.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.619.0",
+    date: "2026-10-28",
+    title: "The Fall regular season can be locked; the finale's standings refresh every minute",
+    changes: [
+      "Kerry 10/28: \"The regular season is over as of yesterday so the current scores (best 6) should be locked. So there's an automatic starting point that won't update similar to our city and TGF championship live leaderboards from the summer.\" tracker_points.lock_season stores each player's lines through a date (app setting race_season_lock:<race>, bridge scoring-season-lock:<race>|<YYYY-MM-DD>[|apply], or |clear). A locked race keeps those totals as its starting point and a rebuild reads only later events (the finale), so on the finale day the standings refresh every minute on read (instead of every 15) and on the 5-minute job, close to the live event leaderboard. Monthly keeps its own 5-minute rebuild. Refuses while any event to the lock date is HELD. Guard test_season_lock.py."
+    ]
+  },
   {
     version: "2.618.0",
     date: "2026-10-28",

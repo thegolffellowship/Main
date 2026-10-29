@@ -1296,6 +1296,16 @@ lines only for a championship (finale, #2462-F); Monthly keeps all (#2466-F).
 `scoring_window.tick` calls `refresh_live_points` every run while an event is in
 play. race_close counts only non-live lines. Guard `test_live_points.py`.
 
+**Regular season lock (v2.619.0, Kerry 10/28: "the current scores (best 6) should
+be locked ... an automatic starting point that won't update").**
+`tracker_points.lock_season(race, through)` stores every player's lines through
+the date in app setting `race_season_lock:<race>`; `build_race` then starts from
+the lock and reads only events after it (`event_lines(since=)`), so a finale-day
+rebuild is one event: `get_points_race_standings` refreshes a locked race every
+minute on an event day, and the locked refresh skips Monthly (rebuilt by
+`scoring_window.refresh_live_points`). Bridge `scoring-season-lock`. Guard
+`test_season_lock.py`.
+
 ## Who did it: the UI action log (v2.615.0, Kerry 2026-10-28)
 
 "Sounds like we need a log of clicks and who did it so you can easily see that
