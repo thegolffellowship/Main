@@ -158,7 +158,9 @@
                 </div>
                 <span class="hint">{{ none_help }}</span>
             </div>
-            <p class="mut">{{ none_note }}</p>
+            {# NONE_NOTE ("The chapter manager uses this to set...") dropped from the page:
+               the Tracker sets LOW - 72 itself (Kerry 10/29 "Approve"). The constant
+               stays in handicap_ask.py so the approved wording hash is unchanged. #}
         </div>
         {% if not info.has_venmo %}
         <div class="sec sec-pay" style="margin-top:14px;">
