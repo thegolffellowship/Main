@@ -38,7 +38,7 @@ def roster_ids():
     with db._connect(DB) as c:
         return {r.get("customer_id") for r in db._event_rsvp_only_players(c, eid)}
 
-check("Kelly is on the roster from her RSVP", 39 in roster_ids(), roster_ids())
+check("Kelly is on the roster from his RSVP", 39 in roster_ids(), roster_ids())
 dry = wl.add(eid, 39, note="over 32", apply=False, db_path=DB)
 check("dry run changes nothing", dry["dry_run"] and 39 in roster_ids() and wl.get(eid, DB) == [], dry)
 r = wl.add(eid, 39, note="over 32", apply=True, db_path=DB)
@@ -52,9 +52,9 @@ check("a paid registration is reported, never touched", p["paid_registration"] a
 with db._connect(DB) as c:
     c.execute("UPDATE rsvps SET received_at = '2099-10-30' WHERE email_uid = 'tracker:1:39'")
     c.commit()
-check("a second I'm-in tap keeps her off", 39 not in roster_ids())
+check("a second I'm-in tap keeps Kelly off", 39 not in roster_ids())
 wl.remove(eid, 39, apply=True, db_path=DB)
-check("taking her off the list puts the RSVP back", 39 in roster_ids() and
+check("taking Kelly off the list puts the RSVP back", 39 in roster_ids() and
       [x["customer_id"] for x in wl.get(eid, DB)] == [18, 703])
 check("bridge exists", 'cmd == "scoring-waitlist"' in open("mcp_server.py").read())
 print(f"\n{'ALL PASS' if not F else str(len(F)) + ' FAILED: ' + ', '.join(F)}")
