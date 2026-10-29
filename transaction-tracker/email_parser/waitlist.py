@@ -26,8 +26,9 @@ THE PIECES
 - The job (`tick`, every 15 minutes, dial `waitlist_auto`, on):
     * the event FILLS -> one staff email: close registration in GoDaddy;
     * a spot OPENS (paid < max) -> the next waiting person is OFFERED it
-      until a deadline (`waitlist_claim_hours`, 12, never later than two
-      hours before the first tee): an email to them, and one to Kerry and
+      until a deadline (`waitlist_claim_hours`, 2 per Kerry 10/29, never
+      later than two hours before the first tee; no offer goes out between
+      9 PM and 7 AM, it waits for 7 AM): an email to them, and one to Kerry and
       the chapter manager to REOPEN GoDaddy for that person until then;
     * the offered person PAYS -> claimed, off the list; staff told;
     * the deadline passes -> expired, the next person is offered;
@@ -56,7 +57,8 @@ FULL_SENT = "waitlist_full_sent:{}"
 MORNING_SENT = "waitlist_morning_sent:{}"
 DIAL = "waitlist_auto"
 MEMBER_DIAL = "waitlist_member_emails"
-CLAIM_HOURS = 12
+CLAIM_HOURS = 2          # Kerry 10/29: "That's a big time window. Probably should be less." -> 2 hours
+QUIET = (21, 7)          # no offer goes out 9 PM - 7 AM; it waits for 7 AM
 STAFF = "kerry@thegolffellowship.com"
 STAFF_DOMAIN = "@thegolffellowship.com"
 
@@ -372,7 +374,8 @@ def _tick_event(ev, now, db_path=None) -> dict:
             # A lapsed offer never leaves RSVP overrides behind silently: the
             # person stays off the roster (they did not pay).
     # 4. offers: one per open spot, while there is time to claim.
-    if cap.get("max") and (not ft or now < ft - timedelta(hours=2)):
+    quiet = now.hour >= QUIET[0] or now.hour < QUIET[1]
+    if cap.get("max") and not quiet and (not ft or now < ft - timedelta(hours=2)):
         cap = capacity(eid, db_path)
         holding = [r for r in rows if r.get("state") == "offered"]
         free = (cap["open"] or 0) - len(holding)

@@ -4148,8 +4148,9 @@ into it."
 - Job `waitlist` every 15 minutes (`waitlist.tick`, dial `waitlist_auto`):
   full alert (once, re-armed when a spot opens), claims (the offered person
   has a paid row), lapses (deadline passed -> next), offers (one per open
-  spot, deadline `waitlist_claim_hours` = 12 capped at first tee - 2 h, staff
-  told to REOPEN GoDaddy), the event-morning note. Entry states: waiting,
+  spot, deadline `waitlist_claim_hours` = 2 (Kerry 10/29: "That's a big time
+  window. Probably should be less.") capped at first tee - 2 h; no offer
+  between 9 PM and 7 AM; staff told to REOPEN GoDaddy), the event-morning note. Entry states: waiting,
   offered, claimed, expired. Staff emails go to kerry@ and the chapter
   manager (`pairings_approval.manager_for`). Member emails (`waitlist.TEXT`:
   joined, offered, expired, morning) wait on dial `waitlist_member_emails`

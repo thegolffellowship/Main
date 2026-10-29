@@ -98,8 +98,12 @@ check("staff are told to reopen GoDaddy for them", any("REOPEN GODADDY" in s for
 check("member emails are held until Kerry approves the wording",
       not any("kbarna" in t for t, _ in SENTM), SENTM)
 check("the held spot is not open to anyone else", W.register_target(eid2, DB).get("full"))
-check("the deadline is 12 hours on", b["line"][0]["deadline"] == "2099-11-01 22:00", b["line"][0])
+check("the deadline is 2 hours on (Kerry 10/29)", b["line"][0]["deadline"] == "2099-11-01 12:00", b["line"][0])
 W.tick(now=_dt(2099, 11, 1, 22, 15), db_path=DB)
+b = W.board(eid2, DB)
+check("lapsed at night: no new offer until 7 AM", b["line"] and b["line"][0]["state"] == "waiting"
+      and b["line"][0]["customer_id"] == 703, b)
+W.tick(now=_dt(2099, 11, 2, 7, 5), db_path=DB)
 b = W.board(eid2, DB)
 check("the offer lapses: Mesa is offered next", [r["customer_id"] for r in b["line"]] == [703]
       and b["line"][0]["state"] == "offered" and b["past"][0]["state"] == "expired", b)

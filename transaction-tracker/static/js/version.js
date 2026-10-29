@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.623.1";
+window.TGF_VERSION = "2.623.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.623.2",
+    date: "2026-10-29",
+    title: "Waitlist claim window: 2 hours, no offers overnight",
+    changes: [
+      "Kerry 10/29 on the 12-hour claim window: \"That's a big time window. Probably should be less.\" and his pick, 2 hours. An offered spot must be claimed within 2 hours (dial waitlist_claim_hours), still never later than two hours before the first tee. No offer goes out between 9 PM and 7 AM, so nobody's spot lapses while they sleep: a spot that opens overnight is offered at 7 AM."
+    ]
+  },
   {
     version: "2.623.1",
     date: "2026-10-29",
