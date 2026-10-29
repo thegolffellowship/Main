@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#E87C3E">
+    <meta name="robots" content="noindex">
+    <title>Points · The Golf Fellowship</title>
+    <link rel="icon" href="/static/tgf-icon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="manifest" href="/static/manifest-member.json">
+    {# THE POINTS TAB (Kerry 2026-10-29, #2460-F: "SCORING | LEADERBOARD |
+       POINTS"). Read-only. The Monthly race and the group's season race(s),
+       from the member LEADERBOARD's own public endpoints; the group's players
+       highlighted by customer_id. Refreshes every minute like the board. #}
+    <style>
+        body { background: #FFFFFF; }
+        .pt-wrap { max-width: 480px; margin: 0 auto; padding: 14px 16px 40px; color: #1B1B1B;
+                   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        .pt-ev { font: 700 15px Bitter, Georgia, serif; margin: 2px 0 10px; }
+        .pt-card { border: 1px solid #E5E7EB; border-radius: 12px; margin: 0 0 14px; overflow: hidden; }
+        .pt-h { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 12px;
+                background: #1B1B1B; color: #fff; }
+        .pt-h .t { font: 700 14px Bitter, Georgia, serif; letter-spacing: .06em; text-transform: uppercase; }
+        .pt-h .m { font-size: 11.5px; color: #D1D5DB; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        td { padding: 7px 10px; border-top: 1px solid #F3F4F6; }
+        td.r { width: 34px; color: #6B7280; font-weight: 700; }
+        td.p { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+        td.n { font-family: Bitter, Georgia, serif; font-weight: 700; }
+        tr.me td { background: #FFF4EC; }
+        tr.me td.n::after { content: " ●"; color: #E87C3E; font-size: 10px; vertical-align: 2px; }
+        tr.gap td { color: #9CA3AF; text-align: center; padding: 2px; }
+        .pt-note { font-size: 12.5px; color: #6B7280; padding: 8px 12px; border-top: 1px solid #F3F4F6; }
+        .pt-empty { padding: 14px 12px; color: #6B7280; font-size: 14px; }
+        .pt-err { background: #FEE2E2; color: #991B1B; padding: 10px 12px; border-radius: 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    {% set SHELL_TITLE = 'Points' %}{% set SHELL_ACTIVE = '' %}{% set SHELL_SLIM = True %}
+    {% include '_shell_nav.html' %}
+    <div class="pt-wrap">
+        <div class="pt-ev" id="pt-ev"></div>
+        <div id="pt-body"><div class="pt-empty">Loading…</div></div>
+    </div>
+<script>
+(function () {
+    "use strict";
+    var t = new URLSearchParams(location.search).get("t") || "";
+    var TOP = 10;
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); }
+    function get(u) { return fetch(u, {credentials: "same-origin"}).then(function (r) { return r.json(); }); }
+
+    // rows: [{rank, name, points, customer_id}] in order. The top TOP, then
+    // any of the group's players further down (with a gap row between).
+    function table(rows, mine) {
+        if (!rows.length) return '<div class="pt-empty">No points yet.</div>';
+        var out = [], last = -1;
+        rows.forEach(function (r, i) {
+            var me = r.customer_id && mine.indexOf(Number(r.customer_id)) >= 0;
+            if (i >= TOP && !me) return;
+            if (last >= 0 && i > last + 1) out.push('<tr class="gap"><td colspan="3">⋯</td></tr>');
+            last = i;
+            out.push('<tr' + (me ? ' class="me"' : '') + '><td class="r">' + esc(r.rank) + '</td><td class="n">' +
+                     esc(r.name) + '</td><td class="p">' + esc(r.points) + '</td></tr>');
+        });
+        return "<table>" + out.join("") + "</table>";
+    }
+    function card(title, meta, inner, note) {
+        return '<div class="pt-card"><div class="pt-h"><span class="t">' + esc(title) + '</span><span class="m">' +
+               esc(meta || "") + '</span></div>' + inner + (note ? '<div class="pt-note">' + esc(note) + '</div>' : '') + '</div>';
+    }
+
+    function load() {
+        get("/api/score-entry/points?t=" + encodeURIComponent(t)).then(function (ctx) {
+            if (ctx.error) throw new Error(ctx.error);
+            document.getElementById("pt-ev").textContent = (ctx.event && ctx.event.name) || "";
+            var mine = (ctx.group_customer_ids || []).map(Number);
+            var jobs = [get("/api/season-contests/monthly-points").catch(function () { return {}; })];
+            (ctx.races || []).forEach(function (r) {
+                jobs.push(get("/api/season-contests/points-race?race=" + encodeURIComponent(r.key)).catch(function () { return {}; }));
+            });
+            return Promise.all(jobs).then(function (res) {
+                var html = [];
+                // MONTHLY: the event's month, both chapters (it is live at every event)
+                var m = ((res[0] && res[0].months) || []).filter(function (x) { return x.month === ctx.month; })[0];
+                if (m) {
+                    var mrows = (m.standings || []).map(function (s) {
+                        return {rank: s.rank_label || s.rank, name: s.player_name, points: s.points, customer_id: s.customer_id};
+                    });
+                    html.push(card((m.name || "Monthly") + " points", m.final ? "FINAL" : "live",
+                                   table(mrows, mine), m.purse ? "$1 per TGF member at month end: $" + m.purse + (m.final ? "" : " so far") : ""));
+                } else {
+                    html.push(card("Monthly points", "", '<div class="pt-empty">No points this month yet.</div>'));
+                }
+                (ctx.races || []).forEach(function (r, i) {
+                    var d = res[i + 1] || {};
+                    // ENROLLED rows only, as the member board ranks them
+                    var rows = (d.standings || []).filter(function (s) { return s.enrolled; }).map(function (s) {
+                        return {rank: s.rank, name: s.display_name || s.player_name, points: s.total_points, customer_id: s.customer_id};
+                    });
+                    html.push(card(d.label || r.label, d.race_final ? "FINAL" : r.chapter,
+                                   d.error ? '<div class="pt-empty">' + esc(d.error) + '</div>' : table(rows, mine)));
+                });
+                document.getElementById("pt-body").innerHTML = html.join("");
+            });
+        }).catch(function (e) {
+            document.getElementById("pt-body").innerHTML = '<div class="pt-err">' + esc((e && e.message) || "Couldn't load the points.") + '</div>';
+        });
+    }
+    load();
+    setInterval(function () { if (!document.hidden) load(); }, 60000);
+})();
+</script>
+</body>
+</html>

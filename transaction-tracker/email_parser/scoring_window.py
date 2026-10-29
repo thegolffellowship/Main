@@ -219,6 +219,18 @@ def tick(now=None, db_path=None) -> dict:
                 did["window_post"] = _w
         except Exception:
             logger.exception("scoring window: window post failed for %s", eid)
+        # THE POST-ROUND INTERVIEW BY EMAIL (Kerry 10/29, #2462): once the
+        # night's money is recorded, the MVPs, eagles and 3+ birdies get one
+        # link. Nothing unless dial ai_interview_email = on and the wording is
+        # stamped; the hook never raises.
+        if db.get_app_setting(CLOSEOUT_KEY.format(eid), db_path=db_path):
+            try:
+                from email_parser import ai_interview as _ai
+                _r = _ai.closeout_hook(eid, db_path=db_path, now=now)
+                if _r:
+                    did["ai_interview"] = _r
+            except Exception:
+                logger.exception("scoring window: interview hook failed for %s", eid)
         if did:
             out[eid] = did
         if st.get("last_score_at") and not st.get("closed"):

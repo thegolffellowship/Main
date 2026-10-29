@@ -675,7 +675,7 @@ def build_message(facts: dict, person: dict, recap_file: str) -> dict:
         today = d.isoformat() == now_central().date().isoformat()
         parts += [f'<p style="margin:0 0 18px;">Here’s your {"day" if today and hour < 17 else "night"} at '
                   f'{_e(course)}{", then the recap and what’s next" if story else " and what’s next"}.</p>',
-                  _champions(facts), night, _winnings(facts, cid), _pace(facts, cid),
+                  _champions(facts), _photos(facts), night, _winnings(facts, cid), _pace(facts, cid),
                   _handicap(facts, cid), pts_html,
                   button(f"See full results from {_e(course)}", _tag_results(ev['id'], cid)),
                   button("Your Spotlight", f"{BASE}/member/spotlight?player={cid}", solid=False)]
@@ -684,7 +684,7 @@ def build_message(facts: dict, person: dict, recap_file: str) -> dict:
         day = d.strftime("%A")
         parts += [f'<p style="margin:0 0 18px;">We missed you at {_e(course)} {day}. '
                   f'{"Here’s where you stand, what happened, and what’s next." if pts_html else "Here’s what happened and what’s next."}</p>',
-                  _champions(facts), pts_html,
+                  _champions(facts), _photos(facts), pts_html,
                   button(f"See full results from {_e(course)}", _tag_results(ev['id'], cid), solid=False)]
         pre = f"{person['first_name']}, here’s {day}’s recap from {course} and what’s next."
         title = f"{ev['item_name']} — the results"
@@ -719,6 +719,17 @@ def _champions(facts) -> str:
                 "".join(f'<div style="padding:6px 0;border-top:1px solid {LINE};">'
                         f'<div style="font-size:12px;color:{MUTED};letter-spacing:.5px;">{_e(t)}</div>'
                         f'<div style="font:bold 18px Georgia,serif;">{_e(w)}</div></div>' for t, w in lines))
+
+
+def _photos(facts) -> str:
+    """THE PHOTOS card (Kerry #2460-J): the night's event photos, only while
+    dial event_photos_in_email is on (default off -> "")."""
+    try:
+        from email_parser.event_photos import email_card_html
+        return email_card_html(int(facts["event"]["id"]), BASE, db_path=facts.get("db_path"))
+    except Exception:
+        logger.exception("results email: event photos unreadable")
+        return ""
 
 
 def _see_you(facts) -> str:

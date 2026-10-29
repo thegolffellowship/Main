@@ -1865,6 +1865,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-waitlist:<event_id> / add|<event_id>|<cid>[|<note>][|apply] / remove|<event_id>|<cid>[|apply] / move|<event_id>|<cid>|<pos> / preview|<joined|offered|expired|morning>|<event_id> / tick  the event's ordered waitlist; an RSVP-only player on it leaves the roster (RSVP override not_playing); paid rows untouched
       scoring-closeout-chain:status|<id> / run|<id> / reset|<id>[|<step>]  the in-Tracker closeout chain (publish, final, payouts, flights, pairings, handicaps, points, pace, recap); runs itself at CLOSEOUT START
       scoring-recap-writer:facts|<ids> / write|<ids> / read|db:<key> / list  the night's recap written by the Tracker (one Claude call, linted, stored as db:<key>)
+      scoring-ai-interview:<event_id>[|preview[|<staff addr>]]  THE POST-ROUND INTERVIEW BY EMAIL (Kerry 10/29 #2462): bare = READ-ONLY who qualifies and why (City/TGF MVP, eagle or better, 3+ birdies), dial ai_interview_email, wording stamp ai_interview_approved, sent, consented quotes; preview mails ONE sample to STAFF only
+      scoring-event-photos:<event_id>  READ-ONLY an event's photos (Kerry 10/29 #2460-J) and dials event_photos_capture / event_photos_in_email
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
@@ -7294,6 +7296,34 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 except _rw.WriterError as exc:
                     return json.dumps({"error": str(exc)})
             return json.dumps({"error": "ops: facts | write | read | list"})
+        if cmd == "scoring-ai-interview":
+            # Kerry 10/29 (#2462): THE POST-ROUND INTERVIEW BY EMAIL.
+            # "<event_id>" = READ-ONLY who qualifies and why (MVP / TGF MVP /
+            # eagle or better / 3+ birdies), dial + wording stamp, sent, answers,
+            # consented quotes. "<event_id>|preview[|<staff addr>]" mails ONE
+            # sample to STAFF only (its link saves nothing). Member sends only
+            # from the closeout hook (dial ai_interview_email=on + stamp
+            # ai_interview_approved).
+            from email_parser import ai_interview as _ai
+            _b = [b.strip() for b in (arg or "").split("|")]
+            if not _b or not _b[0].isdigit():
+                return json.dumps({"error": "ops: <event_id>[|preview[|<staff addr>]]",
+                                   "template_hash": _ai.template_hash()})
+            if len(_b) > 1 and _b[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-ai-interview", arg)
+                return json.dumps(_ai.send_preview(int(_b[0]), next((x for x in _b[2:] if "@" in x), None)),
+                                  indent=2, default=str)
+            return json.dumps(_ai.plan(int(_b[0])), indent=2, default=str)
+        if cmd == "scoring-event-photos":
+            # Kerry 10/29 (#2460-J): READ-ONLY an event's photos (ids, captions,
+            # tagged customer_id, who uploaded) and the two dials.
+            from email_parser import event_photos as _ep
+            _a = (arg or "").strip()
+            if not _a.isdigit():
+                return json.dumps({"error": "ops: <event_id>"})
+            return json.dumps({"event_id": int(_a), "capture_on": _ep.capture_on(),
+                               "in_email_on": _ep.in_email_on(),
+                               "photos": _ep.event_photos(int(_a), staff=True)}, indent=2, default=str)
         if cmd == "scoring-closeout-final":
             # "<event name or id>" — READ-ONLY: is the event's result final
             # enough to close out (CA #829)? GG era: cards = field, identity,

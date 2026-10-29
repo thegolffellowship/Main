@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex">
+    <title>A quick word · The Golf Fellowship</title>
+    <link rel="icon" href="/static/tgf-icon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
+    {# THE POST-ROUND INTERVIEW (Kerry 2026-10-29, #2462). Three questions, one
+       at a time; one optional AI follow-up per answer when the server has a
+       key. Without JavaScript it is one plain form. Nothing is used in the
+       recap unless the consent box is ticked. email_parser/ai_interview.py #}
+    <style>
+        body { margin: 0; background: #F8F8F8; color: #1B1B1B; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        .top { background: #1B1B1B; color: #fff; padding: 14px 16px; }
+        .top .e { font: 700 12px Georgia, serif; letter-spacing: 2px; color: #E87C3E; }
+        .top .t { font: 700 20px Bitter, Georgia, serif; margin-top: 2px; }
+        .wrap { max-width: 480px; margin: 0 auto; padding: 18px 16px 40px; }
+        .why { font-size: 15px; color: #4B5563; margin-bottom: 14px; }
+        .q { font: 700 20px/1.3 Bitter, Georgia, serif; margin: 6px 0 10px; }
+        .step { font: 700 11px Arial, sans-serif; letter-spacing: 1.5px; color: #B45A22; }
+        textarea { width: 100%; box-sizing: border-box; min-height: 110px; font: 16px 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                   padding: 12px; border: 1px solid #D1D5DB; border-radius: 12px; background: #fff; }
+        .btn { display: block; width: 100%; height: 52px; border-radius: 999px; border: none; margin-top: 12px;
+               font: 700 17px 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #0d7556; color: #fff; cursor: pointer; }
+        .btn.light { background: #fff; color: #1B1B1B; border: 2px solid #1B1B1B; }
+        .consent { display: flex; gap: 10px; align-items: flex-start; font-size: 16px; margin: 16px 0 4px;
+                   background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px; }
+        .consent input { width: 22px; height: 22px; margin: 0; flex: none; }
+        .note { font-size: 13px; color: #6B7280; margin-top: 8px; }
+        .err { background: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 10px; }
+        .done { font: 700 22px Bitter, Georgia, serif; margin: 20px 0 8px; }
+        .pv { background: #FFFBEB; color: #92400E; border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 12px; }
+        .hide { display: none; }
+    </style>
+</head>
+<body>
+    <div class="top"><div class="e">THE GOLF FELLOWSHIP</div><div class="t">A quick word for the recap</div></div>
+    <div class="wrap">
+    {% if not info.ok %}
+        <div class="err">{{ info.error or "This link isn't valid any more." }}</div>
+    {% elif done or info.finished %}
+        <div class="done">{{ info.thanks or "Thanks!" }}</div>
+        <p>{% if (done and done.consent) or (not done and info.consent) %}We may use your words in the recap. See you on the course!{% else %}We won't put your words in the recap. See you on the course!{% endif %}</p>
+    {% else %}
+        {% if info.preview %}<div class="pv">Staff preview: nothing on this page is saved.</div>{% endif %}
+        <div class="why">Hi {{ info.first_name or "there" }}! {{ info.why }} A few words for the {{ info.event }} recap: three quick questions, about two minutes.</div>
+        <form method="post" id="ivw">
+            {% for q in info.questions %}
+            <div class="qs" data-q="{{ loop.index0 }}">
+                <div class="step">QUESTION {{ loop.index }} OF {{ info.questions|length }}</div>
+                <div class="q">{{ q }}</div>
+                <textarea name="a{{ loop.index0 }}" maxlength="1200" placeholder="Type or use the mic on your keyboard"></textarea>
+                <div class="fu hide"><div class="q fuq"></div><textarea class="fua" maxlength="1200"></textarea></div>
+            </div>
+            {% endfor %}
+            <div class="fin">
+                <label class="consent"><input type="checkbox" name="consent" value="1"> <span>{{ info.consent_label }}</span></label>
+                <div class="note">Leave it unticked and your answers stay with us; nothing goes in the recap.</div>
+                <button class="btn" type="submit">Send</button>
+            </div>
+        </form>
+    {% endif %}
+    </div>
+{% if info.ok and not done and not info.finished %}
+<script>
+(function () {
+    "use strict";
+    // One at a time (the form above is the no-JavaScript fallback).
+    var tok = location.pathname.split("/").pop();
+    var form = document.getElementById("ivw");
+    var qs = [].slice.call(form.querySelectorAll(".qs")), fin = form.querySelector(".fin");
+    var i = 0, phase = "main", fuText = null;
+    function post(u, b) {
+        return fetch(u, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(b)})
+            .then(function (r) { return r.json(); }).catch(function () { return {ok: false}; });
+    }
+    var next = document.createElement("button");
+    next.type = "button"; next.className = "btn"; next.textContent = "Next";
+    var skip = document.createElement("button");
+    skip.type = "button"; skip.className = "btn light"; skip.textContent = "Skip";
+    function show() {
+        qs.forEach(function (el, k) { el.classList.toggle("hide", k !== i); });
+        fin.classList.toggle("hide", i < qs.length);
+        if (i < qs.length) { qs[i].appendChild(next); qs[i].appendChild(skip);
+            var ta = phase === "main" ? qs[i].querySelector("textarea") : qs[i].querySelector(".fua");
+            try { ta.focus(); } catch (e) {} }
+        else { next.remove(); skip.remove(); }
+    }
+    function advance() { i += 1; phase = "main"; fuText = null; show(); }
+    next.onclick = function () {
+        var el = qs[i];
+        if (phase === "main") {
+            var text = el.querySelector("textarea").value.trim();
+            if (!text) { advance(); return; }
+            next.disabled = true; next.textContent = "…";
+            post("/interview/" + tok + "/answer", {q: i, text: text}).then(function (j) {
+                next.disabled = false; next.textContent = "Next";
+                if (j && j.followup) {
+                    phase = "followup"; fuText = j.followup;
+                    el.querySelector(".fuq").textContent = j.followup;
+                    el.querySelector(".fu").classList.remove("hide");
+                    show();
+                } else { advance(); }
+            });
+        } else {
+            var t2 = el.querySelector(".fua").value.trim();
+            if (t2) post("/interview/" + tok + "/answer", {q: i, text: t2, followup_q: fuText});
+            advance();
+        }
+    };
+    skip.onclick = advance;
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var c = form.querySelector("input[name=consent]").checked;
+        post("/interview/" + tok + "/finish", {consent: c}).then(function (j) {
+            if (j && j.preview) { form.outerHTML = '<div class="done">Preview finished. Nothing was saved.</div>'; }
+            else { location.reload(); }
+        });
+    });
+    show();
+})();
+</script>
+{% endif %}
+</body>
+</html>

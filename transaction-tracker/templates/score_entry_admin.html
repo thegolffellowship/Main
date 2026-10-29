@@ -78,6 +78,16 @@
         </div>{% endif %}
         <div id="err"></div>
         <div id="rounds"><div class="empty">Loading…</div></div>
+        {% if photos_on %}
+        {# EVENT PHOTOS (Kerry 10/29, #2460-J): Add photo (camera, caption,
+           optional player tag) and the night's photos; "Spotlight" puts a
+           tagged photo on that player's Spotlight, only when tapped. #}
+        <div class="card"><div class="card-h"><span class="t">Photos</span>
+            <span class="m">Champions and the night. Tag a player to offer it for the Spotlight.</span></div>
+            <div class="mgr" id="evp"></div></div>
+        <script src="/static/js/event-photos.js"></script>
+        <script>try { TGFEventPhotos.mount(document.getElementById("evp"), {eventId: {{ ev.id }}, manage: true}); } catch (e) {}</script>
+        {% endif %}
         <div class="note">
             <b>Open</b> opens the group's scoring screen in a new tab. While scoring is off for members,
             only a browser signed in to the Tracker as admin can open a link, so this is where you preview it.

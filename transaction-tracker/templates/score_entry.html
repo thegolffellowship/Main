@@ -686,6 +686,14 @@
     {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}{% set SHELL_SLIM = True %}
     {% set SHELL_LOGO = '/static/lsc-logo-dark.png' if cup_splash else '' %}
     {% include '_shell_nav.html' %}
+    {% if SE_STAFF_PHOTO %}
+    {# ADD PHOTO (Kerry 10/29, #2460-J): a manager or admin session only (the
+       route decides; players never get this block). Camera -> caption ->
+       optional player tag -> upload; static/js/event-photos.js. #}
+    <div id="se-evp" style="position:fixed;right:12px;bottom:92px;z-index:95;"></div>
+    <script src="/static/js/event-photos.js?v={{ app_version }}"></script>
+    <script>try { TGFEventPhotos.mount(document.getElementById("se-evp"), {t: new URLSearchParams(location.search).get("t") || ""}); } catch (e) {}</script>
+    {% endif %}
     {% if cup_splash %}
     {# THE CUP SPLASH (Kerry 2026-10-08, verbatim: "a Lonestar cup logo on a
        like a navy background to match the navy in the logo, but have a

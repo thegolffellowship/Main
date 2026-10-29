@@ -71,6 +71,9 @@
 <nav class="se-toggle" id="se-toggle" hidden aria-label="Scoring or leaderboard"><div class="se-tg-in">
     <a id="se-tg-score"><span class="se-tg-l">Scoring</span><span class="se-tg-s" id="se-tg-sub"></span></a>
     <a id="se-tg-board"><span class="se-tg-l">Leaderboard</span></a>
+    {# POINTS (Kerry #2460-F: "SCORING | LEADERBOARD | POINTS"): rendered only
+       while dial scoring_points_tab is on; off, the toggle is unchanged. #}
+    {% if SE_POINTS_TAB %}<a id="se-tg-points"><span class="se-tg-l">Points</span></a>{% endif %}
 </div></nav>
 <script>
 (function () {
@@ -125,7 +128,11 @@
         var a = document.getElementById("se-tg-score"), b = document.getElementById("se-tg-board");
         a.href = "/member/score?t=" + encodeURIComponent(t);
         b.href = "/member/score/board?t=" + encodeURIComponent(t);
-        (onBoard ? b : a).className = "active";
+        var pts = document.getElementById("se-tg-points");
+        var onPoints = location.pathname.indexOf("/member/score/points") === 0;
+        if (pts) pts.href = "/member/score/points?t=" + encodeURIComponent(t);
+        (onPoints && pts ? pts : (onBoard ? b : a)).className = "active";
+        onBoard = onBoard || onPoints;
         var s = JSON.parse(localStorage.getItem("se_live") || "null");
         if (onBoard && s && s.t === t && s.hole) {
             var q = s.queued | 0;

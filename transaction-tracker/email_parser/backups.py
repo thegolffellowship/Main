@@ -540,6 +540,7 @@ _HASH_KEY = "files_backup_hash"
 FILE_STORES = {
     "player_photos": "player headshots and team shots (customer_id file names)",
     "se_photos": "photos of the paper cards (score entry, Check the card)",
+    "event_photos": "event-night and champion photos (Add photo on Live Scoring, #2460-J)",
     "gg_points_ledger": "Golf Genius's per-event points answer key, captured "
                         "read-only (GO 6 and 10/13); the only copy once GG is gone",
 }

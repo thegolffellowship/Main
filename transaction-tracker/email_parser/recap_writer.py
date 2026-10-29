@@ -195,6 +195,35 @@ def night_facts(event_ids: list, db_path=None) -> dict:
                         if row.get("customer_id"):
                             ids.add(row["customer_id"])
                             row["write_as"] = _player(conn, row["customer_id"]).get("write_as")
+    # Players' own words from the post-round interview (#2462; only those who
+    # ticked "Use my quote in the recap") and the night's photos (#2460-J;
+    # dial event_photos_in_email). Keys appear only when there is something,
+    # so a night without either writes exactly as before.
+    with db._connect(db_path) as conn:
+        for e in evs:
+            try:
+                from .ai_interview import consented_quotes
+                qs = consented_quotes(e["event_id"], db_path=db_path)
+            except Exception:
+                logger.exception("recap writer: interview quotes unreadable")
+                qs = []
+            for q in qs:
+                q["write_as"] = _player(conn, q["customer_id"]).get("write_as")
+                ids.add(q["customer_id"])
+            if qs:
+                e["quotes"] = qs
+            try:
+                from .event_photos import recap_facts
+                ph = recap_facts(e["event_id"], db_path=db_path)
+            except Exception:
+                logger.exception("recap writer: event photos unreadable")
+                ph = []
+            for x in ph:
+                if x.get("customer_id"):
+                    x["write_as"] = _player(conn, x["customer_id"]).get("write_as")
+                    ids.add(x["customer_id"])
+            if ph:
+                e["photos"] = ph
     hio = None
     try:
         hio = db.get_hio_pot(db_path=db_path).get("pot")
@@ -250,13 +279,30 @@ def build_prompt(facts: dict, problems: list | None = None) -> tuple:
         "([[First LAST|id]]); guests plain. Every dollar figure must be one in the facts (a player's "
         "night total is his `won`). Never leave a blank or a placeholder; leave out anything the "
         "facts don't support (no fellowship section without a count, no photos).\n"
-        "- Return ONLY the markdown, no commentary.\n\n"
-        "FACTS (JSON):\n" + json.dumps(facts, indent=1, ensure_ascii=False, default=str)
+        "- Return ONLY the markdown, no commentary.\n"
+        + _extras_rules(facts)
+        + "\nFACTS (JSON):\n" + json.dumps(facts, indent=1, ensure_ascii=False, default=str)
     )
     if problems:
         user += ("\n\nYOUR PREVIOUS DRAFT FAILED THESE CHECKS. Fix every one and return the whole "
                  "document again:\n- " + "\n- ".join(problems))
     return system, user
+
+
+def _extras_rules(facts: dict) -> str:
+    """Rules for the interview quotes and photos, only when the facts carry
+    them (a night without either gets the prompt exactly as before)."""
+    out = ""
+    if any(e.get("quotes") for e in facts.get("events") or []):
+        out += ("- An event's `quotes` are players' own words from the post-round interview, given "
+                "with their permission. Use one or two of the best in that event's story, verbatim "
+                "inside quotation marks, attributed by write_as. Never change, merge or invent a "
+                "quote.\n")
+    if any(e.get("photos") for e in facts.get("events") or []):
+        out += ("- An event's `photos` appear in the results email under the story. You may point to "
+                "one by its caption (\"pictured below\"); never describe anything the caption does "
+                "not say.\n")
+    return out
 
 
 def _client_create(system: str, user: str, model_id: str) -> str:
@@ -291,6 +337,10 @@ def _amounts(facts: dict) -> set:
         if purse:
             vals.add(round(float(purse), 2))
     vals.add(1.0)        # "$1 per TGF member at month end" (October race)
+    for e in facts["events"]:     # a figure a player said himself, quoted
+        for q in e.get("quotes") or []:
+            for m in DOLLAR_RE.findall(q.get("answer") or ""):
+                vals.add(round(float(m.replace(",", "")), 2))
     return vals
 
 
