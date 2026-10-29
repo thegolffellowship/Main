@@ -17,6 +17,7 @@ Where each line comes from
   * Every later event: the engine on the event's published entered cards
     (`event_engine_state` + `live_scoring.build_cards`) — net Stableford,
     floored at 0, the plus off the round once; an 18 makes two entries
+    (a CHAMPIONSHIP, the plus event, is one 18-hole total, Kerry 10/28)
     (front, back) per `points_by_nine`.
 
 Who and where
@@ -188,7 +189,11 @@ def event_lines(db_path=None, through: str | None = None,
                 if not c.get("complete"):
                     warnings.append(f"{ev['item_name']}: {c.get('name')} card not complete — no points")
                     continue
-                nines = c.get("points_by_nine")
+                # A CHAMPIONSHIP (the plus event) is ONE total for all 18,
+                # floored at 0 (Kerry 10/28: "For championship events where
+                # it's the plus event then it's total for the 18. There are no
+                # 9 hole amounts"). Other 18s stay two nine entries.
+                nines = None if st["meta"].get("championship") else c.get("points_by_nine")
                 if nines:
                     for n in nines:
                         raw.append((int(c["customer_id"]), n["nine"], float(n["points"] or 0)))
@@ -235,7 +240,8 @@ def _live_lines(ev: dict, db_path=None) -> list | None:
         for c in ls.build_cards(st, formulas):
             if not c.get("customer_id") or not c.get("thru"):
                 continue
-            nines = c.get("points_by_nine")
+            # Championship: one 18-hole total (Kerry 10/28), as published.
+            nines = None if st["meta"].get("championship") else c.get("points_by_nine")
             if nines:
                 for n in nines:
                     if n.get("thru"):

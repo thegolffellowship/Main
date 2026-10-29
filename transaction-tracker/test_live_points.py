@@ -36,11 +36,15 @@ with db._connect(DB) as c:
               "VALUES (3399,'s9.99 TUESDAY TEST',?,'San Antonio','active','9 Holes')", (T,))
     c.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) "
               "VALUES (87, 'Adam', 'Baker', 'active_member')")
+    c.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) "
+              "VALUES (88, 'Neg', 'Player', 'active_member')")
     c.commit()
 
 CARDS = {"s18.12 FALL CHAMPIONSHIP | Kissing Tree":
-         [{"customer_id": 87, "thru": 11, "points_by_nine": [
-             {"nine": "front", "points": 20, "thru": 9}, {"nine": "back", "points": 5, "thru": 2}]}],
+         [{"customer_id": 87, "thru": 11, "stableford_net": 25, "points_by_nine": [
+             {"nine": "front", "points": 20, "thru": 9}, {"nine": "back", "points": 5, "thru": 2}]},
+          {"customer_id": 88, "thru": 18, "stableford_net": -3, "points_by_nine": [
+             {"nine": "front", "points": -8, "thru": 9}, {"nine": "back", "points": 5, "thru": 9}]}],
          "s9.99 TUESDAY TEST": [{"customer_id": 87, "thru": 4, "points_by_nine": None, "stableford_net": 9}]}
 _r = (se.event_enabled, db.event_engine_state, ls.build_cards, tp.cutover)
 se.event_enabled = lambda eid, db_path=None: True
@@ -51,11 +55,17 @@ try:
     lines, w = tp.event_lines(db_path=DB)
     fin = [l for l in lines if l["event_id"] == 3305]
     tue = [l for l in lines if l["event_id"] == 3399]
-    check("the finale in play gives live lines by nine", sorted((l["nine"], l["points"]) for l in fin)
-          == [("back", 5.0), ("front", 20.0)] and all(l["live"] for l in fin), fin)
+    f87 = [(l["nine"], l["points"]) for l in fin if l["customer_id"] == 87]
+    f88 = [(l["nine"], l["points"]) for l in fin if l["customer_id"] == 88]
+    check("the championship (plus event) is ONE 18-hole total, not two nines (Kerry 10/28)",
+          f87 == [(None, 25.0)] and all(l["live"] for l in fin), fin)
+    check("a negative championship total adds 0, never subtracts (not 0 + 5 by nines)", f88 == [(None, 0.0)], f88)
     check("a Tuesday in play gives a live line too (for Monthly)", [(l["points"], l["live"]) for l in tue] == [(9.0, True)], tue)
     kept = [l for l in lines if not l.get("live") or l.get("championship")]
     check("season races keep the finale's live lines, drop the Tuesday's", {l["event_id"] for l in kept} == {3305}, kept)
+    import inspect as _i
+    check("the published path makes the same single total for a championship",
+          'None if st["meta"].get("championship") else c.get("points_by_nine")' in _i.getsource(tp.event_lines))
     import inspect
     check("build_race applies that filter", "not l.get(\"live\") or l.get(\"championship\")" in inspect.getsource(tp.build_race))
     from email_parser import race_close as rc

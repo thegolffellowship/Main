@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.619.1";
+window.TGF_VERSION = "2.619.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.619.2",
+    date: "2026-10-28",
+    title: "A championship scores one 18-hole points total, floored at zero",
+    changes: [
+      "Kerry 10/28: \"An event score can never subtract from a season total even if your event total is negative\" and \"For championship events where it's the plus event then it's total for the 18. There are no 9 hole amounts. Just total for all 18.\" A CHAMPIONSHIP (the championship formula) now makes ONE points line for the whole 18 (stableford_net, the plus taken off the round), floored at 0, live and published alike; before, it made a front and a back entry each floored at 0, so a -8 front and +5 back added 5 instead of 0. Other 18s keep their two nine entries. Guard test_live_points.py."
+    ]
+  },
   {
     version: "2.619.1",
     date: "2026-10-28",

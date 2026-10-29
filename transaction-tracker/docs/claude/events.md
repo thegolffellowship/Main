@@ -1308,6 +1308,11 @@ minute on an event day, and the locked refresh skips Monthly (rebuilt by
 keeps every earlier event's lines (30-minute TTL) and re-reads only today's, so
 the locked refresh rebuilds Monthly every minute; `/api/season-contests/monthly-points`
 triggers that refresh on read. Locked 10/28 through 2026-10-27 on Kerry's word.
+**A championship is one 18-hole total (v2.619.2, Kerry 10/28: "For championship
+events where it's the plus event then it's total for the 18. There are no 9 hole
+amounts"), floored at 0 ("An event score can never subtract from a season
+total").** `event_lines` / `_live_lines` skip `points_by_nine` when
+`st["meta"]["championship"]`.
 
 ## Who did it: the UI action log (v2.615.0, Kerry 2026-10-28)
 
