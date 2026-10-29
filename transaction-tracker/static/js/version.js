@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.623.2";
+window.TGF_VERSION = "2.623.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.623.3",
+    date: "2026-10-29",
+    title: "Waitlist emails are signed by the chapter manager",
+    changes: [
+      "Kerry 10/29: \"Each needs a signature line from the chapter manager. If it's a joint event, it just says The Golf Fellowship.\" Every waitlist email to a player now ends with the chapter's sign-off, the same one the results email uses (results_email.SIGNATURES: San Antonio = Kerry Niester, Austin = Robert Straiton); a joint (TGF) event ends with The Golf Fellowship (waitlist.signature). The event is named as the email's header names it (\"2026 Fall Championship @ Kissing Tree\", \"Tuesday at Silverhorn\")."
+    ]
+  },
   {
     version: "2.623.2",
     date: "2026-10-29",

@@ -469,6 +469,14 @@ def member_on(db_path=None) -> bool:
         "on", "1", "true", "yes")
 
 
+def signature(ev) -> str:
+    """Kerry 10/29: "Each needs a signature line from the chapter manager. If
+    it's a joint event, it just says The Golf Fellowship." The chapter's
+    sign-off is the results email's (results_email.SIGNATURES)."""
+    from .results_email import SIGNATURES
+    return SIGNATURES.get((ev.get("chapter") or "").strip().lower()) or "The Golf Fellowship"
+
+
 def render(ev, entry, kind, db_path=None, **kw) -> dict:
     """{subject, html} for one member email, in the house frame."""
     from .payment_reminder import frame_for
@@ -476,8 +484,11 @@ def render(ev, entry, kind, db_path=None, **kw) -> dict:
     first = (entry.get("name") or "").split(" ")[0] or "there"
     subj, body = TEXT[kind]
     try:
-        from .invitations import _display_name
-        evname = _display_name(ev) or ev["item_name"]
+        # The frame's own title: "2026 Fall Championship @ Kissing Tree" or
+        # "Tuesday at Silverhorn" (payment_reminder.frame_for).
+        from .invitations import _display_name, _context
+        place = _display_name(ev) or ev["item_name"]
+        evname = place if "@" in place else f"{_context(ev, db_path)['day']} at {place}"
     except Exception:
         evname = ev["item_name"]
     vals = {"first": _h(first), "event": _h(evname), "pos": kw.get("pos", ""),
@@ -486,7 +497,7 @@ def render(ev, entry, kind, db_path=None, **kw) -> dict:
             # them); the gate would show everyone else the spot as held.
             "button": pay_button_html((ev.get("registration_url") or "").strip(), "Register now")
             if kind == "offered" else ""}
-    inner = body.format(**vals)
+    inner = body.format(**vals) + f"<p>{signature(ev)}</p>"
     try:
         html = frame_for(ev, inner, db_path)
     except Exception:

@@ -118,6 +118,12 @@ check("Mesa pays: claimed, off the line, staff told",
       not b["line"] and any(r["state"] == "claimed" for r in b["past"]) and any("claimed" in s for _, s in SENTM), b)
 db.set_app_setting("waitlist_member_emails", "on", db_path=DB)
 pv = W.preview("offered", eid2, DB)
+check("a chapter event is signed by the chapter manager (Kerry 10/29)",
+      "Kerry Niester" in W.render({**{"id": eid2, "item_name": "s9.99 Cap", "chapter": "San Antonio",
+                                       "event_date": "2099-11-03"}}, {"name": "Kelly Barna"}, "joined", DB, pos=1)["html"])
+check("a joint event is signed The Golf Fellowship",
+      W.signature({"chapter": "TGF"}) == "The Golf Fellowship")
+check("Austin is signed by Robert", "Robert Straiton" in W.signature({"chapter": "Austin"}))
 check("the offer email names the deadline and links the store",
       "Register now" in pv["html"] and "product-page/s9-99-cap" in pv["html"], pv["subject"])
 from email_parser.pairings_audit import event_pairing_audit  # noqa: F401  (import check)
