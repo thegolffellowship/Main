@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.622.0";
+window.TGF_VERSION = "2.622.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.622.1",
+    date: "2026-10-29",
+    title: "Event waitlist",
+    changes: [
+      "Kerry 10/29: \"Kelly BARNA, Myself and Michael Mesa need to go on a waitlist for Saturday. We can't have anymore than 32, so Kelly needs to come off the active roster.\" email_parser/waitlist.py keeps an ordered waitlist per event by customer_id (app setting event_waitlist:<event_id>). Putting an RSVP-only player on it sets the Players tab's own not_playing RSVP override, so they leave the roster and a second \"I'm in\" tap cannot put them back; a paid registration is reported and never touched; taking someone off the list clears only the overrides the list set. Nothing is emailed. Bridge scoring-waitlist, guard test_waitlist.py."
+    ]
+  },
   {
     version: "2.622.0",
     date: "2026-10-29",

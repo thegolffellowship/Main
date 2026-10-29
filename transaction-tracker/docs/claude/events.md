@@ -4107,3 +4107,20 @@ Kerry: "Why would there be a spots still open register box sent to those that ar
 Kerry: "Ok, I'm good with that plan now." `/events/<id>/approve-pairings` loads light (`review(light=True)`); the audit, the held list and the Event Info sample come from `/events/<id>/approve-pairings/check` after the page. `send_plan(event_id, after=)` writes the line under the button and the confirm from live counts (`teetimes_email.plan_counts`: registered players, open seats on the saved sheet, invitees the open-spots email would reach once stamped), the course contact by name (`course_recipients_for_event`), the Event Info time/day (morning events: noon the day before, with the Course Files) and the Course Files day (`course_files_noon.send_day`). Approval (`approve_and_send(..., background=True)`) records the sheet (`approved_name`, `approved_at`) and returns at once; the tee-times `_deliver` runs in a thread under the claim guard; a second tap on the same sheet returns "already approved". `approval_status` gives the three button states (Approve / APPROVED · who · time / Changed since approval · Approve again), served on the pairings GET as `approval`. Read-only bridge `scoring-approve-plan:<event_id>`.
 
 **Re-approving after the tee times went (v2.604.2, Kerry 10/26):** tee times go ONCE per person per event, so a sheet changed and approved again after the evening send sends nothing new (Silverhorn 10/26: re-approved 9:59 PM, every message "already sent" at 5:14 PM). `send_plan` now reads the sent map and says so: "Tee times already went at 5:14 PM Mon. Approving again does not send them again. Players get their full Event Info with the updated groups at 6:00 AM Tuesday." The confirm says the same, the fallback line reads "Nothing else goes tonight.", and the open-spots sentence drops. Kerry chose to rely on the 6:00 AM Event Info (built from the sheet at send time) rather than an "Updated tee times" email; that option (only players whose group or time changed, plus the course and the manager) is not built.
+
+
+## Event waitlist (v2.622.1, Kerry 2026-10-29)
+
+Kerry: "Kelly BARNA, Myself and Michael Mesa need to go on a waitlist for
+Saturday. We can't have anymore than 32, so Kelly needs to come off the
+active roster." `email_parser/waitlist.py` keeps an ordered list per event
+(app setting `event_waitlist:<event_id>`, entries by customer_id with name,
+note, who, when). Adding an RSVP-only player sets `rsvp_email_overrides` =
+`not_playing` for each of their RSVP emails on that event, which the one
+roster builder (`_event_rsvp_only_players`) already honours, so they leave
+the roster and the pairings, and a later "I'm in" tap does not bring them
+back. A paid registration is reported and left alone (credit / WD stays the
+manager's call). Removing someone from the list clears only the overrides
+the list set. Nothing is emailed and seat-fill does not read the list (not
+ruled). Bridge `scoring-waitlist:<id>` / `add|<id>|<cid>[|<note>][|apply]` /
+`remove|<id>|<cid>[|apply]`; guard `test_waitlist.py`.
