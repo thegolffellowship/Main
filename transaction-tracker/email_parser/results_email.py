@@ -1079,6 +1079,15 @@ def auto_check(now: datetime | None = None, db_path=None) -> dict:
         if r.get("state") == "sent" and not r.get("failed"):
             sch[key]["state"] = "sent"
             sch[key]["sent_at"] = now.isoformat(timespec="minutes")
+            # THE RESULTS CARD ON FACEBOOK (Event Ops #2460-J): after the
+            # players' email. social_post.py: dial social_auto_post (off) and
+            # the wording stamp social_post_approved; never raises.
+            if who == "played":
+                try:
+                    from email_parser import social_post as _sp
+                    sch[key]["social"] = _sp.after_results_email(ids, db_path=db_path)
+                except Exception:
+                    logger.exception("results email: social post hook failed for %s", key)
         elif r.get("state") == "held":
             sch[key]["state"] = "held"
             try:
