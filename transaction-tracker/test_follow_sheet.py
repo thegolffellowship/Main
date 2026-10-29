@@ -147,12 +147,16 @@ check("ROSTER (desktop + phone) and PAIRINGS render the tee through the one pick
 print("C. Handicap-link answers")
 check("low score minus 72: 90-100 for 18 -> 18.0",
       ha.starting_from_scores(ha.validate({"kind": "none", "score_low": "90", "score_high": "100"})) == 18.0)
-check("a single score is the low end: 95 -> 23.0",
-      ha.starting_from_scores(ha.validate({"kind": "none", "score_low": "95"})) == 23.0)
-check("a 9-hole score is doubled first: 45-50 for 9 -> 18.0",
-      ha.starting_from_scores(ha.validate({"kind": "none", "score_low": "45", "score_high": "50"})) == 18.0)
-nothing = ha.validate({"kind": "none"})
-check("no number: nothing to set", nothing.get("error") is None and ha.starting_from_scores(nothing) is None, nothing)
+# Kerry 10/28 (#2474-B, #2475-1) retired the single-score and 9-hole
+# readings: the form takes an 18-hole LOW and HIGH, both required.
+check("a single score is refused now (both numbers required)",
+      ha.validate({"kind": "none", "score_low": "95"}).get("error"))
+check("a 9-hole score is refused now (LOW at least 60), never doubled",
+      ha.validate({"kind": "none", "score_low": "45", "score_high": "50"}).get("error"))
+check("an answer recorded before 10/28 as 9 holes still reads doubled (legacy rows)",
+      ha.starting_from_scores({"kind": "none", "score_low": 45, "score_high": 50, "nine": True}) == 18.0)
+nothing = {"kind": "none", "score_low": None, "score_high": None}   # a pre-10/28 blank answer
+check("no number (legacy answer): nothing to set", ha.starting_from_scores(nothing) is None, nothing)
 ev = {"id": EV, "item_name": NAME}
 m = ha.manager_message("Alex Porter", ev, nothing, None, False, base_url="https://x.test")
 check("no number: the manager's email says NOTHING SET, with a one-tap link",

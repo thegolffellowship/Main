@@ -2624,6 +2624,57 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── THE COURSE SHORTFALL EMAIL (Kerry 10/28, Event Ops #2474-A,
+    #    #2475-3, #2476-1): a course charge over (played x rate) by at least
+    #    half a player's rate -> one credit request to the course contact,
+    #    manager + Kerry CC'd, once per event per charge. Hourly by day;
+    #    nothing unless dial course_shortfall_email = on (default OFF).
+    #    email_parser/course_shortfall.py.
+    def course_shortfall_job():
+        from email_parser.course_shortfall import check
+        try:
+            res = check()
+            if res.get("events"):
+                logger.info("Course shortfall: %s", res["events"])
+        except Exception:
+            logger.exception("Course shortfall job failed (non-fatal)")
+    scheduler.add_job(
+        course_shortfall_job,
+        "cron", hour="9-18", minute=23,
+        timezone="US/Central",
+        id="course_shortfall",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # ── EVENT COURSE CONTACTS FREEZE (Kerry 10/28, Event Ops #2476-3):
+    #    daily (and once shortly after boot), every completed event with a
+    #    course and no snapshot gets its course contacts frozen onto it.
+    #    email_parser/event_contacts.py.
+    def event_contacts_backfill_job():
+        from email_parser.event_contacts import backfill
+        try:
+            res = backfill(apply=True)
+            if res.get("missing"):
+                logger.info("Event course contacts frozen: %s", res["missing"])
+        except Exception:
+            logger.exception("Event contacts backfill failed (non-fatal)")
+    scheduler.add_job(
+        event_contacts_backfill_job,
+        "cron", hour=3, minute=19,
+        timezone="US/Central",
+        id="event_contacts_backfill",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+    try:
+        from datetime import datetime as _dt_ec, timedelta as _td_ec
+        scheduler.add_job(event_contacts_backfill_job, "date",
+                          run_date=_dt_ec.now() + _td_ec(minutes=3),
+                          id="event_contacts_backfill_boot", replace_existing=True)
+    except Exception:
+        logger.exception("Event contacts boot backfill not scheduled (non-fatal)")
+
     # ── PACE OF PLAY (Kerry 2026-10-19 #2092, migration 0037): every morning
     #    at 6:41 Central, rebuild the pace tables out of se_audit
     #    (derived tables, always), then send yesterday's MANAGER PACE REPORT
@@ -3082,9 +3133,20 @@ def api_update_item(item_id):
         finally:
             conn.close()
 
+    # A status set back to active on a CLOSED event (Kerry 10/28, #2477-3):
+    # allowed, and one COO item names it.
+    _pre = None
+    if "transaction_status" in data and (data.get("transaction_status") or "active") == "active":
+        from email_parser import closed_event_guard as _ceg
+        _pre = _ceg.check(item_id)
+        if (_pre.get("status") or "active") == "active":
+            _pre = None
     updated = update_item(item_id, data)
     if updated:
-        return jsonify({"status": "ok"})
+        _flag = None
+        if _pre:
+            _flag = _ceg.after_reactivate(item_id, "status set to active", "ui:admin", pre=_pre)
+        return jsonify({"status": "ok", **({"closed_event": _flag} if _flag else {})})
     return jsonify({"error": "not found or no valid fields"}), 404
 
 
@@ -5370,6 +5432,8 @@ def public_handicap_ask(token):
            "done_label": _ha.DONE_LABEL, "done_temp": _ha.DONE_TEMP, "ghin_note": _ha.GHIN_NOTE,
            "venmo_get": _ha.VENMO_GET, "venmo_url": _ha.VENMO_URL, "venmo_why": _ha.VENMO_WHY,
            "none_note": _ha.NONE_NOTE.format(day=info.get("day") or "the event"),
+           "none_help": _ha.NONE_HELP, "low_min": _ha.LOW_MIN,
+           "done_locked": _ha.DONE_LOCKED, "locked_head": _ha.LOCKED_HEAD,
            "info": info, "form": {}, "done": None, "form_error": None, "error_page": None}
     if not info.get("ok"):
         ctx["error_page"] = info.get("error") or "This link isn't valid any more."
@@ -5398,6 +5462,9 @@ def public_handicap_ask(token):
         f["kind"] = kind
         f["index"] = f.get("index_ghin") if kind == "ghin" else f.get("index_other")
         res = _ha.record(token, f)
+        if res.get("locked"):
+            # Kerry 10/28 (#2474-B): the link is locked once answered.
+            return render_template("handicap_ask.html", **ctx), 409
         if not res.get("ok"):
             ctx.update(form=f, form_error=res.get("error"))
             return render_template("handicap_ask.html", **ctx), 400
@@ -5413,8 +5480,8 @@ def public_handicap_ask(token):
                    done_set=_ha.DONE_SET.format(index=idx_txt),
                    done_check=_ha.DONE_CHECK.format(start=start_txt, index=idx_txt, day=info["day"]),
                    done_need=_ha.DONE_NEED.format(day=info["day"]),
-                   done_rule=_ha.DONE_RULE.format(
-                       low=(_a.get("score_low") or 0) * (2 if _a.get("nine") else 1)))
+                   done_rule=_ha.DONE_RULE_TGF.format(
+                       start=start_txt, low=(_a.get("score_low") or 0) * (2 if _a.get("nine") else 1)))
     return render_template("handicap_ask.html", **ctx)
 
 
@@ -10214,10 +10281,25 @@ def api_transfer_item(item_id):
 @app.route("/api/items/<int:item_id>/reverse-credit", methods=["POST"])
 @require_role("manager")
 def api_reverse_credit(item_id):
-    """Reverse a credit or transfer, restoring the original item to active."""
+    """Reverse a credit or transfer, restoring the original item to active.
+    On a CLOSED event (payouts recorded / closeout final) it still runs
+    (Kerry may mean it) and raises one COO item (#2477-3,
+    email_parser/closed_event_guard.py)."""
+    from email_parser import closed_event_guard as _ceg
+    pre = _ceg.check(item_id)
     if reverse_credit(item_id):
-        return jsonify({"status": "ok"})
+        flag = _ceg.after_reactivate(item_id, "Reverse", f"ui:{session.get('role') or '?'}", pre=pre)
+        return jsonify({"status": "ok", **({"closed_event": flag} if flag else {})})
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
+
+
+@app.route("/api/items/<int:item_id>/reactivation-check")
+@require_role("manager")
+def api_item_reactivation_check(item_id):
+    """Read-only: is this item's event closed? The Reverse confirm carries
+    the warning when it is (Kerry 10/28, #2477-3)."""
+    from email_parser import closed_event_guard as _ceg
+    return jsonify(_ceg.check(item_id))
 
 
 @app.route("/api/events/<int:event_id>/missing-handicaps")
