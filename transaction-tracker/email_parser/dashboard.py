@@ -140,11 +140,22 @@ def _new_leads(conn, today):
 
 
 def _followups_due(conn, today):
+    # Same expiration as leads.followups_due (Kerry 10/29).
+    from datetime import date, timedelta
+    from email_parser.leads import FOLLOWUP_EXPIRE_DAYS
+    try:
+        r = conn.execute("SELECT value FROM app_settings WHERE key = "
+                         "'lead_followup_expire_days'").fetchone()
+        days = int(r[0]) if r and r[0] not in (None, "") else FOLLOWUP_EXPIRE_DAYS
+    except Exception:
+        days = FOLLOWUP_EXPIRE_DAYS
+    oldest = (date.fromisoformat(today) - timedelta(days=days)).isoformat()
     n = conn.execute(
         "SELECT COUNT(*) c FROM leads WHERE merged_into IS NULL "
         "AND status NOT IN ('dismissed','converted') "
-        "AND follow_up_at IS NOT NULL AND follow_up_at <= ?",
-        (today,)).fetchone()["c"]
+        "AND follow_up_at IS NOT NULL AND follow_up_at <= ? "
+        "AND substr(follow_up_at, 1, 10) >= ?",
+        (today, oldest)).fetchone()["c"]
     if not n:
         return None
     return _card("leads_due", "Follow-ups due", n, "/admin/leads?f=due",

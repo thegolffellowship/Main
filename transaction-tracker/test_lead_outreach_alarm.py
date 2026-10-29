@@ -406,6 +406,10 @@ def main():
                                            TODAY.day, 9, 0, 0)
         try:
             res = leads.send_followup_digests(db_path=p_db)
+            check("off by default: no manager digest (Kerry 10/29)",
+                  posted == [] and res.get("skipped"), (posted, res))
+            db.set_app_setting("lead_followup_digest_managers", "on", db_path=p_db)
+            res = leads.send_followup_digests(db_path=p_db)
             check("one digest, to the chapter's own list only",
                   len(posted) == 1 and posted[0][0] == "robert@tgf.com",
                   posted)

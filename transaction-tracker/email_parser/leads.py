@@ -1141,8 +1141,39 @@ def followups_due(db_path: str | Path | None = None) -> list[dict]:
                 "last_note": nr["note"] if nr else None,
                 "customer_id": lead.get("customer_id"),
             })
+    # EXPIRATION (Kerry 2026-10-29: "Definitely need some type of
+    # expiration on those so we're not inundating our managers"): a
+    # follow-up more than `lead_followup_expire_days` (default 14) past
+    # its date leaves every reminder. The lead itself is untouched and
+    # stays on the Leads page; a new follow-up date brings it back.
+    limit = followup_expire_days(db_path)
+    out = [r for r in out if r["days_over"] <= limit]
     out.sort(key=lambda r: (-r["days_over"], r["name"]))
     return out
+
+
+FOLLOWUP_EXPIRE_DAYS = 14
+
+
+def followup_expire_days(db_path=None) -> int:
+    from . import database as db
+    try:
+        v = db.get_app_setting("lead_followup_expire_days", db_path=db_path)
+        return int(v) if v not in (None, "") else FOLLOWUP_EXPIRE_DAYS
+    except Exception:
+        return FOLLOWUP_EXPIRE_DAYS
+
+
+def manager_digest_on(db_path=None) -> bool:
+    """The chapter managers' morning follow-up digest. OFF unless the
+    dial reads on (Kerry 2026-10-29: "Stop having automated emails sent
+    to Robert for follow ups on leads.")."""
+    from . import database as db
+    try:
+        v = db.get_app_setting("lead_followup_digest_managers", db_path=db_path)
+    except Exception:
+        v = None
+    return (v or "off").strip().lower() in ("on", "1", "true", "yes")
 
 
 def _followup_digest_html(rows: list[dict], heading: str) -> str:
@@ -1195,6 +1226,9 @@ def send_followup_digests(db_path: str | Path | None = None) -> dict:
     from .timezone_utils import now_central
     now = now_central()
     result = {"due": 0, "digests": 0, "recipients": []}
+    if not manager_digest_on(db_path):
+        result["skipped"] = "lead_followup_digest_managers is off"
+        return result
     if now.hour < 7:
         # Morning delivery: the first sweep after 7 AM Central sends.
         return result

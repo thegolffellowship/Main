@@ -114,8 +114,10 @@ def main():
     # The digest is the half that emails him, so it has to agree with
     # the section ordering in the page.
     with db._connect(p) as conn:
-        i_conv2 = plant(conn, "ConvHandSet", "converted", "2026-01-01", None)
-        i_open = plant(conn, "StillOpen", "touched", "2026-01-01", None)
+        # Inside the 14-day expiration (Kerry 10/29), so only status decides.
+        from email_parser.timezone_utils import today_central_str as _tcs
+        i_conv2 = plant(conn, "ConvHandSet", "converted", _tcs(), None)
+        i_open = plant(conn, "StillOpen", "touched", _tcs(), None)
         conn.commit()
     due = leads.followups_due(db_path=p)
     ids = {d["id"] for d in due}

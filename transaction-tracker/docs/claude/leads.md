@@ -1167,3 +1167,18 @@ order March. Guard: `test_brevo_add.py`.
   filter.
 - Watermark overlap is safe: dedup on the HubSpot contact id makes
   re-reads of boundary contacts no-ops.
+
+
+## Follow-up reminders: manager digest off, 14-day expiration (v2.622.2, Kerry 2026-10-29)
+
+Kerry: "Stop having automated emails sent to Robert for follow ups on leads.
+He keeps getting daily ones showing Pierret, Difrank, Favarato. Definitely
+need some type of expiration on those so we're not inundating our managers."
+- `send_followup_digests` (the chapter list's 7 AM digest) sends nothing
+  unless app setting `lead_followup_digest_managers` = `on`. New-lead
+  notices to the chapter list are unchanged.
+- `followups_due` drops any lead more than `lead_followup_expire_days`
+  (default 14, `leads.FOLLOWUP_EXPIRE_DAYS`) past its follow-up date; the
+  COO briefing and the Dashboard card (`dashboard._followups_due`) use the
+  same cutoff. Nothing is written to the lead; a new date brings it back.
+Guards `test_lead_outreach_alarm.py`, `test_leads_export.py`.

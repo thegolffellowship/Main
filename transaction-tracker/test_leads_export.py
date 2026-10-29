@@ -385,6 +385,7 @@ def main():
                          "VALUES (?, 'kerry', 'ping me for Silverhorn')",
                          (lid_pros,))
             conn.commit()
+        db.set_app_setting("lead_followup_digest_managers", "on", db_path=db_path)
         _FakeNow.val = _dt(2026, 9, 7, 5, 0, 0)
         r_early = leads.send_followup_digests(db_path=db_path)
         check("pre-7AM sweep leaves the queue alone",
@@ -407,6 +408,13 @@ def main():
         check("an unresolved follow-up appears again, now marked overdue",
               len(me2) == 1 and me2[0]["days_over"] == 2, str(me2))
 
+        _FakeNow.val = _dt(2026, 9, 22, 9, 0, 0)
+        check("15 days overdue: expired out of every reminder (Kerry 10/29)",
+              not any(r["id"] == lid_pros for r in leads.followups_due(db_path=db_path)))
+        _FakeNow.val = _dt(2026, 9, 21, 9, 0, 0)
+        _rows14 = leads.followups_due(db_path=db_path)
+        check("14 days overdue: still listed",
+              any(r["id"] == lid_pros for r in _rows14), str(_rows14))
         with db._connect(db_path) as conn:
             conn.execute("UPDATE leads SET status = 'dismissed' "
                          "WHERE id = ?", (lid_pros,))

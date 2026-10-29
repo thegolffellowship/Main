@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.622.1";
+window.TGF_VERSION = "2.622.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.622.2",
+    date: "2026-10-29",
+    title: "Lead follow-ups: no daily manager digest, and an expiration",
+    changes: [
+      "Kerry 10/29: \"Stop having automated emails sent to Robert for follow ups on leads. He keeps getting daily ones showing Pierret, Difrank, Favarato. Definitely need some type of expiration on those so we're not inundating our managers.\" The chapter managers' 7 AM follow-ups-due digest (leads.send_followup_digests) is now off unless app setting lead_followup_digest_managers reads on. New-lead notices are unchanged.",
+      "Expiration: a follow-up more than lead_followup_expire_days (default 14) past its date drops out of every reminder: the managers' digest, the follow-ups list in Kerry's COO briefing and the Dashboard's Follow-ups due count. The lead itself is untouched and stays on the Leads page; setting a new follow-up date brings it back."
+    ]
+  },
   {
     version: "2.622.1",
     date: "2026-10-29",
