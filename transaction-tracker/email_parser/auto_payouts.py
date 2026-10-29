@@ -378,6 +378,16 @@ def run_event(ev: dict, apply: bool = False, db_path=None) -> dict:
                             outcome="recorded", db_path=db_path)
     except Exception:
         logger.debug("auto-payouts action log failed", exc_info=True)
+    # VERIFY BEFORE PAY (Kerry 10/28 #2460-B, dial payout_verify_gate, off
+    # by default): the recorded rows start as verifying and Pay stays locked
+    # until the cross-check passes.
+    try:
+        from email_parser import payout_verify as _pv
+        if _pv.gate_on(db_path):
+            _pv.mark_verifying(eid, db_path)
+            res["verify"] = _pv.verify(eid, db_path).get("state")
+    except Exception:
+        logger.exception("payout verify after record failed for %s", name)
     return {**res, "state": "recorded", "fingerprint": fp,
             "payouts_added": rec.get("payouts_added")}
 
@@ -393,4 +403,13 @@ def run(apply: bool = False, event_id: int | None = None, db_path=None) -> dict:
             logger.exception("auto payouts failed for %s", ev.get("item_name"))
             out.append({"event_id": ev["id"], "event": ev["item_name"],
                         "state": "error", "why": str(e)})
-    return {"dry_run": not apply, "events": out}
+    res = {"dry_run": not apply, "events": out}
+    if apply and not event_id:
+        try:
+            from email_parser import payout_verify as _pv
+            v = _pv.sweep(db_path)
+            if v:
+                res["verified"] = v
+        except Exception:
+            logger.exception("payout verify sweep failed")
+    return res

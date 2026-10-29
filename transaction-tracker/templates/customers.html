@@ -423,6 +423,7 @@
 
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/refund-memo.js?v={{ app_version }}"></script>
     <script src="/static/js/tgf-standards.js?v={{ app_version }}"></script>
     <script src="/static/js/points-render.js?v={{ app_version }}"></script>
     <script src="/static/js/course-label.js"></script>
@@ -3404,13 +3405,10 @@
         return { label: "Credit from", event: name };
     }
 
+    // Kerry 10/28 (#2475-2 / #2476-4): "[What] for [Event or Season
+    // Contest name]" -> "Refund for s9.18 Cedar Creek" (refund-memo.js).
     function _custRefundMemo() {
-        const { playerName, cust } = custPayoutCtx || {};
-        const first = (cust && cust.first_name) || String(playerName || "").split(" ")[0] || "";
-        const last = (cust && cust.last_name) ||
-            String(playerName || "").split(" ").slice(1).join(" ") || "";
-        const src = _custRefundSource();
-        return `${first} ${last}`.trim() + ` - ${src.label} ${src.event}`.trimEnd();
+        return window.refundMemo("Refund", _custRefundSource().event);
     }
 
     // Deep links mirror the Payouts tab (tgf.html payAction): venmo://
@@ -3619,7 +3617,7 @@
                 // venmo:// scheme on phones — the https universal link shows
                 // literal '+' for memo spaces (Kerry, 2026-07-08)
                 // Excess reads FROM the source event (Kerry 2026-07-15)
-                const venmoNote = encodeURIComponent(`${customerName} - Excess credit from ${sourceEvent || ''}`.trimEnd());
+                const venmoNote = encodeURIComponent(window.refundMemo("Refund", sourceEvent || ''));
                 const _vMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                 const venmoPayUrl = handle
                     ? (_vMobile

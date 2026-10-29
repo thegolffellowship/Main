@@ -38351,10 +38351,10 @@ def get_refunds_overview(db_path: str | Path | None = None,
                 _origin = _credit_origin_event(conn, _full) or r.get("item_name")
             except Exception:
                 _origin = r.get("item_name")
-            _kindword = ("Excess credit" if (r.get("item_name") or "")
-                         .lower().startswith("excess credit")
-                         else ("WD credit" if status == "wd" else "Credit"))
-            _memo = f"{r.get('customer')} - {_kindword} from {_origin}"
+            # Kerry 10/28 (#2475-2 / #2476-4): "[What] for [Event or
+            # Season Contest name]" -> "Refund for s9.18 Cedar Creek".
+            from email_parser.refund_memo import refund_memo as _refund_memo
+            _memo = _refund_memo("Refund", _origin)
             outstanding.append({
                 "item_id": r["id"], "customer": r.get("customer"),
                 "customer_id": r.get("customer_id"), "event": r.get("item_name"),
@@ -38426,8 +38426,18 @@ def get_refunds_overview(db_path: str | Path | None = None,
                 else:
                     _head = "Removal"
                 _reason = _head + (f" ({_detail.title()})" if _detail else "")
-                memo = (f"{rm.get('customer_name')} - {_reason} Refund "
-                        f"for {_contest} {rm.get('season')}").strip()
+                # Kerry 10/28 (#2475-2 / #2476-4): "Refund for San Antonio
+                # Fall Points Race" — the contest the player bought (the
+                # source item's name), else chapter + contest + season.
+                from email_parser.refund_memo import (
+                    refund_memo as _refund_memo, contest_name as _contest_name)
+                _src_name = ""
+                if rm.get("source_item_id"):
+                    _si = conn.execute("SELECT item_name FROM items WHERE id = ?",
+                                       (rm["source_item_id"],)).fetchone()
+                    _src_name = (_si["item_name"] if _si else "") or ""
+                memo = _refund_memo("Refund", _contest_name(
+                    rm.get("contest_type"), rm.get("chapter"), rm.get("season"), _src_name))
                 if paid:
                     age = _age(paid["date"])
                     if age is None or age <= completed_days:
@@ -39073,6 +39083,13 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
             memo = (w.get("memo") or "").strip().lower()
             notes = (exp.get("notes") or "").strip().lower()
             memo_hit = bool(memo) and bool(notes) and memo in notes
+            # Refund memos carry no player name since 10/28 ("Refund for
+            # <event>", #2476-4), so two players refunded the same amount
+            # for one event share a memo: the memo alone never matches a
+            # receipt that resolved to a DIFFERENT customer.
+            if memo_hit and w.get("customer_id") and exp.get("customer_id") \
+                    and exp["customer_id"] != w["customer_id"]:
+                memo_hit = False
             if same_cust or same_handle or memo_hit:
                 cand = exp
                 break
@@ -39687,6 +39704,10 @@ def auto_match_venmo_payouts_to_tgf(
                     conn.execute(
                         "UPDATE tgf_payouts SET acct_transaction_id = ?, paid_at = ? WHERE id = ?",
                         (acct_id, paid_date, r["id"]))
+                # The TIME of the payment, Central, beside the date (Kerry
+                # 10/28 #2460-D): the receipt email's arrival.
+                from email_parser.payout_timing import stamp_conn as _pt_stamp, receipt_time as _pt_rt
+                _pt_stamp(conn, pick["tgf_event_id"], [r["id"] for r in rows], _pt_rt(exp), "receipt")
                 # Admin-tolerance variance trail (v2.275.0): a link the
                 # memo_tolerance override carried across a >1¢ gap gets a
                 # pre-WAIVED tgf_overpayments row (signed) so the ledger

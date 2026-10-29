@@ -920,6 +920,10 @@ def check_expense_inbox(force=False, days_back=None):
                                 "moved): %s", email_data.get("subject", ""))
                     continue
                 if extracted.get("confidence", 0) > 0:
+                    # When the receipt arrived (UTC ISO): the payment's TIME
+                    # for payout_timing (Kerry 10/28 #2460-D).
+                    if email_data.get("date"):
+                        extracted["email_received_at"] = email_data.get("date")
                     memo_txt = extracted.get("memo", "") or ""
                     event_name = match_event_from_memo(memo_txt, conn)
                     # For outbound payouts TGF types the real payee into the
@@ -18359,7 +18363,9 @@ def tgf_page():
 @require_role("admin")
 @perf.timed_route("payouts_list")
 def api_tgf_data():
-    return jsonify(get_tgf_data())
+    # Pay locks (payout_verify_gate) + paid-at times (Kerry 10/28 #2460-B/D).
+    from email_parser.payout_verify import annotate as _pv_annotate
+    return jsonify(_pv_annotate(get_tgf_data()))
 
 
 @app.route("/api/tgf", methods=["POST"])
@@ -18728,9 +18734,17 @@ def api_tgf_mark_paid():
     method_label = _METHOD_LABEL.get(payment_method,
                                      payment_method.capitalize())
 
+    from email_parser.timezone_utils import today_central_str
     if not paid_date:
-        from datetime import date as _date
-        paid_date = _date.today().isoformat()
+        paid_date = today_central_str()
+
+    # VERIFY BEFORE PAY (Kerry 10/28 #2460-B): while the payout_verify_gate
+    # dial is on, an event whose cross-check has not passed stays locked.
+    from email_parser import payout_verify as _pv
+    _lock = _pv.lock_for_tgf_event(event_id)
+    if _lock:
+        return jsonify({"error": f"Pay is locked for this event: {_lock}",
+                        "pay_locked": _lock}), 409
 
     with _connect() as conn:
         # Find all pending payouts for this customer+event
@@ -18791,6 +18805,11 @@ def api_tgf_mark_paid():
                 (new_txn_id, paid_date, p["payout_id"]),
             )
             linked += 1
+        # The moment Mark Paid was pressed (Kerry 10/28 #2460-D), when the
+        # payment is dated today; a back-dated payment has no known time.
+        if str(paid_date)[:10] == today_central_str():
+            from email_parser.payout_timing import stamp_conn as _pt_stamp, pressed_time
+            _pt_stamp(conn, event_id, [p["payout_id"] for p in pending], pressed_time(), "pressed")
 
         conn.commit()
         return jsonify({
