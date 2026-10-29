@@ -974,6 +974,16 @@ points, MVP and Team Net before and after; bridge
 `test_whatif_handicap.py`. On 10/29 Kerry confirmed Mary Shue = Mary Wade,
 Jim = James Lawton, Louie = Luis Samaniego (aliases added).
 
+Kerry's ruling on Baker (10/29): "Leave the paid money alone, but correct the
+points." The s9.28 Individual Net F1 tie with Adam Wilson stands as paid; Kerry
+noted Wilson had been let into the Net games as a guest by mistake, so without
+him Baker would still have won money. `email_parser/ph_correct.py` (bridge
+`scoring-ph-correct`, dry run default) corrects the published card's playing
+handicap and pops plus the entered round, records the ruling in app setting
+`ph_corrections`, and never touches a payout. The engine on s9.28 now pays
+Wilson the whole $63 while the PAID rows show $31.50 each; that difference is
+Kerry's ruling, not an error.
+
 ## The handicap lock, and ONE index on every surface (v2.462.0)
 
 Kerry 2026-09-16: "ROSTER handicaps need to lock after an event begins.

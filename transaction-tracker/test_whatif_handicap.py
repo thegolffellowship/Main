@@ -36,7 +36,7 @@ with db._connect(DB) as c:
     eid = c.execute("INSERT INTO events (item_name, event_date) VALUES "
                     "('s9.29 Silverhorn', '2026-10-27')").lastrowid
     r = c.execute("INSERT INTO scoring_rounds (player_name, customer_id, event_id, holes_played, "
-                  "playing_handicap, tee_id, source) VALUES ('Adam Baker', 87, ?, 9, 5, ?, 'entry')",
+                  "playing_handicap, tee_id, source, gross, net) VALUES ('Adam Baker', 87, ?, 9, 5, ?, 'entry', 43, 38)",
                   (eid, tee)).lastrowid
     pops5 = ruled_dots(5, SI)
     for h in range(1, 10):
@@ -62,7 +62,29 @@ with db._connect(DB) as c:
 check("...and the stored card is untouched", ph == 5 and p6 == 1, (ph, p6))
 check("a customer with no card is refused",
       "none of those" in (whatif(eid, {12345: 4}, db_path=DB).get("error") or ""))
+print("== the correction (Kerry: \"Leave the paid money alone, but correct the points\") ==")
+from email_parser.ph_correct import correct
+dry = correct(eid, 87, 4, note="test", db_path=DB)
+with db._connect(DB) as c:
+    still = c.execute("SELECT playing_handicap FROM scoring_rounds WHERE id = ?", (r,)).fetchone()[0]
+check("dry run changes nothing", not dry.get("applied") and still == 5, (dry, still))
+done = correct(eid, 87, 4, apply=True, note="test", db_path=DB)
+with db._connect(DB) as c:
+    row = c.execute("SELECT playing_handicap, net FROM scoring_rounds WHERE id = ?", (r,)).fetchone()
+    p6 = c.execute("SELECT strokes_received FROM scoring_holes WHERE scoring_round_id = ? "
+                   "AND hole_number = 6", (r,)).fetchone()[0]
+check("the card now reads 4, net 39, no pop on hole 6",
+      tuple(row) == (4.0, 39.0) and p6 == 0, (tuple(row), p6))
+from email_parser import live_scoring as ls
+st = db.event_engine_state("s9.29 Silverhorn", db_path=DB)
+card = ls.build_cards(st, db.get_scoring_formulas(DB))[0]
+check("the points read off the card are 6", card["stableford_net"] == 6, card["stableford_net"])
+check("the correction is recorded with its note",
+      '"note": "test"' in (db.get_app_setting("ph_corrections", db_path=DB) or ""))
+check("the module never writes a payout",
+      "tgf_payouts" not in open("email_parser/ph_correct.py").read())
 _m = open("mcp_server.py", encoding="utf-8").read()
+check("bridge scoring-ph-correct exists", 'cmd == "scoring-ph-correct"' in _m)
 check("bridge scoring-whatif-ph exists", 'cmd == "scoring-whatif-ph"' in _m)
 
 print(f"\n{'ALL PASS' if not F else str(len(F)) + ' FAILED: ' + ', '.join(F)}")

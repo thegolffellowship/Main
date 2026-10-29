@@ -1801,6 +1801,30 @@ def create_preview_round(event_id: int, customer_ids: list[int], db_path=None,
     return out
 
 
+def correct_player_handicap(event_id: int, customer_id: int, playing_handicap: float,
+                            apply: bool = False, db_path=None) -> list:
+    """A played card's playing handicap was wrong (Kerry 10/29, "Paul
+    Cleary": Baker played off a guest's index). Sets se_players.
+    playing_handicap on every round of the event the player is on, so a
+    later republish carries the corrected figure. Scores are untouched.
+    Returns [{round_id, was, now}]. Dry run by default."""
+    out = []
+    with _closing(_conn(db_path)) as conn:
+        for r in conn.execute(
+                "SELECT p.round_id, p.playing_handicap FROM se_players p "
+                "JOIN se_rounds r ON r.id = p.round_id "
+                "WHERE r.event_id = ? AND p.customer_id = ?",
+                (int(event_id), int(customer_id))).fetchall():
+            out.append({"round_id": r[0], "was": r[1], "now": float(playing_handicap)})
+            if apply:
+                conn.execute("UPDATE se_players SET playing_handicap = ? "
+                             "WHERE round_id = ? AND customer_id = ?",
+                             (float(playing_handicap), r[0], int(customer_id)))
+        if apply:
+            conn.commit()
+    return out
+
+
 def set_game_handicaps(round_id: int, by_cid: dict, *, unit=None, basis=None,
                        game: str = "team_net", db_path=None) -> int:
     """Snapshot each player's team-game handicap for this round. A player

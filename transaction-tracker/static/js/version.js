@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.621.1";
+window.TGF_VERSION = "2.621.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.621.2",
+    date: "2026-10-29",
+    title: "Correct a played card's playing handicap; points follow, paid money stays",
+    changes: [
+      "Kerry 10/29: \"Leave the paid money alone, but correct the points.\" email_parser/ph_correct.py corrects one player's published card on one event: the playing handicap, the net and the pops, re-laid by the publish's own allocator (entry_publish._derived_dots). It also corrects the entered round's se_players handicap (score_entry.correct_player_handicap), so a republish keeps the fix. Every correction is recorded in app setting ph_corrections with Kerry's note. Payout rows are never touched. Points follow when the locked races are re-locked and the Tracker races rebuilt. Bridge scoring-ph-correct:<event_id>|<cid>=<ph>|<note>[|apply], dry run by default. Guard test_whatif_handicap.py. For Adam Baker's s9.27, s9.28 and s9.29 (5 -> 4)."
+    ]
+  },
   {
     version: "2.621.1",
     date: "2026-10-29",

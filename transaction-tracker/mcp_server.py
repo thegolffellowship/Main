@@ -1935,6 +1935,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    refresh re-fetches all races first)
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
       scoring-chapter-guesses[:confirm|<cid>=<chapter>;…]  linked customers whose chapter is a GUESS (blank profile) + evidence; confirm writes the profile chapter for those ids, blank ones only
+      scoring-ph-correct:<event_id>|<cid>=<ph>|<note>[|apply]  correct a published card's playing handicap + pops (payouts untouched); dry run default
       scoring-whatif-ph:<event_id>|<cid>=<ph>[,...]  READ-ONLY: the event re-run with those playing handicaps (money, points, MVP, Team Net before/after)
       scoring-hcp-link-identity    READ-ONLY: links / scorecards / handicap rounds whose GG name is not the customer's (Kerry 10/29 "Paul Cleary")
       scoring-hcp-unlink:<GG name>|<customer_id>[|apply]  take a wrong name off a customer (link, cards, rounds) + block re-linking; dry run default
@@ -6162,6 +6163,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
                        f"{len(_out['links'])} link(s), {len(_out['scorecards'])} card(s), "
                        f"{_out['handicap_rounds']} handicap round(s)")
             return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-ph-correct":
+            # scoring-ph-correct:<event_id>|<cid>=<ph>|<note>[|apply] (Kerry 10/29:
+            # "Leave the paid money alone, but correct the points"). Corrects a
+            # published card's playing handicap + pops and the entered round;
+            # payout rows untouched. Dry run by default.
+            from email_parser.ph_correct import correct as _pc
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 3 or "=" not in _p[1] or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-ph-correct:<event_id>|<cid>=<ph>|<note>[|apply]"})
+            _c, _, _v = _p[1].partition("=")
+            _ap = len(_p) > 3 and _p[3].lower() == "apply"
+            _r = _pc(int(_p[0]), int(_c), float(_v), apply=_ap, note=_p[2])
+            if _ap and not _r.get("error"):
+                _audit("scoring-ph-correct", arg)
+            return json.dumps(_r, indent=2, default=str)
         if cmd == "scoring-whatif-ph":
             # READ-ONLY (Kerry 10/29): scoring-whatif-ph:<event_id>|<cid>=<ph>[,<cid>=<ph>]
             # re-runs the event's engine with those playing handicaps; money,
