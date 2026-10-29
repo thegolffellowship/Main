@@ -10634,11 +10634,8 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
                 if _fh and _fh["tee_name"] \
                         and _fh["round_date"] == today_central_str():
                     _names = {_normalize_player_name(_fh["player_name"] or "")}
-                    for lk in _c.execute(
-                            "SELECT player_name FROM handicap_player_links "
-                            "WHERE customer_id = ?",
-                            (int(customer_id),)).fetchall():
-                        _names.add(lk["player_name"])
+                    for _ln in _trusted_link_names(_c, int(customer_id)):
+                        _names.add(_ln)
                     _qm = ",".join("?" * len(_names))
                     for hr in _c.execute(
                             f"""SELECT tee_name, adjusted_score, rating,
@@ -10950,12 +10947,14 @@ def get_points_race_standings(race_key: str,
                 for p in get_all_handicap_players(db_path)
                 if p.get("handicap_index_18") is not None
             }
-            for lr in conn.execute(
-                    """SELECT player_name, customer_id FROM handicap_player_links
-                       WHERE customer_id IS NOT NULL""").fetchall():
-                v = idx_by_name.get(lr["player_name"])
-                if v is not None and lr["customer_id"] not in idx_by_cid:
-                    idx_by_cid[lr["customer_id"]] = v
+            for _cid in {lr["customer_id"] for lr in conn.execute(
+                    """SELECT customer_id FROM handicap_player_links
+                       WHERE customer_id IS NOT NULL""").fetchall()}:
+                for _ln in _trusted_link_names(conn, _cid):
+                    v = idx_by_name.get(_ln)
+                    if v is not None:
+                        idx_by_cid[_cid] = v
+                        break
 
         ranked_ids: set = set()
         out_rows = []
@@ -17197,13 +17196,11 @@ def get_player_spotlight(customer_id: int,
             for hp in get_all_handicap_players(db_path)
             if hp.get("handicap_index_18") is not None
         }
-        for lr in conn.execute(
-                "SELECT player_name FROM handicap_player_links "
-                "WHERE customer_id = ?", (customer_id,)).fetchall():
-            v = idx_by_name.get(lr["player_name"])
+        for _ln in _trusted_link_names(conn, customer_id):
+            v = idx_by_name.get(_ln)
             if v is not None:
                 idx18 = v
-                handicap_player_name = lr["player_name"]
+                handicap_player_name = _ln
                 break
 
         enrollments = [dict(r) for r in conn.execute(
@@ -18539,15 +18536,28 @@ def _participation_event_filter_sql(alias: str = "i") -> str:
     """
 
 
+def _trusted_link_names(conn: sqlite3.Connection, customer_id) -> list:
+    """A customer's linked GG names that belong to them, own name first
+    (hcp_link_identity, Kerry 10/29 "Paul Cleary"). Every reader that pools
+    or picks a customer's handicap rounds by name goes through this, so a
+    wrong link can never feed or replace their index."""
+    from .hcp_link_identity import ordered_link_names, name_matches
+    return [n for n in ordered_link_names(conn, customer_id)
+            if name_matches(conn, n, customer_id) != "mismatch"]
+
+
 def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | None:
     """handicap_player_links first (curated GG-name map), then the alias
-    machinery — same identity spine as everything else."""
+    machinery — same identity spine as everything else. A link whose name
+    does not belong to its customer is never followed (the guest 'Cleary,
+    Paul' resolved to Adam Baker through one, Kerry 10/29)."""
+    from .hcp_link_identity import link_cid_ok
     for cand in _gg_name_candidates(gg_name):
         row = conn.execute(
             """SELECT customer_id FROM handicap_player_links
                WHERE customer_id IS NOT NULL AND LOWER(player_name) = LOWER(?)
                LIMIT 1""", (cand,)).fetchone()
-        if row:
+        if row and link_cid_ok(conn, cand, row["customer_id"]):
             return row["customer_id"]
     for cand in _gg_name_candidates(gg_name):
         cid = _lookup_customer_id(conn, cand, None)
@@ -21764,10 +21774,8 @@ def get_member_summary(customer_id: int, db_path: str | Path = DB_PATH) -> dict 
                 p["player_name"]: p["handicap_index_18"]
                 for p in get_all_handicap_players(db_path)
                 if p.get("handicap_index_18") is not None}
-            for lr in conn.execute(
-                    """SELECT player_name FROM handicap_player_links
-                       WHERE customer_id = ?""", (customer_id,)):
-                v = idx_by_name.get(lr["player_name"])
+            for _ln in _trusted_link_names(conn, customer_id):
+                v = idx_by_name.get(_ln)
                 if v is not None:
                     hcp_index = v
                     break
@@ -22096,10 +22104,8 @@ def get_scoring_handicap_preview(event_query: str,
             # to this very card.
             names = {_normalize_player_name(r["player_name"])}
             if r["customer_id"]:
-                for lk in conn.execute(
-                        "SELECT player_name FROM handicap_player_links "
-                        "WHERE customer_id = ?", (r["customer_id"],)).fetchall():
-                    names.add(lk["player_name"])
+                for _ln in _trusted_link_names(conn, r["customer_id"]):
+                    names.add(_ln)
             qmarks = ",".join("?" * len(names))
             hist = conn.execute(
                 f"""SELECT round_date, differential FROM handicap_rounds
@@ -22258,10 +22264,8 @@ def project_playing_handicaps(event_query: str, allowance: float = 1.0,
             # the self-derived preview
             names = {_normalize_player_name(r["player_name"])}
             if r["customer_id"]:
-                for lk in conn.execute(
-                        "SELECT player_name FROM handicap_player_links "
-                        "WHERE customer_id = ?", (r["customer_id"],)).fetchall():
-                    names.add(lk["player_name"])
+                for _ln in _trusted_link_names(conn, r["customer_id"]):
+                    names.add(_ln)
             qmarks = ",".join("?" * len(names))
             hist = conn.execute(
                 f"""SELECT differential FROM handicap_rounds
@@ -22439,18 +22443,13 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
             # dedup) — so we extend the record instead of forking it.
             target_name = row["player_name"]
             if row["customer_id"]:
-                best = conn.execute(
-                    """SELECT l.player_name,
-                              (SELECT MAX(hr.round_date) FROM handicap_rounds hr
-                               WHERE hr.player_name = l.player_name) AS last_round,
-                              (SELECT COUNT(*) FROM handicap_rounds hr
-                               WHERE hr.player_name = l.player_name) AS n
-                       FROM handicap_player_links l
-                       WHERE l.customer_id = ?
-                       ORDER BY last_round DESC, n DESC, l.player_name
-                       LIMIT 1""", (row["customer_id"],)).fetchone()
-                if best and best["n"]:
-                    target_name = best["player_name"]
+                # own name first; a name that isn't theirs never receives
+                # their rounds (Kerry 10/29, "Paul Cleary")
+                for _ln in _trusted_link_names(conn, row["customer_id"]):
+                    if conn.execute("SELECT 1 FROM handicap_rounds WHERE player_name = ? LIMIT 1",
+                                    (_ln,)).fetchone():
+                        target_name = _ln
+                        break
 
             dup = conn.execute(
                 """SELECT id FROM handicap_rounds
@@ -22501,11 +22500,16 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
                                FROM customers WHERE customer_id = ?""",
                             (p["customer_id"],)).fetchone()
                         cname = (c["nm"] or "").strip() or None
+                    _cid = p["customer_id"]
+                    if _cid:
+                        from .hcp_link_identity import link_cid_ok
+                        if not link_cid_ok(conn, p["player_name"], _cid):
+                            _cid, cname = None, None
                     conn.execute(
                         """INSERT INTO handicap_player_links
                            (player_name, customer_name, customer_id)
                            VALUES (?, ?, ?)""",
-                        (p["player_name"], cname, p["customer_id"]))
+                        (p["player_name"], cname, _cid))
             conn.commit()
             logger.info("Self-derived %d handicap rounds for %r (WHS NDB, "
                         "Kerry-ratified 2026-07-14)", len(plan), event_query)
@@ -24930,24 +24934,18 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = 
             # Reuse the freshest existing handicap identity for this customer.
             target_name = _normalize_player_name(r["player_name"])
             if r["customer_id"]:
-                best = conn.execute(
-                    """SELECT l.player_name,
-                              (SELECT COUNT(*) FROM handicap_rounds hr
-                               WHERE hr.player_name = l.player_name) AS n,
-                              (SELECT MAX(hr.round_date) FROM handicap_rounds hr
-                               WHERE hr.player_name = l.player_name) AS last_round
-                       FROM handicap_player_links l WHERE l.customer_id = ?
-                       ORDER BY last_round DESC, n DESC, l.player_name LIMIT 1""",
-                    (r["customer_id"],)).fetchone()
-                if best and best["n"]:
-                    target_name = best["player_name"]
+                # own name first; a name that isn't theirs never receives
+                # their rounds (Kerry 10/29, "Paul Cleary")
+                for _ln in _trusted_link_names(conn, r["customer_id"]):
+                    if conn.execute("SELECT 1 FROM handicap_rounds WHERE player_name = ? LIMIT 1",
+                                    (_ln,)).fetchone():
+                        target_name = _ln
+                        break
 
             names = {_normalize_player_name(r["player_name"]), target_name}
             if r["customer_id"]:
-                for lk in conn.execute(
-                        "SELECT player_name FROM handicap_player_links WHERE customer_id = ?",
-                        (r["customer_id"],)).fetchall():
-                    names.add(lk["player_name"])
+                for _ln in _trusted_link_names(conn, r["customer_id"]):
+                    names.add(_ln)
             qmarks = ",".join("?" * len(names))
             hist = conn.execute(
                 f"""SELECT round_date, differential FROM handicap_rounds
@@ -25064,10 +25062,15 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = 
                                FROM customers WHERE customer_id = ?""",
                             (p["customer_id"],)).fetchone()
                         cname = (c["nm"] or "").strip() or None
+                    _cid = p["customer_id"]
+                    if _cid:
+                        from .hcp_link_identity import link_cid_ok
+                        if not link_cid_ok(conn, p["player_name"], _cid):
+                            _cid, cname = None, None
                     conn.execute(
                         """INSERT INTO handicap_player_links
                            (player_name, customer_name, customer_id) VALUES (?, ?, ?)""",
-                        (p["player_name"], cname, p["customer_id"]))
+                        (p["player_name"], cname, _cid))
             conn.commit()
             logger.info("Posted %d two-nine handicap rounds for %r (18-hole "
                         "event split, WHS NDB per nine)", len(plan), event_query)
@@ -26590,11 +26593,8 @@ def get_scorecard(scoring_round_id: int, db_path: str | Path = DB_PATH) -> dict 
                 names = {_normalize_player_name(
                     round_out.get("player_name") or "")}
                 if round_out.get("customer_id"):
-                    for lk in conn.execute(
-                            "SELECT player_name FROM handicap_player_links "
-                            "WHERE customer_id = ?",
-                            (round_out["customer_id"],)).fetchall():
-                        names.add(lk["player_name"])
+                    for _ln in _trusted_link_names(conn, round_out["customer_id"]):
+                        names.add(_ln)
                 qm = ",".join("?" * len(names))
                 for hr in conn.execute(
                         f"""SELECT tee_name, adjusted_score, rating, slope,
@@ -29458,6 +29458,9 @@ def _backfill_customer_id_on_player_links(conn: sqlite3.Connection) -> int:
     for row in rows:
         cid = _lookup_customer_id(conn, row["customer_name"], None)
         if cid is not None:
+            from .hcp_link_identity import link_cid_ok
+            if not link_cid_ok(conn, row["player_name"], cid):
+                continue     # a name that isn't theirs (Kerry 10/29)
             cur = conn.execute(
                 """UPDATE handicap_player_links SET customer_id = ?
                    WHERE player_name = ? AND customer_id IS NULL""",
@@ -41795,6 +41798,9 @@ def relink_all_unlinked_players(db_path: str | Path | None = None) -> dict:
             customer_name = _match_customer_name(conn, pname)
             if customer_name:
                 cid = _lookup_customer_id(conn, customer_name, None)
+                from .hcp_link_identity import link_cid_ok
+                if cid and not link_cid_ok(conn, pname, cid):
+                    continue     # a name that isn't theirs (Kerry 10/29)
                 conn.execute(
                     "UPDATE handicap_player_links SET customer_name = ?, customer_id = ? WHERE player_name = ?",
                     (customer_name, cid, pname),
@@ -41863,6 +41869,9 @@ def import_handicap_rounds(rounds: list[dict],
                         if not customer_name:
                             customer_name = _match_customer_name(conn, player_name)
                         cid = _lookup_customer_id(conn, customer_name, player_email) if customer_name else None
+                        from .hcp_link_identity import link_cid_ok
+                        if cid and not link_cid_ok(conn, player_name, cid):
+                            customer_name, cid = None, None
                         conn.execute(
                             """INSERT INTO handicap_player_links (player_name, customer_name, customer_id)
                                VALUES (?, ?, ?)
@@ -41879,6 +41888,10 @@ def import_handicap_rounds(rounds: list[dict],
                             customer_name = _match_customer_name(conn, player_name)
                         if customer_name:
                             cid = _lookup_customer_id(conn, customer_name, player_email)
+                            from .hcp_link_identity import link_cid_ok
+                            if cid and not link_cid_ok(conn, player_name, cid):
+                                customer_name = None
+                        if customer_name:
                             conn.execute(
                                 "UPDATE handicap_player_links SET customer_name = ?, customer_id = ? WHERE player_name = ?",
                                 (customer_name, cid, player_name),

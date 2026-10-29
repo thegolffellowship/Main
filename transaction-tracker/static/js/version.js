@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.620.0";
+window.TGF_VERSION = "2.621.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.621.0",
+    date: "2026-10-29",
+    title: "Handicap identity: a GG name on the wrong customer is found, removed and refused",
+    changes: [
+      "Kerry 10/29: \"Paul Cleary!? Who's that? Why would it be attached to it... Fix it now and run an audit on all other handicaps... What do we need to do to make sure it doesn't happen again?\" A guest at Hill Country Matches (5/16), 'Cleary, Paul', was linked to Adam Baker's customer_id on 5/19, and the GG scorecard import then resolved Cleary's card to Baker through that link. Readers took 'the first linked name with an index', so the Fall Championship starter sheet showed Baker at Cleary's 9.0 instead of his own 6.4. The pairing seat had been fixed in July (the !Name literal); the link and the card had not.",
+      "email_parser/hcp_link_identity.py is the one answer to 'does this GG name belong to this customer?': name_matches (match / likely / mismatch: the last name must be the customer's or an alias's, and the first name the same, a 3+ letter prefix like Matt/Matthew, or a one-word alias; family members sharing a last name never pass), audit (every link, scorecard and handicap round on a customer whose name it does not carry), unlink (link, cards and rounds lose the id, the pair goes on the block list app setting hcp_link_blocked; dry run by default), link_cid_ok (the guard) and ordered_link_names (own name first).",
+      "Guards: every reader that picks or pools a customer's handicap rounds by name now uses _trusted_link_names (own name first, a wrong name never), so a bad link can no longer feed or replace anyone's index: the points-board index, the Spotlight, the member summary, the self-derived preview and post, the 18-hole two-nine post, and the championship card nines. _resolve_scoring_player never follows a wrong link. The automatic link writers (GG/CSV import, relink, the customer_id backfill, both handicap posts) refuse a customer_id the name does not belong to.",
+      "The Handicaps page Unlink now really unlinks: before, it cleared only the label and left the customer_id, so the link held. The daily 5:00 AM health digest raises one HIGH COO item (key hcp_link_identity) whenever the audit finds anything. Bridges scoring-hcp-link-identity (read-only) and scoring-hcp-unlink:<GG name>|<customer_id>[|apply]. Guard test_hcp_link_identity.py."
+    ]
+  },
   {
     version: "2.620.0",
     date: "2026-10-28",

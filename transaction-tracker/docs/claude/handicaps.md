@@ -926,6 +926,44 @@ player` resolves it through `handicap_player_links` first. The 11% of
 rows with no `customer_id` are the residue worth backfilling next; the
 audit measures it.
 
+### A GG name on the wrong customer: `hcp_link_identity` (v2.621.0, Kerry 2026-10-29)
+
+Kerry: "Paul Cleary!? Who's that? Why would it be attached to it... Fix it
+now and run an audit on all other handicaps... What do we need to do to make
+sure it doesn't happen again?" The guest 'Cleary, Paul' (Hill Country
+Matches, 5/16) was linked to Adam Baker (customer 87) on 5/19, and the GG
+scorecard import resolved Cleary's card (scoring round 1042) to Baker through
+that link. The readers took "the first linked name with an index", with no
+order, so the Fall Championship starter sheet showed Baker at Cleary's 9.0
+(PH 11) instead of his own 6.4. The July fix covered only the pairing seat
+(`!Name`). That was the instance; the class was any link whose name is not
+its customer's.
+
+`email_parser/hcp_link_identity.py`:
+- `name_matches(conn, player_name, customer_id)` → match / likely / mismatch.
+  The last name must be the customer's (canonical or a name alias). The first
+  name must be the same, a 3+ letter prefix (Matt/Matthew) or a one-word
+  alias. Suffixes, digits and 'LAST, First' are normalised. Family members
+  share a last name, so 'Pat Youngs' never passes for Luke Youngs.
+- `audit(conn)`: links, scorecards (`scoring_rounds`) and `handicap_rounds`
+  carrying a customer_id whose name is a mismatch; `likely` listed apart.
+- `unlink(conn, name, cid, apply)`: link row kept with no customer, cards and
+  rounds lose the id, the pair goes on the block list (app setting
+  `hcp_link_blocked`). Dry run by default.
+- `link_cid_ok`: the guard every AUTOMATIC link writer calls (GG/CSV import,
+  relink, `_backfill_customer_id_on_player_links`, both handicap posts).
+  `link_handicap_history` (a Kerry-ordered manual link) does not.
+- `database._trusted_link_names(conn, cid)`: a customer's linked names, own
+  name first, mismatches dropped. Every reader that picks or pools rounds by
+  name goes through it. A new reader must too; never iterate
+  `handicap_player_links WHERE customer_id = ?` directly.
+
+Surfaces: bridges `scoring-hcp-link-identity` (read-only) and
+`scoring-hcp-unlink:<GG name>|<customer_id>[|apply]`; the Handicaps page
+Unlink now clears the customer_id (before, only the label); the 5:00 AM
+health digest raises HIGH `hcp_link_identity` while the audit finds anything.
+Guard `test_hcp_link_identity.py`.
+
 ## The handicap lock, and ONE index on every surface (v2.462.0)
 
 Kerry 2026-09-16: "ROSTER handicaps need to lock after an event begins.

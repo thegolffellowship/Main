@@ -11799,12 +11799,24 @@ def api_handicap_unlink_player():
     if not player_name:
         return jsonify({"error": "player_name required"}), 400
 
+    # A real unlink (Kerry 10/29, "Paul Cleary"): the label AND the
+    # customer_id come off, with that customer's scorecards and handicap
+    # rounds of this name, and the pair is blocked from being re-linked by
+    # an import. Before this only the label was cleared, so the link held.
+    from email_parser.hcp_link_identity import unlink as _hcp_unlink
     conn = get_connection()
     try:
-        conn.execute(
-            "UPDATE handicap_player_links SET customer_name = NULL WHERE player_name = ?",
-            (player_name,),
-        )
+        row = conn.execute(
+            "SELECT customer_id FROM handicap_player_links WHERE player_name = ?",
+            (player_name,)).fetchone()
+        if row and row["customer_id"]:
+            _hcp_unlink(conn, player_name, row["customer_id"], apply=True,
+                        note="Handicaps page Unlink")
+        else:
+            conn.execute(
+                "UPDATE handicap_player_links SET customer_name = NULL WHERE player_name = ?",
+                (player_name,),
+            )
         conn.commit()
     finally:
         conn.close()

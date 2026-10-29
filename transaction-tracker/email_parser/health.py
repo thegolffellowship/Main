@@ -65,7 +65,8 @@ RULES = {
     "volume_pct_warn": 80,                # the volume the DB sits on — medium finding
     "volume_pct_alarm": 90,               # ...high finding (9/22: 99% took the site down)
     "expense_unpromoted": True,           # approved expense rows with no ledger row (CA #785 item 6, CFO 9/27)
-    "expense_unpromoted_hours": 24,       # ...older than this many hours (a deploy's backfill promotes the rest)
+    "expense_unpromoted_hours": 24,
+    "hcp_link_identity": True,            # a handicap link / card on the wrong customer (Kerry 10/29, "Paul Cleary")       # ...older than this many hours (a deploy's backfill promotes the rest)
 }
 
 
@@ -97,6 +98,22 @@ def _archive_status(db_path) -> dict:
         return status(db_path)
     except Exception as e:      # the report never fails on its own extras
         return {"mode": "unknown", "error": str(e)[:120]}
+
+
+def _hcp_link_identity(db_path) -> dict:
+    """Links, scorecards and handicap rounds whose GG name is not the
+    customer's (hcp_link_identity.audit). Never breaks the report."""
+    try:
+        from .hcp_link_identity import audit
+        conn = sqlite3.connect(str(db_path), timeout=10)
+        try:
+            a = audit(conn)
+        finally:
+            conn.close()
+        return {"counts": a["counts"], "links": a["links"][:10],
+                "scorecards": a["scorecards"][:10], "handicap_rounds": a["handicap_rounds"][:10]}
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)[:120]}
 
 
 def _table_counts(db_path) -> dict:
@@ -276,6 +293,7 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "files_backup": _files_backup(db_path),
         "scheduled": bool(record_size),
         "expense_unpromoted": _expense_unpromoted(db_path),
+        "hcp_link_identity": _hcp_link_identity(db_path),
         "sample_count": sum(r["count"] for k in summary for r in summary[k]),
     }
     report["findings"] = find(report)
@@ -287,6 +305,19 @@ def find(report: dict) -> list[dict]:
     info, a stable `key` (one open action item per key), a one-line text."""
     out = []
     S = report["summary"]
+    hli = report.get("hcp_link_identity") or {}
+    if RULES.get("hcp_link_identity") and hli.get("counts"):
+        c = hli["counts"]
+        bad = c.get("links", 0) + c.get("scorecards", 0) + c.get("handicap_rounds", 0)
+        if bad:
+            names = [f"{r['player_name']} -> {r['customer']} ({r['customer_id']})"
+                     for r in (hli.get("links") or []) + (hli.get("scorecards") or [])][:5]
+            out.append({"severity": "high", "key": "hcp_link_identity",
+                        "text": f"Handicap identity: {c.get('links', 0)} link(s), "
+                                f"{c.get('scorecards', 0)} scorecard group(s), "
+                                f"{c.get('handicap_rounds', 0)} handicap-round group(s) on a "
+                                f"customer whose name they don't carry: {'; '.join(names)}. "
+                                f"Review with scoring-hcp-link-identity; fix with scoring-hcp-unlink."})
     if report["sample_count"] < RULES["min_samples_expected"]:
         out.append({"severity": "info", "key": "no_samples",
                     "text": "No perf samples in the window — nothing measured "

@@ -702,7 +702,13 @@ send (`api_handicap_send_bulk_email`) reads `_event_roster_rows` and
 matches on `customer_id` sets — never `player_name` or `items.customer`
 string equality, which used to classify "Mike Murphy" vs "Michael
 Murphy" as "no TGF handicap on record" and silently send no card. Audit
-coverage read-only with `scoring-hcp-link-audit`. Details + the class
+coverage read-only with `scoring-hcp-link-audit`. **A GG name on the wrong customer
+(v2.621.0, Kerry 10/29 "Paul Cleary"):** `email_parser/hcp_link_identity.py`
+decides whether a name belongs to a customer; readers go through
+`database._trusted_link_names` (own name first, a wrong name never) and
+automatic link writers through `link_cid_ok`; bridges
+`scoring-hcp-link-identity` / `scoring-hcp-unlink`; daily digest finding;
+guard `test_hcp_link_identity.py`. Details + the class
 sweep (what was left alone and why): `docs/claude/handicaps.md`.
 
 ## The plus rule lives in the mechanism (v2.459.0)
