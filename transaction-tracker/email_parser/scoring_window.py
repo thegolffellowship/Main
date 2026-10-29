@@ -176,6 +176,16 @@ def tick(now=None, db_path=None) -> dict:
             except Exception:
                 logger.exception("scoring window: could not post the closeout start for %s", eid)
             did["closeout_start"] = True
+        # THE PLAYERS' RESULTS EMAIL, SAME DAY (Kerry #2460-H): scheduled at
+        # CLOSEOUT START; results_email.auto_check sends it once the guards
+        # pass. Everyone else gets theirs at 6:00 AM with the recap.
+        if db.get_app_setting(CLOSEOUT_KEY.format(eid), db_path=db_path):
+            try:
+                from email_parser import results_email as _rem
+                if _rem.schedule_same_day(eid, now=now, db_path=db_path):
+                    did["results_same_day"] = "scheduled"
+            except Exception:
+                logger.exception("scoring window: same-day results schedule failed for %s", eid)
         # FALL RACE PRIZES + CHAMPIONS at the finale's CLOSEOUT START (Kerry
         # 10/28, #2473). Retried every run until recorded; holds raise a COO item.
         if db.get_app_setting(CLOSEOUT_KEY.format(eid), db_path=db_path):

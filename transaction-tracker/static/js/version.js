@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.619.2";
+window.TGF_VERSION = "2.620.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.620.0",
+    date: "2026-10-28",
+    title: "Results email: players the same day, everyone else at 6:00 AM; TGF events and the champions",
+    changes: [
+      "Kerry #2460-H: \"Event participants get theirs same day, like within an hour of the last score entered ... Then for non-event participants, theirs just comes the next morning at 6:00a, regardless of event type.\" At CLOSEOUT START (last score + 15 minutes) the scoring-window job schedules the PLAYERS' results email for every event (results_email.schedule_same_day, schedule key <event>|played, dial results_email_same_day, on). It goes the moment every guard passes (final, card parity, payouts recorded = engine), held runs retrying every 10 minutes with one COO item. It carries no recap story (that is written later); everything else is in it: the card, winnings, handicap, points, up next. The 6:00 AM send with the recap reaches only those who did not play (deliver who=others; a send to everyone skips anyone already sent). The greeting follows the time of day.",
+      "A TGF event (the Fall Championship) covers both chapters: each person's points card reads his home chapter's Fall race, the eyebrow and footer say TGF, and the recap section is TGF (else his chapter's).",
+      "THE CHAMPIONS block (Event Ops #2457 BUILD 4; Kerry #2473: \"Tied titles split the winnings and the title\"): every race the event made final, its champion or co-champions. A finale's results email waits until race close has recorded the prizes and champions. Bridge: plan|<ids>|<recap or none>[|played|others]; preview takes recap none. Guard test_results_email.py."
+    ]
+  },
   {
     version: "2.619.2",
     date: "2026-10-28",

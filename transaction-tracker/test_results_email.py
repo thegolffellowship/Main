@@ -144,6 +144,50 @@ check("never twice", res.get("sent") == 0 and res.get("already_sent") == 3 and l
 check("the standing time is 6:00 AM the next morning (Kerry #1778)",
       rx.next_morning([3307], db_path=tmp) == "2026-10-14T06:00", rx.next_morning([3307], db_path=tmp))
 
+print("\nSame day for players, 6:00 AM for everyone else (Kerry #2460-H)")
+db.set_app_setting(rx.SENT_KEY.format(event_id=3307), "{}", tmp)
+sent.clear()
+res = rx.deliver([3307], None, confirm=True, db_path=tmp, who="played")
+check("the players' send goes to the two who played, with no recap needed",
+      res.get("sent") == 2 and sorted(t for t, _ in sent) == ["dan@example.com", "kerry@example.com"], res)
+res = rx.deliver([3307], RECAP, confirm=True, db_path=tmp, who="others")
+check("the 6:00 AM send reaches only those who did not play", res.get("sent") == 1 and sent[-1][0] == "sam@example.com", res)
+res = rx.deliver([3307], RECAP, confirm=True, db_path=tmp)
+check("a later send to everyone skips all three already sent", res.get("sent") == 0 and res.get("already_sent") == 3, res)
+k2 = rx.build_message(facts, {"customer_id": 18, "first_name": "Kerry", "name": "Kerry Niester"}, None)
+check("a same-day player email has no recap section and is clean",
+      "THE RECAP" not in k2["html"] and k2["held"] == [] and ">41<" in k2["html"], k2["held"])
+check("no recap is refused for anyone who did not play",
+      "error" in rx.schedule_send([3307], "2026-10-13T18:00", None, "t", db_path=tmp))
+db.set_app_setting(rx.SCHEDULE_KEY, "{}", tmp)
+sd = rx.schedule_same_day(3307, now=datetime(2026, 10, 13, 18, 40), db_path=tmp)
+check("CLOSEOUT START schedules the players' send for now", sd and sd["scheduled"] == "3307|played"
+      and sd["at"] == "2026-10-13T18:40" and sd["recap"] is None, sd)
+check("...once per event", rx.schedule_same_day(3307, db_path=tmp) is None)
+db.set_app_setting(rx.SCHEDULE_KEY, "{}", tmp)
+db.set_app_setting(rx.SAME_DAY_DIAL, "off", tmp)
+check("...and not when the dial is off", rx.schedule_same_day(3307, db_path=tmp) is None)
+db.set_app_setting(rx.SAME_DAY_DIAL, "on", tmp)
+src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "email_parser", "scoring_window.py")).read()
+check("the scoring window schedules it at CLOSEOUT START", "schedule_same_day(eid" in src)
+
+print("\nA TGF event (the Fall Championship): each person's chapter; the champions")
+tf = {"chapter": "tgf", "home": {13: "austin", 87: "san antonio", 5: "houston"},
+      "races": {"san antonio": {"final": True, "champions": [{"player_name": "BAKER, Adam"},
+                                                            {"player_name": "RIDEOUT, Jeff"}], "rows": []},
+                "austin": {"final": True, "champions": [{"player_name": "YOUNGS, Luke"}], "rows": []}}}
+check("an Austin player reads the Austin race", rx._person_chapter(tf, 13) == "austin")
+check("no known chapter falls back to San Antonio", rx._person_chapter(tf, 5) == "san antonio")
+ch_html = rx._champions(tf)
+check("co-champions on a tie, named once each", "San Antonio Fall Net Co-Champions" in ch_html
+      and "Adam Baker and Jeff Rideout" in ch_html and "Austin Fall Net Champion" in ch_html
+      and "Luke Youngs" in ch_html, ch_html)
+check("no champions block before a race is final",
+      rx._champions({"races": {"austin": {"final": False, "champions": []}}}) == "")
+import inspect
+check("a finale's email waits for race close", "race_close" in inspect.getsource(rx.guards.__wrapped__)
+      if hasattr(rx.guards, "__wrapped__") else "race close" in open(rx.__file__).read())
+
 m = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_server.py")).read()
 check("bridge scoring-results-email exists, members only through a schedule",
       'cmd == "scoring-results-email"' in m and "_kerry_ok" in m[m.find('cmd == "scoring-results-email"'):][:3000])

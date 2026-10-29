@@ -93,7 +93,9 @@ try:
         conn.execute("UPDATE events SET event_date = ? WHERE id = ?", (last.date().isoformat(), EV))
         conn.commit()
     r = sw.tick(now=last + timedelta(minutes=16), db_path=DB)
-    check("the job records the close and the closeout start", r["events"].get(EV) == {"closed": True, "closeout_start": True}, r)
+    check("the job records the close and the closeout start", {k: v for k, v in r["events"].get(EV, {}).items() if k in ("closed", "closeout_start")}
+          == {"closed": True, "closeout_start": True}
+          and r["events"][EV].get("results_same_day") == "scheduled", r)
     with db._connect(DB) as conn:
         post = conn.execute("SELECT author, topic, body FROM platform_dialogue WHERE topic = 'closeout'").fetchall()
         acts = [x[0] for x in conn.execute("SELECT action_type FROM agent_action_log WHERE agent_name = 'scoring-window'")]

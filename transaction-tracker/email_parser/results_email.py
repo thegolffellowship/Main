@@ -305,12 +305,26 @@ def event_facts(event_id: int, db_path=None) -> dict:
     except Exception:
         logger.exception("results email: handicap preview failed for %s", ev.get("item_name"))
     race = {}
-    if ch in FALL_RACE:
+    races: dict = {}
+    for key in ([ch] if ch in FALL_RACE else (list(FALL_RACE) if ch == "tgf" else [])):
         try:
-            data = db.get_points_race_standings(FALL_RACE[ch][0], db_path=db_path, no_network=True)
-            race = {"rows": data.get("standings") or []}
+            data = db.get_points_race_standings(FALL_RACE[key][0], db_path=db_path, no_network=True)
+            races[key] = {"rows": data.get("standings") or [],
+                          "final": bool(data.get("race_final")),
+                          "champions": data.get("champions") or []}
         except Exception:
-            logger.exception("results email: fall race unreadable")
+            logger.exception("results email: fall race %s unreadable", key)
+    if ch in races:
+        race = races[ch]
+    # A TGF event (the Fall Championship) covers both chapters: each person
+    # reads HIS home chapter's race (Kerry 10/28).
+    home: dict = {}
+    if ch == "tgf":
+        with db._connect(db_path) as conn:
+            for r in conn.execute(
+                    "SELECT c.customer_id, lower(COALESCE(chp.name, c.chapter, '')) FROM customers c "
+                    "LEFT JOIN chapters chp ON chp.chapter_id = c.home_chapter_id").fetchall():
+                home[int(r[0])] = (r[1] or "").strip()
     month = {}
     try:
         mk = str(ev["event_date"])[:7]
@@ -321,15 +335,30 @@ def event_facts(event_id: int, db_path=None) -> dict:
     except Exception:
         logger.exception("results email: monthly points unreadable")
     return {"event": ev, "chapter": ch, "cards": cards, "payouts": pays, "next": nxt, "registered": reg,
-            "groups": groups, "hcp": hcp, "race": race, "month": month, "db_path": db_path}
+            "groups": groups, "hcp": hcp, "race": race, "races": races, "home": home,
+            "month": month, "db_path": db_path}
+
+
+def _person_chapter(facts, cid) -> str:
+    """The chapter key a person's points card reads: the event's own, or on a
+    TGF event his home chapter (else San Antonio's)."""
+    ch = facts["chapter"]
+    if ch != "tgf":
+        return ch
+    h = (facts.get("home") or {}).get(cid)
+    return h if h in FALL_RACE else "san antonio"
 
 
 # ---------------------------------------------------------------------------
 # The message
 # ---------------------------------------------------------------------------
 
+def _race_of(facts, cid) -> dict:
+    return (facts.get("races") or {}).get(_person_chapter(facts, cid)) or facts.get("race") or {}
+
+
 def _race_row(facts, cid):
-    for r in (facts.get("race") or {}).get("rows") or []:
+    for r in _race_of(facts, cid).get("rows") or []:
         if r.get("customer_id") == cid:
             return r
     return None
@@ -345,13 +374,15 @@ def _month_row(facts, cid):
 
 def _points_card(facts, cid, chapter_label) -> tuple[str, bool]:
     """(html, bought_in) — empty html when the person is in neither standing."""
-    ch = facts["chapter"]
+    ch = _person_chapter(facts, cid)
+    if facts["chapter"] == "tgf" and ch in FALL_RACE:
+        chapter_label = FALL_RACE[ch][2]
     r = _race_row(facts, cid)
     m, leader = _month_row(facts, cid)
     items, lines = [], []
     enrolled = bool(r and r.get("enrolled"))
     if r and (r.get("total_points") or 0) > 0:
-        rows = (facts.get("race") or {}).get("rows") or []
+        rows = _race_of(facts, cid).get("rows") or []
         top = max((x.get("total_points") or 0) for x in rows) if rows else 0
         behind = top - (r.get("total_points") or 0)
         sub = f"{_rank_text(r.get('rank'))} in {chapter_label}" + (f" · {behind:g} back" if behind > 0 else " · leading")
@@ -502,18 +533,40 @@ def build_message(facts: dict, person: dict, recap_file: str) -> dict:
     d = date.fromisoformat(str(ev["event_date"])[:10])
     chapter_label = FALL_RACE.get(ch, (None, None, (ev.get("chapter") or "").title()))[2]
     eyebrow = f"{chapter_label.upper()} · {d.strftime('%a %b %-d').upper()}"
+    if facts["chapter"] == "tgf":
+        chapter_label = "TGF"
+        eyebrow = f"TGF · {d.strftime('%a %b %-d').upper()}"
     played = cid in facts["cards"]
     pts_html, enrolled = _points_card(facts, cid, chapter_label)
-    section = chapter_label.upper()
-    try:
-        story = recap_story(recap_file, section, enrolled=enrolled)
-    except Exception as e:
-        return {"held": [f"recap section {section} unreadable in {recap_file}: {e}"]}
-    parts = [f'<p style="margin:0 0 14px;">Good morning, {_e(person["first_name"])}!</p>']
+    # The recap story: the chapter's section of the night's recap file. A
+    # player's SAME-DAY email (Kerry #2460-H: "Event participants get theirs
+    # same day, like within an hour of the last score entered") goes before
+    # the recap is written, so it carries none (recap_file None).
+    story = ""
+    if recap_file:
+        sections = [chapter_label.upper()]
+        if facts["chapter"] == "tgf":
+            sections.append(FALL_RACE.get(_person_chapter(facts, cid), (0, 0, "SAN ANTONIO"))[2].upper())
+        err = None
+        for section in sections:
+            try:
+                story = recap_story(recap_file, section, enrolled=enrolled)
+                err = None
+                break
+            except Exception as e:
+                err = f"recap section {section} unreadable in {recap_file}: {e}"
+        if err:
+            return {"held": [err]}
+    from email_parser.timezone_utils import now_central
+    hour = now_central().hour
+    greet = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
+    parts = [f'<p style="margin:0 0 14px;">{greet}, {_e(person["first_name"])}!</p>']
     if played:
         night, pre = _your_night(facts, cid, person)
-        parts += [f'<p style="margin:0 0 18px;">Here’s your night at {_e(course)}, then the recap and what’s next.</p>',
-                  night, _winnings(facts, cid), _handicap(facts, cid), pts_html,
+        today = d.isoformat() == now_central().date().isoformat()
+        parts += [f'<p style="margin:0 0 18px;">Here’s your {"day" if today and hour < 17 else "night"} at '
+                  f'{_e(course)}{", then the recap and what’s next" if story else " and what’s next"}.</p>',
+                  _champions(facts), night, _winnings(facts, cid), _handicap(facts, cid), pts_html,
                   button(f"See full results from {_e(course)}", f"{BASE}/member/results/{ev['id']}"),
                   button("Your Spotlight", f"{BASE}/member/spotlight?player={cid}", solid=False)]
         title = f"{ev['item_name']} — your results"
@@ -521,18 +574,41 @@ def build_message(facts: dict, person: dict, recap_file: str) -> dict:
         day = d.strftime("%A")
         parts += [f'<p style="margin:0 0 18px;">We missed you at {_e(course)} {day}. '
                   f'{"Here’s where you stand, what happened, and what’s next." if pts_html else "Here’s what happened and what’s next."}</p>',
-                  pts_html,
+                  _champions(facts), pts_html,
                   button(f"See full results from {_e(course)}", f"{BASE}/member/results/{ev['id']}", solid=False)]
         pre = f"{person['first_name']}, here’s {day}’s recap from {course} and what’s next."
         title = f"{ev['item_name']} — the results"
-    parts += [f'<div style="{EYE}color:{ORANGE};padding:18px 0 6px;border-top:2px solid {ORANGE};margin-top:14px;">THE RECAP</div>',
-              story, '<div style="height:18px"></div>', _up_next(facts, cid),
+    if story:
+        parts += [f'<div style="{EYE}color:{ORANGE};padding:18px 0 6px;border-top:2px solid {ORANGE};margin-top:14px;">THE RECAP</div>',
+                  story]
+    parts += ['<div style="height:18px"></div>', _up_next(facts, cid),
               f'<p style="margin:18px 0 0;">{_see_you(facts)}<br><br>{SIGNATURES.get(ch, "The Golf Fellowship")}</p>',
-              f'<p style="margin:18px 0 0;font-size:12px;color:{MUTED};">You’re getting this as a TGF {chapter_label} player. '
+              f'<p style="margin:18px 0 0;font-size:12px;color:{MUTED};">You’re getting this as a TGF{"" if chapter_label == "TGF" else " " + chapter_label} player. '
               f'Reply to this email if you’d rather not get results emails.</p>']
     html = frame(eyebrow, title, "".join(p for p in parts if p), pre)
     return {"subject": f"TGF Results | {title}", "html": html, "preheader": pre, "played": played,
             "held": lint(html)}
+
+
+def _champions(facts) -> str:
+    """THE CHAMPIONS block (Event Ops #2457 BUILD 4; Kerry #2473: "Tied
+    titles split the winnings and the title"): every race this event made
+    final, its champion(s). Empty until race close declares them."""
+    lines = []
+    for key, r in (facts.get("races") or {}).items():
+        if not r.get("final") or not r.get("champions"):
+            continue
+        names = [c.get("player_name") or "" for c in r["champions"]]
+        names = [(n.split(", ", 1)[1] + " " + n.split(", ", 1)[0].title()) if ", " in n else n for n in names]
+        who = " and ".join(names) if len(names) <= 2 else ", ".join(names[:-1]) + " and " + names[-1]
+        title = f"{FALL_RACE[key][2]} Fall Net " + ("Co-Champions" if len(names) > 1 else "Champion")
+        lines.append((title, who))
+    if not lines:
+        return ""
+    return card("THE CHAMPIONS",
+                "".join(f'<div style="padding:6px 0;border-top:1px solid {LINE};">'
+                        f'<div style="font-size:12px;color:{MUTED};letter-spacing:.5px;">{_e(t)}</div>'
+                        f'<div style="font:bold 18px Georgia,serif;">{_e(w)}</div></div>' for t, w in lines))
 
 
 def _see_you(facts) -> str:
@@ -675,6 +751,16 @@ def guards(event_id: int, db_path=None) -> list:
     why = blocking_reason(engine_card_parity(int(event_id), db_path=db_path))
     if why:
         out.append(why)
+    # A finale's email names its champions: wait for race close (Kerry #2473).
+    try:
+        from email_parser import race_close as _rc
+        with db._connect(db_path) as conn:
+            _ev = conn.execute("SELECT id, item_name FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        if _ev and _rc.finale_races(dict(_ev), db_path=db_path) and \
+                not db.get_app_setting(_rc.DONE_KEY.format(int(event_id)), db_path=db_path):
+            out.append("the race prizes and champions are not recorded yet (race close)")
+    except Exception as e:
+        out.append(f"race close check failed: {e}")
     try:
         with db._connect(db_path) as conn:
             name = conn.execute("SELECT item_name FROM events WHERE id = ?", (int(event_id),)).fetchone()[0]
@@ -749,17 +835,25 @@ def preview(event_id: int, customer_id: int, recap_file: str, to_address: str | 
     return {**out, "status": "sent" if ok else "failed", "to": to}
 
 
-def deliver(event_ids: list, recap_file: str, confirm: bool = False, db_path=None) -> dict:
+def deliver(event_ids: list, recap_file: str | None, confirm: bool = False, db_path=None,
+            who: str | None = None) -> dict:
     """THE MEMBER SEND for one night. Guards first (any failure holds every
-    event's emails), then once per person per event."""
+    event's emails), then once per person per event. `who` = "played" (the
+    same-day players' send, Kerry #2460-H), "others" (everyone who did not
+    play), or None (everyone)."""
     from email_parser import database as db
     from email_parser.event_day_email import _creds, _graph_send
     held = {e: guards(int(e), db_path) for e in event_ids}
     held = {e: g for e, g in held.items() if g}
     pl = night_plan(event_ids, db_path)
+    if who in ("played", "others"):
+        want = who == "played"
+        pl["plan"] = {e: [p for p in ps if bool(p["played"]) == want] for e, ps in pl["plan"].items()}
+        pl["counts"] = {e: {"recipients": len(v), "played": sum(p["played"] for p in v)}
+                        for e, v in pl["plan"].items()}
     if pl["errors"]:
         held.update({e: [w] for e, w in pl["errors"].items()})
-    res = {"events": event_ids, "counts": pl["counts"], "held_events": held}
+    res = {"events": event_ids, "who": who or "everyone", "counts": pl["counts"], "held_events": held}
     if held:
         return {**res, "state": "held"}
     facts = {int(e): event_facts(int(e), db_path) for e in event_ids}
@@ -805,17 +899,41 @@ def deliver(event_ids: list, recap_file: str, confirm: bool = False, db_path=Non
     return {**res, "state": "sent", "sent": len(sent), "failed": failed, "already_sent": skipped}
 
 
-def schedule_send(event_ids: list, at: str, recap_file: str, authority: str, db_path=None) -> dict:
-    """Schedule the night's send at `at` (YYYY-MM-DDTHH:MM, Central)."""
+def schedule_send(event_ids: list, at: str, recap_file: str | None, authority: str, db_path=None,
+                  who: str | None = None) -> dict:
+    """Schedule the night's send at `at` (YYYY-MM-DDTHH:MM, Central). `who`
+    = "played" needs no recap (the same-day players' send)."""
     from email_parser import database as db
     datetime.fromisoformat(at)
-    if not (RECAP_DIR / recap_file).exists():
+    if recap_file and not (RECAP_DIR / recap_file).exists():
         return {"error": f"no recap file {recap_file}"}
+    if not recap_file and who != "played":
+        return {"error": "a recap file is needed for anyone who did not play"}
     sch = _json_setting(SCHEDULE_KEY, db_path)
-    key = ",".join(str(int(e)) for e in event_ids)
+    key = ",".join(str(int(e)) for e in event_ids) + (f"|{who}" if who else "")
     sch[key] = {"at": at, "recap": recap_file, "authority": authority, "state": "scheduled"}
     db.set_app_setting(SCHEDULE_KEY, json.dumps(sch), db_path=db_path)
     return {"scheduled": key, **sch[key]}
+
+
+SAME_DAY_DIAL = "results_email_same_day"
+SAME_DAY_AUTHORITY = ("Kerry #2460-H (CoS #2463-1/2): \"Event participants get theirs same day, like "
+                      "within an hour of the last score entered ... Then for non-event participants, theirs "
+                      "just comes the next morning at 6:00a, regardless of event type.\"")
+
+
+def schedule_same_day(event_id: int, now: datetime | None = None, db_path=None) -> dict | None:
+    """At CLOSEOUT START (scoring_window.tick): the players' email for this
+    event, due now. auto_check sends it once every guard passes (held runs
+    retry every 10 minutes). Once per event; off when the dial reads off."""
+    from email_parser.timezone_utils import now_central
+    if (_setting(SAME_DAY_DIAL, db_path) or "on").strip().lower() in ("off", "0", "false"):
+        return None
+    key = f"{int(event_id)}|played"
+    if key in _json_setting(SCHEDULE_KEY, db_path):
+        return None
+    at = (now or now_central()).strftime("%Y-%m-%dT%H:%M")
+    return schedule_send([int(event_id)], at, None, SAME_DAY_AUTHORITY, db_path=db_path, who="played")
 
 
 def next_morning(event_ids: list, db_path=None) -> str:
@@ -842,8 +960,9 @@ def auto_check(now: datetime | None = None, db_path=None) -> dict:
         if s.get("state") == "held" and s.get("last_try") and \
                 datetime.fromisoformat(s["last_try"]) > now - timedelta(minutes=10):
             continue
-        ids = [int(x) for x in key.split(",")]
-        r = deliver(ids, s["recap"], confirm=True, db_path=db_path)
+        ids_part, _, who = key.partition("|")
+        ids = [int(x) for x in ids_part.split(",")]
+        r = deliver(ids, s["recap"], confirm=True, db_path=db_path, who=who or None)
         out[key] = {k: r.get(k) for k in ("state", "sent", "failed", "held_events", "held_messages")}
         sch = _json_setting(SCHEDULE_KEY, db_path)
         if r.get("state") == "sent" and not r.get("failed"):

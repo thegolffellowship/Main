@@ -7067,13 +7067,17 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _op == "preview":
                 _send = "send" in _b[4:]
                 _to = next((x for x in _b[5:] if "@" in x), None)
-                r = _re.preview(int(_b[1]), int(_b[2]), _b[3], to_address=_to, send=_send)
+                r = _re.preview(int(_b[1]), int(_b[2]), None if _b[3].lower() == "none" else _b[3],
+                                to_address=_to, send=_send)
                 if "html" not in _b[4:]:
                     r.pop("html", None)
                 return json.dumps(r, indent=2, default=str)
             if _op == "plan":
+                # plan|<ids>|<recap or none>[|played|others]
                 _ids = [int(x) for x in _b[1].split(",") if x.strip()]
-                return json.dumps(_re.deliver(_ids, _b[2], confirm=False), indent=2, default=str)
+                _who = _b[3] if len(_b) > 3 and _b[3] in ("played", "others") else None
+                _rf = None if (len(_b) < 3 or _b[2].lower() in ("", "none")) else _b[2]
+                return json.dumps(_re.deliver(_ids, _rf, confirm=False, who=_who), indent=2, default=str)
             if _op in ("schedule", "schedule-next"):
                 # schedule-next|<ids>|<recap>|<post>: 6:00 AM the next
                 # morning, Kerry's standing rule (#1778).
