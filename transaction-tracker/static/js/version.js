@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.625.0";
+window.TGF_VERSION = "2.626.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.626.0",
+    date: "2026-10-29",
+    title: "Better-differential rule, the pace bar, re-stage by pace",
+    changes: [
+      "THE BETTER-DIFFERENTIAL RULE (Kerry 10/28, Event Ops #2479/#2480, CoS #2505; Kerry 10/29 \"Start on them now\"): a new player on a temporary (starting) handicap who posts a better differential drops to it at once. One nine counts doubled (the Adam Wilson step: 3.1 for nine holes = 6.2), two nines are summed. Only ever down, and only until the player has 27 holes on file; after that the index is theirs. It runs when the differentials post (both posting paths), sets customers.starting_handicap_18 with set_by rule:better_differential and a note naming the event, and logs agent better-differential. Dial better_differential_rule (on).",
+      "YOUR GROUP'S PACE on the results email (Event Ops #2466-H/#2467-H v2): a card after the winnings with one bar in three equal parts, green / yellow / red, each 15 minutes on a nine (to 2:15, 2:30, past) or 30 on an eighteen (4:30, 5:00, past), an arrow and the group's time above it, nothing under it. Shown only when the round has pace data for the player's group.",
+      "RE-STAGE BY PACE (Event Ops #2483-3): a \"Re-stage by pace\" button on the PAIRINGS tab (shown once the sheet is saved). Every group keeps its players, carts and blinds; only which start it holds changes, by the generator's own rule (shotgun: short groups lead the train, then foursomes fastest first; tee times: short groups earliest, then fastest; ties to the lower handicap). It previews the moves and asks before writing; an approved sheet's confirm says the moved players get an updated start. A standings sheet on tee times is left alone. Route /api/events/<id>/pairings/restage-pace (GET preview, POST apply, manager), bridge scoring-restage-pace. Guards test_better_diff.py, test_pace_block.py, test_pace_restage.py."
+    ]
+  },
   {
     version: "2.625.0",
     date: "2026-10-29",

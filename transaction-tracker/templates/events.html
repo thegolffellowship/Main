@@ -7908,6 +7908,10 @@
                 // the Tracker so I can see the preview?"): each group's
                 // scoring link and where every card stands. Admin only in
                 // the dry run.
+                // RE-STAGE BY PACE (Kerry 10/28, #2483-3): after hand edits,
+                // groups keep their players and only their starts move so
+                // the fastest still go off first. Preview, then confirm.
+                html += `<button class="pairings-action-btn pairings-restage-btn" title="Keep every group as is and re-order the starts by pace: the fastest groups go off first">&#x23F1; Re-stage by pace</button>`;
                 html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
                 // APPROVE from here after editing (Kerry 10/19: "takes me to
                 // the PAIRINGS view in the EVENT. Then it would ALSO need an
@@ -11812,6 +11816,43 @@
                 btn.textContent = 'Drawing…'; btn.disabled = true;
                 try { await drawBlinds(ev.id, container, ev); }
                 finally { btn.textContent = was; btn.disabled = false; }
+            });
+        });
+
+        // RE-STAGE BY PACE (#2483-3) — preview the moves, confirm, apply.
+        container.querySelectorAll('.pairings-restage-btn').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const was = btn.textContent;
+                btn.textContent = 'Checking…'; btn.disabled = true;
+                try {
+                    const res = await fetch(`/api/events/${ev.id}/pairings/restage-pace`);
+                    const d = await res.json();
+                    if (!res.ok || d.error) { alert('Re-stage failed: ' + (d.error || res.status)); return; }
+                    const lines = []; let changes = 0;
+                    Object.entries(d.legs || {}).forEach(([holes, leg]) => {
+                        if (leg.skipped) { lines.push(`${holes} holes: left as is (${leg.skipped})`); return; }
+                        changes += leg.changes || 0;
+                        (leg.moves || []).filter(m => m.from_group !== m.to_group).forEach(m => {
+                            lines.push(`  ${m.from} \u2192 ${m.to}: ${m.players.join(', ')} (pace ${m.pace})`);
+                        });
+                    });
+                    if (!changes) { alert('Already staged by pace. Nothing to move.' + (lines.length ? '\n\n' + lines.join('\n') : '')); return; }
+                    const apvd = ((getPairingsState(ev.id).approval || {}).approval || '') === 'approved';
+                    if (!confirm(`RE-STAGE BY PACE: ${changes} group(s) change start\n\n${lines.join('\n')}\n\n`
+                                 + `Groups keep their players; only the starts move.`
+                                 + (apvd ? `\n\nThis sheet is APPROVED: the moved players will get an updated start.` : '')
+                                 + `\n\nApply?`)) return;
+                    const w = await fetch(`/api/events/${ev.id}/pairings/restage-pace`, { method: 'POST' });
+                    const wd = await w.json();
+                    if (!w.ok || wd.error) { alert('Re-stage failed: ' + (wd.error || w.status)); return; }
+                    delete pairingsData[ev.id];
+                    await loadPairings(ev.id);
+                    pairingsOpenForEvent[ev.id] = true;
+                    rerenderDetailBody(container, ev);
+                } catch (err) {
+                    alert('Re-stage failed: ' + err.message);
+                } finally { btn.textContent = was; btn.disabled = false; }
             });
         });
 

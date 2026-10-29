@@ -506,6 +506,72 @@ def _your_night(facts, cid, person) -> tuple[str, str]:
                          else "your card, handicap and points are inside.")
 
 
+# YOUR GROUP'S PACE (Kerry 10/28, Event Ops #2466-H/#2467-H, v2): "I don't
+# think any text is needed. Just let them sit with the colors and their time
+# slot arrow above the bar." / "Show colors as equal length segments." /
+# "2:15 (4:30 for 18s) is target between green and yellow, 2:30 (5:00 for
+# 18s) is time between yellow and red" / "YOUR PACE should show as YOUR
+# GROUP'S PACE." One bar, three equal thirds (each 15 min on a nine, 30 on an
+# eighteen), the arrow at the group's estimated round time (the manager pace
+# report's est_round), clamped at the ends. Group only; no text under the bar.
+PACE_TARGETS = {9: (135, 150), 18: (270, 300)}      # minutes: green|yellow, yellow|red
+
+
+def _group_pace(facts, cid):
+    """(est_minutes, holes) for this player's group, or None."""
+    from email_parser import database as db
+    from email_parser import pace_report as pr
+    eid = facts["event"]["id"]
+    try:
+        with db._connect(facts.get("db_path")) as conn:
+            rids = [int(r[0]) for r in conn.execute("SELECT id FROM se_rounds WHERE event_id = ?", (eid,))]
+    except Exception:
+        return None
+    for rid in rids:
+        try:
+            rep = pr.round_report(rid, db_path=facts.get("db_path"))
+        except Exception:
+            continue
+        for g in rep.get("groups") or []:
+            if int(cid) in [int(x) for x in g.get("customer_ids") or []]:
+                if g.get("status") == "flagged" or g.get("seconds_per_hole") is None:
+                    return None
+                holes = int(rep.get("holes") or 9)
+                return g["seconds_per_hole"] * holes / 60.0, holes
+    return None
+
+
+def pace_bar(est_minutes: float, holes: int) -> str:
+    lo, hi = PACE_TARGETS[18 if holes >= 18 else 9]
+    span = hi - lo
+    start = lo - span
+    pct = max(0.0, min(1.0, (est_minutes - start) / (3 * span))) * 100
+    m = int(round(est_minutes))
+    label = f"{m // 60}:{m % 60:02d}"
+    mark = f'<b style="font:bold 14px Arial,sans-serif;color:{INK};">{label}</b><br>' \
+           f'<span style="font-size:14px;line-height:12px;color:{INK};">&#9660;</span>'
+    if pct > 80:
+        arrow = (f'<tr><td width="{pct:.0f}%" align="right" style="padding:0 0 2px;">{mark}</td>'
+                 f'<td style="padding:0;"></td></tr>')
+    else:
+        arrow = (f'<tr><td width="{pct:.0f}%" style="padding:0;"></td>'
+                 f'<td align="left" style="padding:0 0 2px;">{mark}</td></tr>')
+    seg = 'height:14px;font-size:0;line-height:0;'
+    bar = (f'<table {T}><tr>'
+           f'<td width="33%" bgcolor="#22C55E" style="{seg}background:#22C55E;border-radius:7px 0 0 7px;">&nbsp;</td>'
+           f'<td width="34%" bgcolor="#FACC15" style="{seg}background:#FACC15;">&nbsp;</td>'
+           f'<td width="33%" bgcolor="#EF4444" style="{seg}background:#EF4444;border-radius:0 7px 7px 0;">&nbsp;</td>'
+           f'</tr></table>')
+    return f'<table {T}>{arrow}</table>{bar}'
+
+
+def _pace(facts, cid) -> str:
+    gp = _group_pace(facts, cid)
+    if not gp:
+        return ""
+    return card("YOUR GROUP’S PACE", pace_bar(*gp))
+
+
 def _winnings(facts, cid) -> str:
     rows = facts["payouts"].get(cid) or []
     if not rows:
@@ -578,7 +644,8 @@ def build_message(facts: dict, person: dict, recap_file: str) -> dict:
         today = d.isoformat() == now_central().date().isoformat()
         parts += [f'<p style="margin:0 0 18px;">Here’s your {"day" if today and hour < 17 else "night"} at '
                   f'{_e(course)}{", then the recap and what’s next" if story else " and what’s next"}.</p>',
-                  _champions(facts), night, _winnings(facts, cid), _handicap(facts, cid), pts_html,
+                  _champions(facts), night, _winnings(facts, cid), _pace(facts, cid),
+                  _handicap(facts, cid), pts_html,
                   button(f"See full results from {_e(course)}", _tag_results(ev['id'], cid)),
                   button("Your Spotlight", f"{BASE}/member/spotlight?player={cid}", solid=False)]
         title = f"{ev['item_name']} — your results"

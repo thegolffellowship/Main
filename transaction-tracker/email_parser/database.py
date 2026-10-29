@@ -22526,7 +22526,12 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
     # handicap reports for each chapter after each posting"). Non-fatal —
     # a mail hiccup must never roll back or mask a successful posting.
     recap = None
+    better = None
     if not dry_run and plan:
+        # THE BETTER-DIFFERENTIAL RULE (Kerry 10/28, the Wilson rule):
+        # before the recap, so it shows the new temporary handicap.
+        from email_parser.better_diff import after_post as _bd
+        better = _bd(preview["events_matched"] or [event_query], db_path=db_path)
         try:
             recap = send_handicap_recap_email(
                 (preview["events_matched"] or [event_query])[0],
@@ -22542,6 +22547,7 @@ def derive_handicap_rounds_from_scoring(event_query: str, dry_run: bool = True,
             "would_write" if dry_run else "written": plan,
             "skipped": skipped,
             "recap_email": recap,
+            "better_differential": better,
             "summary": {"planned": len(plan), "skipped": len(skipped),
                         "cap_changes_differential":
                             preview["summary"]["cap_changes_differential"]},
@@ -25081,7 +25087,10 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = 
     # Cedar Creek s18.11 (2026-09-19) posted 30 rounds silently and Kerry
     # had to ask "Was a handicap report summary sent to me as manager?"
     recap = None
+    better = None
     if not dry_run and plan:
+        from email_parser.better_diff import after_post as _bd
+        better = _bd(sorted(events_seen) or [event_query], db_path=db_path)
         try:
             recap = send_handicap_recap_email(
                 (sorted(events_seen) or [event_query])[0], plan, db_path=db_path)
@@ -25094,6 +25103,7 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = 
             ("would_write" if dry_run else "written"): plan,
             "skipped": skipped,
             "recap_email": recap,
+            "better_differential": better,
             "per_nine_source": per_nine_source,
             "summary": {"planned": len(plan), "skipped": len(skipped),
                         "players": len(set(p["player_name"] for p in plan))},

@@ -4199,3 +4199,8 @@ list or something. I don't want to just send stuff to people that don't care."
   min_sent with no open, unknown or click. It reports only; removing anyone from
   a list is Kerry's decision (rule 3b). Brevo sends keep Brevo's tracking.
 - Guard `test_link_clicks.py`.
+
+
+## YOUR GROUP'S PACE on the results email (v2.626.0, Event Ops #2466-H/#2467-H v2)
+
+A card after the winnings: one bar in three equal parts, green #22C55E / yellow #FACC15 / red #EF4444. Each part is 15 minutes on a nine (green to 2:15, yellow to 2:30, red past) and 30 on an eighteen (4:30, 5:00). An arrow and the group's time sit above the bar; nothing goes under it. Data: `pace_report.round_report` for the round, the player's group by customer_id. No pace data, no card. `results_email.PACE_TARGETS`, `pace_bar`, `_pace`; guard `test_pace_block.py`.

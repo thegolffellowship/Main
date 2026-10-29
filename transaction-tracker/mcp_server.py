@@ -1851,6 +1851,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
       scoring-results-email:preview|<event_id>|<cid>|<recap file>[|send[|<to>]][|html] / plan|<ids>|<recap> / schedule|<ids>|<YYYY-MM-DDTHH:MM>|<recap>|<kerry_ok_post> / schedule-next|<ids>|<recap>|<kerry_ok_post> (6:00 AM the next morning, Kerry #1778) / cancel|<ids> / status — the personal RESULTS EMAIL (Kerry 10/14); previews go to staff or a chapter manager's own address; members only through a schedule, guards first
       scoring-card-parity:<event name or id>  READ-ONLY engine vs saved scorecards, every entered player: stored strokes vs the rule (own tee, the nine played) and the engine's card vs the stored card; any difference holds payouts + points
+      scoring-restage-pace:<event_id>[|apply]  re-stage a saved sheet by pace: groups keep their players, only their starts move (dry run default)
       scoring-engagement[:<days>][|<min_sent>]  READ-ONLY who opens / clicks our emails (open pixel + click log): never_engaged = sent at least min_sent, no open or click; Apple preloads counted apart
       scoring-waitlist:<event_id> / add|<event_id>|<cid>[|<note>][|apply] / remove|<event_id>|<cid>[|apply] / move|<event_id>|<cid>|<pos> / preview|<joined|offered|expired|morning>|<event_id> / tick  the event's ordered waitlist; an RSVP-only player on it leaves the roster (RSVP override not_playing); paid rows untouched
       scoring-closeout-chain:status|<id> / run|<id> / reset|<id>[|<step>]  the in-Tracker closeout chain (publish, final, payouts, flights, pairings, handicaps, points, pace, recap); runs itself at CLOSEOUT START
@@ -7163,6 +7164,13 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # Kerry 10/14: the engine against the saved cards, every player.
             from email_parser.card_parity import engine_card_parity as _ecp
             return json.dumps(_ecp(arg.strip()), indent=2, default=str)
+        if cmd == "scoring-restage-pace":
+            # "<event_id>[|apply]" re-stage a saved sheet by pace (Kerry 10/28, #2483-3)
+            from email_parser import pace_restage as _prs
+            _b = [b.strip() for b in (arg or "").split("|")]
+            if "apply" in _b[1:]:
+                return json.dumps(_prs.apply(int(_b[0]), by="tracker-claude"), indent=2, default=str)
+            return json.dumps(_prs.plan(int(_b[0])), indent=2, default=str)
         if cmd == "scoring-engagement":
             # Kerry 10/29: who opens / clicks our emails. "[<days>][|<min_sent>]"
             # read-only; nobody is removed from anything here.

@@ -2638,3 +2638,10 @@ person, Matthew Jenkins, who invited him and he requested. So no ambassador
 needed." The pairings audit counts a 1st Timer grouped with the member who
 invited him, or with a requested partner, as covered (`pairings_audit.py`).
 The generator's rule 16/18 swap is unchanged.
+
+
+## Re-stage by pace (v2.626.0, Kerry 2026-10-28, Event Ops #2483-3)
+
+After hand edits, the PAIRINGS tab's "Re-stage by pace" button (shown when the sheet is saved) re-orders the STARTS so the fastest groups still go off first. Each group keeps its players, carts and blinds; only the slot it holds changes. Group pace is the average member `pace_rating` (1 slowest .. 3 fastest, unrated = `default_rating`). Shotgun: `_stage_shotgun_smalls_lead` (short groups lead the train, then foursomes fastest first in play order). Tee times: short groups take the earliest times, then fastest first, ties to the lower total handicap. A standings sheet on tee times is left alone (leaders go off last).
+
+`email_parser/pace_restage.py`: `plan(event_id)` is the dry run; `apply` parks the leg's rows at group_num + 10000 (blinds too), moves each group to its new number and label, rebuilds blind `slot_key`s, logs agent `pace-restage`, and calls `live_scoring_default.follow_sheet`. The button previews, then confirms; on an approved sheet the confirm warns that the moved players get an updated start (the after-lock job's UPDATED GROUP email). Route `GET|POST /api/events/<id>/pairings/restage-pace` (manager); bridge `scoring-restage-pace:<event_id>[|apply]`. Guard `test_pace_restage.py`.

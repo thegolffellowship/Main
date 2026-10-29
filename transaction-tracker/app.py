@@ -5717,6 +5717,19 @@ def public_register_gate(event_id):
     return _public_page("Waitlist", head + form)
 
 
+@app.route("/api/events/<int:event_id>/pairings/restage-pace", methods=["GET", "POST"])
+@require_role("manager")
+def api_pairings_restage_pace(event_id):
+    """RE-STAGE BY PACE (Kerry 10/28, #2483-3): GET previews, POST applies.
+    Groups keep their players; only their starts move (email_parser/pace_restage.py)."""
+    from email_parser import pace_restage as _pr
+    if request.method == "POST":
+        r = _pr.apply(event_id, by=f"ui:{session.get('role')}")
+    else:
+        r = _pr.plan(event_id)
+    return jsonify(r), (400 if r.get("error") else 200)
+
+
 @app.route("/api/events/<int:event_id>/waitlist", methods=["GET", "POST"])
 @require_role("view-only")
 def api_event_waitlist(event_id):

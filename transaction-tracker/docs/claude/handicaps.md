@@ -1174,3 +1174,10 @@ default; every apply is action-logged.
   link.
 - **Effect on his index:** none. A link to rounds outside the lookback keeps
   the starting index of record.
+
+
+## The better-differential rule (v2.626.0, Kerry 2026-10-28, Event Ops #2479/#2480, CoS #2505)
+
+A new player plays on a temporary (starting) handicap until they have 27 holes on file. If, before then, they post a differential better than that temporary number, it drops to the better one at once. One nine counts doubled (Adam Wilson: 3.1 for a nine = 6.2 against 9.4); two nines on one card are summed. It only ever moves down.
+
+`email_parser/better_diff.py`: `plan(event_ids)` reads each scoring round's `handicap_rounds` (by `scoring_round_id`) for customers with `starting_handicap_18` set, skips anyone with 27 holes already on file (counted by customer_id or the player links), and proposes a change only when the 18-hole number is lower. `after_post(event_names)` runs it from both `derive_handicap_rounds_from_scoring` and `derive_18hole_rounds_as_two_nines` before the recap email; it never raises, writes through `set_starting_handicap` with `set_by = rule:better_differential` and a note naming the event, and logs agent `better-differential`. Dial `better_differential_rule` (on unless "off"). Guard `test_better_diff.py`.
