@@ -4177,3 +4177,25 @@ counts as the person. One reader, `opened(kind, customer_id[, event_id])`;
 `opened_line` feeds the missing-handicap banner's ask line, and
 `payout_ask.status_rows` adds `opened` / `scanner_only` to the Unpaid chips.
 The open pixel waits on Kerry (#2481). Guard `test_link_clicks.py`.
+
+
+## The open pixel and engagement (v2.625.0, Kerry 2026-10-29)
+
+Kerry: "If the open-tracking pixel is no big deal then let's do it for all
+emails so we know who's opening and not opening stuff. If someone never ever
+interacts with our emails then that might be someone that we remove from the
+list or something. I don't want to just send stuff to people that don't care."
+- `fetcher.send_mail_graph` calls `link_clicks.pixel_for`: a 1x1 `/o/<tag>.gif`
+  only for ONE To address, a known customer (customer_emails), not
+  `@thegolffellowship.com`, with no CC/BCC (Kerry's copy would fire it). Each
+  send logs `email_sent` (subject key); each fetch logs `email_open`. Dial
+  `email_open_pixel`.
+- Classification (`classify_open`): Gmail's GoogleImageProxy counts; Apple Mail
+  Privacy Protection (IP 17.x) preloads every image, so it is `unknown`; an
+  empty user agent is a scanner. Outlook often blocks images, so a missing open
+  is not proof of not reading: clicks, RSVPs and registrations count too.
+- `link_clicks.engagement(days=120, min_sent=3)` / bridge `scoring-engagement`:
+  sent, opened, unknown, clicks per customer; `never_engaged` = sent at least
+  min_sent with no open, unknown or click. It reports only; removing anyone from
+  a list is Kerry's decision (rule 3b). Brevo sends keep Brevo's tracking.
+- Guard `test_link_clicks.py`.

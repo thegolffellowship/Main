@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.624.0";
+window.TGF_VERSION = "2.625.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.625.0",
+    date: "2026-10-29",
+    title: "The open pixel and who never engages",
+    changes: [
+      "Kerry 10/29: \"If the open-tracking pixel is no big deal then let's do it for all emails so we know who's opening and not opening stuff. If someone never ever interacts with our emails then that might be someone that we remove from the list or something.\" Every email the Tracker sends goes through fetcher.send_mail_graph, which now adds a 1x1 image (/o/<tag>.gif) when it is one person, a known customer, not a staff address, and has NO CC or BCC (a copy to Kerry would otherwise count as the player opening it). The send and each open are logged (agent link-click, email_sent / email_open). Dial email_open_pixel (on).",
+      "Opens are not all trusted: Apple Mail Privacy Protection loads every image on delivery, so an open from Apple (17.x) is counted as unknown, never as the person; an empty user agent is a scanner; Gmail's image proxy fetches when the person opens, so it counts.",
+      "link_clicks.engagement(days, min_sent) and the read-only bridge scoring-engagement list, per customer, emails sent / opened / unknown / clicked, and never_engaged: sent at least 3, no open or click. Nobody is removed from anything automatically; that stays Kerry's call. Brevo (the Insider) keeps its own open tracking."
+    ]
+  },
   {
     version: "2.624.0",
     date: "2026-10-29",

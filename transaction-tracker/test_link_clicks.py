@@ -63,5 +63,39 @@ cl.get(f"/handicap/{tok}", headers={"User-Agent": PHONE["ua"], "Accept-Language"
 check("opening the handicap ask logs it", (lc.opened("handicap", 851, db_path=DB) or {}).get("count") == 2)
 src = open("email_parser/event_day_email.py").read() + open("email_parser/results_email.py").read()
 check("the event-day and results emails tag their links", "tag_url" in src and "_tag_results" in src)
+
+print("== the open pixel (Kerry 10/29) ==")
+with db._connect(DB) as c:
+    c.execute("INSERT INTO customer_emails (customer_id, email, is_primary) VALUES (851, 'eric@x.com', 1)")
+    c.commit()
+px = lc.pixel_for("Eric@x.com", subject="Your handicap", db_path=DB)
+check("one known person: a 1x1 pixel", px.startswith("<img") and "/o/" in px, px)
+check("a CC means no pixel (Kerry's copy would count as Eric)",
+      lc.pixel_for("eric@x.com", cc="kerry@thegolffellowship.com", subject="x", db_path=DB) == "")
+check("staff and unknown addresses get none",
+      lc.pixel_for("kerry@thegolffellowship.com", db_path=DB) == "" and lc.pixel_for("who@x.com", db_path=DB) == "")
+check("two recipients get none", lc.pixel_for("eric@x.com, b@x.com", db_path=DB) == "")
+tag = px.split("/o/")[1].split(".gif")[0]
+r = cl.get(f"/o/{tag}.gif", headers={"User-Agent": "Mozilla/5.0 (via ggpht.com GoogleImageProxy)"},
+           environ_base={"REMOTE_ADDR": "66.1.1.1"})
+check("the pixel route answers a gif, never cached",
+      r.status_code == 200 and r.mimetype == "image/gif" and "no-store" in r.headers.get("Cache-Control", ""))
+e = lc.engagement(db_path=DB)["by_customer"][851]
+check("a Gmail open counts as Eric opening it", e["sent"] == 1 and e["opened"] == 1, e)
+cl.get(f"/o/{tag}.gif", headers={"User-Agent": "Mozilla/5.0"}, environ_base={"REMOTE_ADDR": "17.58.1.1"})
+e = lc.engagement(db_path=DB)["by_customer"][851]
+check("an Apple privacy preload is 'unknown', not an open", e["opened"] == 1 and e["unknown"] == 1, e)
+check("a forged pixel logs nothing",
+      cl.get("/o/abc.def.gif").status_code == 200 and lc.engagement(db_path=DB)["by_customer"][851]["opened"] == 1)
+with db._connect(DB) as c:
+    c.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (900, 'Never', 'Opens')")
+    c.execute("INSERT INTO customer_emails (customer_id, email, is_primary) VALUES (900, 'never@x.com', 1)")
+    c.commit()
+for i in range(3):
+    lc.pixel_for("never@x.com", subject=f"m{i}", db_path=DB)
+nv = lc.engagement(db_path=DB)["never_engaged"]
+check("three emails, no open, no click: listed as never engaged (nobody removed)",
+      [900, "Never Opens", 3] in nv and not any(x[0] == 851 for x in nv), nv)
+check("the send path adds the pixel", "pixel_for" in open("email_parser/fetcher.py").read())
 print(f"\n{'ALL PASS' if not F else str(len(F)) + ' FAILED: ' + ', '.join(F)}")
 sys.exit(1 if F else 0)

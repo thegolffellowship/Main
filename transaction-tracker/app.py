@@ -5634,6 +5634,17 @@ def _rsvp_confirm_page(info: dict) -> str:
     return _public_page("RSVP", body)
 
 
+@app.route("/o/<tag>.gif")
+def email_open_pixel(tag):
+    """THE OPEN PIXEL (Kerry 10/29): a 1x1 image in one person's email; the
+    fetch is logged by email_parser/link_clicks.record_open. Never cached."""
+    from email_parser import link_clicks as _lc
+    _lc.record_open(tag, _lc.client_of(request))
+    resp = Response(_lc.GIF, mimetype="image/gif")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+
 @app.route("/register/<int:event_id>", methods=["GET", "POST"])
 def public_register_gate(event_id):
     """THE REGISTRATION GATE (Kerry 2026-10-29, after Kelly Barna's dead

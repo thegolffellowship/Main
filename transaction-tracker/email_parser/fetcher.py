@@ -462,6 +462,17 @@ def send_mail_graph(
         "Content-Type": "application/json",
     }
 
+    # THE OPEN PIXEL (Kerry 10/29): one person, no CC/BCC, a known customer
+    # (email_parser/link_clicks.pixel_for decides; never raises).
+    try:
+        from email_parser.link_clicks import pixel_for
+        _px = pixel_for(to_address, cc_address, bcc_address, subject)
+        if _px:
+            html_body = (html_body.replace("</body>", _px + "</body>", 1)
+                         if "</body>" in html_body else html_body + _px)
+    except Exception:
+        pass
+
     message = {
         "subject": subject,
         "body": {
