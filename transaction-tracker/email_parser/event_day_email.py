@@ -534,6 +534,71 @@ def games_card(view: dict, cid: int | None, rsvp_only: bool, as_of: str, day: st
         + "".join(blocks) + hio + "</table>")
 
 
+# PACE OF PLAY on the Event Info email (Kerry 10/29: "I think we also need to
+# have something about expected pace and an announcement of the Group Pace bar
+# in the event info emails"). The course's own standard
+# (database.course_pace_targets, Kissing Tree 4:00) and the three-colour bar
+# the results email will show. Behind dial `event_day_pace_card` (off until
+# Kerry approves the words); words here, not in the approved template, so the
+# template's approval hash is untouched.
+PACE_DIAL = "event_day_pace_card"
+_TIME_RE = re.compile(r"(\d{1,2}):(\d\d)\s*([AP]M)", re.I)
+
+
+def _hm(mins: int) -> str:
+    return f"{mins // 60}:{mins % 60:02d}"
+
+
+def _finish(start_line: str | None, mins: int) -> str | None:
+    m = _TIME_RE.search(start_line or "")
+    if not m:
+        return None
+    h, mi, ap = int(m.group(1)) % 12, int(m.group(2)), m.group(3).upper()
+    t = (h + (12 if ap == "PM" else 0)) * 60 + mi + mins
+    t %= 24 * 60
+    hh = t // 60
+    return f"{(hh % 12) or 12}:{t % 60:02d} {'PM' if hh >= 12 else 'AM'}"
+
+
+def pace_card(lo: int, hi: int, holes: int, course: str | None, start_line: str | None) -> str:
+    fin = _finish(start_line, lo)
+    seg = 'height:14px;font-size:0;line-height:0;'
+    bar = (f'<table {_T}><tr>'
+           f'<td width="33%" bgcolor="#22C55E" style="{seg}background:#22C55E;border-radius:7px 0 0 7px;">&nbsp;</td>'
+           f'<td width="34%" bgcolor="#FACC15" style="{seg}background:#FACC15;">&nbsp;</td>'
+           f'<td width="33%" bgcolor="#EF4444" style="{seg}background:#EF4444;border-radius:0 7px 7px 0;">&nbsp;</td>'
+           f'</tr></table>'
+           f'<table {_T} style="font-size:12px;color:{MUTED};"><tr>'
+           f'<td width="33%" style="padding-top:4px;">{_hm(lo)} or under</td>'
+           f'<td width="34%" align="center" style="padding-top:4px;">{_hm(lo)} to {_hm(hi)}</td>'
+           f'<td width="33%" align="right" style="padding-top:4px;">over {_hm(hi)}</td></tr></table>')
+    where = _e(course) if course else "The course"
+    lead = (f'{where} expects {holes} holes in <b>{_hm(lo)}</b>.'
+            + (f' Off at {_e(_TIME_RE.search(start_line).group(0))}, that puts your group in by <b>{_e(fin)}</b>.'
+               if fin else ""))
+    return (
+        f'<table {_T} style="border:1px solid {LINE};border-radius:8px;margin:0 0 18px;">'
+        f'<tr><td style="padding:14px 16px 6px;">'
+        f'<div style="{_EYEBROW}color:{ORANGE};">PACE OF PLAY</div>'
+        f'<div style="font-size:15px;line-height:1.5;padding-top:4px;">{lead}</div></td></tr>'
+        f'<tr><td style="padding:6px 16px 4px;">{bar}</td></tr>'
+        f'<tr><td style="padding:8px 16px 14px;font-size:14px;line-height:1.5;">'
+        f'New this time: Live Scoring times every group, and your results email will show '
+        f'<b>YOUR GROUP\u2019S PACE</b> on this bar. Keep up with the group ahead and help keep us in the green.'
+        f'</td></tr></table>')
+
+
+def _pace_targets_for(conn, ev: dict, holes, db_path=None):
+    from email_parser import database as db
+    cid = ev.get("course_id")
+    if not cid and ev.get("course"):
+        r = conn.execute("SELECT course_id FROM courses WHERE lower(name) = lower(?)", (ev["course"],)).fetchone()
+        cid = r[0] if r else None
+    h = 18 if int(holes or 9) >= 18 else 9
+    lo, hi = db.course_pace_targets(cid, h, db_path=db_path)
+    return lo, hi, h
+
+
 def scoring_button(url: str) -> str:
     return (f'<table {_T} style="margin:0 0 16px;"><tr><td align="center" bgcolor="{ORANGE}" '
             f'style="background:{ORANGE};border-radius:999px;padding:12px;">'
@@ -633,7 +698,8 @@ def frame(inner: str, chapter_label: str, title: str) -> str:
 # Build
 # ---------------------------------------------------------------------------
 
-def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None = None) -> dict:
+def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None = None,
+                           preview: bool = False) -> dict:
     """Render every roster player's message (nothing is sent).
 
     Returns {event, template_hash, approved, counts, messages, held,
@@ -687,6 +753,17 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                 except Exception as exc:
                     logger.exception("event-day email: games tab read failed (non-fatal)")
                     gview = {"ok": False, "why": f"games tab unreadable: {exc}"}
+        # PACE OF PLAY card: dial event_day_pace_card on = every send;
+        # "preview" = staff previews only (Kerry reviews the words first).
+        pace_t = None
+        try:
+            dial = (db.get_app_setting(PACE_DIAL, db_path=db_path) or "off").strip().lower()
+            if dial == "on" or (preview and dial == "preview"):
+                hk = next((g.get("holes") for g in groups if g.get("holes")), None) or pack.get("holes_key") or 9
+                pace_t = _pace_targets_for(conn, ev, hk, db_path)
+        except Exception:
+            logger.exception("event-day email: pace card unavailable (non-fatal)")
+            pace_t = None
         if gview.get("ok"):
             try:
                 pot = float((db.get_hio_pot(db_path=db_path) or {}).get("pot") or 0)
@@ -841,6 +918,8 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             tbutton = (teesheet_button(_tag(f"{teesheet_url}#g{_e(g.get('group_num'))}", cid, event_id, "teesheet"))
                        if teesheet_url and "{teesheet_button}" in tpl_text else "")
             gcard = games_card(gview, cid, bool(r.get("rsvp_only")), as_of, day) if gview.get("ok") else ""
+            if pace_t:
+                gcard += pace_card(pace_t[0], pace_t[1], pace_t[2], ev_info.get("course"), g.get("start_line"))
             sbutton = scoring_button(short_score_url(url)) if url else ""
             first = nm.get("first_name") or (full.split()[0] if full else "")
             vals_html = {
@@ -982,7 +1061,7 @@ def send_event_day_preview(event_id: int, to_address=None, db_path=None, only=No
     if bad:
         return {"error": f"the event-day preview goes to TGF staff only; refused {bad}"}
     _ensure_scoring(event_id, db_path)
-    built = build_event_day_emails(event_id, db_path=db_path)
+    built = build_event_day_emails(event_id, db_path=db_path, preview=True)
     if built.get("error"):
         return built
     ev = built["event"]

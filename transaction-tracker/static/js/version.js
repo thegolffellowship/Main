@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.627.0";
+window.TGF_VERSION = "2.628.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.628.0",
+    date: "2026-10-29",
+    title: "Pace of play on the Event Info email",
+    changes: [
+      "Kerry 10/29: \"I think we also need to have something about expected pace and an announcement of the Group Pace bar in the event info emails that go out tomorrow.\" The Event Info (event-day) email gets a PACE OF PLAY card after the GAMES card: the course's own standard (Kissing Tree 4:00 for 18), the time the player's group should be in by (start + standard, e.g. 8:30 AM -> 12:30 PM), the green / yellow / red bar labelled with the course's lines, and one line announcing that the results email will show YOUR GROUP'S PACE on it.",
+      "The words live in code beside the GAMES card, so the approved template's hash (event_day_email_approved) is unchanged. Dial event_day_pace_card: off (default), preview (staff previews only, for Kerry's review), on (every send). Guard test_event_day_pace.py."
+    ]
+  },
   {
     version: "2.627.0",
     date: "2026-10-29",
