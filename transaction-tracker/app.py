@@ -2690,6 +2690,26 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # THE WAITLIST (Kerry 2026-10-29): every 15 minutes, the full alert,
+    # claims, expiries, offers and the event-morning note.
+    # email_parser/waitlist.py, dial waitlist_auto.
+    def waitlist_job():
+        from email_parser.waitlist import tick
+        try:
+            res = tick()
+            if res.get("events"):
+                logger.info("Waitlist: %s", res["events"])
+        except Exception:
+            logger.exception("Waitlist job failed (non-fatal)")
+    scheduler.add_job(
+        waitlist_job,
+        "cron", minute="7-59/15",
+        timezone="US/Central",
+        id="waitlist",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     # NOON COURSE FILES (Kerry 2026-10-26, CoS #2321/#2329-3/#2331 item 4:
     # "Event ops - Absolutely should be on Tracker side. Not an agent
     # routine" / "CC Course Files to Manager too"). Event day, every 15 min
@@ -5498,6 +5518,15 @@ def public_event_rsvp(token):
         # The one-tap confirm of a guarded I'm in (Kerry 10/26): on to registration.
         _reg = ((res.get("event") or {}).get("registration_url") or "").strip()
         if res.get("action") == "in" and _reg and not res.get("ignored") and not res.get("preview"):
+            # Through the registration gate (Kerry 10/29): the waitlist page
+            # when the event is full, never a dead store link.
+            try:
+                from email_parser import waitlist as _wl
+                _evid = (res.get("event") or {}).get("id")
+                if _evid and _wl.register_target(int(_evid)).get("full"):
+                    return redirect(f"{_wl.register_url(int(_evid))}?t={token}")
+            except Exception:
+                logger.exception("rsvp: waitlist check failed")
             return redirect(_reg)
     else:
         _inv.log_tap(token, _client)
@@ -5591,6 +5620,107 @@ def _rsvp_confirm_page(info: dict) -> str:
             f"background:{'#15803D' if info['action'] == 'in' else '#1B1B1B'};color:#fff;"
             f"cursor:pointer'>{_b}</button></form>")
     return _public_page("RSVP", body)
+
+
+@app.route("/register/<int:event_id>", methods=["GET", "POST"])
+def public_register_gate(event_id):
+    """THE REGISTRATION GATE (Kerry 2026-10-29, after Kelly Barna's dead
+    link). Every registration link we send comes here: spots open -> on to
+    the store; full -> "This event is full" and Join the waitlist (one tap
+    with an invitation token, else the email on file). Joining is a POST, so
+    a mail scanner opening the link never puts anyone on the list."""
+    import html as _h
+    from email_parser import waitlist as _wl
+    from email_parser import invitations as _inv
+    tgt = _wl.register_target(event_id)
+    if tgt.get("error"):
+        return _public_page("Registration", "<h2>That event is no longer on the schedule.</h2>"), 404
+    ev = tgt["event"]
+    name = _h.escape(_inv._display_name(ev) if hasattr(_inv, "_display_name") else ev["item_name"])
+    if tgt.get("redirect") and request.method == "GET":
+        return redirect(tgt["redirect"])
+    if tgt.get("closed"):
+        return _public_page("Registration", f"<h2>{name}</h2><p>{_h.escape(tgt['closed'])}</p>")
+    token = (request.values.get("t") or "").strip()
+    p = _inv.verify_token(token) if token else None
+    cid = int(p["c"]) if p and int(p.get("v", 0)) == int(event_id) else None
+    btn = ("display:inline-block;border:0;border-radius:999px;padding:12px 22px;margin-top:8px;"
+           "font:bold 16px Georgia,serif;background:#1B1B1B;color:#fff;cursor:pointer")
+    if request.method == "POST":
+        if not cid:
+            email = (request.form.get("email") or "").strip().lower()
+            if email:
+                _c = get_connection()
+                try:
+                    r = _c.execute("SELECT customer_id FROM customer_emails "
+                                   "WHERE lower(email) = ? LIMIT 1", (email,)).fetchone()
+                finally:
+                    _c.close()
+                cid = int(r[0]) if r else None
+            if not cid:
+                try:
+                    _wl._staff(ev, f"Waitlist request we could not match: {ev['item_name']}",
+                               f"<p>Someone asked to join the waitlist with "
+                               f"<b>{_h.escape(request.form.get('email') or '')}</b> "
+                               f"({_h.escape(request.form.get('name') or '')}), which is not on file. "
+                               "Please add them by hand.</p>")
+                except Exception:
+                    logger.exception("waitlist: unmatched notice failed")
+                return _public_page("Waitlist", f"<h2>{name}</h2><p>Thanks. We couldn't find that "
+                                    "email on file, so we've passed it to the chapter manager, who "
+                                    "will add you to the waitlist.</p>")
+        res = _wl.add(event_id, cid, note="joined from the waitlist page", by="self", apply=True)
+        pos = res.get("position")
+        return _public_page("Waitlist", f"<h2>You're on the waitlist, #{pos}.</h2><p>{name} is full. "
+                            "If a spot opens we'll email you right away with a link to register "
+                            "and a time to claim it by.</p>")
+    cap = tgt["capacity"]
+    head = f"<h2>{name} is full.</h2><p>All {cap.get('max') or ''} spots are taken.</p>"
+    if cid:
+        pos = _wl.position(_wl.get(event_id), cid)
+        if pos:
+            return _public_page("Waitlist", head + f"<p>You're on the waitlist, <b>#{pos}</b>. "
+                                "We'll email you if a spot opens.</p>")
+        form = (f"<form method='post'><input type='hidden' name='t' value='{_h.escape(token)}'>"
+                f"<button type='submit' style='{btn}'>Join the waitlist</button></form>")
+    else:
+        form = ("<form method='post'><p>Join the waitlist and we'll email you if a spot opens.</p>"
+                "<p><input name='name' placeholder='Your name' style='padding:10px;width:100%;"
+                "max-width:320px;border:1px solid #E5E7EB;border-radius:8px'></p>"
+                "<p><input name='email' type='email' required placeholder='Your email' "
+                "style='padding:10px;width:100%;max-width:320px;border:1px solid #E5E7EB;"
+                f"border-radius:8px'></p><button type='submit' style='{btn}'>Join the waitlist"
+                "</button></form>")
+    return _public_page("Waitlist", head + form)
+
+
+@app.route("/api/events/<int:event_id>/waitlist", methods=["GET", "POST"])
+@require_role("view-only")
+def api_event_waitlist(event_id):
+    """The Players tab's WAITLIST section (Kerry 10/29). POST (manager):
+    {op: add|remove|move, customer_id, position?}."""
+    from email_parser import waitlist as _wl
+    if request.method == "POST":
+        if session.get("role") not in ("manager", "admin"):
+            return jsonify({"error": "Manager or admin login required."}), 403
+        b = request.get_json(silent=True) or {}
+        op, cid = b.get("op"), b.get("customer_id")
+        try:
+            cid = int(cid)
+        except (TypeError, ValueError):
+            return jsonify({"error": "customer_id required"}), 400
+        who = f"ui:{session.get('role')}"
+        if op == "add":
+            r = _wl.add(event_id, cid, note=b.get("note") or "", by=who, apply=True)
+        elif op == "remove":
+            r = _wl.remove(event_id, cid, apply=True)
+        elif op == "move":
+            r = _wl.move(event_id, cid, int(b.get("position") or 1))
+        else:
+            return jsonify({"error": "op must be add, remove or move"}), 400
+        if r.get("error"):
+            return jsonify(r), 400
+    return jsonify(_wl.board(event_id))
 
 
 @app.route("/rsvp/<token>/reason", methods=["POST"])
@@ -5838,7 +5968,14 @@ def api_set_customer_role(customer_id):
     data = request.get_json(silent=True) or {}
     flag = str(data.get("flag") or "").strip()
     try:
-        result = set_customer_role_flag(customer_id, flag, bool(data.get("value")))
+        if flag == "ambassador":
+            # One flag, two stores written together (Kerry 10/29: "Why are
+            # there 2 places for the Ambassador flag?"): ambassadors.py.
+            from email_parser.ambassadors import set_from_page
+            result = set_from_page(customer_id, bool(data.get("value")),
+                                   f"ui:{session.get('role') or 'manager'}")
+        else:
+            result = set_customer_role_flag(customer_id, flag, bool(data.get("value")))
     except ValueError as e:
         code = 404 if "not found" in str(e) else 400
         return jsonify({"error": str(e)}), code

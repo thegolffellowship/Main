@@ -35,6 +35,9 @@ for k, v in (("AZURE_TENANT_ID", "t"), ("AZURE_CLIENT_ID", "c"), ("AZURE_CLIENT_
     os.environ[k] = v
 
 EV, NOLINK, CHAMP, PAST = 9401, 9402, 9403, 9404
+# Registration links go through the Tracker's gate, /register/<event_id>,
+# which forwards to URL while spots are open (Kerry 10/29, the waitlist).
+GATE = "/register/"
 URL = "https://www.thegolffellowship.com/product-page/s9-98-remind-links"
 with db._connect(DB) as conn:
     for eid, name, d, url in ((EV, "s9.98 REMIND LINKS", "2026-12-15", URL),
@@ -65,7 +68,7 @@ print("1. The email")
 m = pr.preview(EV, 880001, db_path=DB)
 check("no hold on a verified link with a manager on file", m["held"] == [], m["held"])
 check("greets the player by first name", "Hi Ann," in m["html"])
-check("carries the registration link as a button", URL in m["html"] and "Complete Registration" in m["html"])
+check("carries the registration link as a button", GATE in m["html"] and "Complete Registration" in m["html"])
 check("the roster link is a plain link to the member results page",
       f"/member/results/{EV}" in m["html"] and pr.ROSTER_LINK_TEXT.replace("'", "&#x27;") in m["html"]
       or pr.ROSTER_LINK_TEXT in m["html"], m["html"][:300])
@@ -92,7 +95,7 @@ print("5. Sending, once a day")
 SENT.clear()
 r1 = pr.send(EV, people, db_path=DB)
 check("sends to Ann", [s["customer_id"] for s in r1["sent"]] == [880001] and len(SENT) == 1, r1)
-check("the sent email is the framed build", SENT and URL in SENT[0]["html_body"])
+check("the sent email is the framed build", SENT and GATE in SENT[0]["html_body"])
 r2 = pr.send(EV, people, db_path=DB)
 check("a second send the same day is skipped", r2["already_today"] and not r2["sent"] and len(SENT) == 1, r2)
 r3 = pr.send(EV, people, force=True, db_path=DB)
@@ -117,7 +120,7 @@ with cl.session_transaction() as s_:
     s_["role"] = "manager"; s_["authenticated"] = True
 SENT.clear()
 rv = cl.post("/api/events/send-reminder", json={"event_id": EV, "customer_id": 880002, "player_name": "Bob Test"})
-check("the Remind tag sends the same email", rv.status_code == 200 and SENT and URL in SENT[-1]["html_body"],
+check("the Remind tag sends the same email", rv.status_code == 200 and SENT and GATE in SENT[-1]["html_body"],
       (rv.status_code, rv.get_json()))
 rv = cl.post("/api/events/send-reminder", json={"event_id": EV, "customer_id": 880002})
 check("a second Remind the same day says so", rv.status_code == 409 and "today" in rv.get_json()["error"],
@@ -137,7 +140,7 @@ with db._connect(DB) as conn:
 db.set_app_setting("payment_reminder_exclude_events", "[]")
 _app.send_auto_payment_reminders()
 check("the job sends the same email to the RSVP-only player",
-      [s["to_address"] for s in SENT] == ["ann@example.test"] and URL in SENT[0]["html_body"],
+      [s["to_address"] for s in SENT] == ["ann@example.test"] and GATE in SENT[0]["html_body"],
       [s["to_address"] for s in SENT])
 SENT.clear()
 with db._connect(DB) as conn:

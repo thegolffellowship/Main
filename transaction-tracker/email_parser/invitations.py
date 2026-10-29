@@ -739,7 +739,7 @@ def record_answer(token: str, db_path=None) -> dict:
                                 f"event {eid} customer {cid} {name}: I'm not playing after all")
         except Exception:
             logger.exception("invitations: payment-email out failed for %s", cid)
-    ctx_ev = {"name": ev.get("item_name"), "date": ev.get("event_date"),
+    ctx_ev = {"id": ev.get("id"), "name": ev.get("item_name"), "date": ev.get("event_date"),
               "registration_url": (ev.get("registration_url") or "").strip()}
     return {"ok": True, "action": action, "response": RESPONSE[action], "name": name,
             "event": ctx_ev}
@@ -932,6 +932,16 @@ def click_in(token: str, db_path=None, client: dict | None = None) -> dict:
     url = ((ev or {}).get("registration_url") or "").strip()
     if not url:
         return {"ok": False}
+    # A FULL event (Kerry 10/29, Kelly Barna: "it was a dead link to the
+    # event...because I turned it off in GoDaddy"): the waitlist page, and
+    # no PLAYING RSVP is recorded, so a full event's roster stays put.
+    try:
+        from email_parser import waitlist as _wl
+        if _wl.register_target(int(p["v"]), db_path=db_path).get("full"):
+            return {"ok": True, "redirect": f"{_wl.register_url(int(p['v']))}?t={token}",
+                    "full": True}
+    except Exception:
+        logger.exception("invitations: waitlist check failed; registration as usual")
     if p.get("p"):
         return {"ok": True, "redirect": url, "preview": True}
     why = _scanner_ignored(p, "in", db_path)

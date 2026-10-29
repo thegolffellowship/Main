@@ -739,3 +739,9 @@ them. Integer seconds, ids not names, no JSON, enums by CHECK. Also declared in
 - Numbering: `migrations/` holds 0001-0024 with gaps; 0025-0036 are not in
   the repo (0036 reserved for soft-merge, db-claude #2059). The runner
   applies each file once in name order, so 0037 applies ahead of the gap.
+
+## `events.max_players` (migration 0042, Kerry 2026-10-29)
+
+INTEGER, NULL = no limit, CHECK > 0. The contracted field size, set on Edit
+Event. Read only through `waitlist.capacity` (paid registrations vs the max).
+See events.md "Max players, the registration gate and the waitlist".

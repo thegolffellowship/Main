@@ -201,6 +201,12 @@ def event_url_for_message(ev: dict | None, today: date | None = None) -> tuple[s
         return "", "no registration link on file for this event"
     if st["state"] == STATE_MISSING:
         return "", "the registration link on file did not verify against the store"
+    # Through the Tracker's registration gate (Kerry 10/29): it forwards to
+    # the store while spots are open and shows the waitlist page once the
+    # event is full, so a message never carries a dead store link.
+    if ev.get("id"):
+        from email_parser.waitlist import register_url
+        return register_url(int(ev["id"])), ""
     return st["url"], ""
 
 

@@ -31795,7 +31795,8 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                 "tgf_markup_final", "tgf_markup_final_9", "tgf_markup_final_18",
                 "course_surcharge", "per_game_addon",
                 "course_cost_breakdown", "course_cost_breakdown_9", "course_cost_breakdown_18",
-                "rescheduled_to_event_id", "status_badge", "lock_override", "tee_keep"}
+                "rescheduled_to_event_id", "status_badge", "lock_override", "tee_keep",
+                "max_players"}
     shotgun_done = False
     _sgs = fields.get("shotgun_staging")
     for _sg in ([_sgs] if isinstance(_sgs, dict) else (_sgs if isinstance(_sgs, list) else [])):
@@ -31818,6 +31819,13 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
         except ValueError:
             logger.warning("Event %s: shotgun order %r refused", event_id, fields["shotgun_order"])
     safe = {k: v for k, v in fields.items() if k in allowed}
+    if "max_players" in safe:
+        # The contracted field size (Kerry 10/29); blank = no limit.
+        try:
+            _mp = int(str(safe["max_players"] or "").strip() or 0)
+            safe["max_players"] = _mp if _mp > 0 else None
+        except (TypeError, ValueError):
+            safe.pop("max_players")
     if "tee_keep" in safe:
         _tk = str(safe["tee_keep"] or "").strip().lower()
         if _tk in ("latest", "earliest"):

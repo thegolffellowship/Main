@@ -189,3 +189,44 @@ def set_ambassador(customer_id, chapter, on: bool, kerry_ok_post, note: str = ""
                         f"{note or 'no note'}; authority {why}", db_path=db_path)
     out["applied"] = True
     return out
+
+
+def set_from_page(customer_id: int, on: bool, set_by: str, db_path=None) -> dict:
+    """The Customers page AMB chip (a manager or admin PIN tap). Kerry
+    2026-10-29: "Why are there 2 places for the Ambassador flag?" The chip
+    (customers.ambassador, 9/15) and the per-chapter list
+    (customer_ambassadors, 10/1) are now written TOGETHER from both doors:
+    the tap writes the player's HOME chapter row beside the chip, under the
+    same rule as set_ambassador (an Ambassador is an active member with an
+    established TGF handicap). The tap is the person's own act, so it needs
+    no mailbox post; the agent door (set_ambassador) still does."""
+    from email_parser import database as db
+    cust = int(customer_id)
+    with db._connect(db_path) as conn:
+        r = conn.execute("SELECT first_name, last_name, home_chapter_id FROM customers "
+                         "WHERE customer_id = ?", (cust,)).fetchone()
+        if not r:
+            raise ValueError(f"customer {cust} not found")
+        name = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
+        if on:
+            why_not = db.customer_blind_gate(conn, cust, db_path=db_path)
+            if why_not:
+                raise ValueError(f"{name} cannot be an Ambassador: {why_not} (an Ambassador must "
+                                 "be an active member with an established TGF handicap)")
+        chap = r["home_chapter_id"]
+        if chap is not None:
+            prev = conn.execute("SELECT 1 FROM customer_ambassadors WHERE customer_id = ? "
+                                "AND chapter_id = ?", (cust, int(chap))).fetchone()
+            if prev:
+                conn.execute("UPDATE customer_ambassadors SET ambassador = ?, set_by = ?, "
+                             "set_at = datetime('now'), note = ? WHERE customer_id = ? AND chapter_id = ?",
+                             (1 if on else 0, set_by, "AMB chip", cust, int(chap)))
+            elif on:
+                conn.execute("INSERT INTO customer_ambassadors (customer_id, chapter_id, ambassador, "
+                             "set_by, note) VALUES (?, ?, 1, ?, 'AMB chip')", (cust, int(chap), set_by))
+        conn.execute("UPDATE customers SET ambassador = ? WHERE customer_id = ?", (1 if on else 0, cust))
+        conn.commit()
+    db.log_agent_action(set_by, "set_ambassador",
+                        f"customer {cust} ({name}) chapter {chap}: ambassador -> {on!r} (AMB chip)",
+                        db_path=db_path)
+    return {"customer_id": cust, "ambassador": 1 if on else 0, "chapter_id": chap}

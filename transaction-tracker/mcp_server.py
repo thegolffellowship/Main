@@ -1851,7 +1851,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
       scoring-results-email:preview|<event_id>|<cid>|<recap file>[|send[|<to>]][|html] / plan|<ids>|<recap> / schedule|<ids>|<YYYY-MM-DDTHH:MM>|<recap>|<kerry_ok_post> / schedule-next|<ids>|<recap>|<kerry_ok_post> (6:00 AM the next morning, Kerry #1778) / cancel|<ids> / status — the personal RESULTS EMAIL (Kerry 10/14); previews go to staff or a chapter manager's own address; members only through a schedule, guards first
       scoring-card-parity:<event name or id>  READ-ONLY engine vs saved scorecards, every entered player: stored strokes vs the rule (own tee, the nine played) and the engine's card vs the stored card; any difference holds payouts + points
-      scoring-waitlist:<event_id> / add|<event_id>|<cid>[|<note>][|apply] / remove|<event_id>|<cid>[|apply]  the event's ordered waitlist; an RSVP-only player on it leaves the roster (RSVP override not_playing); paid rows untouched
+      scoring-waitlist:<event_id> / add|<event_id>|<cid>[|<note>][|apply] / remove|<event_id>|<cid>[|apply] / move|<event_id>|<cid>|<pos> / preview|<joined|offered|expired|morning>|<event_id> / tick  the event's ordered waitlist; an RSVP-only player on it leaves the roster (RSVP override not_playing); paid rows untouched
       scoring-closeout-chain:status|<id> / run|<id> / reset|<id>[|<step>]  the in-Tracker closeout chain (publish, final, payouts, flights, pairings, handicaps, points, pace, recap); runs itself at CLOSEOUT START
       scoring-recap-writer:facts|<ids> / write|<ids> / read|db:<key> / list  the night's recap written by the Tracker (one Claude call, linted, stored as db:<key>)
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
@@ -7171,7 +7171,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _ap = "apply" in _b
             _b = [b for b in _b if b != "apply"]
             if _b and _b[0].isdigit():
-                return json.dumps(_wl.get(int(_b[0])), indent=2)
+                return json.dumps(_wl.board(int(_b[0])), indent=2, default=str)
+            if len(_b) >= 3 and _b[0] == "preview":
+                # preview|<kind>|<event_id>: a member email's words (nothing sent)
+                return json.dumps(_wl.preview(_b[1], int(_b[2])), indent=2)
+            if len(_b) >= 3 and _b[0] == "move":
+                return json.dumps(_wl.move(int(_b[1]), int(_b[2]), int(_b[3]) if len(_b) > 3 else 1),
+                                  indent=2, default=str)
+            if _b and _b[0] == "tick":
+                return json.dumps(_wl.tick(), indent=2, default=str)
             if len(_b) >= 3 and _b[0] == "add":
                 return json.dumps(_wl.add(int(_b[1]), int(_b[2]), note=_b[3] if len(_b) > 3 else "",
                                           by="tracker-claude", apply=_ap), indent=2, default=str)

@@ -253,8 +253,20 @@ def event_pairing_audit(event_id: int, db_path=None, sheet: dict | None = None,
             ambs = [p for p in ps if p["ambassador"]]
             for p in ps:
                 if p["is_first_timer"]:
-                    hit("R-A 1st Timer + Ambassador", "hard", bool(ambs),
-                        f"{p['name']}: " + (", ".join(a["name"] for a in ambs) or "no Ambassador in the group"))
+                    # Kerry 10/29 (Eric Carstens with Matthew Jenkins): "Eric
+                    # Carstens is with the person ... who invited him and he
+                    # requested. So no ambassador needed." A 1st Timer with the
+                    # member who invited him (or whom he requested, or who
+                    # requested him) is covered.
+                    host = next((x["name"] for x in ps if x is not p and (
+                        K(p.get("invited_by") or "") == K(x["name"])
+                        or frozenset((K(p["name"]), K(x["name"]))) in req_keys)), None)
+                    if host and not ambs:
+                        hit("R-A 1st Timer + Ambassador", "hard", True,
+                            f"{p['name']}: with {host}, who invited / requested him (no Ambassador needed)")
+                    else:
+                        hit("R-A 1st Timer + Ambassador", "hard", bool(ambs),
+                            f"{p['name']}: " + (", ".join(a["name"] for a in ambs) or "no Ambassador in the group"))
                     # R-F soft: same-gender Ambassador
                     if p.get("gender"):
                         same = [a for a in ambs if a.get("gender") == p["gender"]]

@@ -32,6 +32,9 @@ for k, v in (("AZURE_TENANT_ID", "t"), ("AZURE_CLIENT_ID", "c"), ("AZURE_CLIENT_
 
 # Monday 2099-10-26 is the lock day of Tuesday 2099-10-27 (default dial: Tuesdays, one day ahead).
 EV, OTHER = 9601, 9602
+# Registration links go through the Tracker's gate, /register/<event_id>,
+# which forwards to URL while spots are open (Kerry 10/29, the waitlist).
+GATE = "/register/"
 URL = "https://www.thegolffellowship.com/product-page/s9-29-silverhorn"
 with db._connect(DB) as conn:
     for eid, name, d in ((EV, "s9.29 Silverhorn", "2099-10-27"), (OTHER, "s9.30 Later", "2099-11-03")):
@@ -80,7 +83,7 @@ r = rd.tick(datetime(2099, 10, 26, 13, 10), DB)
 check("1:10 PM sends the warning once", len(SENT) == 1 and SENT[0]["to_address"] == "chris@example.test", (r, SENT))
 w = SENT[0] if SENT else {}
 check("the warning names 5:00 PM and carries the registration button",
-      "5:00 PM" in w.get("html_body", "") and URL in w.get("html_body", "") and "Silverhorn" in w.get("subject", ""),
+      "5:00 PM" in w.get("html_body", "") and GATE in w.get("html_body", "") and "Silverhorn" in w.get("subject", ""),
       w.get("subject"))
 check("the warning is CC'd to Kerry (Kerry 10/26)", w.get("cc_address") == "kerry@thegolffellowship.com",
       w.get("cc_address"))

@@ -133,7 +133,7 @@
     "app.py::_public_page",
     "app.py::_rsvp_confirm_page"
    ],
-   "watch_hash": "463213b104c42e94"
+   "watch_hash": "477709cafcd3d798"
   },
   {
    "id": "payment-reminder",
@@ -202,7 +202,7 @@
     "email_parser/event_day_email.py",
     "email_parser/event_links.py"
    ],
-   "watch_hash": "5a8ec5f5690881f8"
+   "watch_hash": "6417a6699d7dfd5a"
   },
   {
    "id": "rsvp-deadline",

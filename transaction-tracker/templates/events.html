@@ -1117,6 +1117,7 @@
                     <label title="Where the group meets after this event. Fills {fellowship_spot} in the Fellowship preset; the send refuses while it is blank.">Fellowship spot<input type="text" id="edit-event-fellowship_spot" class="modal-input" placeholder="e.g. Clubhouse (on site), or the restaurant's name"></label>
                     <label title="Kerry 10/26: the standard lock is 5:00 PM the day before (Monday to Thursday events), two days before (Friday), three days before (Saturday, Sunday). Set a date and time here only to change it for this event; clear it to go back to the standard.">Lock (blank = standard)<input type="datetime-local" id="edit-event-lock_override" class="modal-input"></label>
                     <label title="Kerry 10/26: when an event holds more tee times than its groups need, a weeknight event keeps the LATEST times and gives back the earliest; a weekend event keeps the EARLIEST and gives back the latest. The tee-times email to the course names each released time. Shotguns are not affected.">Unused tee times<select id="edit-event-tee_keep" class="modal-input"><option value="">Default (weeknight: keep latest, weekend: keep earliest)</option><option value="latest">Keep latest</option><option value="earliest">Keep earliest</option></select></label>
+                    <label title="Kerry 10/29: the contracted field size. Only a paid registration takes a spot. At the limit every registration link we send shows the waitlist page instead of the store, Kerry and the chapter manager are told to close GoDaddy registration, and when a spot opens the next person on the waitlist is offered it. Blank = no limit.">Max players (blank = no limit)<input type="number" min="1" step="1" id="edit-event-max_players" class="modal-input"></label>
                 </div>
                 <!-- Format -->
                 <div style="margin-top:0.75rem;">
@@ -3171,6 +3172,57 @@
         if (!b) return;
         e.preventDefault(); e.stopPropagation();
         setNhFlag(parseInt(b.dataset.eventId), parseInt(b.dataset.customerId), b.dataset.nh === "1");
+    });
+    // THE WAITLIST (Kerry 2026-10-29: "I don't see the waitlist anywhere on
+    // the roster"). Spots (paid of max) and the line, in order, above every
+    // tab like the missing-handicap banner. Server: /api/events/<id>/waitlist
+    // (email_parser/waitlist.py, the one reader). Managers move and remove.
+    const waitlists = {};
+    async function fetchWaitlist(ev) {
+        if (!ev || !ev.id) return;
+        try {
+            const res = await fetch(`/api/events/${ev.id}/waitlist`, {cache: "no-store"});
+            if (res.ok) waitlists[ev.id] = await res.json();
+        } catch (err) { console.error("fetchWaitlist:", err); }
+    }
+    const WL_STATE = {waiting: "Waiting", offered: "Offered", claimed: "Claimed", expired: "Offer lapsed"};
+    function waitlistBannerHtml(ev) {
+        const w = ev && waitlists[ev.id];
+        if (!w) return '';
+        const cap = w.capacity || {};
+        const line = w.line || [];
+        if (!cap.max && !line.length) return '';
+        const canEdit = (typeof currentRole !== "undefined") && (currentRole === "manager" || currentRole === "admin");
+        const spots = cap.max ? `<b>${cap.paid} of ${cap.max}</b> spots paid${cap.full ? ' · <b style="color:#B91C1C;">FULL</b>' : ` · ${cap.open} open`}` : '';
+        const rows = line.map(r => {
+            const dl = r.state === "offered" && r.deadline ? ` until ${escapeHtml(r.deadline)}` : '';
+            const ops = canEdit ? ` <button class="btn-wl" data-op="move" data-pos="${Math.max(1, r.position - 1)}" data-event-id="${ev.id}" data-customer-id="${r.customer_id}" title="Move up" style="border:1px solid #D1D5DB;background:#fff;border-radius:999px;padding:0 8px;cursor:pointer;">&uarr;</button>`
+                + ` <button class="btn-wl" data-op="move" data-pos="${r.position + 1}" data-event-id="${ev.id}" data-customer-id="${r.customer_id}" title="Move down" style="border:1px solid #D1D5DB;background:#fff;border-radius:999px;padding:0 8px;cursor:pointer;">&darr;</button>`
+                + ` <button class="btn-wl" data-op="remove" data-event-id="${ev.id}" data-customer-id="${r.customer_id}" title="Take off the waitlist" style="border:1px solid #B91C1C;color:#B91C1C;background:#fff;border-radius:999px;padding:0 8px;cursor:pointer;">Remove</button>` : '';
+            return `<li>${r.position}. <b>${escapeHtml(r.name || '')}</b> <span style="color:#6B7280;">(${WL_STATE[r.state] || r.state}${dl})</span>${ops}</li>`;
+        }).join('');
+        const note = w.member_emails ? '' : '<div style="color:#6B7280;font-size:0.8rem;margin-top:0.2rem;">Waitlist emails to players are held until Kerry approves the wording.</div>';
+        return `<div class="waitlist-box" style="white-space:normal;background:#F8F8F8;border:1px solid #E5E7EB;border-radius:8px;padding:0.45rem 0.75rem;margin:0 0 0.6rem;font-size:0.85rem;">
+            <div><b>WAITLIST</b>${spots ? ' · ' + spots : ''}</div>
+            ${line.length ? `<ol style="list-style:none;margin:0.3rem 0 0;padding:0;">${rows}</ol>` : '<div style="color:#6B7280;">Nobody on the waitlist.</div>'}${note}</div>`;
+    }
+    document.addEventListener("click", async e => {
+        const b = e.target.closest && e.target.closest(".btn-wl");
+        if (!b) return;
+        e.preventDefault(); e.stopPropagation();
+        const evId = parseInt(b.dataset.eventId);
+        const body = {op: b.dataset.op, customer_id: parseInt(b.dataset.customerId)};
+        if (b.dataset.op === "move") body.position = parseInt(b.dataset.pos);
+        if (b.dataset.op === "remove" && !confirm("Take this player off the waitlist?")) return;
+        try {
+            const res = await fetch(`/api/events/${evId}/waitlist`, {method: "POST",
+                headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { alert(data.error || "Could not update the waitlist."); return; }
+            waitlists[evId] = data;
+            const ev = allEvents.find(x => x.id === evId);
+            if (ev) rerenderDetail(detailContainerFor(ev.id), ev);
+        } catch (err) { console.error("waitlist:", err); alert("Could not update the waitlist."); }
     });
     // THE HANDICAP ASK (Kerry 2026-10-16): where each emailed new player's
     // answer stands. Only "Check this one" and "Needs a number" need a person.
@@ -9387,7 +9439,7 @@
     // is wrapped in [data-ev-body] so an in-panel change can swap the body
     // alone — the header and its handlers stay put.
     function renderDetailContent(ev) {
-        const html = missingHcpBannerHtml(ev) + renderDetailContentInner(ev);
+        const html = missingHcpBannerHtml(ev) + waitlistBannerHtml(ev) + renderDetailContentInner(ev);
         return html.indexOf('data-ev-body="') >= 0 ? html + "</div>" : html;
     }
     function renderDetailContentInner(ev) {
@@ -10440,6 +10492,7 @@
             fetchBalanceDueSendMap(ev.item_name),
             ensureHcpAsOf(ev),
             fetchMissingHcp(ev),
+            fetchWaitlist(ev),
         ]);
 
         // Desktop: render detail into table row
@@ -16560,6 +16613,8 @@
         if (editLock) editLock.value = (ev.lock_override || "").replace(" ", "T").slice(0, 16);  // 24h-ok: datetime-local input value
         const editKeep = document.getElementById("edit-event-tee_keep");
         if (editKeep) editKeep.value = ev.tee_keep || "";
+        const editMax = document.getElementById("edit-event-max_players");
+        if (editMax) editMax.value = ev.max_players || "";
         sgOpen(ev);
 
         // Pricing fields — single format
@@ -16739,6 +16794,8 @@
         }
         const keepEl = document.getElementById("edit-event-tee_keep");
         if (keepEl && keepEl.value !== (ev.tee_keep || "")) changes.tee_keep = keepEl.value;
+        const maxEl = document.getElementById("edit-event-max_players");
+        if (maxEl && String(maxEl.value || "") !== String(ev.max_players || "")) changes.max_players = maxEl.value;
         const sgSave = sgChanges();
         if (sgSave) changes.shotgun_staging = sgSave;
 

@@ -3591,7 +3591,10 @@ def sms_vars_for(lead: dict, owners: dict | None = None,
         "start_phrase": start_phrase(ev),
         "first_timer_price": money(price),
         # #417: the follow-ups carry the link, not a price recap.
-        "link": (ev.get("registration_url") or "").strip() if ev else "",
+        # Through the registration gate (Kerry 10/29): never a dead store link.
+        "link": ((__import__("email_parser.waitlist", fromlist=["register_url"]).register_url(ev["id"])
+                  if ev.get("id") else (ev.get("registration_url") or "").strip())
+                 if ev and (ev.get("registration_url") or "").strip() else ""),
         "deadline": signup_deadline_phrase(ev) if ev else "",
         "range_balls": ", range balls" if rb else "",
         "gross_bundle": GROSS_BUNDLE.get(holes, GROSS_BUNDLE[9]),

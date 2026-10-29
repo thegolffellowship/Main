@@ -419,6 +419,11 @@ def _up_next(facts, cid) -> str:
             when += (f" · {t} shotgun" if (u.get("start_type") or "").lower().startswith("shotgun")
                      else f" · tee times from {t}")
         url = (u.get("registration_url") or "").strip()
+        if url:
+            # Through the registration gate (Kerry 10/29): the store while
+            # spots are open, the waitlist page once full.
+            from email_parser.waitlist import register_url
+            url = register_url(u["id"])
         mine = cid in facts["registered"].get(u["id"], set())
         tag = ("You’re signed up" if mine else
                ("You’re not signed up yet" if first_open is None and url else ""))

@@ -57,5 +57,92 @@ wl.remove(eid, 39, apply=True, db_path=DB)
 check("taking Kelly off the list puts the RSVP back", 39 in roster_ids() and
       [x["customer_id"] for x in wl.get(eid, DB)] == [18, 703])
 check("bridge exists", 'cmd == "scoring-waitlist"' in open("mcp_server.py").read())
+
+print("== the limit, the gate, offers (Kerry 10/29) ==")
+from datetime import datetime as _dt
+import email_parser.waitlist as W
+SENTM = []
+W._mail = lambda to, subject, html, db_path=None, who="waitlist": SENTM.append((to, subject)) or True
+with db._connect(DB) as c:
+    eid2 = c.execute("INSERT INTO events (item_name, event_date, start_time, registration_url, max_players) "
+                     "VALUES ('s9.99 Cap', '2099-11-03', '17:00', 'https://www.thegolffellowship.com/product-page/s9-99-cap', 2) "
+                     "RETURNING id").fetchone()[0]
+    for i, cid in enumerate((87, 18)):
+        c.execute("INSERT INTO items (email_uid, item_index, customer, customer_id, item_name, event_id, "
+                  "transaction_status, merchant, order_date) VALUES (?, 0, 'x', ?, 's9.99 Cap', ?, 'active', "
+                  "'The Golf Fellowship', '2099-10-01')", (f"cap{i}", cid, eid2))
+    c.execute("INSERT INTO customer_emails (customer_id, email, is_primary) VALUES (39, 'kbarna@austin.rr.com', 1)")
+    c.commit()
+cap = W.capacity(eid2, DB)
+check("max 2, 2 paid: full", cap["full"] and cap["paid"] == 2 and cap["open"] == 0, cap)
+check("a full event's link shows the waitlist page, not the store", W.register_target(eid2, DB).get("full"))
+check("the registration link we send goes through the gate",
+      __import__("email_parser.event_links", fromlist=["x"]).event_url_for_message(
+          {"id": eid2, "event_date": "2099-11-03", "registration_url": "https://www.thegolffellowship.com/p/x",
+           "registration_url_status": "ok"})[0].endswith(f"/register/{eid2}"))
+r = W.tick(now=_dt(2099, 11, 1, 9, 0), db_path=DB)
+check("the event fills: one staff note to close GoDaddy",
+      any("FULL" in s for _, s in SENTM) and all("@thegolffellowship.com" in t for t, _ in SENTM), SENTM)
+SENTM.clear(); W.tick(now=_dt(2099, 11, 1, 9, 15), db_path=DB)
+check("...only once", not any("FULL" in s for _, s in SENTM), SENTM)
+W.add(eid2, 39, apply=True, db_path=DB, notify=False)
+W.add(eid2, 703, apply=True, db_path=DB, notify=False)
+with db._connect(DB) as c:
+    c.execute("UPDATE items SET transaction_status = 'credited' WHERE email_uid = 'cap1'")
+    c.commit()
+SENTM.clear()
+W.tick(now=_dt(2099, 11, 1, 10, 0), db_path=DB)
+b = W.board(eid2, DB)
+check("a spot opens: #1 is offered it, #2 waits", [r["state"] for r in b["line"]] == ["offered", "waiting"], b["line"])
+check("staff are told to reopen GoDaddy for them", any("REOPEN GODADDY" in s for _, s in SENTM), SENTM)
+check("member emails are held until Kerry approves the wording",
+      not any("kbarna" in t for t, _ in SENTM), SENTM)
+check("the held spot is not open to anyone else", W.register_target(eid2, DB).get("full"))
+check("the deadline is 12 hours on", b["line"][0]["deadline"] == "2099-11-01 22:00", b["line"][0])
+W.tick(now=_dt(2099, 11, 1, 22, 15), db_path=DB)
+b = W.board(eid2, DB)
+check("the offer lapses: Mesa is offered next", [r["customer_id"] for r in b["line"]] == [703]
+      and b["line"][0]["state"] == "offered" and b["past"][0]["state"] == "expired", b)
+with db._connect(DB) as c:
+    c.execute("INSERT INTO items (email_uid, item_index, customer, customer_id, item_name, event_id, "
+              "transaction_status, merchant, order_date) VALUES ('cap9', 0, 'Mesa', 703, 's9.99 Cap', ?, "
+              "'active', 'The Golf Fellowship', '2099-11-01')", (eid2,))
+    c.commit()
+SENTM.clear(); W.tick(now=_dt(2099, 11, 2, 8, 0), db_path=DB)
+b = W.board(eid2, DB)
+check("Mesa pays: claimed, off the line, staff told",
+      not b["line"] and any(r["state"] == "claimed" for r in b["past"]) and any("claimed" in s for _, s in SENTM), b)
+db.set_app_setting("waitlist_member_emails", "on", db_path=DB)
+pv = W.preview("offered", eid2, DB)
+check("the offer email names the deadline and links the store",
+      "Register now" in pv["html"] and "product-page/s9-99-cap" in pv["html"], pv["subject"])
+from email_parser.pairings_audit import event_pairing_audit  # noqa: F401  (import check)
+
+print("== the page ==")
+import app as _app
+cl = _app.app.test_client()
+with db._connect(DB) as c:
+    c.execute("UPDATE items SET transaction_status = 'active' WHERE email_uid = 'cap1'")
+    c.commit()
+g = cl.get(f"/register/{eid2}")
+check("full: the page says so and offers the waitlist", g.status_code == 200 and b"is full" in g.data
+      and b"Join the waitlist" in g.data, g.status_code)
+po = cl.post(f"/register/{eid2}", data={"email": "KBarna@austin.rr.com", "name": "Kelly"})
+check("joining by the email on file puts Kelly on the line", b"on the waitlist" in po.data
+      and W.position(W.get(eid2, DB), 39), po.data[:200])
+with db._connect(DB) as c:
+    c.execute("UPDATE events SET max_players = 10 WHERE id = ?", (eid2,))
+    c.commit()
+g2 = cl.get(f"/register/{eid2}")
+check("spots open: straight on to the store", g2.status_code == 302 and "product-page/s9-99-cap" in g2.headers["Location"])
+from email_parser import invitations as _inv
+from datetime import date as _date
+with db._connect(DB) as c:
+    c.execute("UPDATE events SET max_players = 2 WHERE id = ?", (eid2,))
+    c.commit()
+tok = _inv.make_token(703, eid2, "in", _date(2099, 11, 3))
+ci = _inv.click_in(tok, db_path=DB)
+check("an I'm in on a full event goes to the waitlist page and records nothing",
+      ci.get("full") and f"/register/{eid2}?t=" in ci["redirect"], ci)
 print(f"\n{'ALL PASS' if not F else str(len(F)) + ' FAILED: ' + ', '.join(F)}")
 sys.exit(1 if F else 0)

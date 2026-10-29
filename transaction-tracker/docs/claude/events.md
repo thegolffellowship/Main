@@ -4124,3 +4124,36 @@ manager's call). Removing someone from the list clears only the overrides
 the list set. Nothing is emailed and seat-fill does not read the list (not
 ruled). Bridge `scoring-waitlist:<id>` / `add|<id>|<cid>[|<note>][|apply]` /
 `remove|<id>|<cid>[|apply]`; guard `test_waitlist.py`.
+
+
+## Max players, the registration gate and the waitlist (v2.623.0, Kerry 2026-10-29)
+
+Kerry: "There of course needs to be the ability to add max players for an
+event. I obviously had a max I contracted, but system didn't know that. Then
+Kelly texted me and said when he tried to sign up (after clicking RSVP) it was
+a dead link to the event...because I turned it off in GoDaddy." Claim rule:
+"for now B with reopening GoDaddy for them. Later when we have our own
+shopping experience it will all deal with itself based on rules that we design
+into it."
+- `events.max_players` (migration 0042, Edit Event). `waitlist.capacity`:
+  only a paid registration (a non-RSVP roster row) holds a spot.
+- `/register/<event_id>` (app.py `public_register_gate`) is where every
+  registration link we send points: `event_links.event_url_for_message`
+  (`{event_url}` / `{pay_button}`), `invitations.click_in`, the RSVP POST,
+  the results email's UP NEXT, the lead texts. Open -> redirect to the store;
+  full (or every open spot held by an offer) -> the waitlist page: one-tap
+  join with an invitation token, else the email on file; an unknown email is
+  passed to Kerry and the manager. Joining is a POST (scanners only GET).
+  An I'm in tap on a full event records no PLAYING RSVP.
+- Job `waitlist` every 15 minutes (`waitlist.tick`, dial `waitlist_auto`):
+  full alert (once, re-armed when a spot opens), claims (the offered person
+  has a paid row), lapses (deadline passed -> next), offers (one per open
+  spot, deadline `waitlist_claim_hours` = 12 capped at first tee - 2 h, staff
+  told to REOPEN GoDaddy), the event-morning note. Entry states: waiting,
+  offered, claimed, expired. Staff emails go to kerry@ and the chapter
+  manager (`pairings_approval.manager_for`). Member emails (`waitlist.TEXT`:
+  joined, offered, expired, morning) wait on dial `waitlist_member_emails`
+  = on, set when Kerry approves the words (`scoring-waitlist:preview|<kind>|<id>`).
+- Players tab: the WAITLIST box above every tab (spots paid of max, the line,
+  manager move / remove), `/api/events/<id>/waitlist`.
+- Guard `test_waitlist.py`.

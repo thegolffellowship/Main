@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.622.2";
+window.TGF_VERSION = "2.623.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.623.0",
+    date: "2026-10-29",
+    title: "Max players, the registration gate and a working waitlist; one Ambassador flag",
+    changes: [
+      "Kerry 10/29: \"There of course needs to be the ability to add max players for an event. I obviously had a max I contracted, but system didn't know that. Then Kelly texted me and said when he tried to sign up (after clicking RSVP) it was a dead link to the event...because I turned it off in GoDaddy.\" Edit Event has Max players (events.max_players, migration 0042). Only a paid registration takes a spot.",
+      "THE REGISTRATION GATE: every registration link the Tracker sends goes to /register/<event_id>: the {event_url} / {pay_button} composer variables (payment reminders, RSVP deadline warning), the invitation's I'm in, the results email's UP NEXT and the lead texts. While spots are open it forwards to the store; once the event is full it shows \"This event is full\" with Join the waitlist (one tap from an invitation, else the email on file), never a dead link. An I'm in on a full event records no PLAYING RSVP, so the roster stays put.",
+      "THE WAITLIST (job every 15 minutes, dial waitlist_auto): the event fills -> one email to Kerry and the chapter manager to close GoDaddy registration; a spot opens -> the next person is offered it until a deadline (waitlist_claim_hours, 12, never later than two hours before the first tee), and Kerry and the manager are told to REOPEN GoDaddy for them (Kerry: \"for now B with reopening GoDaddy for them\"); they pay -> claimed, staff told; the deadline passes -> the next person; event morning -> anyone still waiting hears it did not open up. A held spot shows as full to everyone else. The emails to players (joined, offered, lapsed, morning) are held until Kerry approves the wording (dial waitlist_member_emails). The Players tab shows WAITLIST: spots paid of max and the line, with move up / down and remove for managers (GET/POST /api/events/<id>/waitlist).",
+      "Kerry 10/29: \"Why are there 2 places for the Ambassador flag?\" The customer AMB chip (9/15) and the per-chapter list (10/1) were built at different times. A tap on the AMB chip now writes both (the player's home chapter row beside the chip), under the same rule as before: an Ambassador is an active member with an established TGF handicap. ambassadors.set_from_page.",
+      "Kerry 10/29 on Eric Carstens: \"Eric Carstens is with the person, Matthew Jenkins, who invited him and he requested. So no ambassador needed.\" The pairings audit's R-A no longer flags a 1st Timer grouped with the member who invited or requested him."
+    ]
+  },
   {
     version: "2.622.2",
     date: "2026-10-29",

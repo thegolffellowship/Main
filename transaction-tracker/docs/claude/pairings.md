@@ -2631,3 +2631,10 @@ Kerry (CoS #2331 A / #2332): "If we have more tee times than we need the tee tim
 - The generator (`generate_event_pairings`) places the groups on `kept_tee_slots(ev, slots, n)` when no seed pins a slot.
 - `released_tee_times(ev)`: the times the event holds and its SAVED sheet does not use. The tee-times email to the course contact names them under the tee sheet: "We're releasing these tee times: 3:40 PM, 3:50 PM." (`teetimes_email.released_block`). It rides inside {tee_sheet}, so the stamped course template and its hash are unchanged.
 - Guard `test_tee_keep.py`.
+
+
+**R-A and the inviting member (Kerry 2026-10-29):** "Eric Carstens is with the
+person, Matthew Jenkins, who invited him and he requested. So no ambassador
+needed." The pairings audit counts a 1st Timer grouped with the member who
+invited him, or with a requested partner, as covered (`pairings_audit.py`).
+The generator's rule 16/18 swap is unchanged.
