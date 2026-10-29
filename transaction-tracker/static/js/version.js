@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.621.0";
+window.TGF_VERSION = "2.621.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.621.1",
+    date: "2026-10-29",
+    title: "What-if handicap re-run (read-only), for Baker's three nights",
+    changes: [
+      "Kerry 10/29: \"show me the corrected versions based on what his handicaps should have been for each of those events...not his current handicap.\" email_parser/whatif_handicap.py re-runs an event's engine IN MEMORY with given players' playing handicaps replaced; their pops are re-laid on their own tee by the ruled allocator (handicap_calc.ruled_dots, the call the publish stores pops with), and flights stay as the event froze them. It returns money per game before and after, points, MVP and Team Net standings, and writes nothing. Bridge scoring-whatif-ph:<event_id>|<cid>=<ph>[,...]. Guard test_whatif_handicap.py.",
+      "Also on Kerry's word: 'Mary Shue', 'Jim Lawton' and 'Louie Samaniego' are recorded as name aliases of Mary Wade, James Lawton and Luis Samaniego, so the handicap identity audit is clean."
+    ]
+  },
   {
     version: "2.621.0",
     date: "2026-10-29",

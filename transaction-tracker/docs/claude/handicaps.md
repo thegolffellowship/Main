@@ -964,6 +964,16 @@ Unlink now clears the customer_id (before, only the label); the 5:00 AM
 health digest raises HIGH `hcp_link_identity` while the audit finds anything.
 Guard `test_hcp_link_identity.py`.
 
+What it cost (Kerry: "show me the corrected versions based on what his
+handicaps should have been for each of those events"): Baker played s9.27,
+s9.28 and s9.29 off 5 where his own index then gave 4. `email_parser/
+whatif_handicap.py` re-runs an event in memory with a corrected playing
+handicap (pops re-laid by `ruled_dots`, flights as frozen) and shows money,
+points, MVP and Team Net before and after; bridge
+`scoring-whatif-ph:<event_id>|<cid>=<ph>`, writes nothing. Guard
+`test_whatif_handicap.py`. On 10/29 Kerry confirmed Mary Shue = Mary Wade,
+Jim = James Lawton, Louie = Luis Samaniego (aliases added).
+
 ## The handicap lock, and ONE index on every surface (v2.462.0)
 
 Kerry 2026-09-16: "ROSTER handicaps need to lock after an event begins.

@@ -1935,6 +1935,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    refresh re-fetches all races first)
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
       scoring-chapter-guesses[:confirm|<cid>=<chapter>;…]  linked customers whose chapter is a GUESS (blank profile) + evidence; confirm writes the profile chapter for those ids, blank ones only
+      scoring-whatif-ph:<event_id>|<cid>=<ph>[,...]  READ-ONLY: the event re-run with those playing handicaps (money, points, MVP, Team Net before/after)
       scoring-hcp-link-identity    READ-ONLY: links / scorecards / handicap rounds whose GG name is not the customer's (Kerry 10/29 "Paul Cleary")
       scoring-hcp-unlink:<GG name>|<customer_id>[|apply]  take a wrong name off a customer (link, cards, rounds) + block re-linking; dry run default
       scoring-hcp-link-audit       READ-ONLY: handicap identity coverage by customer_id,
@@ -6161,6 +6162,18 @@ def _scoring_dispatch_inner(url: str, extract: str):
                        f"{len(_out['links'])} link(s), {len(_out['scorecards'])} card(s), "
                        f"{_out['handicap_rounds']} handicap round(s)")
             return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-whatif-ph":
+            # READ-ONLY (Kerry 10/29): scoring-whatif-ph:<event_id>|<cid>=<ph>[,<cid>=<ph>]
+            # re-runs the event's engine with those playing handicaps; money,
+            # points, MVP and Team Net before and after. Writes nothing.
+            from email_parser.whatif_handicap import whatif as _wi
+            _eid, _, _ov = arg.partition("|")
+            try:
+                _ovr = {int(k): float(v) for k, v in
+                        (x.split("=") for x in _ov.split(",") if x.strip())}
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-whatif-ph:<event_id>|<cid>=<ph>[,...]"})
+            return json.dumps(_wi(int(_eid), _ovr), indent=2, default=str)
         if cmd == "scoring-hcp-audit":
             # READ-ONLY full-table audit: every handicap record classified
             # by how it reconciles with its scorecard (Kerry 2026-07-14).
