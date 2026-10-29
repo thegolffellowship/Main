@@ -2482,6 +2482,7 @@
     let flightsOpenForEvent = {};  // keyed by event id → true if the DIVISIONS/FLIGHTS panel is open
     let scoringOpenForEvent = {};  // keyed by event id → true if the SCORE ENTRY tab is open (Kerry 2026-10-06)
     let reportsOpenForEvent = {};  // keyed by event id → true if the REPORTS panel is open (Kerry 2026-09-29)
+    let summaryOpenForEvent = {};  // keyed by event id → true if the SUMMARY tab is open (#2460-E, Kerry 2026-10-29)
     let tgfPayoutData = { customers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
     let mvpUnlinks = new Set();  // event names unlinked from same-day TGF MVP combining
     let eventSortField = "event_date";
@@ -3849,7 +3850,8 @@
                 const mobileFlightsView = flightsOpenForEvent[ev.id];
                 const mobileReportsView = reportsOpenForEvent[ev.id];
                 const mobileScoringView = scoringOpenForEvent[ev.id];
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView && !mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+                const mobileSummaryView = summaryOpenForEvent[ev.id];
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView && !mobileScoringView && !mobileSummaryView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
                 badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
@@ -3860,12 +3862,13 @@
                 badgesHtml += `<span class="game-stat-badge ${mobileReportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="6" title="Print reports">REPORTS</span>`;
                 // SCORING for managers too (Kerry 2026-10-13: "make the SCORING tab available to Managers under each event")
                 if ((currentRole === "admin" || currentRole === "manager") && seEventOn(ev.id)) badgesHtml += `<span class="game-stat-badge ${mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
+                if (currentRole === "admin" || currentRole === "manager") badgesHtml += summaryBadgeHtml(ev, mobileSummaryView);
                 if (currentRole === 'admin') {
                     badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
                     badgesHtml += `<span class="game-stat-badge fin-badge-admin ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
                 }
                 badgesHtml += '</span>';
-                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView && !mobileScoringView) {
+                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView && !mobileScoringView && !mobileSummaryView) {
                     // Hole tabs — one per hole count this event actually sold
                     badgesHtml += holesTabsHtml(ev, registrants);
 
@@ -3898,6 +3901,8 @@
                     detailHtml = badgesHtml + renderReportsPanel(ev);
                 } else if (mobileScoringView) {
                     detailHtml = badgesHtml + renderScoreEntryTab(ev);
+                } else if (mobileSummaryView) {
+                    detailHtml = badgesHtml + renderSummaryPanel(ev, registrants);
                 } else if (mobileFinancialView) {
                     detailHtml = badgesHtml + renderFinancialPanel(ev, registrants);
                 } else if (mobileGamesView) {
@@ -4540,6 +4545,10 @@
                 if (params.get("view") === "reports") {
                     applyDetailView(byId.id, "6");
                 }
+                // The summary page's "Open the event in the Tracker" (#2460-E).
+                if (params.get("view") === "summary") {
+                    applyDetailView(byId.id, "8");
+                }
                 _openRestored = true;
                 // LOAD what the tab shows (Kerry 2026-09-29: "When I go Back
                 // to Pairings from scorecards it gets stuck loading"). The
@@ -4619,7 +4628,7 @@
     //    Frustrating when it refreshes to closed state each time."
     //    sessionStorage, not local: this is where you are right now, not
     //    a preference, so a new tab starts clean.
-    const DETAIL_VIEWS = {"1": "games", "2": "pairings", "3": "financial", "4": "payouts", "5": "flights", "6": "reports", "7": "scoring"};
+    const DETAIL_VIEWS = {"1": "games", "2": "pairings", "3": "financial", "4": "payouts", "5": "flights", "6": "reports", "7": "scoring", "8": "summary"};
 
     function applyDetailView(evId, val) {
         gamesOpenForEvent[evId] = val === "1";
@@ -4629,6 +4638,7 @@
         flightsOpenForEvent[evId] = val === "5";
         reportsOpenForEvent[evId] = val === "6";
         scoringOpenForEvent[evId] = val === "7";
+        summaryOpenForEvent[evId] = val === "8";
     }
 
     function currentDetailView(evId) {
@@ -4639,6 +4649,7 @@
         if (flightsOpenForEvent[evId]) return "5";
         if (reportsOpenForEvent[evId]) return "6";
         if (scoringOpenForEvent[evId]) return "7";
+        if (summaryOpenForEvent[evId]) return "8";
         return "0";
     }
 
@@ -6371,6 +6382,215 @@
     // toggle bar. After Flights." Every printable for the event in one
     // place, phone and desktop alike. The reports read the SAVED
     // pairings on the server, so an unsaved edit on PAIRINGS is flagged.
+    // ── THE SUMMARY TAB (Event Ops #2460-E, Kerry 2026-10-29: "a Summary
+    //    page ... Handicap changes, Payout stuff, Financial report, Pace of
+    //    Play report ... RECAP could also go in there with the ability to
+    //    edit it"). Manager+. One payload, GET /api/events/<id>/summary
+    //    (email_parser/event_summary.build_summary), the same one the phone
+    //    page /events/<id>/summary and the manager email read. For admin the
+    //    FINANCIAL and PAYOUTS sections are the existing tabs' own renderers;
+    //    those tabs stay where they are until Kerry reviews.
+    let summaryData = {};     // event id → payload (or {error})
+    let summarySection = {};  // event id → which section is showing
+    let summaryRegs = {};     // event id → registrants at render time
+    const SUMMARY_SECTIONS = [["financial", "FINANCIAL"], ["payouts", "PAYOUTS"],
+                              ["handicaps", "HANDICAPS"], ["pace", "PACE"], ["recap", "RECAP"]];
+
+    function summaryBadgeHtml(ev, active) {
+        return `<span class="game-stat-badge ${active ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="8" title="The manager's full report: financial, payouts, handicap changes, pace of play, recap">SUMMARY</span>`;
+    }
+
+    function _sumMoney(x) {
+        return "$" + Number(x || 0).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function renderSummaryPanel(ev, registrants) {
+        summaryRegs[ev.id] = registrants;
+        const sec = summarySection[ev.id] || "financial";
+        let html = `<div class="ev-summary" data-ev-summary="${ev.id}" style="padding:0.5rem 0; white-space:normal;">`;
+        html += `<div data-ev-summary-head></div>`;
+        html += `<div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center; margin:0.4rem 0 0.6rem;">`;
+        html += '<span class="view-toggle-group">';
+        SUMMARY_SECTIONS.forEach(([k, lab]) => {
+            html += `<span class="game-stat-badge ${sec === k ? 'active' : ''}" data-summary-sec="${k}" data-event-id="${ev.id}">${lab}</span>`;
+        });
+        html += '</span>';
+        html += `<a href="/events/${ev.id}/summary" target="_blank" rel="noopener" style="font-size:0.8rem; color:var(--link, #2563eb);">Open the summary page &#8599;</a>`;
+        html += `</div><div data-ev-summary-body><div class="tgf-loading" style="padding:1rem; color:var(--text-muted);">Loading…</div></div></div>`;
+        if (summaryData[ev.id]) setTimeout(() => fillEventSummary(ev.id), 0);
+        setTimeout(() => loadEventSummary(ev.id), 0);
+        return html;
+    }
+
+    async function loadEventSummary(evId) {
+        try {
+            const res = await fetch(`/api/events/${evId}/summary`);
+            const data = await res.json();
+            summaryData[evId] = res.ok ? data : {error: data.error || ("HTTP " + res.status)};
+        } catch (e) {
+            summaryData[evId] = {error: "Could not load the summary."};
+        }
+        fillEventSummary(evId);
+    }
+
+    function fillEventSummary(evId) {
+        const ev = allEvents.find(e => e.id === evId);
+        const s = summaryData[evId];
+        if (!ev || !s) return;
+        document.querySelectorAll(`[data-ev-summary="${evId}"]`).forEach(box => {
+            const head = box.querySelector("[data-ev-summary-head]");
+            const body = box.querySelector("[data-ev-summary-body]");
+            if (s.error) {
+                if (body) body.innerHTML = `<div style="padding:1rem; color:#B91C1C;">${escapeHtml(s.error)}</div>`;
+                return;
+            }
+            if (head) head.innerHTML = summaryHeadHtml(s.headline);
+            if (!body) return;
+            const sec = summarySection[evId] || "financial";
+            const isAdmin = currentRole === "admin";
+            const regs = summaryRegs[evId] || [];
+            if (sec === "financial" && isAdmin) {
+                body.innerHTML = renderFinancialPanel(ev, regs);
+            } else if (sec === "payouts" && isAdmin) {
+                body.innerHTML = renderPayoutsPanel(ev, regs);
+                attachPayoutsHandlers(body, ev);
+            } else {
+                body.innerHTML = summarySectionHtml(s, sec, evId);
+            }
+        });
+    }
+
+    function summaryHeadHtml(h) {
+        const tile = (k, v) => `<div style="background:var(--surface,#fff); border:1px solid var(--border,#E5E7EB); border-radius:8px; padding:0.35rem 0.75rem; min-width:90px;"><div style="font-size:0.66rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">${k}</div><div style="font-family:Bitter,Georgia,serif; font-weight:700; font-size:1.05rem;">${v}</div></div>`;
+        const pace = (p) => p ? `${escapeHtml(p.min_per_hole)} min/hole` : "&mdash;";
+        let html = '<div style="display:flex; flex-wrap:wrap; gap:0.5rem;">';
+        html += tile("Players", h.players == null ? "?" : h.players);
+        html += tile("Games", h.games_total == null ? "&mdash;" : _sumMoney(h.games_total));
+        html += tile("Payouts", `${h.payouts_count} &middot; ${_sumMoney(h.payouts_total)}`);
+        html += tile("Unpaid", _sumMoney(h.unpaid));
+        html += tile("HCP changes", `${h.handicap_changes} / ${h.handicaps_posted}`);
+        html += tile("Fastest", pace(h.fastest));
+        html += tile("Slowest", pace(h.slowest));
+        html += '</div>';
+        return html;
+    }
+
+    function summarySectionHtml(s, sec, evId) {
+        const muted = (t) => `<div style="padding:0.75rem 0; color:var(--text-muted); font-size:0.85rem;">${t}</div>`;
+        const row = (a, b) => `<tr><td style="padding:0.3rem 0.5rem; border-bottom:1px solid var(--border); white-space:normal;">${a}</td><td style="padding:0.3rem 0.5rem; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums;">${b}</td></tr>`;
+        const table = (rows) => `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:0.85rem;"><tbody>${rows}</tbody></table></div>`;
+        if (sec === "financial") {
+            const f = s.financial || {};
+            if (f.hidden) return muted(escapeHtml(f.why || "Admin only."));
+            if (f.error) return muted("The financial summary could not be built: " + escapeHtml(f.error));
+            let rows = "";
+            [["Revenue", f.revenue], ["Credits and refunds", f.credits_and_refunds], ["Net revenue", f.net_revenue],
+             ["Course fees", f.course_fees], ["Prize fund (games)", f.prize_fund], ["Processing fees", f.processing_fees],
+             ["Expenses", f.expenses], ["Projected bottom line", f.projected_profit]].forEach(([k, v]) => { rows += row(k, _sumMoney(v)); });
+            return table(rows);
+        }
+        if (sec === "payouts") {
+            const p = s.payouts;
+            if (!p.count) return muted("No payouts recorded yet.");
+            let rows = "";
+            p.winners.forEach(g => {
+                const what = g.items.map(i => i.description || i.category || "").join(", ");
+                rows += row(`${escapeHtml(g.name)}<div style="color:var(--text-muted); font-size:0.75rem;">${escapeHtml(what)}</div>`,
+                            _sumMoney(g.total) + (g.unpaid ? `<div style="color:#B91C1C; font-size:0.75rem;">unpaid ${_sumMoney(g.unpaid)}</div>` : `<div style="color:var(--text-muted); font-size:0.75rem;">paid</div>`));
+            });
+            return `<div style="font-size:0.85rem; margin-bottom:0.4rem;">${p.count} payouts, ${_sumMoney(p.total)}. <strong>${_sumMoney(p.unpaid)}</strong> unpaid (${p.unpaid_count}).</div>` + table(rows);
+        }
+        if (sec === "handicaps") {
+            const hc = s.handicaps;
+            if (hc.error) return muted(escapeHtml(hc.error));
+            if (!hc.rows.length) return muted(escapeHtml(hc.note || "No handicap rounds posted for this event yet."));
+            const ix = (v) => v == null ? "&mdash;" : Number(v).toFixed(1) + "N";
+            let rows = "";
+            hc.rows.forEach(r => {
+                const c = r.change;
+                const arrow = r.new ? '<span style="color:var(--text-muted);">new</span>'
+                    : (c < 0 ? `<span style="color:#15803D;">&#9660; ${Math.abs(c).toFixed(1)}</span>`
+                    : (c > 0 ? `<span style="color:#B45309;">&#9650; ${c.toFixed(1)}</span>` : '<span style="color:var(--text-muted);">&mdash;</span>'));
+                rows += row(`${escapeHtml(r.player_name)}<div style="color:var(--text-muted); font-size:0.75rem;">diff ${escapeHtml(r.differentials.map(d => Number(d).toFixed(1)).join(", "))}</div>`,
+                            `${ix(r.index_before)} &rarr; <strong>${ix(r.index_after)}</strong> ${arrow}`);
+            });
+            return `<div style="font-size:0.85rem; margin-bottom:0.4rem;">${hc.moved} of ${hc.posted} players changed.</div>` + table(rows);
+        }
+        if (sec === "pace") {
+            const pc = s.pace;
+            if (pc.error) return muted(escapeHtml(pc.error));
+            if (!pc.rounds.length) return muted("No live-scoring round for this event, so nothing was timed.");
+            let html = "";
+            pc.rounds.forEach(r => {
+                if (pc.rounds.length > 1) html += `<div style="font-weight:700; margin:0.5rem 0 0.25rem;">${escapeHtml(r.label || "Round")}</div>`;
+                if (r.excluded) { html += muted("Not a timed round (" + escapeHtml(r.excluded) + ")."); return; }
+                if (!r.groups || !r.groups.length) { html += muted("No saves from the phones on this round."); return; }
+                let rows = "";
+                r.groups.forEach(g => {
+                    rows += row(`${escapeHtml(g.players.join(", "))}<div style="color:var(--text-muted); font-size:0.75rem;">${escapeHtml(g.start)} &middot; ${escapeHtml(g.status_text)}</div>`,
+                                `${escapeHtml(g.min_per_hole)} min/hole<div style="color:var(--text-muted); font-size:0.75rem;">est. ${escapeHtml(g.est_round)}</div>`);
+                });
+                html += `<div style="color:var(--text-muted); font-size:0.75rem;">Groups, fastest first.</div>` + table(rows);
+                if (r.slowest_holes && r.slowest_holes.length) html += muted("Slowest holes: " + escapeHtml(r.slowest_holes.join(", ")) + ".");
+            });
+            return html;
+        }
+        // RECAP
+        const rc = s.recap || {};
+        if (!rc.name) return muted(escapeHtml(rc.why || "No recap yet."));
+        let meta = [];
+        if (rc.send_at) meta.push("Goes to the players " + escapeHtml(String(rc.send_at).replace("T", " ")) + ".");
+        if (rc.edited) meta.push("Last edited" + (rc.edited_by ? " by " + escapeHtml(rc.edited_by) : "") + (rc.edited_at ? " at " + escapeHtml(rc.edited_at) : "") + ".");
+        meta.push("One recap covers the whole night (every event that date).");
+        let html = muted(meta.join(" "));
+        if (!rc.editable) {
+            html += muted(escapeHtml(rc.why || ""));
+            html += `<pre style="white-space:pre-wrap; font-size:0.8rem; background:#F9FAFB; border-radius:6px; padding:0.6rem; max-height:420px; overflow:auto;">${escapeHtml(rc.md || "")}</pre>`;
+            return html;
+        }
+        html += `<textarea data-summary-recap="${evId}" rows="16" style="width:100%; box-sizing:border-box; font:0.8rem/1.45 ui-monospace,Menlo,monospace; border:1px solid var(--border); border-radius:8px; padding:0.6rem;">${escapeHtml(rc.md || "")}</textarea>`;
+        html += `<div style="display:flex; gap:0.75rem; align-items:center; margin-top:0.4rem;"><button class="btn btn-primary" data-summary-save="${evId}">Save recap</button><span data-summary-msg style="font-size:0.85rem;"></span></div>`;
+        return html;
+    }
+
+    // One listener for every SUMMARY panel (desktop and phone containers):
+    // the section chips and the recap Save.
+    document.addEventListener("click", async (e) => {
+        const chip = e.target.closest && e.target.closest("[data-summary-sec]");
+        if (chip) {
+            e.stopPropagation();
+            const evId = Number(chip.dataset.eventId);
+            summarySection[evId] = chip.dataset.summarySec;
+            document.querySelectorAll(`[data-ev-summary="${evId}"] [data-summary-sec]`).forEach(c =>
+                c.classList.toggle("active", c.dataset.summarySec === summarySection[evId]));
+            fillEventSummary(evId);
+            return;
+        }
+        const save = e.target.closest && e.target.closest("[data-summary-save]");
+        if (!save) return;
+        e.stopPropagation();
+        const evId = Number(save.dataset.summarySave);
+        const box = save.closest("[data-ev-summary]");
+        const ta = box && box.querySelector(`[data-summary-recap="${evId}"]`);
+        const msg = box && box.querySelector("[data-summary-msg]");
+        if (!ta) return;
+        save.disabled = true;
+        if (msg) { msg.style.color = "var(--text-muted)"; msg.textContent = "Saving…"; }
+        try {
+            const res = await fetch(`/api/events/${evId}/summary/recap`, {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({md: ta.value})});
+            const d = await res.json();
+            if (res.ok && d.ok) {
+                if (summaryData[evId] && summaryData[evId].recap) summaryData[evId].recap.md = ta.value;
+                if (msg) { msg.style.color = "#15803D"; msg.textContent = d.changed ? "Saved." : "No change."; }
+            } else if (msg) { msg.style.color = "#B91C1C"; msg.textContent = d.error || "Save failed."; }
+        } catch (err) {
+            if (msg) { msg.style.color = "#B91C1C"; msg.textContent = "Save failed."; }
+        }
+        save.disabled = false;
+    });
+
     function renderReportsPanel(ev) {
         const st = (typeof getPairingsState === "function") ? getPairingsState(ev.id) : null;
         const open = (path, label, title) =>
@@ -9566,6 +9786,7 @@
         const flightsView = flightsOpenForEvent[ev.id];
         const reportsView = reportsOpenForEvent[ev.id];
         const scoringView = scoringOpenForEvent[ev.id];
+        const summaryView = summaryOpenForEvent[ev.id];
         let html = '';
 
         // Status banner for cancelled/postponed events
@@ -9584,7 +9805,7 @@
 
         html += '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView && !scoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView && !scoringView && !summaryView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
@@ -9604,6 +9825,8 @@
         if ((currentRole === "admin" || currentRole === "manager") && seEventOn(ev.id)) {   // managers too (Kerry 10/13)
             html += `<span class="game-stat-badge ${scoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
         }
+        // SUMMARY (#2460-E, Kerry 10/29): the manager's full report — manager+.
+        if (currentRole === "admin" || currentRole === "manager") html += summaryBadgeHtml(ev, summaryView);
         if (currentRole === 'admin') {
             html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
             // FINANCIAL is admin-only (Kerry 2026-08-05) — persistent TGF
@@ -9613,7 +9836,7 @@
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
-        if (!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView && !scoringView) {
+        if (!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView && !scoringView && !summaryView) {
             // Hole tabs — one per hole count this event actually sold
             html += holesTabsHtml(ev, registrants);
 
@@ -9680,6 +9903,10 @@
         }
         if (scoringView) {
             html += renderScoreEntryTab(ev);
+            return html;
+        }
+        if (summaryView) {
+            html += renderSummaryPanel(ev, registrants);
             return html;
         }
 

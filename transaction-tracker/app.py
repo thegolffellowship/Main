@@ -7036,6 +7036,64 @@ def api_approve_pairings(event_id):
     return jsonify(res), (code or (500 if res.get("error") else 200))
 
 
+# ── THE EVENT SUMMARY (Event Ops #2460-E, Kerry 2026-10-29) ─────────────
+# One payload (email_parser/event_summary.build_summary) behind the SUMMARY
+# tab, this phone page and the manager email. Manager of the event's chapter,
+# or admin (the approve-pairings rule). FINANCIAL is admin only unless app
+# setting event_summary_financial_managers is on.
+def _event_summary_gate(event_id):
+    from email_parser import event_summary as es
+    from email_parser.pairings_approval import may_approve
+    ev = es.event_row(event_id)
+    if not ev:
+        return None, ("No such event", 404)
+    why = may_approve(session.get("role"), session.get("chapter"), ev.get("chapter"))
+    if why:
+        return None, (why, 403)
+    return ev, None
+
+
+@app.route("/events/<int:event_id>/summary")
+@require_role("manager")
+@perf.timed_route("event_summary_page")
+def event_summary_page(event_id):
+    from email_parser import event_summary as es
+    ev, err = _event_summary_gate(event_id)
+    if err:
+        return err
+    s = es.build_summary(event_id, include_financial=es.may_see_financial(session.get("role")))
+    return es.render_page(s)
+
+
+@app.route("/api/events/<int:event_id>/summary")
+@require_role("manager")
+@perf.timed_route("event_summary_api")
+def api_event_summary(event_id):
+    from email_parser import event_summary as es
+    ev, err = _event_summary_gate(event_id)
+    if err:
+        return jsonify({"error": err[0]}), err[1]
+    return jsonify(es.build_summary(event_id, include_financial=es.may_see_financial(session.get("role"))))
+
+
+@app.route("/api/events/<int:event_id>/summary/recap", methods=["POST"])
+@require_role("manager")
+def api_event_summary_recap(event_id):
+    """Save the night's recap before it goes to the players (editable only
+    until the results email carrying it has sent). Logged."""
+    from email_parser import event_summary as es
+    ev, err = _event_summary_gate(event_id)
+    if err:
+        return jsonify({"error": err[0]}), err[1]
+    body = request.get_json(silent=True) or {}
+    who = session.get("role") or "?"
+    if session.get("chapter"):
+        who = f"{who} ({session.get('chapter')})"
+    res = es.save_recap(event_id, str(body.get("md") or ""), who)
+    code = res.pop("code", None)
+    return jsonify(res), (code or (500 if res.get("error") else 200))
+
+
 @app.route("/api/events/<int:event_id>/event-day-email")
 @require_role("admin")
 def api_event_day_email_preview(event_id):

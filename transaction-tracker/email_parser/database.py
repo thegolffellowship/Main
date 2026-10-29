@@ -22577,7 +22577,8 @@ def _handicap_recap_recipient(conn, chapter: str) -> str | None:
 
 
 def send_handicap_recap_email(event_label: str, written: list,
-                              db_path: str | Path | None = None) -> dict:
+                              db_path: str | Path | None = None,
+                              force: bool = False) -> dict:
     """Email the chapter manager a recap of one handicap posting — the
     same shape as the chat recap Kerry approved 2026-07-29: header
     (event / course / date / standard), biggest index movers up top,
@@ -22589,6 +22590,16 @@ def send_handicap_recap_email(event_label: str, written: list,
     from email_parser.fetcher import send_mail_graph
     if not written:
         return {"ok": False, "error": "nothing written — no recap to send"}
+    # The EVENT SUMMARY email carries the handicap changes when its dial is
+    # on (#2460-E); the automatic recap skips. A manual resend (force) still goes.
+    if not force:
+        try:
+            from email_parser.event_summary import dial_on as _es_on
+            if _es_on(db_path):
+                return {"ok": False, "skipped": "event_summary_email is on: the event "
+                                                "summary email carries the handicap changes"}
+        except Exception:
+            logger.exception("Non-fatal: event summary dial check failed")
     with _connect(db_path) as conn:
         chapter = None
         row = conn.execute(
@@ -24451,7 +24462,7 @@ def send_handicap_recap_for_event(event_query: str,
                          "— run scoring-hcp-import:<event>|apply first"}
     return send_handicap_recap_email(
         (preview["events_matched"] or [event_query])[0], written,
-        db_path=db_path)
+        db_path=db_path, force=True)
 
 
 # Per-nine (front/back) course ratings are NOT in course_tees (which stores

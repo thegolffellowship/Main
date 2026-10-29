@@ -130,7 +130,8 @@ def run(day: str | None = None, confirm: bool = False, now=None, db_path=None) -
     from email_parser.timezone_utils import now_central
     now = now or now_central()
     day = day or now.date().isoformat()
-    if not _on(db_path):
+    from email_parser import event_summary as _es
+    if not _on(db_path) and not _es.dial_on(db_path):   # the summary rides this job's moment
         return {"status": "off"}
     key = SENT_KEY.format(day=day)
     if db.get_app_setting(key, db_path=db_path):
@@ -141,6 +142,10 @@ def run(day: str | None = None, confirm: bool = False, now=None, db_path=None) -
     if not p["all_closed"]:
         return {"status": "waiting", "day": day,
                 "open": [{"event": r["name"], "blocking": r["blocking"]} for r in p["events"] if not r["closed"]]}
+    # THE EVENT SUMMARY replaces this report when its dial is on (#2460-E):
+    # one summary email per event to the manager + admin, sent right here.
+    if _es.dial_on(db_path):
+        return _es.run_for_plan(p, confirm=confirm is True, now=now, db_path=db_path)
     to = recipient(db_path)
     if not to:
         return {"status": "held", "why": f"{TO_KEY} is not a staff address", "day": day}

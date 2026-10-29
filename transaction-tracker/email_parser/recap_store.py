@@ -66,12 +66,19 @@ def read_text(name: str, db_path=None) -> str:
     return p.read_text(encoding="utf-8")
 
 
-def update_text(name: str, md: str, db_path=None) -> None:
+def update_text(name: str, md: str, db_path=None, who: str | None = None) -> None:
     """Replace a stored recap's text (a manager's or Kerry's edit before it
-    sends). Only stored recaps can be edited this way."""
+    sends). Only stored recaps can be edited this way. `who` (the event
+    SUMMARY's Save, #2460-E) records the editor, the time and the text it
+    replaced (one level back) in the recap's meta."""
     if not is_db(name):
         raise ValueError("only a stored recap (db:...) can be edited here")
     rec = load(name, db_path=db_path) or {"meta": {}}
     meta = dict(rec.get("meta") or {})
     meta["edited"] = True
+    if who:
+        from .timezone_utils import now_central, stamp12
+        meta["edited_by"] = who
+        meta["edited_at"] = stamp12(now_central())
+        meta["previous_md"] = rec.get("md")
     save(_key(name), md, meta, db_path=db_path)
