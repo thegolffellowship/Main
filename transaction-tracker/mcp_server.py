@@ -1851,6 +1851,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
       scoring-results-email:preview|<event_id>|<cid>|<recap file>[|send[|<to>]][|html] / plan|<ids>|<recap> / schedule|<ids>|<YYYY-MM-DDTHH:MM>|<recap>|<kerry_ok_post> / schedule-next|<ids>|<recap>|<kerry_ok_post> (6:00 AM the next morning, Kerry #1778) / cancel|<ids> / status — the personal RESULTS EMAIL (Kerry 10/14); previews go to staff or a chapter manager's own address; members only through a schedule, guards first
       scoring-card-parity:<event name or id>  READ-ONLY engine vs saved scorecards, every entered player: stored strokes vs the rule (own tee, the nine played) and the engine's card vs the stored card; any difference holds payouts + points
+      scoring-closeout-chain:status|<id> / run|<id> / reset|<id>[|<step>]  the in-Tracker closeout chain (publish, final, payouts, flights, pairings, handicaps, points, pace, recap); runs itself at CLOSEOUT START
+      scoring-recap-writer:facts|<ids> / write|<ids> / read|db:<key> / list  the night's recap written by the Tracker (one Claude call, linted, stored as db:<key>)
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
@@ -7159,6 +7161,44 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # Kerry 10/14: the engine against the saved cards, every player.
             from email_parser.card_parity import engine_card_parity as _ecp
             return json.dumps(_ecp(arg.strip()), indent=2, default=str)
+        if cmd == "scoring-closeout-chain":
+            # Kerry 10/29 (#2457 BUILD 1): the closeout chain the Tracker runs
+            # at CLOSEOUT START.  status|<id>   run|<id>   reset|<id>[|<step>]
+            from email_parser import closeout_chain as _cc
+            _b = [b.strip() for b in (arg or "").split("|")]
+            if len(_b) < 2 or not _b[1].isdigit():
+                return json.dumps({"error": "ops: status|<id> | run|<id> | reset|<id>[|<step>]",
+                                   "steps": list(_cc.STEPS)})
+            if _b[0] == "run":
+                return json.dumps(_cc.run(int(_b[1])), indent=2, default=str)
+            if _b[0] == "reset":
+                return json.dumps(_cc.reset(int(_b[1]), _b[2] if len(_b) > 2 and _b[2] else None),
+                                  indent=2, default=str)
+            return json.dumps(_cc.state(int(_b[1])), indent=2, default=str)
+        if cmd == "scoring-recap-writer":
+            # Kerry 10/29 (#2457 BUILD 2): the night's recap, written by the
+            # Tracker.  facts|<ids>   write|<ids> (writes + stores, sends
+            # nothing)   read|db:<key>   list
+            from email_parser import recap_writer as _rw, recap_store as _rs
+            _b = [b.strip() for b in (arg or "").split("|")]
+            _op = _b[0] if _b else ""
+            if _op == "list":
+                with db._connect() as _c:
+                    return json.dumps([r[0] for r in _c.execute(
+                        "SELECT key FROM app_settings WHERE key LIKE 'event_recap:%' ORDER BY key")])
+            if _op == "read":
+                return _rs.read_text(_b[1])
+            _ids = [int(x) for x in (_b[1] if len(_b) > 1 else "").split(",") if x.strip()]
+            if not _ids:
+                return json.dumps({"error": "ops: facts|<ids> | write|<ids> | read|db:<key> | list"})
+            if _op == "facts":
+                return json.dumps(_rw.night_facts(_ids), indent=1, default=str)
+            if _op == "write":
+                try:
+                    return json.dumps(_rw.write_and_store(_ids), indent=2, default=str)
+                except _rw.WriterError as exc:
+                    return json.dumps({"error": str(exc)})
+            return json.dumps({"error": "ops: facts | write | read | list"})
         if cmd == "scoring-closeout-final":
             # "<event name or id>" — READ-ONLY: is the event's result final
             # enough to close out (CA #829)? GG era: cards = field, identity,

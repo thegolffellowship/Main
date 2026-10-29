@@ -20,6 +20,8 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
     from email_parser import scoring_window as sw
     from email_parser import timezone_utils as tz
     db.init_db(DB)
+    # The closeout chain has its own test (test_closeout_chain.py).
+    db.set_app_setting("closeout_chain_auto", "off", db_path=DB)
 
 F = []
 def check(label, cond, detail=""):

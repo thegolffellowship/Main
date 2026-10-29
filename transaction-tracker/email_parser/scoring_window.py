@@ -198,6 +198,17 @@ def tick(now=None, db_path=None) -> dict:
                     did["race_close"] = _rc.run(eid, apply=True, db_path=db_path).get("done")
             except Exception:
                 logger.exception("scoring window: race close failed for %s", eid)
+        # THE CLOSEOUT CHAIN (Kerry 10/29, #2457 BUILD 1): publish -> final ->
+        # payouts -> flights -> pairings -> handicaps -> points -> pace ->
+        # the night's recap, each guarded; retried every run until done.
+        if db.get_app_setting(CLOSEOUT_KEY.format(eid), db_path=db_path):
+            try:
+                from email_parser import closeout_chain as _cc
+                _r = _cc.tick_event(eid, db_path=db_path, now=now)
+                if _r:
+                    did["closeout_chain"] = _r.get("at")
+            except Exception:
+                logger.exception("scoring window: closeout chain failed for %s", eid)
         if did:
             out[eid] = did
         if st.get("last_score_at") and not st.get("closed"):

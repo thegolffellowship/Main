@@ -207,7 +207,8 @@ def recap_story(recap_file: str, section: str, enrolled: bool = False) -> str:
     NEXT), rendered by the recap mailer's own renderer. A bought-in reader
     does not get the 'activate them by BUYING IN' sentence."""
     from email_parser.recap_mail import extract_section, render_recap_html
-    md = (RECAP_DIR / recap_file).read_text()
+    from email_parser import recap_store
+    md = recap_store.read_text(recap_file)
     _, body = extract_section(md, section)
     body = body.split("UP NEXT.")[0]
     keep, started = [], False
@@ -905,7 +906,8 @@ def schedule_send(event_ids: list, at: str, recap_file: str | None, authority: s
     = "played" needs no recap (the same-day players' send)."""
     from email_parser import database as db
     datetime.fromisoformat(at)
-    if recap_file and not (RECAP_DIR / recap_file).exists():
+    from email_parser import recap_store
+    if recap_file and not recap_store.exists(recap_file, db_path=db_path):
         return {"error": f"no recap file {recap_file}"}
     if not recap_file and who != "played":
         return {"error": "a recap file is needed for anyone who did not play"}

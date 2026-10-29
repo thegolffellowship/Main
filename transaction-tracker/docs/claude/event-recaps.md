@@ -4,6 +4,25 @@ News-reporter recaps of TGF events, written for the chapter's GG roster
 email blast. First one shipped for s9.21 Canyon Springs; Kerry refined
 the rules live. This is the voice and rulebook of record.
 
+## The Tracker writes the recap (v2.622.0, Kerry 10/29, #2457 BUILD 2)
+
+`email_parser/recap_writer.py`: at the end of the closeout chain
+(score-entry.md), one Claude call per event night. The system prompt is
+THIS FILE plus the newest recap in `docs/claude/recaps/` as the template;
+the user prompt is the night's facts from the Tracker only (cards, recorded
+payouts, the races and the month, the HIO pot, first-timers, UP NEXT, each
+member's `[[First LAST|id]]` form). The draft is linted: no blank, no bold
+name without a Spotlight link, no link to an id outside the night, no
+dollar figure the facts don't carry, every section, Subject and greeting.
+A failing draft is re-asked once with the problems; a second failure holds
+the chain. The recap is stored in the database (`email_parser/recap_store.py`,
+app setting `event_recap:<key>`, named `db:<key>`), which the staff draft
+email and the 6:00 AM results email both read; a plain file name still
+reads `docs/claude/recaps/`. Lessons from Kerry's edits keep landing in this
+file, so the writer learns them on the next night. Dial `recap_writer_auto`;
+model `recap_model` (else `insider_model`); bridge
+`scoring-recap-writer:facts|write|read|list`.
+
 ## Editorial rules (Kerry, verbatim-derived)
 
 1. **Evaluate every number comparatively against the season before

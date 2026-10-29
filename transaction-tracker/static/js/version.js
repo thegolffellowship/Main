@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.621.3";
+window.TGF_VERSION = "2.622.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.622.0",
+    date: "2026-10-29",
+    title: "The Tracker runs the closeout and writes the night's recap",
+    changes: [
+      "Kerry 10/29: \"Build both now for Saturday\" (#2457 BUILD 1). At CLOSEOUT START the scoring window job now runs the closeout itself, in order: publish the signed cards, the final check, payouts recorded, flights freeze/settle, pairing history, the handicap post (nine or two nines; NO HANDICAPS events skipped), the points rebuild and the pace rebuild. Each step is guarded. A failed step waits for the first 30 minutes, then holds itself and every later step, raises one COO item CLOSEOUT HELD and posts once to Event Ops; the chain retries every 5 minutes and never re-runs a done step. email_parser/closeout_chain.py, dial closeout_chain_auto, bridge scoring-closeout-chain.",
+      "#2457 BUILD 2: the night's recap is written by the Tracker (email_parser/recap_writer.py). Once every event of the night reaches the end of the chain, one Claude call writes it in the house style (event-recaps.md plus the newest recap as template) from Tracker data only. The draft is checked for blanks, unlinked names, unknown customer ids, dollar figures not in the data and missing sections; it is re-asked once, then held. It is stored in the database (recap_store, db:<key>), the staff drafts go to the senders, and the 6:00 AM results email is scheduled with it. Event Ops verifies and can cancel the send; if the chain holds, they write it by hand as before. Dials recap_writer_auto and recap_auto_schedule, bridge scoring-recap-writer, guard test_closeout_chain.py."
+    ]
+  },
   {
     version: "2.621.3",
     date: "2026-10-29",

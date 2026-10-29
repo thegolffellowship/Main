@@ -217,9 +217,16 @@ def send_recap_draft(file_name: str, section: str, to=None, cc=None,
         except Exception:
             return None
 
+    from email_parser import recap_store
     try:
-        path = resolve_file(file_name)
-        heading, body = extract_section(path.read_text(encoding="utf-8"), section)
+        if recap_store.is_db(file_name):
+            # A recap the Tracker wrote and stored (recap_writer.py).
+            from types import SimpleNamespace
+            path = SimpleNamespace(name=file_name)
+            heading, body = extract_section(recap_store.read_text(file_name, db_path=db_path), section)
+        else:
+            path = resolve_file(file_name)
+            heading, body = extract_section(path.read_text(encoding="utf-8"), section)
     except ValueError as exc:
         return {"error": str(exc)}
 

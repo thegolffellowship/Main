@@ -1016,6 +1016,25 @@ window. So:
   (s9.29's "Hole 3B", #2457). Guard `test_empty_group_closeout.py`.
 - Read-only bridge `scoring-scoring-window:<event_id>`. Guard
   `test_live_scoring_timing.py`.
+- **The closeout chain** (v2.622.0, Kerry 10/29 "Build both now for
+  Saturday", #2457 BUILD 1): once CLOSEOUT START is set, every tick runs
+  `email_parser/closeout_chain.py` for the event: publish -> final check ->
+  payouts recorded -> flights freeze/settle -> pairing history -> handicap
+  post (a nine as one round, an 18 as two nines; NO HANDICAPS events
+  skipped) -> points rebuild -> pace rebuild -> the night's recap. Each step
+  is guarded; a failed step waits for the first 30 minutes (cards and money
+  finish on their own minute jobs), then HOLDS that step and every later one
+  with one COO item `CLOSEOUT HELD: <event>` and one mailbox post to Event
+  Ops; the next tick retries from the held step, done steps never re-run.
+  The recap step waits until every Live Scoring event of that date reaches
+  it, then `recap_writer.write_and_store` writes the night's recap once
+  (`closeout_recap_night:<date>`), staff drafts go out per section
+  (`recap_mail.send_recap_draft`), and the 6:00 AM results email is
+  scheduled with the stored recap (dial `recap_auto_schedule`, on). A
+  writer failure holds the recap step; Event Ops writes it by hand as
+  before. State `closeout_chain:<event_id>`; dial `closeout_chain_auto`
+  (on); bridge `scoring-closeout-chain:status|run|reset`; guard
+  `test_closeout_chain.py`.
 
 ## Publishing entered scores (G-0 keystone, CA #786 GO 1)
 
