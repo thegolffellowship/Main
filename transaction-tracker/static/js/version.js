@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.628.1";
+window.TGF_VERSION = "2.629.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.629.0",
+    date: "2026-10-29",
+    title: "The rest of the Event Ops list",
+    changes: [
+      "Kerry 10/29: \"Build everything remaining on the event ops list. We can review later tonight before deploying.\" Every new automation below sits behind a dial that is OFF until Kerry turns it on, except where noted.",
+      "VERIFY BEFORE PAY (#2460-B, dial payout_verify_gate): auto-recorded payouts start VERIFYING; Pay stays locked on the Payouts page, /api/tgf/mark-paid and the admin payout report until the recorded rows equal the GAMES engine line for line and card parity is clean; a failure raises one COO item PAYOUTS HELD. PAID-AT TIMES (#2460-D): each payment's Central time from the receipt or the Mark Paid press, and per event the first/last payment, batches (a 30-minute gap starts one) and minutes spent (bridge scoring-payout-timing). REFUND MEMOS (#2476-4): every refund the Tracker starts pre-fills \"Refund for <Event or Season Contest>\".",
+      "EVENT SUMMARY (#2460-E): a SUMMARY tab on each event (FINANCIAL, PAYOUTS, HANDICAPS, PACE, RECAP, the recap editable until it sends), a phone page /events/<id>/summary and one staff email per event to the manager and admin (dial event_summary_email; when on it replaces the admin payout report and the handicap recap email). FINANCIAL stays admin-only unless event_summary_financial_managers is on. The FINANCIAL and PAYOUTS tabs are unchanged.",
+      "COURSE SHORTFALL EMAIL (#2474-A/#2475-3/#2476-1, dial course_shortfall_email): a course-fee charge over played x course rate by half a player or more drafts Kerry's approved credit request to the course contact, CC the manager and Kerry. HANDICAP FORM (#2474-B/#2475-1): the no-handicap answer is the usual 18-hole LOW and HIGH, digits only, LOW at least 60, HIGH at least LOW, the starting index named on the thank-you page and the link locked after the answer (live with the deploy). CONTACT SNAPSHOT (#2476-3): a past event's course contacts freeze with it. CLOSED-EVENT GUARD (#2477-3): reactivating an item on a closed event warns and raises one COO item, never blocks.",
+      "LIVE SCORING (#2460-F/J, #2462): a POINTS tab beside SCORING and LEADERBOARD (dial scoring_points_tab); Add photo for managers and admin on the scorer's page and the Live Scoring page, with a Spotlight button for a tagged champion (capture on; photos in emails behind event_photos_in_email); the post-round interview by email to the MVPs, eagles and 3+ birdies with a 'use my quote' consent, read by the recap writer (dial ai_interview_email + wording stamp).",
+      "OPS: the Tracker posts WINDOW OPEN / WINDOW CLOSED itself (#2460-I, dial window_posts_auto; the scoring-window job now starts at 5 AM); the pairing generator honours the guest-with-host exception the audit already had (Kerry: \"Eric Carstens is with the person, Matthew Jenkins, who invited him\"); a Facebook results post after the players' email (#2460-J, dial social_auto_post + wording stamp; needs META_PAGE_TOKEN with pages_manage_posts)."
+    ]
+  },
   {
     version: "2.628.1",
     date: "2026-10-29",
