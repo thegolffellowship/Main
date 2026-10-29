@@ -62,7 +62,8 @@ print("== the limit, the gate, offers (Kerry 10/29) ==")
 from datetime import datetime as _dt
 import email_parser.waitlist as W
 SENTM = []
-W._mail = lambda to, subject, html, db_path=None, who="waitlist": SENTM.append((to, subject)) or True
+CCS = []
+W._mail = lambda to, subject, html, db_path=None, who="waitlist", cc=None: (SENTM.append((to, subject)), CCS.append((to, cc))) and True
 with db._connect(DB) as c:
     eid2 = c.execute("INSERT INTO events (item_name, event_date, start_time, registration_url, max_players) "
                      "VALUES ('s9.99 Cap', '2099-11-03', '17:00', 'https://www.thegolffellowship.com/product-page/s9-99-cap', 2) "
@@ -117,6 +118,11 @@ b = W.board(eid2, DB)
 check("Mesa pays: claimed, off the line, staff told",
       not b["line"] and any(r["state"] == "claimed" for r in b["past"]) and any("claimed" in s for _, s in SENTM), b)
 db.set_app_setting("waitlist_member_emails", "on", db_path=DB)
+CCS.clear()
+W._member({"id": eid2, "item_name": "s9.99 Cap", "chapter": "San Antonio", "event_date": "2099-11-03"},
+          {"name": "Kelly Barna", "customer_id": 39}, "joined", DB, pos=1)
+check("every player email copies Kerry (Kerry 10/29)",
+      CCS and CCS[-1] == ("kbarna@austin.rr.com", "kerry@thegolffellowship.com"), CCS)
 pv = W.preview("offered", eid2, DB)
 check("a chapter event is signed by the chapter manager (Kerry 10/29)",
       "Kerry Niester" in W.render({**{"id": eid2, "item_name": "s9.99 Cap", "chapter": "San Antonio",

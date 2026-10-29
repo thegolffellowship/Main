@@ -435,7 +435,7 @@ def staff_recipients(ev, db_path=None) -> list:
     return to
 
 
-def _mail(to, subject, html, db_path=None, who="waitlist") -> bool:
+def _mail(to, subject, html, db_path=None, who="waitlist", cc=None) -> bool:
     creds = [os.getenv(k) for k in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET",
                                     "EMAIL_ADDRESS")]
     if not all(creds):
@@ -445,7 +445,7 @@ def _mail(to, subject, html, db_path=None, who="waitlist") -> bool:
     try:
         return bool(send_mail_graph(tenant_id=creds[0], client_id=creds[1], client_secret=creds[2],
                                     from_address=creds[3], to_address=to, subject=subject,
-                                    html_body=html))
+                                    html_body=html, cc_address=cc))
     except Exception:
         logger.exception("waitlist: send failed")
         return False
@@ -461,6 +461,13 @@ def _staff(ev, subject, inner, db_path=None) -> bool:
 def _events_link(ev) -> str:
     from .invitations import _base_url
     return f"{_base_url()}/events?event={ev['id']}"
+
+
+def member_cc(db_path=None) -> str:
+    """Who is copied on every waitlist email to a player (dial
+    waitlist_member_cc, default Kerry)."""
+    from . import database as db
+    return (db.get_app_setting("waitlist_member_cc", db_path=db_path) or STAFF).strip()
 
 
 def member_on(db_path=None) -> bool:
@@ -517,7 +524,9 @@ def _member(ev, entry, kind, db_path=None, **kw) -> bool:
     if not addr:
         return False
     msg = render(ev, entry, kind, db_path, **kw)
-    ok = _mail(addr, msg["subject"], msg["html"], db_path)
+    # Kerry 10/29: "I want to be CC'd on any of those that are going out."
+    cc = member_cc(db_path)
+    ok = _mail(addr, msg["subject"], msg["html"], db_path, cc=cc if cc and cc.lower() != addr.lower() else None)
     try:
         db.log_message({"event_name": ev["item_name"], "template_id": None, "channel": "email",
                         "recipient_name": entry["name"], "recipient_address": addr,

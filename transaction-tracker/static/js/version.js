@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.623.3";
+window.TGF_VERSION = "2.623.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.623.4",
+    date: "2026-10-29",
+    title: "Kerry is copied on every waitlist email to a player",
+    changes: [
+      "Kerry 10/29, on approving the waitlist emails: \"I want to be CC'd on any of those that are going out.\" Every waitlist email to a player (joined, spot offered, offer lapsed, event morning) now copies kerry@thegolffellowship.com (dial waitlist_member_cc). The player emails were switched back off until this was live."
+    ]
+  },
   {
     version: "2.623.3",
     date: "2026-10-29",

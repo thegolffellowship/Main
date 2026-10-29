@@ -4154,7 +4154,8 @@ into it."
   offered, claimed, expired. Staff emails go to kerry@ and the chapter
   manager (`pairings_approval.manager_for`). Member emails (`waitlist.TEXT`:
   joined, offered, expired, morning) wait on dial `waitlist_member_emails`
-  = on, set when Kerry approves the words (`scoring-waitlist:preview|<kind>|<id>`).
+  = on (Kerry approved 10/29), each copied to Kerry (dial `waitlist_member_cc`,
+  Kerry 10/29: "I want to be CC'd on any of those that are going out"), set when Kerry approves the words (`scoring-waitlist:preview|<kind>|<id>`).
 - Players tab: the WAITLIST box above every tab (spots paid of max, the line,
   manager move / remove), `/api/events/<id>/waitlist`.
 - Guard `test_waitlist.py`.
