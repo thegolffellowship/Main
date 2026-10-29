@@ -85,6 +85,10 @@ def plan(day: str, db_path=None) -> dict:
         chk = closeout_final_check(r["event_id"], db_path=db_path)
         r["closed"] = bool(chk.get("final"))
         r["blocking"] = chk.get("blocking") or ([chk["error"]] if chk.get("error") else [])
+        # VERIFY BEFORE PAY (Kerry 10/28 #2460-B): None unless the
+        # payout_verify_gate dial is on and the check has not passed.
+        from email_parser.payout_verify import lock_for
+        r["pay_locked"] = lock_for(r["event_id"], db_path=db_path)
     return {"day": day, "events": rows, "all_closed": bool(rows) and all(r["closed"] for r in rows)}
 
 
@@ -110,6 +114,13 @@ def build(p: dict) -> dict:
            'font-weight:700;font-size:16px;line-height:1;padding:14px 28px;border-radius:999px;'
            'text-decoration:none;font-family:Helvetica,Arial,sans-serif;">'
            '<span style="color:#ffffff;">Open PAYMENTS</span></a></td></tr></table>')
+    locked = [r for r in p["events"] if r.get("pay_locked")]
+    if locked:
+        # The button stays locked while any event's check has not passed.
+        btn = ('<p style="margin:18px 0;padding:12px 14px;background:#FEF2F2;border:1px solid #FECACA;'
+               'border-radius:8px;color:#991B1B;"><strong>Pay is locked</strong> until the Tracker\'s '
+               'check passes:<br>' + "<br>".join(f"{_e(r['name'])}: {_e(r['pay_locked'])}" for r in locked)
+               + "</p>")
     inner = (f"<p>Every event for {_e(day_long)} is closed. "
              f"<strong>{_money(unpaid)}</strong> is waiting to be paid.</p>"
              '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
@@ -141,6 +152,10 @@ def run(day: str | None = None, confirm: bool = False, now=None, db_path=None) -
     if not p["all_closed"]:
         return {"status": "waiting", "day": day,
                 "open": [{"event": r["name"], "blocking": r["blocking"]} for r in p["events"] if not r["closed"]]}
+    verifying = [r for r in p["events"] if (r.get("pay_locked") or "").startswith("Verifying")]
+    if verifying:
+        return {"status": "waiting", "day": day,
+                "open": [{"event": r["name"], "blocking": [r["pay_locked"]]} for r in verifying]}
     to = recipient(db_path)
     if not to:
         return {"status": "held", "why": f"{TO_KEY} is not a staff address", "day": day}

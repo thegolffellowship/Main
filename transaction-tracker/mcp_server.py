@@ -1784,6 +1784,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-courses              course/tee database listing
       scoring-rsvp-deadline:<event_id>|warn|release  who the lock-day 1:00 PM warning / 4:50 PM release would reach now, with a sample (read-only)
       scoring-admin-payout-report[:<YYYY-MM-DD>]  would the same-night admin payout report (PAYMENTS link) go now, and what it says (read-only)
+      scoring-payout-timing:<event_id>  paid-at times for an event's payouts: first / last paid, batches (a gap over 30 min starts one), minutes spent paying (read-only)
+      scoring-payout-verify:<event_id>  verify-before-pay: stored state, whether Pay is locked and why, and a fresh cross-check (read-only)
       scoring-unsubscribes[:<hours>][|refresh]  who unsubscribed (Tracker invitations + Brevo Insider) in the last <hours>, default 24 (read-only toward Brevo)
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
       scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
@@ -4206,6 +4208,24 @@ def _scoring_dispatch_inner(url: str, extract: str):
             from email_parser import admin_payout_report as _apr
             _d = (arg or "").strip() or None
             return json.dumps(_apr.run(day=_d, confirm=False), indent=2, default=str)
+        if cmd == "scoring-payout-timing":
+            # "<event_id>" (Kerry 10/28, Event Ops #2460-D): first paid, last
+            # paid, batches (30-minute gap), minutes spent paying. Read-only.
+            from email_parser.payout_timing import payout_timing as _ptm
+            if not (arg or "").strip().isdigit():
+                return json.dumps({"error": "usage: scoring-payout-timing:<event_id>"})
+            return json.dumps(_ptm(int(arg.strip())), indent=2, default=str)
+        if cmd == "scoring-payout-verify":
+            # "<event_id>" (Kerry 10/28, Event Ops #2460-B): the stored
+            # verify-before-pay state, the lock and a fresh check. Read-only:
+            # the auto_payouts job stores verdicts.
+            from email_parser import payout_verify as _pvf
+            if not (arg or "").strip().isdigit():
+                return json.dumps({"error": "usage: scoring-payout-verify:<event_id>"})
+            _e = int(arg.strip())
+            return json.dumps({"gate_on": _pvf.gate_on(), "state": _pvf.get_state(_e),
+                               "pay_locked": _pvf.lock_for(_e), "check": _pvf.check(_e)},
+                              indent=2, default=str)
         if cmd == "scoring-unsubscribes":
             # "[<hours>][|refresh]" (Kerry 10/23): who unsubscribed from Tracker
             # invitations or the Brevo Insider list in the last <hours>

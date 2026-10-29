@@ -648,6 +648,7 @@
     </main>
 
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/refund-memo.js?v={{ app_version }}"></script>
     <script src="/static/js/version.js"></script>
     <script>
     /* ═══════════════════════════════════════════════════════════
@@ -1035,6 +1036,12 @@
             const alreadyPaid = g.payment_status === "paid";
             // paid rows drop any stale "verifying" marker
             if (alreadyPaid) _clearVerifying(ev.id, g.golfer_id);
+            // VERIFY BEFORE PAY (Kerry 10/28 #2460-B): while the Tracker's
+            // cross-check has not passed, Pay and Mark Paid are locked; the
+            // tooltip names the reason (/api/tgf ev.pay_locked).
+            if (!alreadyPaid && ev.pay_locked) {
+                return `<span class="pay-locked" title="${escR(ev.pay_locked)}" style="display:inline-block;background:#F3F4F6;color:#6B7280;border:1px solid #E5E7EB;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;white-space:nowrap;cursor:help;">Pay locked</span>`;
+            }
             // Partial payments (Kerry 2026-07-20): Pay carries only the
             // unpaid remainder when some rows are already paid.
             const gDue = g.items.filter(p => p.payment_status !== "paid")
@@ -1429,7 +1436,7 @@
                     action = `<span title="${escR(r.payment_handle || "")}"
                            style="display:inline-block;background:${bg};color:#fff;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;white-space:nowrap;">${label} ${fmt(r.amount)}</span>${moreLink}`;
                 } else if (r.venmo_handle) {
-                    const memo = encodeURIComponent(r.memo || `TGF refund — ${r.event || "season contest"}`);
+                    const memo = encodeURIComponent(r.memo || window.refundMemo("Refund", r.event || ""));
                     const amt = Number(r.amount || 0).toFixed(2);
                     const h = r.venmo_handle.replace(/^@/, "");
                     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
