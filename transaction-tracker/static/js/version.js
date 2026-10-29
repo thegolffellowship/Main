@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.623.0";
+window.TGF_VERSION = "2.623.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.623.1",
+    date: "2026-10-29",
+    title: "Waitlist emails name the event the way members know it",
+    changes: [
+      "The four waitlist emails to players (joined, spot offered, offer lapsed, event morning) named the event by its store item name (\"s18.12 FALL CHAMPIONSHIP | Kissing Tree\"); they now use the invitation's display name (\"2026 Fall Championship @ Kissing Tree\") in the subject and the body, the same as the header. Found while sending Kerry the four previews he asked for."
+    ]
+  },
   {
     version: "2.623.0",
     date: "2026-10-29",

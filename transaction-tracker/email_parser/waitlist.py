@@ -472,7 +472,12 @@ def render(ev, entry, kind, db_path=None, **kw) -> dict:
     from .event_links import pay_button_html
     first = (entry.get("name") or "").split(" ")[0] or "there"
     subj, body = TEXT[kind]
-    vals = {"first": _h(first), "event": _h(ev["item_name"]), "pos": kw.get("pos", ""),
+    try:
+        from .invitations import _display_name
+        evname = _display_name(ev) or ev["item_name"]
+    except Exception:
+        evname = ev["item_name"]
+    vals = {"first": _h(first), "event": _h(evname), "pos": kw.get("pos", ""),
             "deadline": _h(kw.get("deadline", "")),
             # The offer goes straight to the store (Kerry reopens it for
             # them); the gate would show everyone else the spot as held.
@@ -483,7 +488,7 @@ def render(ev, entry, kind, db_path=None, **kw) -> dict:
         html = frame_for(ev, inner, db_path)
     except Exception:
         html = inner
-    return {"subject": subj.format(**{**vals, "event": ev["item_name"]}), "html": html}
+    return {"subject": subj.format(**{**vals, "event": evname}), "html": html}
 
 
 def _member(ev, entry, kind, db_path=None, **kw) -> bool:
