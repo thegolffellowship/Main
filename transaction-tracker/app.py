@@ -14366,6 +14366,18 @@ def api_season_contest_monthly_points():
     # worker 12.8 s).
     force = (request.args.get("force") == "1"
              and _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["manager"])
+    # Monthly adds immediately (Kerry 10/28): with the Fall races locked, a
+    # read refreshes them when over a minute old, and that refresh rebuilds
+    # Monthly from the kept baseline plus today's event.
+    try:
+        from email_parser import tracker_points as _tp
+        from email_parser.database import get_points_race_standings
+        for _rk in _tp.TRACKER_RACES:
+            if _tp.season_lock(_rk):
+                get_points_race_standings(_rk)
+                break
+    except Exception:
+        logger.warning("monthly read: live refresh failed (non-fatal)", exc_info=True)
     snapshot = load_gg_snapshot("monthly_points")
     if snapshot and not force:
         return jsonify(snapshot)

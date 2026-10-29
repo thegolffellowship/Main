@@ -213,11 +213,4 @@ def refresh_live_points(db_path=None) -> dict:
         except Exception as e:
             logger.exception("live points: %s failed", rk)
             res[rk] = f"error: {e}"
-    if any(tp.season_lock(rk, db_path=db_path) for rk in tp.TRACKER_RACES):
-        try:  # a locked race's refresh skips Monthly; keep Monthly live here
-            tp.rebuild_monthly(db_path=db_path, apply=True)
-            res["monthly"] = "rebuilt"
-        except Exception as e:
-            logger.exception("live points: monthly failed")
-            res["monthly"] = f"error: {e}"
     return res

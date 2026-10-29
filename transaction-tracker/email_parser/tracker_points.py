@@ -615,3 +615,31 @@ def unlock_season(race_key: str, db_path=None) -> dict:
     from . import database as db
     db.set_app_setting(LOCK_KEY.format(race_key), "", db_path=db_path)
     return {"race_key": race_key, "unlocked": True}
+
+
+
+# MONTHLY ADDS IMMEDIATELY (Kerry 10/28: "October is adding all the month so
+# it's not throwing any out so whatever points are collected to date are a
+# baseline and won't change. So it should be able to add immediately too").
+# Lines from events before today are read once and kept (re-read every 30
+# minutes in case a past card is corrected); only today's event is re-read,
+# so Monthly can rebuild every minute beside the locked races.
+_PAST_LINES: dict = {}
+PAST_LINES_TTL_SEC = 1800
+
+
+def fast_lines(db_path=None) -> tuple[list, list]:
+    """(lines, warnings) = the cached baseline before today + today's lines."""
+    import time
+    from datetime import timedelta
+    from .timezone_utils import today_central
+    today = today_central()
+    yday = (today - timedelta(days=1)).isoformat()
+    key = (str(db_path), today.isoformat())
+    hit = _PAST_LINES.get(key)
+    if not hit or time.time() - hit[2] > PAST_LINES_TTL_SEC:
+        past, pw = event_lines(db_path=db_path, through=yday)
+        _PAST_LINES.clear()
+        hit = _PAST_LINES[key] = (past, pw, time.time())
+    now_lines, nw = event_lines(db_path=db_path, since=yday)
+    return [dict(l) for l in hit[0]] + now_lines, list(hit[1]) + nw

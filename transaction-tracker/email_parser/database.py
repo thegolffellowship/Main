@@ -8901,11 +8901,18 @@ def refresh_points_race_standings(race_key: str,
             # A LOCKED race rebuilds from one event (the finale), so it can
             # refresh every minute; Monthly reads the whole month and stays on
             # the 5-minute job (scoring_window.refresh_live_points).
-            if not _tp.season_lock(race_key, db_path=db_path):
-                try:
+            try:
+                if _tp.season_lock(race_key, db_path=db_path):
+                    # Monthly drops nothing: the baseline before today is kept
+                    # and only today's event is re-read (Kerry 10/28), so it
+                    # rebuilds every minute with the locked race.
+                    _fl, _fw = _tp.fast_lines(db_path=db_path)
+                    if not _tp.held_events(_fw):
+                        _tp.rebuild_monthly(db_path=db_path, apply=True, tracker_lines=_fl)
+                else:
                     _tp.rebuild_monthly(db_path=db_path, apply=True)
-                except Exception:
-                    logger.exception("tracker monthly rebuild failed (non-fatal)")
+            except Exception:
+                logger.exception("tracker monthly rebuild failed (non-fatal)")
             return n
         raise RuntimeError(POINTS_PAUSED)
 

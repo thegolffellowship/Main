@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.619.0";
+window.TGF_VERSION = "2.619.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.619.1",
+    date: "2026-10-28",
+    title: "Monthly adds the finale's points immediately too",
+    changes: [
+      "Kerry 10/28: \"October is adding all the month so it's not throwing any out so whatever points are collected to date are a baseline and won't change. So it should be able to add immediately too.\" tracker_points.fast_lines keeps the lines of every event before today (re-read every 30 minutes in case a past card is corrected) and re-reads only today's, so a locked race's one-minute refresh rebuilds Monthly with it, and opening the Monthly board triggers that refresh. Both Fall races were locked through Tuesday 10/27 on Kerry's word (SA 52 players, Baker 63; Austin 37, Youngs 63). Guard test_season_lock.py."
+    ]
+  },
   {
     version: "2.619.0",
     date: "2026-10-28",

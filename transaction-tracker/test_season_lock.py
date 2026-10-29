@@ -69,6 +69,32 @@ try:
 finally:
     tp.event_lines = _real
 
+print("Monthly adds immediately (Kerry 10/28): the baseline before today is read once")
+from email_parser.timezone_utils import today_central
+from datetime import timedelta
+TODAY = today_central().isoformat()
+YDAY = (today_central() - timedelta(days=1)).isoformat()
+seen = []
+
+
+def fake2(db_path=None, through=None, since=None):
+    seen.append((through, since))
+    if through:
+        return [ln(YDAY, 7, eid=5)], []
+    return [ln(TODAY, 4, live=True, eid=6)], []
+
+
+tp.event_lines = fake2
+tp._PAST_LINES.clear()
+try:
+    a, _ = tp.fast_lines(db_path=DB)
+    b, _ = tp.fast_lines(db_path=DB)
+    check("first call reads the past once and today", seen[:2] == [(YDAY, None), (None, YDAY)], seen)
+    check("second call re-reads only today", seen[2:] == [(None, YDAY)], seen)
+    check("lines = baseline + today", sorted(l["points"] for l in b) == [4, 7], b)
+finally:
+    tp.event_lines = _real
+
 try:
     os.remove(DB)
 except OSError:

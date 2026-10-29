@@ -1304,7 +1304,10 @@ the lock and reads only events after it (`event_lines(since=)`), so a finale-day
 rebuild is one event: `get_points_race_standings` refreshes a locked race every
 minute on an event day, and the locked refresh skips Monthly (rebuilt by
 `scoring_window.refresh_live_points`). Bridge `scoring-season-lock`. Guard
-`test_season_lock.py`.
+`test_season_lock.py`. **Monthly too (v2.619.1):** `tracker_points.fast_lines`
+keeps every earlier event's lines (30-minute TTL) and re-reads only today's, so
+the locked refresh rebuilds Monthly every minute; `/api/season-contests/monthly-points`
+triggers that refresh on read. Locked 10/28 through 2026-10-27 on Kerry's word.
 
 ## Who did it: the UI action log (v2.615.0, Kerry 2026-10-28)
 
