@@ -13407,7 +13407,232 @@ def score_entry_page():
         cup = bool(gid) and group_is_cup(gid)
     except Exception:
         cup = False
-    return render_template("score_entry.html", member_mode=True, cup_splash=cup)
+    return render_template("score_entry.html", member_mode=True, cup_splash=cup,
+                           SE_POINTS_TAB=_se_points_tab_on(), SE_STAFF_PHOTO=_se_staff_photo())
+
+
+def _se_points_tab_on() -> bool:
+    """SCORING | LEADERBOARD | POINTS (Kerry #2460-F). The third segment shows
+    only while app setting `scoring_points_tab` = on (default off), so the
+    scorer's page is exactly as before until Kerry turns it on."""
+    from email_parser.database import get_app_setting
+    try:
+        return (get_app_setting("scoring_points_tab") or "").strip().lower() == "on"
+    except Exception:
+        return False
+
+
+def _se_staff_photo() -> bool:
+    """The Add photo button on the scorer's page (Kerry #2460-J): a manager or
+    admin session only, while dial `event_photos_capture` is not off."""
+    if _ROLE_RANK.get(session.get("role"), 0) < _ROLE_RANK["manager"]:
+        return False
+    try:
+        from email_parser.event_photos import capture_on
+        return capture_on()
+    except Exception:
+        return False
+
+
+@app.route("/member/score/points")
+def score_entry_points_page():
+    """THE POINTS TAB on Live Scoring (Kerry #2460-F: "The Leaderboard button
+    on the scoring app will also need the ability to see those point race
+    standings too ... SCORING | LEADERBOARD | POINTS"). Read-only: the Monthly
+    race and the season race(s) of the group's home chapters, from the same
+    public endpoints the member LEADERBOARD reads; the group's players are
+    highlighted by customer_id. Behind dial scoring_points_tab."""
+    from email_parser.score_entry import verify_group_token
+    tok = request.args.get("t") or ""
+    gid = verify_group_token(tok) if (_score_entry_live() and _se_points_tab_on()) else None
+    if not gid or _se_event_gate("group", gid):
+        return render_template("score_entry.html", member_mode=True)
+    return render_template("score_points.html", member_mode=True, SE_POINTS_TAB=True)
+
+
+@app.route("/api/score-entry/points")
+def api_se_points_context():
+    """What the POINTS tab reads first: the event, the races to show and the
+    group's customer_ids (ids only, no names). Group link only."""
+    if not _se_points_tab_on():
+        return jsonify({"error": "not on"}), 404
+    gid, err = _se_group_from_request()
+    if err:
+        return err
+    from email_parser.score_points import points_context
+    return jsonify(points_context(gid))
+
+
+# ---------------------------------------------------------------------------
+# EVENT PHOTOS (Kerry 2026-10-29, #2460-J) — email_parser/event_photos.py
+# ---------------------------------------------------------------------------
+
+def _evp_event_id():
+    """The event an upload names: event_id, or a scorer's group link (t)."""
+    src = request.form if request.form else request.args
+    ev = (src.get("event_id") or "").strip()
+    if ev.isdigit():
+        return int(ev)
+    tok = src.get("t") or ""
+    if tok:
+        from email_parser.score_entry import verify_group_token, event_of
+        gid = verify_group_token(tok)
+        if gid:
+            return event_of("group", gid)
+    return None
+
+
+def _evp_actor() -> str:
+    return f"{session.get('role')}" + (f":{session.get('chapter')}" if session.get("chapter") else "")
+
+
+@app.route("/api/event-photos/upload", methods=["POST"])
+@require_role("manager")
+def api_event_photo_upload():
+    from email_parser import event_photos as _ep
+    if not _ep.capture_on():
+        return jsonify({"error": "photos are off (event_photos_capture)"}), 403
+    ev = _evp_event_id()
+    if not ev:
+        return jsonify({"error": "which event? (event_id or the group link)"}), 400
+    f = request.files.get("photo")
+    if not f:
+        return jsonify({"error": "no photo"}), 400
+    data = f.read(_ep.MAX_UPLOAD + 1)
+    res = _ep.save_photo(ev, data, caption=request.form.get("caption") or "",
+                         customer_id=request.form.get("customer_id") or None, by=_evp_actor())
+    if res.get("error"):
+        return jsonify(res), 400
+    try:
+        from email_parser.database import log_agent_action
+        log_agent_action(_evp_actor(), "event_photo_added", f"event {ev}: {res['photo']['id']}")
+    except Exception:
+        pass
+    return jsonify(res)
+
+
+@app.route("/api/event-photos/players")
+@require_role("manager")
+def api_event_photo_players():
+    """The tag picker: the event's players from the saved pairings."""
+    ev = _evp_event_id()
+    if not ev:
+        return jsonify({"players": []})
+    from email_parser.database import get_event_print_pack
+    seen, out = set(), []
+    try:
+        for g in (get_event_print_pack(int(ev)) or {}).get("groups") or []:
+            for p in g.get("players") or []:
+                cid = p.get("customer_id")
+                if cid and cid not in seen:
+                    seen.add(cid)
+                    out.append({"customer_id": cid, "name": p.get("name") or f"#{cid}"})
+    except Exception:
+        logger.warning("event photos: player list failed", exc_info=True)
+    out.sort(key=lambda x: x["name"])
+    return jsonify({"event_id": ev, "players": out})
+
+
+@app.route("/api/event-photos/<int:event_id>")
+@require_role("member")
+def api_event_photos(event_id):
+    """An event's photos: ids, captions, the tagged customer_id, URLs.
+    PII-free for the public tier; ?staff=1 from a manager adds the player's
+    name and who uploaded it."""
+    from email_parser.event_photos import event_photos
+    staff = (request.args.get("staff") == "1"
+             and _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["manager"])
+    rows = event_photos(event_id, staff=staff)
+    if staff and rows:
+        ids = sorted({r["customer_id"] for r in rows if r.get("customer_id")})
+        names = {}
+        if ids:
+            conn = get_connection()
+            try:
+                for r in conn.execute("SELECT customer_id, first_name, last_name FROM customers "
+                                      f"WHERE customer_id IN ({','.join('?' * len(ids))})", ids):
+                    names[r[0]] = f"{r[1] or ''} {r[2] or ''}".strip()
+            finally:
+                conn.close()
+        for r in rows:
+            r["player"] = names.get(r.get("customer_id"))
+    return jsonify({"event_id": event_id, "photos": rows})
+
+
+@app.route("/member/event-photo/<int:event_id>/<photo_id>.jpg")
+def member_event_photo(event_id, photo_id):
+    """One event photo, public like the results page it decorates."""
+    from email_parser.event_photos import photo_file
+    p = photo_file(event_id, photo_id)
+    if not p:
+        return "", 404
+    return send_file(str(p), mimetype="image/jpeg", max_age=604800)
+
+
+@app.route("/api/event-photos/<int:event_id>/<photo_id>/spotlight", methods=["POST"])
+@require_role("manager")
+def api_event_photo_spotlight(event_id, photo_id):
+    """The explicit manager action that puts a champion-tagged photo on the
+    player's Spotlight (player_photos.save_photo). Never automatic."""
+    from email_parser.event_photos import promote_to_spotlight
+    res = promote_to_spotlight(event_id, photo_id, by=_evp_actor())
+    if res.get("error"):
+        return jsonify(res), 400
+    try:
+        from email_parser.database import log_agent_action
+        log_agent_action(_evp_actor(), "event_photo_spotlight",
+                         f"event {event_id} photo {photo_id} -> headshot of customer {res['customer_id']}")
+    except Exception:
+        pass
+    return jsonify(res)
+
+
+@app.route("/api/event-photos/<int:event_id>/<photo_id>", methods=["POST"])
+@require_role("manager")
+def api_event_photo_edit(event_id, photo_id):
+    """Change a photo's caption or player tag."""
+    from email_parser.event_photos import set_tag
+    body = request.get_json(silent=True) or {}
+    res = set_tag(event_id, photo_id, caption=body.get("caption"),
+                  customer_id=body["customer_id"] if "customer_id" in body else "keep")
+    return (jsonify(res), 400) if res.get("error") else jsonify(res)
+
+
+# ---------------------------------------------------------------------------
+# THE POST-ROUND INTERVIEW (Kerry 2026-10-29, #2462) — email_parser/ai_interview.py
+# ---------------------------------------------------------------------------
+
+@app.route("/interview/<token>", methods=["GET", "POST"])
+def public_ai_interview(token):
+    """Three questions, one at a time (a plain form without JavaScript).
+    Signed link, no login; only a POST saves, so a mail scanner opening the
+    link answers nothing."""
+    from email_parser import ai_interview as _ai
+    info = _ai.describe(token)
+    if not info.get("ok"):
+        return render_template("ai_interview.html", info=info, done=None), 400
+    if request.method == "POST":
+        f = request.form
+        res = _ai.finish(token, consent=bool(f.get("consent")),
+                         answers={i: f.get(f"a{i}") for i in range(len(_ai.QUESTIONS))})
+        return render_template("ai_interview.html", info=_ai.describe(token), done=res)
+    return render_template("ai_interview.html", info=info, done=None)
+
+
+@app.route("/interview/<token>/answer", methods=["POST"])
+def public_ai_interview_answer(token):
+    from email_parser import ai_interview as _ai
+    b = request.get_json(silent=True) or {}
+    res = _ai.record_answer(token, b.get("q"), b.get("text") or "", followup_q=b.get("followup_q"))
+    return (jsonify(res), 400) if not res.get("ok") else jsonify(res)
+
+
+@app.route("/interview/<token>/finish", methods=["POST"])
+def public_ai_interview_finish(token):
+    from email_parser import ai_interview as _ai
+    b = request.get_json(silent=True) or {}
+    res = _ai.finish(token, consent=bool(b.get("consent")))
+    return (jsonify(res), 400) if not res.get("ok") else jsonify(res)
 
 
 @app.route("/member/score/board")
@@ -13438,7 +13663,8 @@ def score_entry_board_page():
                            MATCHPLAY_V2=_matchplay_v2_flag(),
                            SOLO_EVENT=(row["item_name"] if row else ""), SOLO_T=tok,
                            SOLO_LSC=group_is_cup(gid),
-                           SOLO_CUP=cup_session_of_group(gid))
+                           SOLO_CUP=cup_session_of_group(gid),
+                           SE_POINTS_TAB=_se_points_tab_on())
 
 
 def _board_read_ok():
@@ -13931,8 +14157,13 @@ def live_scoring_admin_page(event_id):
         conn.close()
     if not ev:
         return "Event not found", 404
+    try:
+        from email_parser.event_photos import capture_on
+        photos_on = capture_on()
+    except Exception:
+        photos_on = False
     return render_template("score_entry_admin.html", ev=dict(ev),
-                           is_admin=session.get("role") == "admin")
+                           is_admin=session.get("role") == "admin", photos_on=photos_on)
 
 
 @app.route("/api/score-entry/events/<int:event_id>/admin")

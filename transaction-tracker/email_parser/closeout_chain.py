@@ -194,6 +194,15 @@ def step_recap(ev, db_path=None):
                and state(e, db_path).get("at") not in ("recap", "done")]
     if waiting:
         return None, f"waiting for event(s) {waiting} to reach the recap"
+    # The post-round interview answers (#2462): only while dial
+    # ai_interview_email is on and invitations went out minutes ago.
+    try:
+        from . import ai_interview as _ai
+        _w = _ai.recap_wait(ids, db_path=db_path)
+    except Exception:
+        _w = None
+    if _w:
+        return None, _w
     nk = NIGHT_KEY.format(str(ev["event_date"])[:10])
     done = db.get_app_setting(nk, db_path=db_path)
     if done:
