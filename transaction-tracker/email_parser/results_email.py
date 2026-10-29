@@ -551,8 +551,13 @@ def _event_course_id(facts):
         return cid
     try:
         with db._connect(facts.get("db_path")) as conn:
-            r = conn.execute("SELECT course_id FROM events WHERE id = ?", (facts["event"]["id"],)).fetchone()
-        return r[0] if r else None
+            r = conn.execute("SELECT course_id, course FROM events WHERE id = ?", (facts["event"]["id"],)).fetchone()
+            if r and r[0]:
+                return r[0]
+            if r and r[1]:   # no id on the event row: the course by name
+                c = conn.execute("SELECT course_id FROM courses WHERE lower(name) = lower(?)", (r[1],)).fetchone()
+                return c[0] if c else None
+        return None
     except Exception:
         return None
 

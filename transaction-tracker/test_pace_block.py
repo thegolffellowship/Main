@@ -54,5 +54,13 @@ for bad in ("0:30", "9:00", "abc"):
     except ValueError:
         ok = True
     check(f"refuses {bad!r}", ok)
+with db._connect(DBP) as c:
+    c.execute("INSERT INTO courses (course_id, name) VALUES (22362, 'Kissing Tree Golf Club')")
+    eid = c.execute("INSERT INTO events (item_name, event_date, course) VALUES ('s18.12 FALL', '2026-10-31', "
+                    "'Kissing Tree Golf Club') RETURNING id").fetchone()[0]
+    c.commit()
+check("an event row with no course_id finds its course by name",
+      re_._event_course_id({"event": {"id": eid}, "db_path": DBP}) == 22362)
+
 print(f"\n{'ALL PASS' if not F else str(len(F)) + ' FAILED: ' + ', '.join(F)}")
 sys.exit(1 if F else 0)
