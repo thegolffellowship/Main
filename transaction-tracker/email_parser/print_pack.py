@@ -452,9 +452,19 @@ def _event_course_id(ev: dict | None, db_path=None) -> int | None:
 
 
 def course_recipients_for_event(ev: dict | None, db_path=None) -> dict:
-    """{ok, to, cc[], why, course_id} from course_staff (the one reader)."""
+    """{ok, to, cc[], why, course_id} from course_staff (the one reader).
+    A COMPLETED event reads the contacts frozen onto it (Kerry 10/28,
+    #2476-3: event_contacts.py), so a later course_staff change never
+    rewrites who an archived event's mail went to."""
     from email_parser import database as db
     from email_parser import course_staff as cs
+    from email_parser import event_contacts as ec
+    if ev and ev.get("id") is not None and ec.is_completed(ev):
+        got = ec.contacts_for_event(ev, db_path)
+        if got.get("frozen"):
+            if not got.get("course_id"):
+                return {"ok": False, "course_id": None, "why": "this event has no course linked"}
+            return {**ec.recipients(got["contacts"]), "course_id": got["course_id"], "frozen": True}
     cid = _event_course_id(ev, db_path)
     if not cid:
         return {"ok": False, "course_id": None, "why": "this event has no course linked"}

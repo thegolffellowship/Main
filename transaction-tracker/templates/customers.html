@@ -3336,11 +3336,21 @@
         } catch (err) { alert(err.message); }
     }
 
+    // THE CLOSED-EVENT CHECK (Kerry 10/28, #2477-3): the Reverse confirm warns
+    // when the event is closed; it never blocks.
+    async function tgfReactivationWarning(itemId) {
+        try {
+            const r = await fetch(`/api/items/${itemId}/reactivation-check`);
+            if (!r.ok) return "";
+            const j = await r.json();
+            return j && j.closed ? (j.warning + "\n\n") : "";
+        } catch (e) { return ""; }
+    }
     async function reverseCustCredit(itemId) {
         const item = allItems.find(r => r.id === itemId);
         if (!item) return;
         const label = item.transaction_status === "wd" ? "WD" : item.transaction_status;
-        if (!confirm(`Reverse ${label} for ${item.customer}?`)) return;
+        if (!confirm(await tgfReactivationWarning(itemId) + `Reverse ${label} for ${item.customer}?`)) return;
         try {
             const res = await fetch(`/api/items/${itemId}/reverse-credit`, {
                 method: "POST", headers: { "Content-Type": "application/json" },

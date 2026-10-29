@@ -1534,11 +1534,21 @@ async function submitCredit() {
     }
 }
 
+// THE CLOSED-EVENT CHECK (Kerry 10/28, #2477-3): the Reverse confirm warns
+// when the event is closed; it never blocks.
+async function tgfReactivationWarning(itemId) {
+    try {
+        const r = await fetch(`/api/items/${itemId}/reactivation-check`);
+        if (!r.ok) return "";
+        const j = await r.json();
+        return j && j.closed ? (j.warning + "\n\n") : "";
+    } catch (e) { return ""; }
+}
 async function reverseCreditAction(itemId) {
     const item = allItems.find(r => r.id === itemId);
     if (!item) return;
     const status = item.transaction_status || "active";
-    if (!confirm(`Reverse ${status} for ${item.customer}? This will restore the original transaction.`)) return;
+    if (!confirm(await tgfReactivationWarning(itemId) + `Reverse ${status} for ${item.customer}? This will restore the original transaction.`)) return;
 
     try {
         const res = await fetch(`/api/items/${itemId}/reverse-credit`, {

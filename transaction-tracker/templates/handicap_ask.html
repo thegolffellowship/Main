@@ -76,16 +76,26 @@
             <div class="big">{{ done.starting_text }}</div>
             <p class="mut">{{ done_check if done.status == 'check' else (done_rule if done.status == 'rule' else done_set) }}</p>
             <p class="temp">{{ done_temp }}</p>
+            {% if not info.preview %}<p class="mut">{{ done_locked }}</p>{% endif %}
         {% else %}
             <p class="mut">{{ done_need }}</p>
         {% endif %}
         {% if done.venmo_line %}<p class="mut">{{ done.venmo_line }}{% if done.answer and done.answer.no_venmo %} <a href="{{ venmo_url }}" target="_blank" rel="noopener">Get Venmo</a>{% endif %}</p>{% endif %}
         <a class="ghost" href="/member/teesheet/{{ info.event_id }}">See the tee sheet</a>
     </div>
+{% elif info.answer and info.has_venmo and not info.preview %}
+    {# LOCKED (Kerry 10/28, #2474-B): one answer per link; only a manager changes it. #}
+    <div class="done">
+        <div class="tick">&#10003;</div>
+        <h1>{{ locked_head }}, {{ info.first_name or 'golfer' }}.</h1>
+        <p class="mut">{{ done_locked }}</p>
+        <a class="ghost" href="/member/teesheet/{{ info.event_id }}">See the tee sheet</a>
+    </div>
 {% elif info.answer and not info.has_venmo %}
     {% if info.preview %}<p class="pv">Preview link: the page works and saves nothing.</p>{% endif %}
     <h1>{{ venmo_only_head }}, {{ info.first_name or 'golfer' }}</h1>
     <p class="mut">{{ venmo_only }}</p>
+    {% if not info.preview %}<p class="note">{{ done_locked }}</p>{% endif %}
     {% if form_error %}<p class="err" role="alert">{{ form_error }}</p>{% endif %}
     <form method="post" autocomplete="off" class="sec" style="display:flex;">
         <input type="hidden" name="venmo_only" value="1">
@@ -102,7 +112,6 @@
     <p class="mut">For {{ info.event }}{% if info.day %}, {{ info.day }}{% endif %}</p>
     <p class="tgf-hcp"><b>{{ page_note_head }}</b><span>{{ page_note }}</span></p>
     {% if form_error %}<p class="err" role="alert">{{ form_error }}</p>{% endif %}
-    {% if info.answer %}<p class="note">We already have your answer. Send it again only if something changed.</p>{% endif %}
     <form method="post" autocomplete="off">
         <input type="radio" name="kind" id="k-ghin" value="ghin" {% if form.kind == 'ghin' %}checked{% endif %}>
         <input type="radio" name="kind" id="k-other" value="other" {% if form.kind == 'other' %}checked{% endif %}>
@@ -137,14 +146,18 @@
             <h2>What do you usually shoot?</h2>
             <div class="f" role="group" aria-labelledby="range-label">
                 <span id="range-label">For 18 holes, I typically shoot between</span>
+                {# Digits only (Kerry 10/28, #2474-B): the page strips anything
+                   else as it is typed; the server refuses it too. LOW at least
+                   60 (an 18-hole total), HIGH at least LOW, no cap. #}
                 <div class="range">
-                    <input id="score-low" name="score_low" inputmode="numeric" aria-label="Low score" value="{{ form.score_low or '' }}" placeholder="90">
+                    <input id="score-low" name="score_low" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3"
+                           data-digits="1" aria-label="Low score" value="{{ form.score_low or '' }}" placeholder="90">
                     <span>and</span>
-                    <input id="score-high" name="score_high" inputmode="numeric" aria-label="High score" value="{{ form.score_high or '' }}" placeholder="100">
+                    <input id="score-high" name="score_high" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3"
+                           data-digits="1" aria-label="High score" value="{{ form.score_high or '' }}" placeholder="100">
                 </div>
+                <span class="hint">{{ none_help }}</span>
             </div>
-            <label class="f" for="rounds-year">Rounds you play a year (optional)
-                <input id="rounds-year" name="rounds_year" inputmode="numeric" value="{{ form.rounds_year or '' }}" placeholder="About how many?"></label>
             <p class="mut">{{ none_note }}</p>
         </div>
         {% if not info.has_venmo %}
@@ -163,5 +176,30 @@
     </form>
 {% endif %}
 </main>
+<script>
+/* Numbers only in the score boxes; with LOW and HIGH both required when
+   "I don't have a handicap" is picked (the server checks the same). */
+(function () {
+    document.querySelectorAll("input[data-digits]").forEach(function (el) {
+        el.addEventListener("input", function () {
+            var v = el.value.replace(/[^0-9]/g, "");
+            if (v !== el.value) el.value = v;
+        });
+    });
+    var f = document.querySelector("form input[name=kind]") && document.querySelector("form input[name=kind]").form;
+    if (!f) return;
+    f.addEventListener("submit", function (ev) {
+        var k = f.querySelector("input[name=kind]:checked");
+        if (!k || k.value !== "none") return;
+        var lo = f.querySelector("#score-low"), hi = f.querySelector("#score-high");
+        var L = parseInt(lo.value, 10), H = parseInt(hi.value, 10);
+        var msg = "";
+        if (!lo.value || !hi.value) msg = "Please enter both numbers: your low score and your high score for 18 holes.";
+        else if (L < {{ low_min }}) msg = "Your low score is for 18 holes, so it should be at least {{ low_min }}.";
+        else if (H < L) msg = "Your high score should be at least your low score.";
+        if (msg) { ev.preventDefault(); alert(msg); (lo.value && L >= {{ low_min }} ? hi : lo).focus(); }
+    });
+})();
+</script>
 </body>
 </html>

@@ -72,10 +72,12 @@ check("Other needs a name", ha.validate({"kind": "other", "service": "Other", "i
 check("no handicap asks a RANGE for 18 holes (Kerry: between x and x)",
       ha.validate({"kind": "none", "score_low": "20", "score_high": "22"}).get("error")
       and ha.validate({"kind": "none", "score_low": "90", "score_high": "100"}).get("score_high") == 100)
-check("a 9-hole range is taken as 9 holes (CoS #2426: doubled before the rule)",
-      ha.validate({"kind": "none", "score_low": "45", "score_high": "50"}).get("nine") is True)
-check("a range typed backwards is put right", ha.validate(
-      {"kind": "none", "score_low": "105", "score_high": "95"}).get("score_low") == 95)
+# Kerry 10/28 (#2474-B, #2475-1) retired the CoS readings for this form:
+# an 18-hole total only (LOW at least 60), HIGH at least LOW, digits only.
+check("a 9-hole total is refused, not doubled (LOW at least 60, Kerry 10/28)",
+      ha.validate({"kind": "none", "score_low": "45", "score_high": "50"}).get("error"))
+check("HIGH below LOW is refused, not swapped", ha.validate(
+      {"kind": "none", "score_low": "105", "score_high": "95"}).get("error"))
 
 print("who is asked")
 pl = ha.plan(db_path=DB)
@@ -157,7 +159,8 @@ check("no Venmo yet: told to tap the same email button later, with the link",
 check("no doubled Thanks", b"Thanks. The chapter" not in r.data)
 
 check("no handicap: low score minus 72 is set (Kerry 10/27, #2426)",
-      r.status_code == 200 and b"From the 90 you usually shoot for 18, minus 72." in r.data, r.data[-600:])
+      r.status_code == 200 and b"Your starting TGF Handicap Index is 18.0, from your low score of 90 minus 72."
+      in r.data, r.data[-600:])
 _n = con.execute("SELECT starting_handicap_18, starting_handicap_set_by FROM customers WHERE customer_id = 3").fetchone()
 check("...18.0, set by the rule", _n[0] == 18.0 and _n[1] == "rule:low_score_minus_72", _n)
 pg = cl.get(f"/handicap/{tok[3]}").data.decode()

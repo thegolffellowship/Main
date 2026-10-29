@@ -92,6 +92,16 @@ DONE_SET = "75% of the {index} index you entered."
 # template_hash(): adding it to the hash would lock the live ask until
 # re-stamped. Kerry reviews it with the build.
 DONE_RULE = "From the {low} you usually shoot for 18, minus 72."
+# Kerry 10/28 (Event Ops #2474-B, #2475-1): name the number, and lock the
+# link after the answer. Also OUTSIDE template_hash() so the live ask is not
+# re-locked; Kerry stamps the final wording with the build.
+DONE_RULE_TGF = "Your starting TGF Handicap Index is {start}, from your low score of {low} minus 72."
+DONE_LOCKED = ("Your answer is saved and can't be changed from this link. If something needs "
+               "to change, your chapter manager can update it.")
+LOCKED_HEAD = "We have your answer"
+NONE_HELP = ("Your usual 18-hole total, numbers only: your low score and your high score. "
+             "Your starting TGF Handicap Index is your low score minus 72.")
+LOW_MIN = 60          # Kerry: "a minimum of 60 in the low one" (no 9-hole totals)
 DONE_CHECK = "75% of the {index} index you entered. The chapter manager will confirm it before {day}."
 DONE_TEMP = ("This is temporary. After 27 holes with TGF, your own TGF handicap replaces it, "
              "figured from your rounds with us.")
@@ -267,28 +277,26 @@ def validate(form: dict) -> dict:
             return {"error": "Please enter your latest handicap index, for example 17.8."}
         return {"kind": "other", "service": svc, "service_name": name, "index": idx}
     if kind == "none":
-        # A RANGE for 18 holes (Kerry 10/16: "I typically shoot between x and x").
-        msg = "Please enter the range you usually shoot for 18 holes, for example 90 to 100."
-        rounds = str(form.get("rounds_year") or "").strip()[:20]
+        # LOW and HIGH, the usual 18-HOLE total, both required, digits only,
+        # LOW at least 60, HIGH at least LOW, no cap on HIGH (Kerry 10/28,
+        # #2474-B / #2475-1: "They should only be able to enter a number. A
+        # low number and a high number. It shouldn't accept non-numbers." /
+        # "a minimum of 60 in the low one" / "No cap on high."). The CoS
+        # readings for free text (a 9-hole total doubled, a single score is
+        # the low end) are retired for this form.
         lo_s = str(form.get("score_low") or "").strip()
         hi_s = str(form.get("score_high") or "").strip()
-        if not lo_s and not hi_s:
-            # No number at all: nothing is set and the manager is told (#2426).
-            return {"kind": "none", "score_low": None, "score_high": None, "rounds_year": rounds}
-        try:
-            lo = int(lo_s or hi_s)
-            hi = int(hi_s or lo_s)
-        except ValueError:
-            return {"error": msg}
-        lo, hi = min(lo, hi), max(lo, hi)
-        # A 9-hole score is doubled before the rule (CoS #2426 reading).
-        nine = hi < 60
-        if not ((25 <= lo <= 80 and 25 <= hi <= 80) if nine else (60 <= lo <= 160 and 60 <= hi <= 160)):
-            return {"error": msg}
-        out = {"kind": "none", "score_low": lo, "score_high": hi, "rounds_year": rounds}
-        if nine:
-            out["nine"] = True
-        return out
+        if not lo_s or not hi_s:
+            return {"error": "Please enter both numbers: your low score and your high score for 18 holes."}
+        if not (lo_s.isascii() and lo_s.isdigit() and hi_s.isascii() and hi_s.isdigit()):
+            return {"error": "Numbers only, please: your low and high 18-hole scores, for example 90 and 100."}
+        lo, hi = int(lo_s), int(hi_s)
+        if lo < LOW_MIN:
+            return {"error": f"Your low score is for 18 holes, so it should be at least {LOW_MIN}. "
+                             "Please enter your usual 18-hole total."}
+        if hi < lo:
+            return {"error": "Your high score should be at least your low score."}
+        return {"kind": "none", "score_low": lo, "score_high": hi}
     return {"error": "Please pick one of the three choices."}
 
 
@@ -611,6 +619,12 @@ def record(token: str, form: dict, db_path=None) -> dict:
     info = describe(token, db_path)
     if not info.get("ok"):
         return info
+    # LOCKED after the answer (Kerry 10/28, #2474-B: "Don't allow them to go
+    # back to change it to avoid tampering."). Only a manager changes the
+    # number (the roster HCP cell). A preview link never saves, so never locks.
+    if info.get("answer") and not info.get("preview"):
+        return {"ok": False, "locked": True,
+                "error": "We already have your answer. " + DONE_LOCKED}
     ans = validate(form)
     if ans.get("error"):
         return {"ok": False, "error": ans["error"], "form_error": True}

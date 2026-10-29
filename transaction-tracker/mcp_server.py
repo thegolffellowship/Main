@@ -814,10 +814,14 @@ def undo_credit_or_transfer(transaction_id: int, confirm: bool = False) -> str:
     row = _item_summary(transaction_id)
     if not row:
         return json.dumps({"error": f"Transaction {transaction_id} not found"})
+    # THE CLOSED-EVENT CHECK (Kerry 10/28, #2477-3): warn, never block.
+    from email_parser import closed_event_guard as _ceg
+    _pre = _ceg.check(transaction_id)
     if not confirm:
         return _confirm_gate(
             "undo_credit_or_transfer", row,
-            "Restore this registration to ACTIVE, unwinding the credit or "
+            ((_ceg.WARNING + " ") if _pre.get("closed") else "")
+            + "Restore this registration to ACTIVE, unwinding the credit or "
             "transfer. If it was transferred, the $0 row created at the "
             "target event is affected too.",
             "Re-runnable, but check the target event afterwards.")
@@ -825,7 +829,9 @@ def undo_credit_or_transfer(transaction_id: int, confirm: bool = False) -> str:
     _audit("undo_credit_or_transfer", f"row={row}",
            item_id=transaction_id, outcome="ok" if ok else "no-op")
     if ok:
-        return json.dumps({"status": "ok", "restored_id": transaction_id})
+        _flag = _ceg.after_reactivate(transaction_id, "undo_credit_or_transfer (MCP)", "mcp-claude", pre=_pre)
+        return json.dumps({"status": "ok", "restored_id": transaction_id,
+                           **({"closed_event_warning": _ceg.WARNING, "action_item": _flag} if _flag else {})})
     return json.dumps({"error": f"Transaction {transaction_id} not found or not in credited/transferred state"})
 
 
@@ -1869,6 +1875,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-teetimes-email:<event_id>[|preview[|<staff addr>]]  the 7 PM TEE-TIMES EMAIL, three versions (player / course contact / manager, CMO #2101): dry build = per-recipient ready / held with reasons, wording hashes, stamps (teetimes_<version>_approved) and dials (teetimes_email_auto, teetimes_spots_audience); |preview mails ONE combined preview to STAFF only. No send bridge: only the 7 PM job sends
       scoring-no-show-notice:<event_id>[|preview[|<staff addr>]]  THE COURSE NO-SHOW NOTICE (Kerry 9/30 #1021): READ ONLY, who the scorers marked missing, whether the notice is due (group played no_show_course_notice_holes, default 3, or a WD), the TGF-branded player-count totals (registered, no-shows, left, added, playing now), To/CC (course contacts + manager + admin no_show_notice_admin_cc), held reasons, the last set sent and whether this one would go as UPDATED; |preview mails ONE sample to STAFF only. The job sends itself (dial no_show_course_notice, on unless off)
       scoring-course-update:<event_id>[|preview[|<staff addr>]]  THE COURSE UPDATE BEFORE THE LOCK (Kerry 10/26): who it would go to, held reasons, wording hash; |preview mails ONE sample to STAFF only. The job sends only with dial course_update_auto=on and stamp course_update_approved
+      scoring-course-shortfall[:<event_id>][|preview[|<staff addr>]][|send]  THE COURSE SHORTFALL EMAIL (Kerry 10/28, #2474-A/#2475-3/#2476-1): bare = every recent event with a course charge and its verdict (charged vs played x rate, half-a-player threshold); :<id> = that event's dry run; |preview = one sample to STAFF only; |send = the real credit request to the course, only with dial course_shortfall_email=on, once per event per charge
+      scoring-event-contacts[:<event_id>][|apply]  EVENT COURSE CONTACTS FREEZE (Kerry 10/28, #2476-3): bare = which completed events lack a snapshot (dry run; |apply freezes them); :<id> = that event's snapshot or what would be frozen
       scoring-course-files-noon:<event_id>  NOON COURSE FILES, read only (Kerry 10/26): would the event-day noon job send the Course Files now (To the course contact, CC TGF contacts + the chapter manager), or why not (already sent, no pairings, no course contact, within the hour before first tee, a scorecard gap)
       scoring-social-post:<event_id>[|preview]  THE RESULTS CARD for the TGF Facebook Page, read only (Event Ops #2460-J, proposal): the post text, link, champion photo and gates (dial social_auto_post off, stamp social_post_approved = template hash, META_PAGE_TOKEN); posts only after the players' results email
       scoring-window-posts[:<event_id>]  WINDOW OPEN / CLOSED, read only (Event Ops #2460-I): what the scoring-window job would post on the mailbox now (open at first tee - 60 min; closed at a clean closeout or last score + 60 min); dial window_posts_auto (off)
@@ -7808,6 +7816,43 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps(_nsn.send_preview(int(_p[0]), _p[2] if len(_p) > 2 else None),
                                   indent=2, default=str)
             return json.dumps(_nsn.run_event(int(_p[0]), confirm=False), indent=2, default=str)
+        if cmd == "scoring-course-shortfall":
+            # "[<event_id>][|preview[|<staff>]][|send]" (Kerry 10/28, Event Ops
+            # #2474-A, #2475-3, #2476-1): the course credit request. Bare and
+            # :<id> are read-only; |preview goes to staff only; |send emails
+            # the COURSE, and only when dial course_shortfall_email = on.
+            from email_parser import course_shortfall as _csf
+            _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            if not _p:
+                return json.dumps(_csf.scan(), indent=2, default=str)
+            if not _p[0].isdigit():
+                return json.dumps({"error": "[<event_id>][|preview[|<staff addr>]][|send]"})
+            _eid = int(_p[0])
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-course-shortfall", arg)
+                return json.dumps(_csf.send_preview(_eid, _p[2] if len(_p) > 2 else None),
+                                  indent=2, default=str)
+            if len(_p) > 1 and _p[1].lower() == "send":
+                db.log_agent_action("mcp-claude", "scoring-course-shortfall", arg)
+                return json.dumps(_csf.run_event(_eid, confirm=True), indent=2, default=str)
+            return json.dumps(_csf.run_event(_eid, confirm=False), indent=2, default=str)
+        if cmd == "scoring-event-contacts":
+            # "[<event_id>][|apply]" (Kerry 10/28, Event Ops #2476-3): course
+            # contacts frozen onto completed events. Dry run unless |apply.
+            from email_parser import event_contacts as _ec
+            _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            _apply = "apply" in [x.lower() for x in _p]
+            _ids = [x for x in _p if x.isdigit()]
+            if _apply:
+                db.log_agent_action("mcp-claude", "scoring-event-contacts", arg)
+            if _ids:
+                _st = _ec.stored(int(_ids[0]))
+                if _st and not _apply:
+                    return json.dumps({"event_id": int(_ids[0]), "status": "frozen", "snapshot": _st},
+                                      indent=2, default=str)
+                return json.dumps(_ec.snapshot(int(_ids[0]), apply=_apply, source="bridge"),
+                                  indent=2, default=str)
+            return json.dumps(_ec.backfill(apply=_apply), indent=2, default=str)
         if cmd == "scoring-course-files-noon":
             # "<event_id>" — NOON COURSE FILES (Kerry 10/26, CoS #2331 item 4),
             # READ ONLY: would the noon job send now, to whom (manager CC'd),
