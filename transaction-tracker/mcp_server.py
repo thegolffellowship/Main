@@ -1786,6 +1786,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-admin-payout-report[:<YYYY-MM-DD>]  would the same-night admin payout report (PAYMENTS link) go now, and what it says (read-only)
       scoring-payout-timing:<event_id>  paid-at times for an event's payouts: first / last paid, batches (a gap over 30 min starts one), minutes spent paying (read-only)
       scoring-payout-verify:<event_id>  verify-before-pay: stored state, whether Pay is locked and why, and a fresh cross-check (read-only)
+      scoring-event-summary:<event_id>[|preview[|<staff email>]]  the event SUMMARY payload + who the manager email would go to (dry run); |preview mails it to one staff address
       scoring-unsubscribes[:<hours>][|refresh]  who unsubscribed (Tracker invitations + Brevo Insider) in the last <hours>, default 24 (read-only toward Brevo)
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
       scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
@@ -4228,6 +4229,26 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps({"gate_on": _pvf.gate_on(), "state": _pvf.get_state(_e),
                                "pay_locked": _pvf.lock_for(_e), "check": _pvf.check(_e)},
                               indent=2, default=str)
+        if cmd == "scoring-event-summary":
+            # "<event_id>[|preview[|<staff email>]]" (Event Ops #2460-E): the
+            # event SUMMARY. No flag: dry run (the payload + who it would go
+            # to). |preview: send it to one staff address (default the admin
+            # recipient), stamping nothing. The real send rides the admin
+            # payout report job behind dial event_summary_email.
+            from email_parser import event_summary as _es
+            _a = [x.strip() for x in (arg or "").split("|")]
+            if not _a or not _a[0].isdigit():
+                return json.dumps({"error": "usage: scoring-event-summary:<event_id>[|preview[|<staff email>]]"})
+            _eid = int(_a[0])
+            if len(_a) > 1 and _a[1].lower() == "preview":
+                from email_parser.admin_payout_report import recipient as _apr_to
+                _to = (_a[2] if len(_a) > 2 and _a[2] else None) or _apr_to()
+                if not _to:
+                    return json.dumps({"error": "no staff address to preview to"})
+                _out = _es.send_summary_email(_eid, to=_to)
+                _audit("scoring-event-summary", f"event {_eid} preview to {_to}: {_out.get('status') or _out.get('error')}")
+                return json.dumps(_out, indent=2, default=str)
+            return json.dumps(_es.send_summary_email(_eid, dry_run=True), indent=2, default=str)
         if cmd == "scoring-unsubscribes":
             # "[<hours>][|refresh]" (Kerry 10/23): who unsubscribed from Tracker
             # invitations or the Brevo Insider list in the last <hours>
