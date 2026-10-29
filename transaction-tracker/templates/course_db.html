@@ -127,12 +127,14 @@
                         <th style="width:105px;" class="crs-hide-mobile">City</th>
                         <th style="width:48px;" class="crs-hide-mobile">State</th>
                         <th style="width:90px;">Status</th>
+                        <th style="width:62px;" title="The course's pace standard for 18 holes (green|yellow line on the results email; red starts 30 minutes later). Blank = 4:30">Pace 18</th>
+                        <th style="width:62px;" title="The course's pace standard for 9 holes (red starts 15 minutes later). Blank = 2:15">Pace 9</th>
                         <th style="width:44px;text-align:right;" class="crs-hide-mobile">Tees</th>
                         <th style="width:56px;text-align:right;" class="crs-hide-mobile">Rounds</th>
                         <th style="width:90px;"></th>
                     </tr></thead>
                     <tbody id="crs-tbody">
-                        <tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">Loading…</td></tr>
+                        <tr><td colspan="11" style="text-align:center;padding:32px;color:#94a3b8;">Loading…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -157,7 +159,7 @@
         async function load() {
             const res = await fetch("/api/course-db");
             if (!res.ok) {
-                $("crs-tbody").innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#b91c1c;">Admin login required.</td></tr>';
+                $("crs-tbody").innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:#b91c1c;">Admin login required.</td></tr>';
                 return;
             }
             const data = await res.json();
@@ -172,6 +174,9 @@
             return `<select data-f="chapter">${opts.join("")}</select>`;
         }
 
+        // Pace standard minutes -> "4:00" (blank when the course has none).
+        function hm(m) { return m ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}` : ""; }
+
         function render() {
             const q = $("crs-search").value.trim().toLowerCase();
             const showArchived = $("crs-show-archived").checked;
@@ -180,7 +185,7 @@
                 && (!q || c.name.toLowerCase().includes(q) || (c.short_name || "").toLowerCase().includes(q)));
             $("crs-count").textContent = `${rows.length} of ${COURSES.length}`;
             if (!rows.length) {
-                $("crs-tbody").innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">No courses match.</td></tr>';
+                $("crs-tbody").innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:#94a3b8;">No courses match.</td></tr>';
                 return;
             }
             $("crs-tbody").innerHTML = rows.map(c => `
@@ -196,12 +201,14 @@
                         <option value="active"${(c.status || "active") !== "archived" ? " selected" : ""}>active</option>
                         <option value="archived"${(c.status || "active") === "archived" ? " selected" : ""}>archived</option>
                     </select></td>
+                    <td><input data-f="pace_18" value="${hm(c.pace_18)}" placeholder="4:30" style="width:52px;"></td>
+                    <td><input data-f="pace_9" value="${hm(c.pace_9)}" placeholder="2:15" style="width:52px;"></td>
                     <td class="crs-num crs-hide-mobile">${c.n_tees ?? 0}</td>
                     <td class="crs-num crs-hide-mobile">${c.n_rounds ?? 0}</td>
                     <td style="white-space:nowrap;"><button class="crs-save">Save</button>
                         <button class="crs-staff-btn" title="People at this course, their roles, and who gets the Course Files">Contacts</button></td>
                 </tr>
-                <tr class="crs-staff-row" data-staff-for="${c.course_id}" style="display:none;"><td colspan="9"><div class="crs-staff"></div></td></tr>`).join("");
+                <tr class="crs-staff-row" data-staff-for="${c.course_id}" style="display:none;"><td colspan="11"><div class="crs-staff"></div></td></tr>`).join("");
             bind();
         }
 

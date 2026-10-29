@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.626.0";
+window.TGF_VERSION = "2.627.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.627.0",
+    date: "2026-10-29",
+    title: "Each course sets its own pace standard",
+    changes: [
+      "Kerry 10/29: \"Only thing about group's pace is that courses need to have their own standard pace entry that this adjusts too. For instance, Rafe is holding us to 4:00 hrs on Saturday. So we really need to adjust the times for the 18 on that course to 4:00 and 4:30 from 4:30 and 5:00.\" The Courses page has two new fields, Pace 18 and Pace 9 (h:mm). The value is the green|yellow line on the results email's YOUR GROUP'S PACE bar; red starts 30 minutes later on an 18 and 15 on a nine. Blank uses 4:30 / 2:15 as before.",
+      "Stored as data, not schema: app setting course_pace_minutes, {course_id: {\"18\": minutes, \"9\": minutes}}, read by database.course_pace_targets(course_id, holes) and written only by set_course_pace (refuses anything outside 1:00-7:00). Guard test_pace_block.py."
+    ]
+  },
   {
     version: "2.626.0",
     date: "2026-10-29",

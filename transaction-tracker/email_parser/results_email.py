@@ -514,7 +514,10 @@ def _your_night(facts, cid, person) -> tuple[str, str]:
 # GROUP'S PACE." One bar, three equal thirds (each 15 min on a nine, 30 on an
 # eighteen), the arrow at the group's estimated round time (the manager pace
 # report's est_round), clamped at the ends. Group only; no text under the bar.
-PACE_TARGETS = {9: (135, 150), 18: (270, 300)}      # minutes: green|yellow, yellow|red
+# The lines are the COURSE's standard (Kerry 10/29: "courses need to have their
+# own standard pace entry ... Rafe is holding us to 4:00 hrs on Saturday"):
+# database.course_pace_targets, default 4:30|5:00 and 2:15|2:30.
+PACE_TARGETS = {9: (135, 150), 18: (270, 300)}      # the defaults: green|yellow, yellow|red
 
 
 def _group_pace(facts, cid):
@@ -537,12 +540,25 @@ def _group_pace(facts, cid):
                 if g.get("status") == "flagged" or g.get("seconds_per_hole") is None:
                     return None
                 holes = int(rep.get("holes") or 9)
-                return g["seconds_per_hole"] * holes / 60.0, holes
+                return g["seconds_per_hole"] * holes / 60.0, holes, _event_course_id(facts)
     return None
 
 
-def pace_bar(est_minutes: float, holes: int) -> str:
-    lo, hi = PACE_TARGETS[18 if holes >= 18 else 9]
+def _event_course_id(facts):
+    from email_parser import database as db
+    cid = facts["event"].get("course_id")
+    if cid:
+        return cid
+    try:
+        with db._connect(facts.get("db_path")) as conn:
+            r = conn.execute("SELECT course_id FROM events WHERE id = ?", (facts["event"]["id"],)).fetchone()
+        return r[0] if r else None
+    except Exception:
+        return None
+
+
+def pace_bar(est_minutes: float, holes: int, targets: tuple | None = None) -> str:
+    lo, hi = targets or PACE_TARGETS[18 if holes >= 18 else 9]
     span = hi - lo
     start = lo - span
     pct = max(0.0, min(1.0, (est_minutes - start) / (3 * span))) * 100
@@ -569,7 +585,13 @@ def _pace(facts, cid) -> str:
     gp = _group_pace(facts, cid)
     if not gp:
         return ""
-    return card("YOUR GROUP’S PACE", pace_bar(*gp))
+    from email_parser import database as db
+    est, holes, course_id = gp
+    try:
+        targets = db.course_pace_targets(course_id, holes, db_path=facts.get("db_path"))
+    except Exception:
+        targets = None
+    return card("YOUR GROUP’S PACE", pace_bar(est, holes, targets))
 
 
 def _winnings(facts, cid) -> str:

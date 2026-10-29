@@ -28325,8 +28325,83 @@ def list_courses(db_path: str | Path = DB_PATH) -> list:
                                        "bogey_rating", "yardage", "source")})
             for t in tees:
                 t["ratings"] = rr.get(t["tee_id"], [])
-            out.append(dict(r) | {"tees": tees})
+            pm = (_pace_map(db_path).get(str(r["course_id"])) or {})
+            out.append(dict(r) | {"tees": tees, "pace_18": pm.get("18"), "pace_9": pm.get("9")})
         return out
+
+
+# COURSE PACE STANDARD (Kerry 10/29: "courses need to have their own standard
+# pace entry ... Rafe is holding us to 4:00 hrs on Saturday. So we really need
+# to adjust the times for the 18 on that course to 4:00 and 4:30"). Per course,
+# the green|yellow line in minutes for 18 and for 9; yellow|red is that plus
+# PACE_RED_AFTER (30 on an 18, 15 on a nine). Data, not code: app setting
+# `course_pace_minutes` = {"<course_id>": {"18": 240, "9": 120}}. A course
+# with no entry uses PACE_DEFAULT_MINUTES (4:30 / 2:15).
+PACE_DEFAULT_MINUTES = {18: 270, 9: 135}
+PACE_RED_AFTER = {18: 30, 9: 15}
+
+
+def _pace_map(db_path=None) -> dict:
+    try:
+        raw = get_app_setting("course_pace_minutes", db_path=db_path)
+        m = json.loads(raw) if raw else {}
+        return m if isinstance(m, dict) else {}
+    except Exception:
+        logger.exception("course_pace_minutes unreadable — using defaults")
+        return {}
+
+
+def course_pace_minutes(course_id, db_path=None) -> dict:
+    """{18: minutes, 9: minutes} set on the course, None where not set."""
+    ent = _pace_map(db_path).get(str(course_id)) or {} if course_id else {}
+    out = {}
+    for h in (18, 9):
+        try:
+            out[h] = int(ent.get(str(h))) if ent.get(str(h)) not in (None, "") else None
+        except (TypeError, ValueError):
+            out[h] = None
+    return out
+
+
+def course_pace_targets(course_id, holes: int, db_path=None) -> tuple:
+    """(green|yellow, yellow|red) in minutes for this course and length."""
+    h = 18 if int(holes or 9) >= 18 else 9
+    lo = course_pace_minutes(course_id, db_path).get(h) or PACE_DEFAULT_MINUTES[h]
+    return lo, lo + PACE_RED_AFTER[h]
+
+
+def _parse_pace(v):
+    """'4:00' / '240' / '' -> minutes or None."""
+    v = (str(v).strip() if v is not None else "")
+    if not v:
+        return None
+    if ":" in v:
+        hh, mm = v.split(":", 1)
+        mins = int(hh) * 60 + int(mm)
+    else:
+        mins = int(float(v))
+        if mins < 10:            # "4" or "4.5" means hours
+            mins = int(round(float(v) * 60))
+    if not 60 <= mins <= 420:
+        raise ValueError("pace is h:mm between 1:00 and 7:00")
+    return mins
+
+
+def set_course_pace(course_id: int, holes: int, value, db_path=None) -> dict:
+    h = 18 if int(holes) >= 18 else 9
+    mins = _parse_pace(value)
+    m = _pace_map(db_path)
+    ent = dict(m.get(str(course_id)) or {})
+    if mins is None:
+        ent.pop(str(h), None)
+    else:
+        ent[str(h)] = mins
+    if ent:
+        m[str(course_id)] = ent
+    else:
+        m.pop(str(course_id), None)
+    set_app_setting("course_pace_minutes", json.dumps(m, sort_keys=True), db_path=db_path)
+    return course_pace_minutes(course_id, db_path)
 
 
 def update_course(course_id: int, fields: dict, db_path: str | Path = DB_PATH) -> dict:
@@ -28337,7 +28412,9 @@ def update_course(course_id: int, fields: dict, db_path: str | Path = DB_PATH) -
     dim-backfills join courses by name, so renames belong to a dedicated
     (alias-aware) flow, not a grid edit.
     """
-    allowed = {"short_name", "city", "state", "status", "chapter"}
+    allowed = {"short_name", "city", "state", "status", "chapter", "pace_18", "pace_9"}
+    fields = dict(fields)
+    pace = {h: fields.pop(f"pace_{h}") for h in (18, 9) if f"pace_{h}" in fields}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"not editable: {', '.join(sorted(bad))}")
@@ -28366,14 +28443,18 @@ def update_course(course_id: int, fields: dict, db_path: str | Path = DB_PATH) -
                 sets.append("state = ?"); vals.append((v or "").upper() or None)
             else:
                 sets.append(f"{k} = ?"); vals.append(v)
-        conn.execute(f"UPDATE courses SET {', '.join(sets)} WHERE course_id = ?", (*vals, course_id))
-        conn.commit()
+        if sets:
+            conn.execute(f"UPDATE courses SET {', '.join(sets)} WHERE course_id = ?", (*vals, course_id))
+            conn.commit()
         out = conn.execute(
             """SELECT c.course_id, c.name, c.short_name, c.city, c.state, c.status,
                       ch.name AS chapter
                FROM courses c LEFT JOIN chapters ch ON ch.chapter_id = c.chapter_id
                WHERE c.course_id = ?""", (course_id,)).fetchone()
-        return dict(out)
+    for h, v in pace.items():
+        set_course_pace(course_id, h, v, db_path=db_path)
+    pm = course_pace_minutes(course_id, db_path)
+    return dict(out) | {"pace_18": pm[18], "pace_9": pm[9]}
 
 
 def link_handicap_history(player_name: str, customer_id: int, apply: bool = False,

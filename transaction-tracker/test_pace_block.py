@@ -33,5 +33,26 @@ check("no text under the bar: the bar is the last thing", b.rstrip().endswith("<
       and "ahead" not in b.lower() and "behind" not in b.lower())
 check("the card says YOUR GROUP'S PACE", "YOUR GROUP" in re_.card("YOUR GROUP’S PACE", b))
 check("no pace data, no block", re_._pace({"event": {"id": 999999}, "db_path": None}, 1) == "")
+
+print("\n== the course's own standard (Kerry 10/29: Kissing Tree 4:00 / 4:30) ==")
+from email_parser import database as db   # noqa: E402
+DBP = os.environ["DATABASE_PATH"]
+db.init_db(DBP)
+check("no entry: the defaults", db.course_pace_targets(22362, 18, db_path=DBP) == (270, 300)
+      and db.course_pace_targets(22362, 9, db_path=DBP) == (135, 150))
+db.set_course_pace(22362, 18, "4:00", db_path=DBP)
+check("set 4:00 on the 18: lines 4:00 and 4:30", db.course_pace_targets(22362, 18, db_path=DBP) == (240, 270))
+check("the nine keeps its default", db.course_pace_targets(22362, 9, db_path=DBP) == (135, 150))
+check("another course is untouched", db.course_pace_targets(1, 18, db_path=DBP) == (270, 300))
+check("4:00 sits on green|yellow, 4:30 on yellow|red",
+      pos(re_.pace_bar(240, 18, (240, 270))) == 33 and pos(re_.pace_bar(270, 18, (240, 270))) == 67)
+db.set_course_pace(22362, 18, "", db_path=DBP)
+check("clearing it goes back to the default", db.course_pace_targets(22362, 18, db_path=DBP) == (270, 300))
+for bad in ("0:30", "9:00", "abc"):
+    try:
+        db.set_course_pace(22362, 18, bad, db_path=DBP); ok = False
+    except ValueError:
+        ok = True
+    check(f"refuses {bad!r}", ok)
 print(f"\n{'ALL PASS' if not F else str(len(F)) + ' FAILED: ' + ', '.join(F)}")
 sys.exit(1 if F else 0)
