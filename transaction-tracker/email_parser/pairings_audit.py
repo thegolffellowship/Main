@@ -258,9 +258,8 @@ def event_pairing_audit(event_id: int, db_path=None, sheet: dict | None = None,
                     # requested. So no ambassador needed." A 1st Timer with the
                     # member who invited him (or whom he requested, or who
                     # requested him) is covered.
-                    host = next((x["name"] for x in ps if x is not p and (
-                        K(p.get("invited_by") or "") == K(x["name"])
-                        or frozenset((K(p["name"]), K(x["name"]))) in req_keys)), None)
+                    # One definition, shared with the generator.
+                    host = db._host_in_group(p["name"], names, host_of, req_keys)
                     if host and not ambs:
                         hit("R-A 1st Timer + Ambassador", "hard", True,
                             f"{p['name']}: with {host}, who invited / requested him (no Ambassador needed)")

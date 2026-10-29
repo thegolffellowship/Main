@@ -69242,6 +69242,32 @@ def _host_of_map(rows: list[dict], all_names: list[str],
             if h and h != k}
 
 
+def _host_in_group(name: str, group_names, host_of: dict,
+                   req_keys: set) -> str | None:
+    """The R-A HOST EXCEPTION (Kerry 2026-10-29), ONE definition shared by
+    the pairings audit and the generator.
+
+    Kerry, on Eric Carstens (851) grouped with Matthew Jenkins (7): "Eric
+    Carstens is with the person, Matthew Jenkins, who invited him and he
+    requested. So no ambassador needed." A 1st Timer / guest whose group
+    holds the member who invited him (`host_of`: the "Purchased by" note or
+    the shared order, `_host_of_map`), or a player he requested or who
+    requested him (`req_keys`: frozensets of `_pair_key_name` keys), does not
+    need an Ambassador in the group. Returns that group-mate's name, or None.
+    """
+    k = _pair_key_name(name)
+    h = (host_of or {}).get(k)
+    for x in group_names or ():
+        if not x or x == name:
+            continue
+        kx = _pair_key_name(x)
+        if kx == k:
+            continue
+        if (h and kx == h) or frozenset((k, kx)) in (req_keys or ()):
+            return x
+    return None
+
+
 def _host_units(host_of: dict, players: list[str],
                 max_size: int = HOST_GROUP_MAX) -> list[list[str]]:
     """Host-and-guests foursomes, as unsplittable units of roster NAMES.
@@ -73224,16 +73250,38 @@ def generate_event_pairings(
 
         _locked_base = set(locked_names)
 
+        # R-A HOST EXCEPTION (Kerry 2026-10-29, Eric Carstens with Matthew
+        # Jenkins: "Eric Carstens is with the person, Matthew Jenkins, who
+        # invited him and he requested. So no ambassador needed."). A 1st
+        # Timer whose GROUP holds his host (`host_of_all`) or a player he
+        # requested / who requested him needs no Ambassador: rules 14 and
+        # 18 do not count him and the fixers do not move anyone for him.
+        # The test is `_host_in_group`, the audit's own definition.
+        _req_keys: set = set()
+        for _rq, _txt in partner_map.items():
+            _pn = _find_partner_name(_txt, all_names, _rq)
+            if _pn:
+                _req_keys.add(frozenset((_pair_key_name(_rq), _pair_key_name(_pn))))
+
+        def _host_covered(g) -> set:
+            """Keys of the 1st Timers in group `g` covered by their host."""
+            return {_pair_key_name(n) for n in g
+                    if _pair_key_name(n) in _ft
+                    and _host_in_group(n, g, host_of_all, _req_keys)}
+
         def _rule_misses(g) -> tuple:
             """(lone back, no leader, 1st Timer without Ambassador, a first
             year player who must ride alone, a guest who cannot ride with an
             Ambassador) for one group."""
             ks = [_pair_key_name(n) for n in g]
+            _cov = _host_covered(g)
             solo_miss, guest_miss = _group_seat_misses(
-                g, partner_adj, _amb, need_amb_cart, no_solo, amb_fit)
+                g, partner_adj, _amb, (need_amb_cart - _cov) if _cov else need_amb_cart,
+                no_solo, amb_fit)
             return (1 if _lone_back_offender(g, tee_map, _sok) else 0,
                     1 if len(g) >= 2 and not any(k in _lead for k in ks) else 0,
-                    1 if any(k in _ft for k in ks) and not any(k in _amb for k in ks) else 0,
+                    1 if any(k in _ft and k not in _cov for k in ks)
+                    and not any(k in _amb for k in ks) else 0,
                     solo_miss, guest_miss)
 
         def _keeps_rules(og, oh, ng, nh) -> bool:
@@ -73264,7 +73312,8 @@ def generate_event_pairings(
             _t("spread leaders (rule 7)", "a group without a captain or Ambassador", _b, gp)
             _b = [list(g) for g in gp]
             gp, n3 = _pair_first_timers_with_ambassadors(
-                gp, ambassadors, first_timers, tee_map, locked_names, pair_counts, solo_ok)
+                gp, ambassadors, first_timers, tee_map, locked_names, pair_counts, solo_ok,
+                host_of=host_of_all, req_keys=_req_keys)
             _t("1st Timer + Ambassador (rule 14)", "a 1st Timer's group without an Ambassador", _b, gp)
             # Kerry 2026-10-12: first year players never alone, guests with
             # an Ambassador. Swaps only when the sheet's total rule misses
@@ -73982,7 +74031,8 @@ def _spread_leaders(groups: list[list[str]], leaders: set, locked: set,
 def _pair_first_timers_with_ambassadors(groups: list[list[str]], ambassadors: set,
                                         first_timers: set, tee_map: dict,
                                         locked: set, pair_counts: dict,
-                                        solo_ok: set
+                                        solo_ok: set, host_of: dict | None = None,
+                                        req_keys: set | None = None
                                         ) -> tuple[list[list[str]], list[str]]:
     """Pairings rule 14 (Kerry-ratified 2026-09-15): "1st Timers also need
     to be paired up (carted) with an Ambassador of the same tees whenever
@@ -73992,6 +74042,11 @@ def _pair_first_timers_with_ambassadors(groups: list[list[str]], ambassadors: se
     once-played repeat, so history still breaks ties). Never moves a
     locked player, never strips a group of the only ambassador riding
     with ITS first-timer. The seating half lives in _arrange_group_seats.
+
+    `host_of` / `req_keys` apply the R-A host exception (Kerry 2026-10-29,
+    `_host_in_group`): a 1st Timer grouped with the member who invited him,
+    or with a player he requested / who requested him, needs no Ambassador,
+    so nobody is moved for him.
     """
     notes: list[str] = []
     groups = [list(g) for g in groups]
@@ -74007,7 +74062,10 @@ def _pair_first_timers_with_ambassadors(groups: list[list[str]], ambassadors: se
         return sum(1 for n in g if _pair_key_name(n) in amb)
 
     def _has_ft(g):
-        return any(_pair_key_name(n) in ft for n in g)
+        return any(_pair_key_name(n) in ft
+                   and not (host_of is not None
+                            and _host_in_group(n, g, host_of, req_keys or set()))
+                   for n in g)
 
     for _ in range(len(groups)):
         gi = next((i for i, g in enumerate(groups)
