@@ -20,7 +20,10 @@
 
     window.TGF_CARD_STYLE = function (compact) {
         return {
-            td: `padding:${compact ? "1px 1px" : "2px 6px"};text-align:center;border:1px solid #e2e8f0;min-width:${compact ? "1.1em" : "2em"};white-space:nowrap;`,
+            // EQUAL HOLE COLUMNS (Kerry 10/29: "scorecard displays to always
+            // have equal hole column widths"): one fixed width per cell, so
+            // 1 and 18 take the same room; a cell only grows if it must.
+            td: `padding:${compact ? "1px 1px" : "2px 2px"};text-align:center;border:1px solid #e2e8f0;width:${compact ? "1.5em" : "2.4em"};min-width:${compact ? "1.5em" : "2.4em"};white-space:nowrap;`,
             lbl: `padding:${compact ? "1px 2px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`,
             fs: compact ? "0.58rem" : "0.8rem",
             spanW: compact ? "1.08em" : "1.4em",

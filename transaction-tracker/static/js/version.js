@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.628.0";
+window.TGF_VERSION = "2.628.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.628.1",
+    date: "2026-10-29",
+    title: "Scorecards: every hole column the same width",
+    changes: [
+      "Kerry 10/29, on the Event Info email's YOUR CARD: \"I would like scorecard displays to always have equal hole column widths though. Makes it look more professional.\" Holes 10-18 were wider than 1-9 because each column sized to its digits. The Event Info card and the results email scorecard now use a fixed layout (label 12-13%, TOT 9%, the rest split evenly over the holes), and the app's card standard (tgf-standards.js TGF_CARD_STYLE: Contests, Handicaps, /me, the live card) gives every cell one fixed width. The printed scorecards were already equal (scorecards.py)."
+    ]
+  },
   {
     version: "2.628.0",
     date: "2026-10-29",

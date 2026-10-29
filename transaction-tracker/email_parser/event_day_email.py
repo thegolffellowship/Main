@@ -626,7 +626,12 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
     net_short = "CART" if (net or {}).get("unit") == "cart" else "TEAM"
     cell = 'align="center" style="padding:3px 0;font-size:12px;border-top:1px solid ' + LINE + ';"'
     lab = f'style="padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"'
-    head = "".join(f'<td align="center" style="padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in holes)
+    # EQUAL HOLE COLUMNS (Kerry 10/29: "I would like scorecard displays to
+    # always have equal hole column widths though. Makes it look more
+    # professional"): fixed layout, every hole the same share of the width.
+    lab_w, tot_w = 13, 9
+    hw = f"{(100 - lab_w - tot_w) / len(holes):.2f}%"
+    head = "".join(f'<td width="{hw}" align="center" style="width:{hw};padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in holes)
     pars = "".join(f"<td {cell}>{par.get(h, '')}</td>" for h in holes)
     ph_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(ph_d.get(h))}</span></td>' for h in holes)
     net_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(net_d.get(h))}</span></td>' for h in holes)
@@ -639,16 +644,16 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
             except (TypeError, ValueError):
                 pass
         return t
-    tcell = ('align="center" style="padding:3px 6px;font:bold 12px Arial,sans-serif;border-top:1px solid '
+    tcell = ('align="center" style="padding:3px 0;font:bold 12px Arial,sans-serif;border-top:1px solid '
              + LINE + ';border-left:1px solid ' + LINE + ';"')
-    head += (f'<td align="center" style="padding:3px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;'
+    head += (f'<td width="{tot_w}%" align="center" style="width:{tot_w}%;padding:3px 0;font:bold 10px Arial,sans-serif;letter-spacing:1px;'
              f'color:#ffffff;" bgcolor="{INK}">TOT</td>')
     pars += f"<td {tcell}>{_sum(par, holes) or ''}</td>"
     ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, holes)}</span></td>'
     net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, holes)}</span></td>'
     grid_html = (
-        f'<table {_T} style="border:1px solid {LINE};border-radius:6px;">'
-        f'<tr><td bgcolor="{INK}" style="padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
+        f'<table {_T} style="border:1px solid {LINE};border-radius:6px;table-layout:fixed;">'
+        f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
         f'<tr><td {lab}>PAR</td>{pars}</tr>'
         f'<tr><td {lab}>NET</td>{ph_row}</tr>'
         f'<tr><td {lab}>{net_short}</td>{net_row}</tr></table>')

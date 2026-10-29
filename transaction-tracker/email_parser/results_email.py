@@ -128,7 +128,11 @@ def scorecard(holes, pars, strokes, dots) -> str:
     cell = f'align="center" style="padding:4px 0;font-size:13px;border-top:1px solid {LINE};"'
     lab = (f'style="padding:4px 6px 4px 0;font:bold 10px Arial,sans-serif;letter-spacing:1px;'
            f'color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"')
-    head = "".join(f'<td align="center" bgcolor="{INK}" style="padding:4px 0;font:bold 12px Arial,sans-serif;color:#fff;">{h}</td>' for h in holes)
+    # EQUAL HOLE COLUMNS (Kerry 10/29: "scorecard displays to always have
+    # equal hole column widths"): fixed layout, each hole the same share.
+    lab_w, tot_w = 12, 9
+    hw = f"{(100 - lab_w - tot_w) / max(1, len(holes)):.2f}%"
+    head = "".join(f'<td width="{hw}" align="center" bgcolor="{INK}" style="width:{hw};padding:4px 0;font:bold 12px Arial,sans-serif;color:#fff;">{h}</td>' for h in holes)
     par = "".join(f"<td {cell}>{p}</td>" for p in pars)
 
     def mark(s, p):
@@ -147,9 +151,9 @@ def scorecard(holes, pars, strokes, dots) -> str:
                   for d in dots)
     tot = "OUT" if holes and holes[0] == 1 and len(holes) == 9 else ("IN" if holes and holes[0] == 10 else "TOT")
     played = [s for s in strokes if s is not None]
-    return (f'<table {T} style="border:1px solid {LINE};border-radius:6px;">'
-            f'<tr><td bgcolor="{INK}" style="padding:4px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#fff;">HOLE</td>{head}'
-            f'<td bgcolor="{INK}" align="center" style="font:bold 11px Arial,sans-serif;color:#fff;padding:0 4px;">{tot}</td></tr>'
+    return (f'<table {T} style="border:1px solid {LINE};border-radius:6px;table-layout:fixed;">'
+            f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:4px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#fff;">HOLE</td>{head}'
+            f'<td width="{tot_w}%" bgcolor="{INK}" align="center" style="width:{tot_w}%;font:bold 11px Arial,sans-serif;color:#fff;padding:0;">{tot}</td></tr>'
             f'<tr><td {lab}>PAR</td>{par}<td {cell}>{sum(pars)}</td></tr>'
             f'<tr><td {lab}>YOU</td>{sc}<td {cell}><b>{sum(played)}</b></td></tr>'
             f'<tr><td {lab}>POPS</td>{dot}<td {cell}>{sum(d for d in dots if d > 0)}</td></tr></table>')
