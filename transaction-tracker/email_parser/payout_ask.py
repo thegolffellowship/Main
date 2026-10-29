@@ -651,5 +651,13 @@ def status_rows(db_path=None) -> dict:
             chip = {"state": "asked", "at": rec["sent_at"]}
         else:
             continue
+        if chip["state"] != "in":
+            try:  # THE CLICK LOG (Kerry 10/29): did they open it?
+                from email_parser.link_clicks import opened
+                o = opened("payout", int(cid), db_path=db_path)
+                chip["opened"] = (o or {}).get("last")
+                chip["scanner_only"] = bool(o and o.get("scanner_only"))
+            except Exception:
+                pass
         out[cid] = chip
     return out

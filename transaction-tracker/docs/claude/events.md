@@ -4159,3 +4159,21 @@ into it."
 - Players tab: the WAITLIST box above every tab (spots paid of max, the line,
   manager move / remove), `/api/events/<id>/waitlist`.
 - Guard `test_waitlist.py`.
+
+
+## The click log (v2.624.0, Kerry 2026-10-29)
+
+Kerry: "Let's do the click log next" (spec Event Ops #2481, Kerry "Yes,
+clicks first"). `email_parser/link_clicks.py`: every visit to a link we sent
+a person is logged to agent_action_log (agent `link-click`, action
+`<kind>_open`) with customer_id, event, user agent, language and IP. Kinds:
+`handicap` (/handicap/<token>), `payout` (/payout/<token>), `teesheet`
+(/member/teesheet/<id>?w=, the event-day email's button) and `results`
+(/member/results/<id>?w=, the results email's button); invitation taps are
+already logged by `invitations.log_tap`. `tag_url` adds the short signed `w`
+tag; the public pages still work without it. A likely mail scanner
+(`invitations.tap_fingerprint`) is logged with `scanner=<why>` and never
+counts as the person. One reader, `opened(kind, customer_id[, event_id])`;
+`opened_line` feeds the missing-handicap banner's ask line, and
+`payout_ask.status_rows` adds `opened` / `scanner_only` to the Unpaid chips.
+The open pixel waits on Kerry (#2481). Guard `test_link_clicks.py`.

@@ -198,6 +198,12 @@ def frame(eyebrow, title, inner, preheader) -> str:
 # The night's facts, read once per event
 # ---------------------------------------------------------------------------
 
+def _tag_results(event_id, cid) -> str:
+    """The full-results link with this person's click tag (Kerry 10/29)."""
+    from email_parser.link_clicks import tag_url
+    return tag_url(f"{BASE}/member/results/{event_id}", cid, event_id, "results")
+
+
 def _chapter_key(ev: dict) -> str:
     return (ev.get("chapter") or "").strip().lower()
 
@@ -573,7 +579,7 @@ def build_message(facts: dict, person: dict, recap_file: str) -> dict:
         parts += [f'<p style="margin:0 0 18px;">Here’s your {"day" if today and hour < 17 else "night"} at '
                   f'{_e(course)}{", then the recap and what’s next" if story else " and what’s next"}.</p>',
                   _champions(facts), night, _winnings(facts, cid), _handicap(facts, cid), pts_html,
-                  button(f"See full results from {_e(course)}", f"{BASE}/member/results/{ev['id']}"),
+                  button(f"See full results from {_e(course)}", _tag_results(ev['id'], cid)),
                   button("Your Spotlight", f"{BASE}/member/spotlight?player={cid}", solid=False)]
         title = f"{ev['item_name']} — your results"
     else:
@@ -581,7 +587,7 @@ def build_message(facts: dict, person: dict, recap_file: str) -> dict:
         parts += [f'<p style="margin:0 0 18px;">We missed you at {_e(course)} {day}. '
                   f'{"Here’s where you stand, what happened, and what’s next." if pts_html else "Here’s what happened and what’s next."}</p>',
                   _champions(facts), pts_html,
-                  button(f"See full results from {_e(course)}", f"{BASE}/member/results/{ev['id']}", solid=False)]
+                  button(f"See full results from {_e(course)}", _tag_results(ev['id'], cid), solid=False)]
         pre = f"{person['first_name']}, here’s {day}’s recap from {course} and what’s next."
         title = f"{ev['item_name']} — the results"
     if story:

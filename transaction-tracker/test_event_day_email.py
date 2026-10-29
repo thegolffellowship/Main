@@ -166,7 +166,7 @@ check("Live Scoring off: no Keep score button, and the build says so",
       "Keep score on your phone" not in at and "Live Scoring is not on" in (b.get("scoring_note") or ""),
       b.get("scoring_note"))
 check("a tee sheet button that lands on the player's group",
-      "See the full tee sheet" in at and "/member/teesheet/9101#g1" in ann.get("html", ""), ann.get("html", "")[-900:])
+      "See the full tee sheet" in at and "/member/teesheet/9101?w=" in ann.get("html", "") and "#g1" in ann.get("html", ""), ann.get("html", "")[-900:])
 strip = ede.card_strip(
     {"ph": "6", "net": "5", "ph_dots": {11: 1, 13: 1, 18: 2}, "net_dots": {11: 1, 18: 1},
      "si_by_hole": {h: h - 9 for h in range(10, 19)}},

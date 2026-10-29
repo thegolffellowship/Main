@@ -5374,6 +5374,12 @@ def public_handicap_ask(token):
     if not info.get("ok"):
         ctx["error_page"] = info.get("error") or "This link isn't valid any more."
         return render_template("handicap_ask.html", **ctx), 400
+    if request.method == "GET":
+        # THE CLICK LOG (Kerry 10/29): who opened it, when, from what.
+        _p = _ha.verify_token(token) or {}
+        if not _p.get("p"):
+            from email_parser import link_clicks as _lc
+            _lc.record("handicap", _p.get("c"), _p.get("v"), _lc.client_of(request))
     ctx.update(venmo_only_head=_ha.VENMO_ONLY_HEAD, venmo_only=_ha.VENMO_ONLY)
     if request.method == "POST" and request.form.get("venmo_only"):
         # Back on the same link later to add Venmo only (Kerry 10/16).
@@ -5423,6 +5429,12 @@ def public_payout_ask(token):
     if not info.get("ok"):
         return render_template("payout_ask.html", error_page=info.get("error"), info={},
                                w={}, done=None, step=""), 400
+    if request.method == "GET":
+        # THE CLICK LOG (Kerry 10/29).
+        _p = _pa.verify_token(token) or {}
+        if not _p.get("p"):
+            from email_parser import link_clicks as _lc
+            _lc.record("payout", _p.get("c"), None, _lc.client_of(request))
     amt = info["amount_text"]
     w = {"page_head": _pa.PAGE_HEAD.format(amount=amt), "venmo_label": _pa.VENMO_LABEL,
          "venmo_hint": _pa.VENMO_HINT, "confirm_head": _pa.CONFIRM_HEAD,
@@ -14788,6 +14800,8 @@ def member_teesheet(event_id):
     data = build_teesheet(event_id)
     if not data:
         return "Event not found", 404
+    from email_parser import link_clicks as _lc
+    _lc.record_tag(request, "teesheet", event_id)
     return render_teesheet(data)
 
 
@@ -14845,6 +14859,8 @@ def member_results_event(event_id):
                            (event_id,)).fetchone()
     if not row:
         return redirect("/member/results")
+    from email_parser import link_clicks as _lc
+    _lc.record_tag(request, "results", event_id)
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
                            evlb_landing=True, evlb_open=row["item_name"])

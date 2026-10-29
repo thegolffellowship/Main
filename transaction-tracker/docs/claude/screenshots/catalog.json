@@ -133,7 +133,7 @@
     "app.py::_public_page",
     "app.py::_rsvp_confirm_page"
    ],
-   "watch_hash": "477709cafcd3d798"
+   "watch_hash": "be36e898eb478a03"
   },
   {
    "id": "payment-reminder",
@@ -202,7 +202,7 @@
     "email_parser/event_day_email.py",
     "email_parser/event_links.py"
    ],
-   "watch_hash": "6417a6699d7dfd5a"
+   "watch_hash": "3d509c380c8aade9"
   },
   {
    "id": "rsvp-deadline",
@@ -246,7 +246,7 @@
     "email_parser/payment_reminder.py",
     "email_parser/event_day_email.py"
    ],
-   "watch_hash": "f97f3c5d7810d67a"
+   "watch_hash": "61c2c6614998ed5b"
   },
   {
    "id": "events-leaderboard-batch1",

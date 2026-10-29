@@ -859,6 +859,11 @@ def status_rows(customer_ids, missing_ids=(), db_path=None) -> list[dict]:
             line = (f"Emailed {_when(rec.get('sent_at'))}"
                     + (f"; reminded {_when(rec.get('reminded_at'))}" if rec.get("reminded_at")
                        else f"; reminder {REMIND_DAYS_BEFORE} days before the event"))
+            try:  # THE CLICK LOG (Kerry 10/29): did they open it?
+                from email_parser.link_clicks import opened_line
+                line += f"; {opened_line('handicap', int(cid), db_path=db_path)}"
+            except Exception:
+                pass
         elif a.get("kind") == "ghin":
             line = (f"GHIN {a.get('ghin')} · index {a.get('index')} → starting "
                     f"{starting_from_index(a['index'])} · answered {_when(rec.get('answered_at'))}")

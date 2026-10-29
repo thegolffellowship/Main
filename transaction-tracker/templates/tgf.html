@@ -1275,8 +1275,11 @@
                     : (PAY_LABEL[a.kind] || a.kind) + (a.handle ? " in" : "");
                 return chip("#DCFCE7", "#15803D", what + " " + d(a.at));
             }
-            if (a.state === "reminded") return chip("#FEE2E2", "#B91C1C", "Asked " + d(a.asked) + ", reminded " + d(a.at));
-            return chip("#FEF3C7", "#92400E", "Asked " + d(a.at));
+            // THE CLICK LOG (Kerry 10/29): opened, scanner only, or not yet.
+            const op = a.opened ? ", opened " + d(String(a.opened).replace(" ", "T") + "Z")
+                : (a.scanner_only ? ", scanner only" : ", not opened");
+            if (a.state === "reminded") return chip("#FEE2E2", "#B91C1C", "Asked " + d(a.asked) + ", reminded " + d(a.at) + op);
+            return chip("#FEF3C7", "#92400E", "Asked " + d(a.at) + op);
         }
         function renderUnpaidList() {
             const el = $("#unpaid-main");

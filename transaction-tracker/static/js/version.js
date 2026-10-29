@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.623.4";
+window.TGF_VERSION = "2.624.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.624.0",
+    date: "2026-10-29",
+    title: "The click log: who opened the links we sent",
+    changes: [
+      "Kerry 10/29: \"Let's do the click log next\" (spec Event Ops #2481, Kerry \"Yes, clicks first\"), after \"Has Eric clicked on the email about his handicap yet?\" could not be answered. email_parser/link_clicks.py logs every visit to a link we sent a person, with customer_id, event, time, user agent, language and IP, in agent_action_log (agent link-click, the same log the invitation taps use; no new table): the handicap ask, the payout ask, the event-day email's tee-sheet button and the results email's full-results button (the two public pages carry a short signed tag naming the person and still work without it). A likely mail scanner (the invitation guard's own test) is logged and flagged, never counted as the person.",
+      "Where it shows: the missing-handicap banner's ask line now ends \"opened Thu 8:12 AM\" / \"not opened yet\" / \"link checked by a mail scanner only\", and the Payouts → Unpaid ask chips add \"opened 10/29\" / \"not opened\" / \"scanner only\". Reader link_clicks.opened(kind, customer_id). Guard test_link_clicks.py."
+    ]
+  },
   {
     version: "2.623.4",
     date: "2026-10-29",

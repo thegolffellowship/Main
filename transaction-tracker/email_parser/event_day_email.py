@@ -837,7 +837,8 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             spot = spot_card(g, me, start_headline=start_headline, start_sub=start_sub,
                              tee=tee, format_line=format_line, card_html=card_html,
                              photos=group_photos, base_url=group_base) if sl else ""
-            tbutton = (teesheet_button(f"{teesheet_url}#g{_e(g.get('group_num'))}")
+            from email_parser.link_clicks import tag_url as _tag
+            tbutton = (teesheet_button(_tag(f"{teesheet_url}#g{_e(g.get('group_num'))}", cid, event_id, "teesheet"))
                        if teesheet_url and "{teesheet_button}" in tpl_text else "")
             gcard = games_card(gview, cid, bool(r.get("rsvp_only")), as_of, day) if gview.get("ok") else ""
             sbutton = scoring_button(short_score_url(url)) if url else ""
