@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.621.2";
+window.TGF_VERSION = "2.621.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.621.3",
+    date: "2026-10-29",
+    title: "Editing a row's course or chapter now updates its course_id / chapter_id",
+    changes: [
+      "Kerry 10/29: \"Fix Peter's course and chapter too.\" Item 3162 (Peter Rundqvist, s9.29 Silverhorn) read ShadowGlen / Austin, and editing the text alone would have left course_id and chapter_id on the old values: update_item only wrote the text, and the boot backfill fills NULL ids only. Now any edit of course or chapter (the Edit modal, update_transaction) re-resolves the id from courses / course_aliases and chapters (names, short codes, the backfill's aliases). A name that resolves to nothing clears the id rather than keeping the wrong one. Guard test_item_course_chapter_ids.py."
+    ]
+  },
   {
     version: "2.621.2",
     date: "2026-10-29",

@@ -33975,8 +33975,51 @@ def update_item(item_id: int, fields: dict, db_path: str | Path | None = None) -
 
     with _connect(db_path) as conn:
         cursor = conn.execute(f"UPDATE items SET {set_clause} WHERE id = ?", values)
+        # The text and its id move together (Kerry 10/29, item 3162 read
+        # ShadowGlen / Austin by id after its text was fixed): a new course
+        # or chapter name re-resolves course_id / chapter_id, and a name that
+        # resolves to nothing clears the id rather than leaving the old one.
+        if cursor.rowcount and "course" in safe_fields:
+            conn.execute("UPDATE items SET course_id = ? WHERE id = ?",
+                         (_course_id_for_name(conn, safe_fields["course"]), item_id))
+        if cursor.rowcount and "chapter" in safe_fields:
+            conn.execute("UPDATE items SET chapter_id = ? WHERE id = ?",
+                         (_chapter_id_for_name(conn, safe_fields["chapter"]), item_id))
         conn.commit()
         return cursor.rowcount > 0
+
+
+_CHAPTER_NAME_ALIASES = {"aus": "austin", "atx": "austin", "sa": "san antonio",
+                         "sat": "san antonio", "dal": "dfw", "dallas": "dfw",
+                         "fort worth": "dfw", "hou": "houston"}
+
+
+def _chapter_id_for_name(conn, name) -> int | None:
+    """chapters.chapter_id for a chapter name or short code (the boot
+    backfill's own aliases); None when it doesn't resolve."""
+    key = " ".join(str(name or "").split()).lower()
+    if not key:
+        return None
+    key = _CHAPTER_NAME_ALIASES.get(key, key)
+    r = conn.execute("SELECT chapter_id FROM chapters WHERE lower(name) = ? "
+                     "OR lower(short_code) = ?", (key, key)).fetchone()
+    return r[0] if r else None
+
+
+def _course_id_for_name(conn, name) -> int | None:
+    """courses.course_id for a course name or alias; None when it doesn't
+    resolve (the boot backfill fills NULLs later)."""
+    key = " ".join(str(name or "").split()).lower()
+    if not key:
+        return None
+    r = conn.execute("SELECT course_id FROM courses WHERE lower(name) = ?", (key,)).fetchone()
+    if not r:
+        try:
+            r = conn.execute("SELECT course_id FROM course_aliases WHERE lower(alias_name) = ?",
+                             (key,)).fetchone()
+        except sqlite3.OperationalError:
+            r = None
+    return r[0] if r else None
 
 
 def get_item(item_id: int, db_path: str | Path | None = None) -> dict | None:
