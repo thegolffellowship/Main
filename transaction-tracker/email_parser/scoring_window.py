@@ -209,6 +209,16 @@ def tick(now=None, db_path=None) -> dict:
                     did["closeout_chain"] = _r.get("at")
             except Exception:
                 logger.exception("scoring window: closeout chain failed for %s", eid)
+        # WINDOW OPEN / WINDOW CLOSED on the mailbox (Event Ops #2460-I):
+        # first tee - 60 min, then the clean closeout (or last score + 60
+        # min). Dial window_posts_auto, off by default. window_posts.py.
+        try:
+            from email_parser import window_posts as _wp
+            _w = _wp.tick_event(eid, st, now=now, db_path=db_path)
+            if _w:
+                did["window_post"] = _w
+        except Exception:
+            logger.exception("scoring window: window post failed for %s", eid)
         if did:
             out[eid] = did
         if st.get("last_score_at") and not st.get("closed"):

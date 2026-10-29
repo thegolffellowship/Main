@@ -1867,6 +1867,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-no-show-notice:<event_id>[|preview[|<staff addr>]]  THE COURSE NO-SHOW NOTICE (Kerry 9/30 #1021): READ ONLY, who the scorers marked missing, whether the notice is due (group played no_show_course_notice_holes, default 3, or a WD), the TGF-branded player-count totals (registered, no-shows, left, added, playing now), To/CC (course contacts + manager + admin no_show_notice_admin_cc), held reasons, the last set sent and whether this one would go as UPDATED; |preview mails ONE sample to STAFF only. The job sends itself (dial no_show_course_notice, on unless off)
       scoring-course-update:<event_id>[|preview[|<staff addr>]]  THE COURSE UPDATE BEFORE THE LOCK (Kerry 10/26): who it would go to, held reasons, wording hash; |preview mails ONE sample to STAFF only. The job sends only with dial course_update_auto=on and stamp course_update_approved
       scoring-course-files-noon:<event_id>  NOON COURSE FILES, read only (Kerry 10/26): would the event-day noon job send the Course Files now (To the course contact, CC TGF contacts + the chapter manager), or why not (already sent, no pairings, no course contact, within the hour before first tee, a scorecard gap)
+      scoring-window-posts[:<event_id>]  WINDOW OPEN / CLOSED, read only (Event Ops #2460-I): what the scoring-window job would post on the mailbox now (open at first tee - 60 min; closed at a clean closeout or last score + 60 min); dial window_posts_auto (off)
       scoring-scoring-window:<event_id>  THE SCORING WINDOW, read only (Kerry 10/26): first tee, saves open (first tee - 60 min), cards final, last score, scoring closes (last score + 15 min once every card is final), closeout start (last score + 15 min)
       scoring-seat-fill:<event_id>  SEAT-FILL, read only (Kerry 10/26): the registered late adds the after-lock job would seat now (tee times: latest threesome first; shotgun: lowest hole first, B before A) and who has no open seat
       scoring-withdrawal-fold:<event_id>  WITHDRAWAL FOLD, read only (Kerry 10/26, #2363-#2366): what the after-lock job would do now after a withdrawal: a group under 3 takes from a foursome (shotgun highest hole first, B before A; tee times the first foursome), a group the field no longer needs dissolves into the threesomes (from 7:00 AM event day), never splitting a request, match or guest and host; or why it waits / is blocked
@@ -7776,6 +7777,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             from app import _print_pack_render, app as _flask
             return json.dumps(_cfn.run_event(int(_p[0]), _print_pack_render, _flask.static_folder,
                                              confirm=False), indent=2, default=str)
+        if cmd == "scoring-window-posts":
+            # "[<event_id>]" — WINDOW OPEN / CLOSED posts (Event Ops #2460-I),
+            # READ ONLY: today's live events (or one), what the scoring-window
+            # job would post now and why. Dial window_posts_auto (off).
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if _p[0] and not _p[0].isdigit():
+                return json.dumps({"error": "[<event_id>]"})
+            from email_parser import window_posts as _wpo
+            return json.dumps(_wpo.preview(int(_p[0]) if _p[0] else None), indent=2, default=str)
         if cmd == "scoring-scoring-window":
             # "<event_id>" — THE SCORING WINDOW (Kerry 10/26), READ ONLY:
             # first tee, when saves open, cards final, last score, when

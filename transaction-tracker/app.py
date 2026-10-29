@@ -2608,7 +2608,10 @@ def start_scheduler():
             logger.exception("Scoring window failed (non-fatal)")
     scheduler.add_job(
         scoring_window_job,
-        "cron", hour="7-23", minute="*/5",
+        # From 5 AM so a 7:00 AM first tee gets its WINDOW OPEN at 6:00
+        # (window_posts.py, Event Ops #2460-I); everything else in the tick
+        # waits on scores and does nothing that early.
+        "cron", hour="5-23", minute="*/5",
         timezone="US/Central",
         id="scoring_window",
         replace_existing=True,
