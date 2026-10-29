@@ -1,5 +1,7 @@
 # Twilio texting: toll-free 833 number (WORKING DRAFT, not ratified)
 
+> **UPDATE 2026-10-29 (Kerry): the 833 number is being RELEASED.** Twilio support (Oscar G., ticket #29975540) offered the one-time refund of the -$67.32 balance only if the number was released; Kerry authorized the release by email the same day ("No, release it"). The number was never verified, used or published. When texting is ready, buy a new toll-free number and run verification with it; everything below that names +1 (833) 440-2738 is history.
+
 Started 2026-10-17 with Kerry. Nothing is sent, built or paid from this doc.
 Rule 3b: the consent field, the opt-in page and every member-facing word need
 Kerry's OK first (CoS #1990-4: "SMS consent is its own field and its own
