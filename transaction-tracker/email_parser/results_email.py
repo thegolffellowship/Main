@@ -357,6 +357,7 @@ def event_facts(event_id: int, db_path=None) -> dict:
         try:
             data = db.get_points_race_standings(FALL_RACE[key][0], db_path=db_path, no_network=True)
             races[key] = {"rows": data.get("standings") or [],
+                          "payouts": (data.get("projected_payouts") or {}).get("amounts_cents") or [],
                           "final": bool(data.get("race_final")),
                           "champions": data.get("champions") or []}
         except Exception:
@@ -419,6 +420,11 @@ def _month_row(facts, cid):
     return None, (st[0] if st else None)
 
 
+# How close to the last paid place counts as "within reach" for the points
+# card's nudge: roughly one good 18-hole round of net points (Kerry 10/30).
+WITHIN_REACH = 20
+
+
 def _points_card(facts, cid, chapter_label, eyebrow: str = "YOUR POINTS") -> tuple[str, bool]:
     """(html, bought_in) — empty html when the person is in neither standing."""
     ch = _person_chapter(facts, cid)
@@ -435,7 +441,36 @@ def _points_card(facts, cid, chapter_label, eyebrow: str = "YOUR POINTS") -> tup
         sub = f"{_rank_text(r.get('rank'))} in {chapter_label}" + (f" · {behind:g} back" if behind > 0 else " · leading")
         items.append(("FALL RACE", f"{r['total_points']:g}", sub,
                       f"{BASE}/member/contests#race={FALL_RACE[ch][1]}&player={cid}"))
+        # WITHIN REACH (Kerry 10/30: "if someone's in a reasonable distance to
+        # place in the money something could be said towards that idea"): a
+        # bought-in player outside the paid places but within WITHIN_REACH
+        # points of the last paid place, while the race is still open.
+        ladder_all = _race_of(facts, cid).get("payouts") or []
+        if enrolled and ladder_all and not _race_of(facts, cid).get("final"):
+            pts_e = r.get("total_points") or 0
+            ins = sorted(((x.get("total_points") or 0) for x in rows if x.get("enrolled")), reverse=True)
+            place_e = 1 + sum(1 for v in ins if v > pts_e)
+            if place_e > len(ladder_all) and len(ins) >= len(ladder_all):
+                gap = ins[len(ladder_all) - 1] - pts_e
+                if 0 < gap <= WITHIN_REACH:
+                    lines.append(f"<b>You’re {gap:g} points out of the money</b> ({_ordinal(len(ladder_all))} "
+                                 f"pays {_usd(ladder_all[-1] / 100)} today). One good round closes that.")
         if not enrolled:
+            # IN THE MONEY? (Kerry 10/30, Michael Murphy: "should say something
+            # like if it ended today, you'd finish in the money"): his place
+            # among the BOUGHT-IN players, and the ladder's amount for it today.
+            pts = r.get("total_points") or 0
+            place = 1 + sum(1 for x in rows if x.get("enrolled") and (x.get("total_points") or 0) > pts)
+            ladder = _race_of(facts, cid).get("payouts") or []
+            if 0 < place <= len(ladder) and ladder[place - 1]:
+                lines.append(f"<b>If the race ended today and your points were active, you’d finish "
+                             f"{_ordinal(place)} and in the money: {_usd(ladder[place - 1] / 100)}.</b>")
+            elif place > 0:
+                ins = sorted(((x.get("total_points") or 0) for x in rows if x.get("enrolled")), reverse=True)
+                gap = (ins[len(ladder) - 1] - pts) if (ladder and len(ins) >= len(ladder)) else None
+                lines.append(f"If the race ended today and your points were active, you’d finish {_ordinal(place)}"
+                             + (f", {gap:g} points out of the money. One good round closes that."
+                                if gap is not None and 0 < gap <= WITHIN_REACH else "."))
             lines.append(f"Your {r['total_points']:g} fall points are being tallied but aren’t <b>active</b> yet. "
                          f"Buy in and they count toward the race payouts: "
                          f'<a href="{STORE_CONTESTS}" style="color:#2563eb;">activate my points</a>.')

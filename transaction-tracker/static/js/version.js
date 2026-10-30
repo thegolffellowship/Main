@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.634.0";
+window.TGF_VERSION = "2.634.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.634.1",
+    date: "2026-10-30",
+    title: "Points card: in the money, and within reach",
+    changes: [
+      "IN THE MONEY (Kerry 10/30, Michael Murphy: \"should say something like if it ended today, you'd finish in the money\"): a player with fall points who has not bought in reads his place among the BOUGHT-IN players and, when it pays, the race ladder's amount today (\"If the race ended today and your points were active, you'd finish 4th and in the money: $60.\"), before the activate-my-points line.",
+      "WITHIN REACH (Kerry 10/30: \"if someone's in a reasonable distance to place in the money something could be said towards that idea\"): a player outside the paid places but within 20 points of the last one (results_email.WITHIN_REACH, about one good 18-hole round) reads \"You're 9 points out of the money (4th pays $60 today). One good round closes that.\" while the race is open. Both lines sit in the one points card the results email and the event-day email share."
+    ]
+  },
   {
     version: "2.634.0",
     date: "2026-10-30",
