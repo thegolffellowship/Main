@@ -9312,6 +9312,27 @@
         return vals.length > 0 && vals.every(v => Number(v) === 0);
     }
 
+// CLOSEST TO THE PIN BY ITS HOLE (Kerry 10/30: "Closest to Pins #1-#4 ...
+// to reflect the holes they're on, not just 1-4"): the proximity contests'
+// holes from /api/events/<id>/ctp-holes, read once per event; until they
+// arrive (or if the course has no hole data) the row keeps "CTP #n".
+const _ctpHoles = {};
+function ctpLabel(evId, i) {
+    const l = (_ctpHoles[evId] || [])[i];
+    // always led by "CTP": the games sheet and the email read rows that way
+    return l ? "CTP \u00b7 " + l : "CTP #" + (i + 1);
+}
+function ctpHolesLoad(evId) {
+    if (_ctpHoles[evId]) return;
+    _ctpHoles[evId] = [];
+    fetch(`/api/events/${evId}/ctp-holes`).then(r => r.ok ? r.json() : null).then(j => {
+        if (!j || !Array.isArray(j.labels)) return;
+        _ctpHoles[evId] = j.labels;
+        document.querySelectorAll(`[data-ctp-ev="${evId}"][data-ctp-ix]`).forEach(el => {
+            el.textContent = ctpLabel(evId, Number(el.dataset.ctpIx));
+        });
+    }).catch(() => {});
+}
     function renderGamesPanel(ev) {
         // Bucket-account events: the regular 9/18 matrix does NOT apply —
         // render the derived bucket purses instead of matrix pots so the
@@ -9431,12 +9452,13 @@
             }
 
             const ctps = holes === 18 ? [gEvent.ctp1, gEvent.ctp2, gEvent.ctp3, gEvent.ctp4] : [gEvent.ctp1, gEvent.ctp2];
+            if (ctps.some(v => v != null && v !== "NO_GAME" && v !== "NO_EVENT")) ctpHolesLoad(ev.id);
             ctps.forEach((v, i) => {
                 if (v === "NO_GAME" || v === "NO_EVENT") {
                     html += `<tr class="games-row-disabled"><td>CTP #${i+1}</td><td colspan="${C-1}">No Game</td></tr>`;
                 } else if (v != null) {
                     inclMWP += numVal(v);
-                    html += `<tr><td><strong>CTP #${i+1}</strong> <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="ctp" data-idx="${i}"></span></td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
+                    html += `<tr><td><strong data-ctp-ix="${i}" data-ctp-ev="${ev.id}">${escapeHtml(ctpLabel(ev.id, i))}</strong> <span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="ctp" data-idx="${i}"></span></td><td>${fmt$(v)}</td><td>${fmt$(v)}</td><td></td>${empty4}</tr>`;
                 }
             });
 

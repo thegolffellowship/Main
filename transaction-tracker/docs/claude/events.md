@@ -3716,7 +3716,11 @@ for now"). The Customer Communications lane owns its content and timing
   for an 18-hole group), date and course; the group with initials circles,
   "you" / "your cart" and Cart A/B (seats 1&2 / 3&4); TEES (the player's
   `tee_choice` band through the print pack's `tee_legend`, left out when
-  unknown) and FORMAT (holes + the GAMES tab's team game).
+  unknown) and FORMAT (holes + the GAMES tab's team game, "18 · Team Net"),
+  then INDEX (the event's own, 9-hole on a nine) and PLAYING HCP (100% in
+  ink / team or cart in orange) from the scorecard row (Kerry 10/30,
+  v2.632.0). CTP lines on the GAMES card and the Events GAMES tab name the
+  hole (`ctp_hole_labels`, `/api/events/<id>/ctp-holes`).
 - **GAMES card** (`games_view` + `games_card`): read ONCE per build from the
   GAMES tab (`page_probe.event_games_tab`, the page's own math). Shows total in
   play, player/Net/Gross counts, a pot split bar, a block per section (sub

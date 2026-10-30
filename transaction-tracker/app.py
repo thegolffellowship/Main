@@ -7379,6 +7379,15 @@ def proximity_markers_page(event_id):
     return render_template("proximity_markers.html", rep=rep)
 
 
+@app.route("/api/events/<int:event_id>/ctp-holes")
+@require_role("view-only")
+def api_event_ctp_holes(event_id):
+    """The proximity contests' holes in order (Kerry 10/30: label Closest to
+    the Pin by its hole). The GAMES tab names its CTP rows from this."""
+    from email_parser.event_day_email import ctp_hole_labels
+    return jsonify({"event_id": event_id, "labels": ctp_hole_labels(event_id)})
+
+
 _CUP_SESSION_TITLE = {"sat-am": "Sat AM Fourball", "sat-pm": "Sat PM Foursomes", "sun": "Sun Singles"}
 # Team band colors for the Lone Star Cup cart sign (design-claude #1463 §3,
 # Kerry-approved option 3e). A chapter with no color here does not print:

@@ -309,7 +309,7 @@ def _cart_of(p: dict) -> str:
 
 def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
               tee: dict | None, format_line: str, card_html: str = "",
-              photos: dict | None = None, base_url: str = "") -> str:
+              photos: dict | None = None, base_url: str = "", hcp: dict | None = None) -> str:
     """The orange START header, the group with initials and carts, then
     tees and format. Blinds are not people and are never listed."""
     my_cart = _cart_of(me)
@@ -352,6 +352,13 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
             f'{face}<div style="font-size:14px;line-height:1.3;padding-top:6px;">{label}</div>'
             + (f'<div style="font-size:12px;color:{MUTED};">{note}</div>' if note else "")
             + "</td>")
+    # THE TEES ROW (Kerry 10/30, mockup approved "New tees row is good"):
+    # TEES | FORMAT | INDEX | PLAYING HCP. The index is the event's own (a
+    # nine shows the 9-hole index); playing handicap 100% in ink and the
+    # team / cart handicap in orange, each labelled under it.
+    hcp = hcp or {}
+    has_hcp = hcp.get("index") is not None or hcp.get("ph") not in (None, "")
+    w_tee, w_fmt = ("22%", "30%") if has_hcp else ("50%", "50%")
     foot = []
     if tee and tee.get("name"):
         sw = (tee.get("color") or "").strip()
@@ -361,11 +368,29 @@ def spot_card(g: dict, me: dict, *, start_headline: str, start_sub: str,
             dot = (f'<span style="display:inline-block;width:12px;height:12px;border-radius:6px;'
                    f'background:{"#ffffff" if white or tee.get("ring") else sw};'
                    f'border:2px solid {"#9CA3AF" if white else sw};vertical-align:middle;margin-right:6px;"></span>')
-        foot.append(f'<td width="50%" style="font-size:14px;vertical-align:top;">'
+        foot.append(f'<td width="{w_tee}" style="font-size:14px;vertical-align:top;padding-right:6px;">'
                     f'<span style="{_EYEBROW}color:{MUTED};">TEES</span><br>{dot}<b>{_e(tee["name"])}</b></td>')
     if format_line:
-        foot.append(f'<td style="font-size:14px;vertical-align:top;">'
+        foot.append(f'<td width="{w_fmt}" style="font-size:14px;vertical-align:top;padding-right:6px;">'
                     f'<span style="{_EYEBROW}color:{MUTED};">FORMAT</span><br><b>{_e(format_line)}</b></td>')
+    if has_hcp:
+        idx = hcp.get("index")
+        try:
+            idx_txt = f"{float(idx):.1f}" if idx is not None else "&ndash;"
+        except (TypeError, ValueError):
+            idx_txt = _e(idx)
+        sub = f'<br><span style="font-size:11px;color:{MUTED};">{_e(hcp.get("holes") or "")}-hole</span>' if hcp.get("holes") else ""
+        foot.append(f'<td width="17%" style="font-size:14px;vertical-align:top;padding-right:6px;">'
+                    f'<span style="{_EYEBROW}color:{MUTED};">INDEX</span><br><b>{idx_txt}</b>{sub}</td>')
+        ph, net, lab = hcp.get("ph"), hcp.get("net"), (hcp.get("net_label") or "TEAM")
+        slash = '<span style="color:#D1D5DB;"> / </span>'
+        top = f'<b style="color:{INK};">{_e(ph if ph not in (None, "") else "&ndash;")}</b>'
+        bot = f'<span style="font-size:11px;color:{MUTED};">100%</span>'
+        if net not in (None, ""):
+            top += f'{slash}<b style="color:{ORANGE};">{_e(net)}</b>'
+            bot += f'{slash}<span style="font-size:11px;color:{ORANGE};">{_e(lab)}</span>'
+        foot.append(f'<td style="font-size:14px;vertical-align:top;white-space:nowrap;">'
+                    f'<span style="{_EYEBROW}color:{MUTED};white-space:nowrap;">PLAYING HCP</span><br>{top}<br>{bot}</td>')
     return (
         f'<table {_T} style="border:1px solid {LINE};border-radius:8px;margin:0 0 18px;">'
         f'<tr><td bgcolor="{ORANGE}" style="background:{ORANGE};border-radius:8px 8px 0 0;padding:14px 16px;color:#ffffff;">'
@@ -396,7 +421,29 @@ def _game_label(name: str) -> str:
     return re.sub(r"^Ind\.\s*", "Individual ", n)
 
 
-def games_view(tab: dict | None) -> dict:
+def ctp_hole_labels(event_id: int, db_path=None) -> list:
+    """The proximity contests in order as their own labels (Kerry 10/30:
+    "Closest to Pin should be labelled by actual hole"): "Hole 2", or
+    "Longest Putt · Hole 9". The same contests the Proximity report, the
+    games sheet and the leaderboard's CTPs tab read. [] when unknown."""
+    from email_parser import database as db
+    try:
+        rep = db.event_proximity_report(int(event_id), db_path=db_path) or {}
+    except Exception:
+        logger.exception("ctp hole labels: proximity report failed for %s", event_id)
+        return []
+    out = []
+    for c in rep.get("contests") or []:
+        if c.get("hole") is None:
+            out.append(None)
+        elif c.get("kind") == "longest_putt":
+            out.append(f"Longest Putt \u00b7 Hole {c['hole']}")
+        else:
+            out.append(f"Hole {c['hole']}")
+    return out
+
+
+def games_view(tab: dict | None, ctp_holes: list | None = None) -> dict:
     """The GAMES tab (page_probe) shaped for the card, once per event.
     {'ok': False, 'why': ...} when it cannot be shown faithfully."""
     if not tab or tab.get("error"):
@@ -432,7 +479,14 @@ def games_view(tab: dict | None) -> dict:
                 note = f"{fl} flights"
             if "MVP" in (r.get("game") or "").upper() and "TGF" in (r.get("game") or "").upper() and linked:
                 note = f"with {linked}"
-            rows.append({"game": _game_label(r.get("game")), "pot": r.get("pot"), "note": note})
+            label = _game_label(r.get("game"))
+            m = re.match(r"^CTP\s*#\s*(\d+)", (r.get("game") or "").strip())
+            if m and ctp_holes:
+                i = int(m.group(1)) - 1
+                h = ctp_holes[i] if 0 <= i < len(ctp_holes) else None
+                if h:
+                    label = (h if h.startswith("Longest") else f"Closest to the Pin \u00b7 {h}")
+            rows.append({"game": label, "pot": r.get("pot"), "note": note})
         # A flighted game paying only 1st in every flight: say what a winner takes.
         for row in rows:
             if row["note"].endswith("flights"):
@@ -780,7 +834,8 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             else:
                 try:
                     gview = games_view(games_tab if games_tab is not None
-                                       else _read_games_tab(int(event_id)))
+                                       else _read_games_tab(int(event_id)),
+                                       ctp_holes=ctp_hole_labels(int(event_id), db_path))
                 except Exception as exc:
                     logger.exception("event-day email: games tab read failed (non-fatal)")
                     gview = {"ok": False, "why": f"games tab unreadable: {exc}"}
@@ -930,13 +985,20 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             start_sub = " \u00b7 ".join(x for x in (
                 "Shotgun" if shot else "Tee time", date_short, ev_info.get("course") or "") if x)
             team = (gview.get("team_type") or "").replace("TEAM", "Team").replace("CART", "Cart")
-            format_line = " \u00b7 ".join(x for x in (f"{holes} holes" if holes else "", team) if x)
+            # "18 · Team Net" (Kerry's tees-row mockup, 10/30)
+            format_line = " \u00b7 ".join(x for x in ((f"{holes} holes" if not team else holes) if holes else "", team) if x)
             tee = tees.get(str(me.get("tee_choice"))) if me.get("tee_choice") else None
             card_html = ""
+            hcp_row = None
             hit_sc = sc_rows.get(cid)
             if hit_sc:
                 rr, hk = hit_sc
                 grid = sc_grids.get(hk) or sc_grids.get(str(hk)) or {}
+                _d = sc_dump.get(cid) or {}
+                hcp_row = {"index": _d.get("index"), "ph": rr.get("ph"),
+                           "net": rr.get("net") if sc_net else None,
+                           "net_label": "CART" if "cart" in (team or "").lower() else "TEAM",
+                           "holes": holes}
                 try:
                     card_html = card_strip(rr, grid, sc_net, sc_dump.get(cid),
                                            (tee or {}).get("name"))
@@ -944,7 +1006,7 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                     logger.exception("event-day email: card strip failed for cid %s", cid)
             spot = spot_card(g, me, start_headline=start_headline, start_sub=start_sub,
                              tee=tee, format_line=format_line, card_html=card_html,
-                             photos=group_photos, base_url=group_base) if sl else ""
+                             photos=group_photos, base_url=group_base, hcp=hcp_row) if sl else ""
             from email_parser.link_clicks import tag_url as _tag
             tbutton = (teesheet_button(_tag(f"{teesheet_url}#g{_e(g.get('group_num'))}", cid, event_id, "teesheet"))
                        if teesheet_url and "{teesheet_button}" in tpl_text else "")
