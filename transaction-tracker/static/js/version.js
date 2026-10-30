@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.630.0";
+window.TGF_VERSION = "2.631.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.631.0",
+    date: "2026-10-30",
+    title: "Scoring not on yet, the TEAM board before the first score, and Team Net explained",
+    changes: [
+      "LIVE SCORING SAYS IT IS NOT ON YET (Kerry 10/30: \"Live Scoring should not be turned on yet and should say as much to anyone who scans the QR code or clicks the Keep Score ... that SCORE THIS GROUP button should show something else ... They could still click Follow the LEADERBOARD\"). Before the scoring window opens (first tee minus live_scoring_on_minutes, 60) the scorer's landing shows a grey SCORING OPENS 7:30 AM in place of SCORE THIS GROUP, with the line \"Live scoring isn't on yet. It opens at 7:30 AM, an hour before the first tee.\" Follow the Leaderboard and the POINTS tab still work. After the window closes it reads SCORING HAS CLOSED. The card API carries scoring_window from the same rule as the save gate (scoring_window.entry_open); staff are never held, and a phone that had pressed SCORE THIS GROUP earlier is put back on the landing.",
+      "TEAM BOARD BEFORE THE FIRST SCORE (Kerry 10/30): the last column reads START until the first score comes in, then THRU; the plus/minus column is not shown until then. A shotgun's start shows just its hole (1A, 17B), which no longer runs off the column; tee times still show the time. The Team Net dial line and the pot now sit on one baseline.",
+      "HOW IT WORKS on the TEAM tab (Kerry 10/30: \"Visual and simple first, then more detail if desired\"): titled with the game's own name (Team Net or Cart Net), then one line (\"Each hole, the team's lowest net score is the team score, and the lowest total wins\"), then a small example scorecard where the net ball that counts on each hole is green and the TEAM row adds them (built from the event's own best-N), then the existing details.",
+      "THIS GROUP WITH FACES (Kerry 10/30: \"Show player circle headshots on the LIVE SCORING landing pages\"): THIS GROUP is a two-by-two quad (Kerry: \"stack these in a quad, with headshots centered above player names ... equal rows and columns\" / \"Cart 1 players up top row\"): seats 1-2 (cart 1) on the top row, cart 2 below, each a 64px circle headshot from the player photos (initials when we have none) centred over the name. The Lone Star Cup's San Antonio | Austin columns are unchanged.",
+      "POINTS IN GREEN (Kerry 10/30: \"Turn the Points tab green to make it stand out\"): the POINTS segment of SCORING | LEADERBOARD | POINTS is solid green with white text, darker green while open. The POINTS tab itself (scoring_points_tab) was smoke-checked on the Fall Championship and turned on 10/30.",
+      "CHAPTER COLOURS ON POINTS (Kerry 10/30: \"Use chapter colors to enhance title bars and use row color bars to signify player chapters in the OCTOBER POINTS\"): the San Antonio race's bar is the San Antonio blue-grey, Austin's the burnt orange; the monthly bar stays ink with a San Antonio | Austin stripe under it, each monthly row has its player's chapter as a left bar, with a key under the table. A \"Your group\" key under the event name says what the orange dot is."
+    ]
+  },
   {
     version: "2.630.0",
     date: "2026-10-30",

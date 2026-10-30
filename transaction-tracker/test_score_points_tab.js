@@ -5,7 +5,7 @@ const fs = require('fs');
 const src = fs.readFileSync(require('path').join(__dirname, 'templates/score_points.html'), 'utf8');
 const lines = src.split('\n');
 const a = lines.findIndex(l => l.includes('var TOP = 10;'));
-const b = lines.findIndex(l => l.includes('function card(title, meta, inner, note)'));
+const b = lines.findIndex(l => l.includes('function chOf(name)'));
 if (a < 0 || b < 0) throw new Error('table region not found');
 eval(lines.slice(a, b).join('\n') + '\nglobalThis.table = table;');
 
@@ -23,5 +23,7 @@ h = table(rows.slice(0, 5), []);
 check('short race: no gap, no highlight', !h.includes('gap') && !h.includes('class="me"'));
 check('empty race says so', table([], []).includes('No points yet'));
 check('names escaped', table([{rank: '1', name: '<b>x</b>', points: 1, customer_id: 1}], []).includes('&lt;b&gt;'));
+// chapter bars on the monthly (Kerry 10/30)
+check('a chapter row carries its bar class', table([{rank: '1', name: 'A', points: 1, customer_id: 1, ch: 'aus'}], [1]).includes('class="me c-aus"'));
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

@@ -2830,7 +2830,11 @@ board. Guard `test_evlb_batch1.py`.
 - **TEAM** collapsed: dial line with the team pot shown once, then
   `# | TEAM | ± | THRU | WON/PROJ.`. ± is the big number; a finished team's
   THRU is its team net score only (no F, Kerry 10/20, also on every tab's
-  THRU); names First 600 + LAST 800 Bitter on one line, tee dot after each
+  THRU). Before the first score (Kerry 10/30, v2.631.0) the column is START
+  and ± is not shown; a shotgun start shows only its hole (1A). HOW IT WORKS
+  on this tab is titled Team Net / Cart Net and opens with one line and an
+  example card (green = the ball that counts), then the details;
+  names First 600 + LAST 800 Bitter on one line, tee dot after each
   name, a blind leads with the BLIND chip and reads italic brown. Opened
   (`evlbTeamGrid`): HOLE / PAR / players (gross with Team Net pops, counted
   balls green) / TEAM NET, then N · ± · USED; USED blank on TEAM NET. A phone

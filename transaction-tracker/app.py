@@ -13878,7 +13878,30 @@ def api_se_card():
     card = get_group_card(gid, request.args.get("device_id") or None)
     if "error" in card:
         return jsonify(card), 410
+    # NOT ON YET (Kerry 10/30: "Live Scoring should not be turned on yet and
+    # should say as much to anyone who scans the QR code or clicks the Keep
+    # Score"). The landing reads this and shows SCORING OPENS <time> in place
+    # of SCORE THIS GROUP; Follow the Leaderboard stays. Same rule as the
+    # save gate (scoring_window.entry_open); staff are never held.
+    card["scoring_window"] = _se_window_for_card(gid)
     return jsonify(card)
+
+
+def _se_window_for_card(gid) -> dict:
+    if _se_is_admin():
+        return {"open": True}
+    try:
+        from email_parser.scoring_window import entry_open, event_state, label
+        from email_parser.score_entry import event_of
+        ev = event_of("group", gid)
+        ok, why = entry_open(ev)
+        if ok:
+            return {"open": True}
+        st = event_state(int(ev)) if ev is not None else {}
+        return {"open": False, "closed": bool(st.get("closed")), "why": why,
+                "opens_at": label(st.get("opens_at")) if st.get("opens_at") else None}
+    except Exception:
+        return {"open": True}
 
 
 @app.route("/api/score-entry/claim", methods=["POST"])

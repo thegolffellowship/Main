@@ -119,6 +119,17 @@
         .se-grp .t { font: 700 11px Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px; }
         .se-grp .t.aus { color: #BF5700; } .se-grp .t.sa { color: #4B6274; }
         .se-grp .nm { font: 600 16px Bitter, Georgia, serif; line-height: 1.3; }
+        .se-grp .se-gw { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+        .se-grp .r .se-gw { flex-direction: row-reverse; }
+        /* THIS GROUP as a quad (Kerry 10/30): cart 1 (seats 1-2) on the top
+           row, cart 2 below, each headshot centred over the name, equal cells */
+        .se-quad { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 14px 10px; margin-top: 10px; }
+        .se-qc { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; min-width: 0; }
+        .se-qc .se-face { width: 64px; height: 64px; font-size: 20px; }
+        .se-qn { font: 600 15px/1.25 Bitter, Georgia, serif; margin-top: 6px; }
+        .se-face { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none; display: block; }
+        .se-face.ini { display: flex; align-items: center; justify-content: center; background: #D3DDE4; color: #1B1B1B;
+                       font: 700 15px Arial, sans-serif; }
         .se-pill.line { border: 1px solid var(--se-ink); background: transparent; color: var(--se-ink); }
         /* NO-SHOW (Kerry 9/30 #1021: "an obvious red player missing button at
            the bottom"): red, on every hole screen, under the save bar's row. */
@@ -1098,7 +1109,10 @@
             // Picking a name used to claim the group, so a spectator's scan
             // made him the scorer. SCORE THIS GROUP opens the claim flow as
             // built; FOLLOW leaves without claiming anything.
-            if (!who && !store.get(K.gate, false)) body = gateScreen();
+            // Not on yet (Kerry 10/30): the landing, whatever this phone did
+            // before, until the scoring window opens.
+            const notOpen = card.scoring_window && card.scoring_window.open === false;
+            if (!who && (notOpen || !store.get(K.gate, false))) body = gateScreen();
             else if (!who) body = joinScreen();
             else if (card.lock.state === "held" && !following) body = heldScreen();
             else {
@@ -1190,13 +1204,28 @@
             const held = card.lock.state === "held"
                 ? `<div class="se-status">${ICON.check}<span>${esc(first(card.lock.holder_name || "Someone"))} is already keeping score for this group.</span></div>`
                 : "";
-            const names = (ps) => ps.map((p) => esc(p.display_name)).join("<br>");
+            // Headshots in THIS GROUP (Kerry 10/30: "Show player circle
+            // headshots on the LIVE SCORING landing pages"): the photo when we
+            // have one, else the initials, then the name.
+            const face = (p) => {
+                const src = p.customer_id ? photoOf([p.customer_id]) : null;
+                const ini = String(p.display_name || "").split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+                return src ? `<img class="se-face" src="${esc(src)}" alt="">` : `<span class="se-face ini">${esc(ini)}</span>`;
+            };
+            const names = (ps) => ps.map((p) => `<div class="se-gw">${face(p)}<span>${esc(p.display_name)}</span></div>`).join("");
+            // NOT ON YET (Kerry 10/30): same rule as the save gate.
+            const sw = card.scoring_window || {};
+            const shut = sw.open === false;
+            const shutLabel = sw.closed ? "SCORING HAS CLOSED" : (sw.opens_at ? "SCORING OPENS " + sw.opens_at : "LIVE SCORING NOT ON YET");
+            const shutCopy = sw.closed ? "Scoring has closed for this event."
+                : "Live scoring isn't on yet" + (sw.opens_at ? ". It opens at " + sw.opens_at + ", an hour before the first tee." : ".");
             const sideOf = (p) => ((card.matches || {})[String(p.customer_id)] || {}).side;
             const sa = card.players.filter((p) => sideOf(p) === "sa"), aus = card.players.filter((p) => sideOf(p) === "austin");
             const group = cup && (sa.length || aus.length)
                 ? `<div class="se-grp"><div><div class="t sa">San Antonio</div><div class="nm">${names(sa)}</div></div>
                      <div class="r"><div class="t aus">Austin</div><div class="nm">${names(aus)}</div></div></div>`
-                : `<div class="se-grp"><div class="nm">${names(card.players)}</div></div>`;
+                : `<div class="se-quad">${card.players.slice().sort((a, b) => (a.seat || 99) - (b.seat || 99)).map((p) =>
+                    `<div class="se-qc">${face(p)}<div class="se-qn">${esc(p.display_name)}</div></div>`).join("")}</div>`;
             // "Oct 10, 2026", not the ISO date (mockup QRLanding).
             const dt = (d) => { const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
                 return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString("en-US", {month: "short", day: "numeric", year: "numeric"}) : d; };
@@ -1207,10 +1236,11 @@
                 <div class="se-box se-this"><div class="se-lbl">This group</div>${group}</div>
                 ${held}<div class="se-gap"></div>
                 <div class="se-stack">
-                  <button type="button" class="se-pill dark" data-act="gate-score">SCORE THIS GROUP</button>
+                  ${shut ? `<button type="button" class="se-pill dark" disabled>${esc(shutLabel)}</button>`
+                         : `<button type="button" class="se-pill dark" data-act="gate-score">SCORE THIS GROUP</button>`}
                   <button type="button" class="se-pill line" data-act="gate-follow" data-href="${esc(follow)}">${cup ? "FOLLOW THE CUP" : "FOLLOW THE LEADERBOARD"}</button>
                 </div><div class="se-gap"></div>
-                <div class="se-copy">One phone per group keeps the scores. Everyone else follows along${cup ? " on the Cup leaderboard, with this match open" : " on the leaderboard"}; following claims nothing.${card.lock.state === "held" ? " Take over only if " + esc(first(card.lock.holder_name || "the scorer")) + " can't keep going." : ""}</div>`;
+                <div class="se-copy">${shut ? esc(shutCopy) + " " : ""}One phone per group keeps the scores. Everyone else follows along${cup ? " on the Cup leaderboard, with this match open" : " on the leaderboard"}; following claims nothing.${card.lock.state === "held" ? " Take over only if " + esc(first(card.lock.holder_name || "the scorer")) + " can't keep going." : ""}</div>`;
         }
         // Mockups WhoAreYou / Held: "Sat AM Fourball · Group 2".
         const eyebrowGroup = () => cupEyebrow() || practiceEyebrow() || [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");

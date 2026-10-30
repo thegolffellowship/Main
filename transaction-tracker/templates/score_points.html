@@ -25,6 +25,21 @@
                 background: #1B1B1B; color: #fff; }
         .pt-h .t { font: 700 14px Bitter, Georgia, serif; letter-spacing: .06em; text-transform: uppercase; }
         .pt-h .m { font-size: 11.5px; color: #D1D5DB; }
+        /* CHAPTER COLOURS (Kerry 10/30: "Use chapter colors to enhance title
+           bars and use row color bars to signify player chapters in the
+           OCTOBER POINTS"): a chapter race's bar wears its chapter; the
+           monthly (both chapters) keeps ink with a two-chapter stripe, and
+           each monthly row carries its player's chapter as a left bar. */
+        .pt-h.ch-sa { background: #D3DDE4; color: #1B1B1B; } .pt-h.ch-sa .m { color: #4B6274; }
+        .pt-h.ch-aus { background: #BF5700; color: #fff; } .pt-h.ch-aus .m { color: #FDE7D6; }
+        .pt-h.ch-both { border-bottom: 4px solid;
+                        border-image: linear-gradient(90deg, #8FA8B8 0 50%, #BF5700 50% 100%) 1; }
+        tr.c-sa td.r { box-shadow: inset 4px 0 0 #8FA8B8; }
+        tr.c-aus td.r { box-shadow: inset 4px 0 0 #BF5700; }
+        td.r { padding-left: 12px; }
+        .pt-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; }
+        .pt-mine { font-size: 12px; color: #6B7280; margin: -6px 0 10px; }
+        .pt-mine b { color: #E87C3E; }
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
         td { padding: 7px 10px; border-top: 1px solid #F3F4F6; }
         td.r { width: 34px; color: #6B7280; font-weight: 700; }
@@ -43,6 +58,7 @@
     {% include '_shell_nav.html' %}
     <div class="pt-wrap">
         <div class="pt-ev" id="pt-ev"></div>
+        <div class="pt-mine" id="pt-mine"></div>
         <div id="pt-body"><div class="pt-empty">Loading…</div></div>
     </div>
 <script>
@@ -64,20 +80,28 @@
             if (i >= TOP && !me) return;
             if (last >= 0 && i > last + 1) out.push('<tr class="gap"><td colspan="3">⋯</td></tr>');
             last = i;
-            out.push('<tr' + (me ? ' class="me"' : '') + '><td class="r">' + esc(r.rank) + '</td><td class="n">' +
+            var cls = (me ? "me " : "") + (r.ch ? "c-" + r.ch : "");
+            out.push('<tr' + (cls.trim() ? ' class="' + cls.trim() + '"' : '') + '><td class="r">' + esc(r.rank) + '</td><td class="n">' +
                      esc(r.name) + '</td><td class="p">' + esc(r.points) + '</td></tr>');
         });
         return "<table>" + out.join("") + "</table>";
     }
-    function card(title, meta, inner, note) {
-        return '<div class="pt-card"><div class="pt-h"><span class="t">' + esc(title) + '</span><span class="m">' +
-               esc(meta || "") + '</span></div>' + inner + (note ? '<div class="pt-note">' + esc(note) + '</div>' : '') + '</div>';
+    function chOf(name) {
+        var c = String(name || "").toLowerCase();
+        return c.indexOf("austin") >= 0 ? "aus" : (c.indexOf("san antonio") >= 0 ? "sa" : "");
+    }
+    function card(title, meta, inner, note, ch, noteHtml) {
+        return '<div class="pt-card"><div class="pt-h' + (ch ? " ch-" + ch : "") + '"><span class="t">' + esc(title) + '</span><span class="m">' +
+               esc(meta || "") + '</span></div>' + inner + (note || noteHtml ? '<div class="pt-note">' + esc(note || "") + (noteHtml || "") + '</div>' : '') + '</div>';
     }
 
     function load() {
         get("/api/score-entry/points?t=" + encodeURIComponent(t)).then(function (ctx) {
             if (ctx.error) throw new Error(ctx.error);
             document.getElementById("pt-ev").textContent = (ctx.event && ctx.event.name) || "";
+            // what the orange dot means (Kerry 10/30 asked)
+            var key = document.getElementById("pt-mine");
+            if (key) key.innerHTML = '<b>●</b> Your group';
             var mine = (ctx.group_customer_ids || []).map(Number);
             var jobs = [get("/api/season-contests/monthly-points").catch(function () { return {}; })];
             (ctx.races || []).forEach(function (r) {
@@ -89,10 +113,11 @@
                 var m = ((res[0] && res[0].months) || []).filter(function (x) { return x.month === ctx.month; })[0];
                 if (m) {
                     var mrows = (m.standings || []).map(function (s) {
-                        return {rank: s.rank_label || s.rank, name: s.player_name, points: s.points, customer_id: s.customer_id};
+                        return {rank: s.rank_label || s.rank, name: s.player_name, points: s.points, customer_id: s.customer_id, ch: chOf(s.chapter)};
                     });
                     html.push(card((m.name || "Monthly") + " points", m.final ? "FINAL" : "live",
-                                   table(mrows, mine), m.purse ? "$1 per TGF member at month end: $" + m.purse + (m.final ? "" : " so far") : ""));
+                                   table(mrows, mine), m.purse ? "$1 per TGF member at month end: $" + m.purse + (m.final ? "" : " so far") : "",
+                                   "both", '<br><span class="pt-key" style="background:#8FA8B8;margin-left:0"></span>San Antonio<span class="pt-key" style="background:#BF5700"></span>Austin'));
                 } else {
                     html.push(card("Monthly points", "", '<div class="pt-empty">No points this month yet.</div>'));
                 }
@@ -103,7 +128,7 @@
                         return {rank: s.rank, name: s.display_name || s.player_name, points: s.total_points, customer_id: s.customer_id};
                     });
                     html.push(card(d.label || r.label, d.race_final ? "FINAL" : r.chapter,
-                                   d.error ? '<div class="pt-empty">' + esc(d.error) + '</div>' : table(rows, mine)));
+                                   d.error ? '<div class="pt-empty">' + esc(d.error) + '</div>' : table(rows, mine), "", chOf(r.chapter)));
                 });
                 document.getElementById("pt-body").innerHTML = html.join("");
             });

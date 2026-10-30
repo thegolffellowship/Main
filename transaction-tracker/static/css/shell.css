@@ -401,6 +401,9 @@ header.shell-nav.shell-member.shell-slim .shell-wordmark { display: none; }
 .se-toggle a:not(:first-child):not(:last-child) { border-radius: 0; border-left: 0; }
 .se-toggle a.active { background: #1B1B1B; border-color: #1B1B1B; color: #fff; }
 .se-toggle a.amber { background: #FFFBEB; border-color: #D97706; color: #92400E; }
+/* POINTS in green so it stands out (Kerry 10/30) */
+.se-toggle a#se-tg-points { background: #15803D; border-color: #15803D; color: #fff; }
+.se-toggle a#se-tg-points.active { background: #14532D; border-color: #14532D; color: #fff; }
 .se-toggle .se-tg-s { font: 600 10.5px/1 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .02em; text-transform: none; margin-top: 3px; }
 .se-toggle .se-tg-s:empty { display: none; }
 

@@ -75,6 +75,9 @@ def seed() -> dict:
              "handicap_index": hi} for j, (cid, fn, ln, hi) in enumerate(PEOPLE[g * 4:(g + 1) * 4])]})
     db.save_event_pairings(eid, {"9": groups})
     db.set_app_setting("score_entry_live", "1")
+    # The demo shows scoring as it is during play, whatever the clock says:
+    # the scoring window would otherwise put "SCORING OPENS" on the landing.
+    db.set_app_setting("scoring_window_auto", "off")
     db.set_app_setting(se.EVENTS_SETTING, json.dumps([eid]))
     rid = se.create_round(eid, 9, round_date=today, label="s9.99", course_holes=NINE)["round_id"]
     gids = []

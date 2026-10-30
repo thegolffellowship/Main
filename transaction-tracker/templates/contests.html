@@ -858,7 +858,7 @@
         .evlb-holes tr.evlb-band[data-team] td { cursor: pointer; }
         /* TEAM tab, collapsed (design-claude #2147 §4, Kerry-approved 10/20):
            # | TEAM | ± | THRU | WON/PROJ., names on one line, ± the big number */
-        .evlb-tdial { display: flex; align-items: center; gap: 16px; padding: 12px 20px 8px 4px; white-space: normal; }
+        .evlb-tdial { display: flex; align-items: baseline; gap: 16px; padding: 12px 20px 8px 4px; white-space: normal; }
         .evlb-tdial-l { font: 700 13px/1.3 'Bitter', serif; color: #1B1B1B; white-space: nowrap; }
         .evlb-tpot { font-size: 12px; color: #6B7280; white-space: nowrap; }
         .evlb-tpot b { font: 700 12px/1 'Bitter', serif; color: #047857; }
@@ -4350,13 +4350,41 @@
             summary: `Every game's winners and their money in one place, with a link to each game's board. It appears once every score is in. <b>IN REVIEW</b> means the money is showing but not settled: a score can still be corrected and the amounts can change. <b>FINAL</b> means results are closed and prizes are set.`,
             mp: `City Match Play matches played at this event, in the same cards the Match Play board uses. Tap a match for its hole-by-hole card.`,
         };
+        // TEAM / CART NET, visual first (Kerry 10/30: "a one sentence
+        // overview first followed by a scorecard graphic to show how the low
+        // net score per hole is selected as the team score for that hole.
+        // Then the rest of the details"). The example card is illustrative,
+        // built from the event's own best-N so it shows the game being played.
+        if (game === "team") {
+            const n = Math.max(1, evlbTeamBalls(d) || 1);
+            const cart = (d && d.team_unit) === "cart";
+            const who = cart ? ["Player A", "Player B"] : ["Player A", "Player B", "Player C", "Player D"];
+            const par = [4, 3, 5];
+            const nets = cart ? [[4, 3, 6], [5, 2, 5]] : [[5, 3, 6], [4, 4, 5], [6, 2, 7], [7, 5, 4]];
+            const used = par.map((_, h) => {
+                const col = nets.map((r, i) => [r[h], i]).sort((a, b) => a[0] - b[0]);
+                return new Set(col.slice(0, Math.min(n, nets.length)).map(x => x[1]));
+            });
+            const team = par.map((_, h) => nets.reduce((a, r, i) => a + (used[h].has(i) ? r[h] : 0), 0));
+            const td = "padding:6px 4px;text-align:center;border-bottom:1px solid #E5E7EB;width:22%;";
+            const card = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font:13px/1.2 'Helvetica Neue',Arial,sans-serif;margin:6px 0 2px;">`
+                + `<tr style="background:#1B1B1B;color:#fff;font:700 11px/1 'Bitter',serif;"><td style="padding:7px 8px;">HOLE</td>${par.map((_, h) => `<td style="${td}border:0;">${h + 1}</td>`).join("")}</tr>`
+                + `<tr style="color:#6B7280;"><td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;">Par</td>${par.map(x => `<td style="${td}">${x}</td>`).join("")}</tr>`
+                + who.map((nm, i) => `<tr><td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;white-space:nowrap;">${nm}</td>${par.map((_, h) => used[h].has(i)
+                    ? `<td style="${td}background:#DCFCE7;color:#15803D;font-weight:700;">${nets[i][h]}</td>`
+                    : `<td style="${td}color:#9CA3AF;">${nets[i][h]}</td>`).join("")}</tr>`).join("")
+                + `<tr style="font:700 13px/1 'Bitter',serif;"><td style="padding:8px;">TEAM</td>${team.map(x => `<td style="padding:8px 4px;text-align:center;">${x}</td>`).join("")}</tr></table>`
+                + `<div style="font-size:12px;color:#6B7280;">Net scores (gross less pops). Green = the ${n === 1 ? "low net ball that counts" : n + " low net balls that count"} on each hole.</div>`;
+            out.push(sec("The game in one line", `Each hole, the ${cart ? "cart's" : "team's"} ${n === 1 ? "lowest net score is" : `${n} lowest net scores are`} the ${cart ? "cart" : "team"} score, and the lowest total wins.`));
+            out.push(sec("How a hole is scored", card));
+        }
         if (game !== "summary" && game !== "mp" && evlbProjOn(d))
             out.push(sec("Projected winnings", `While the round is in play, <b>Won</b> shows what each player would win if play ended now, marked <b>PROJ.</b> It is not final and moves as scores come in. Each flight's header shows that flight's pot.`));
         if (noGames) out.push(sec("This event", "No games at this event, so the boards are just the scores: Net ranks by net total, Gross by gross total. Nobody bought in and nothing is paid."));
         // the game notes that used to sit on the board (Kerry 10/19)
         const gn = (d.games_off || []).map(g => escapeHtml(g.note)).filter(Boolean);
         if (gn.length) out.push(sec("Tonight's games", gn.join("<br>")));
-        else if (what[game]) out.push(sec("This tab", what[game]));
+        else if (what[game]) out.push(sec(game === "team" ? "The details" : "This tab", what[game]));
         if (!noGames) out.push(sec("Colors",
             `Money winners are colour-coded by FLIGHT: ${[1, 2, 3].map(f => `<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`).join(" ")}. `
             + `On the Net, Gross, Skins and MVP/Points tabs a <span class="lg" style="background:var(--buyin-row,#FFFFFF);color:#1B1B1B;border:1px solid #E5E7EB;">white</span> row bought into that game and a <span class="lg" style="background:var(--buyin-nobuy,#EEEEEC);color:var(--buyin-nobuy-text,#6B7280);">grey</span> row did not; non-buyers are placed in the flight their handicap would have flighted them. Show All Players brings the non-buyers back onto a Net or Gross board.`));
@@ -4382,7 +4410,9 @@
         if (!d) return;
         const act = body.querySelector(".evlb-subtab.active");
         const game = act ? act.dataset.sub : "overall";
-        const label = act ? act.textContent.trim() : "";
+        let label = act ? act.textContent.trim() : "";
+        // the game's own name on the Team tab: Team Net or Cart Net (Kerry 10/30)
+        if (game === "team") label = (d.team_unit === "cart") ? "Cart Net" : "Team Net";
         $("evlb-hiw-title").innerHTML = `How it works <span class="hiw-name">${escapeHtml(label || "")}</span>`;
         $("evlb-hiw-secs").innerHTML = evlbReadGuide(d, game);
         $("evlb-hiw-scrim").style.display = "block";
@@ -5185,6 +5215,11 @@
     function evlbTeamThru(t, s) {
         if (s.complete) return `<b>${s.net ?? ""}</b>`;
         if (s.upcoming) {
+            // A shotgun's slot "Hole 1A | 8:30 AM" reads just "1A": every
+            // group goes at the same time, which the board's note already
+            // says (Kerry 10/30: the START column was cutting it off).
+            const sg = String((t && t.start_line) || "").match(/^\s*Hole\s*(\S+)\s*\|/i);
+            if (sg) return `<span class="evlb-tstart">${escapeHtml(sg[1])}</span>`;
             // "4:30 PM | Hole 1" (the pack's slot) reads "4:30 PM · 1"
             const full = String((t && t.start_line) || "\u2014").replace(/\s*\|\s*(?:Hole\s*)?/i, " \u00b7 ");
             const short = full.replace(/\s*[AP]M\b/i, "");
@@ -5404,6 +5439,10 @@
         const noWon = evlbNoGames(d) || st === "upcoming" || !st;
         const wc = evlbWonClass(d);
         const rows = evlbTeamRows(d);
+        // Before the first score (Kerry 10/30): the column reads START, not
+        // THRU, and ± is not shown; both switch on with the first score.
+        const started = rows.some(x => !(x.s && x.s.upcoming));
+        const ncol = 3 + (started ? 1 : 0) + (noWon ? 0 : 1);
         const body = rows.map(x => {
             const t = x.t, s = x.s;
             const money = t.purse != null && Number(t.purse) > 0 ? "$" + Number(t.purse).toFixed(2) : "";
@@ -5411,19 +5450,19 @@
             return `<tr class="evlb-tsum-row${s.upcoming ? " upcoming" : ""}" data-ti="${x.i}" data-tk="${escapeHtml(evlbTeamKey(t))}" data-pos="${escapeHtml(x.pos || "")}" tabindex="0" role="button" aria-expanded="false">` +
                 `<td class="pos">${escapeHtml(x.pos || "")}</td>` +
                 `<td class="nm"><div class="tnm"><span class="tchev tgf-exp">&#9654;&#xFE0E;</span><span class="evlb-tnames">${evlbTeamNamesHtml(d, t)}</span>${evlbTeamGridNamesHtml(d, t)}</div></td>` +
-                `<td class="tp${tp != null && tp < 0 ? " red" : ""}">${evlbPgaToPar(tp)}</td>` +
+                (started ? `<td class="tp${tp != null && tp < 0 ? " red" : ""}">${evlbPgaToPar(tp)}</td>` : "") +
                 `<td class="thru">${evlbTeamThru(t, s)}</td>` +
                 (noWon ? "" : `<td class="won ${wc}">${money}</td>`) + `</tr>` +
-                `<tr class="evlb-tsum-exp" data-ti="${x.i}" hidden><td colspan="${noWon ? 4 : 5}"><div class="evlb-texp"><div class="evlb-scroll">${evlbTeamGrid(d, t, x.mins)}</div></div></td></tr>`;
+                `<tr class="evlb-tsum-exp" data-ti="${x.i}" hidden><td colspan="${ncol}"><div class="evlb-texp"><div class="evlb-scroll">${evlbTeamGrid(d, t, x.mins)}</div></div></td></tr>`;
         }).join("");
         return (note || "") +
             `<div class="evlb-tpanel">` +
             `<div class="evlb-tdial"><span class="evlb-tdial-l">${escapeHtml(evlbTeamDialLabel(d))}</span>${evlbTeamPotHtml(d)}` +
             `<button type="button" class="evlb-tall" data-evlb-team-all aria-expanded="false">EXPAND ALL</button></div>` +
-            `<table class="evlb-tsum${noWon ? " no-won" : ""}"><colgroup><col class="c-pos"><col><col class="c-tp"><col class="c-thru">${noWon ? "" : `<col class="c-won">`}</colgroup><thead><tr>` +
-            `<th class="pos">#</th><th class="nm">TEAM</th><th class="tp">&plusmn;</th><th class="thru">THRU</th>` +
+            `<table class="evlb-tsum${noWon ? " no-won" : ""}"><colgroup><col class="c-pos"><col>${started ? `<col class="c-tp">` : ""}<col class="c-thru">${noWon ? "" : `<col class="c-won">`}</colgroup><thead><tr>` +
+            `<th class="pos">#</th><th class="nm">TEAM</th>${started ? `<th class="tp">&plusmn;</th>` : ""}<th class="thru">${started ? "THRU" : "START"}</th>` +
             (noWon ? "" : `<th class="won">${st === "live" ? "PROJ." : "WON"}</th>`) + `</tr></thead>` +
-            `<tbody>${body || `<tr><td colspan="${noWon ? 4 : 5}" style="color:var(--text-muted);">No teams yet.</td></tr>`}</tbody></table>` +
+            `<tbody>${body || `<tr><td colspan="${ncol}" style="color:var(--text-muted);">No teams yet.</td></tr>`}</tbody></table>` +
             `</div>`;
     }
     // Open / close ONE team (each team opens and closes on its own), and
