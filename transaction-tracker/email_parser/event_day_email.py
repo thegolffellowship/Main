@@ -1750,11 +1750,14 @@ def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: b
     if not appr["approved"]:
         return {"refused": "template not approved: app setting "
                            f"{APPROVAL_KEY} must equal the current template hash", **appr}
-    conn = db.get_connection(db_path)
-    try:
-        ok, why = _kerry_ok(conn, kerry_ok_post)
-    finally:
-        conn.close()
+    if kerry_ok_post is None and confirm is not True:
+        ok, why = True, "dry run (no send; a send needs a post carrying Kerry's word)"
+    else:
+        conn = db.get_connection(db_path)
+        try:
+            ok, why = _kerry_ok(conn, kerry_ok_post)
+        finally:
+            conn.close()
     if not ok:
         return {"refused": f"rule 3b: {why}"}
     _ensure_scoring(event_id, db_path)
@@ -1858,6 +1861,20 @@ def card_banner(course: str | None) -> str:
             f'</td></tr></table>')
 
 
+STANDINGS_PREFIX = "UPDATED: "
+
+
+def standings_banner() -> str:
+    """The notice on a re-issue that adds the standings block (Kerry 10/30:
+    "I'm thinking of sending updated emails ... so they can see it")."""
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td bgcolor="#FFF7ED" '
+            f'style="background:#FFF7ED;border:2px solid {ORANGE};border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">UPDATED</div>'
+            f'<div style="padding-top:4px;color:{INK};">We added where you stand going in, plus your '
+            f'yardage and hole handicaps on your card. Your start, group and cart are the same as in our '
+            f'earlier email.</div></td></tr></table>')
+
+
 def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
                            db_path=None, kind: str = "start") -> dict:
     """RE-ISSUE the event-day email after the start holes change: every ready
@@ -1892,9 +1909,13 @@ def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
         return {"refused": "template changed during the build"}
     key = reissue_key(event_id, built["messages"])
     card = (kind == "card")
+    stand = (kind == "standings")
     if card:
         # one card correction per event per sheet state
         key += ":card"
+    if stand:
+        key += ":standings"
+    prefix = CARD_PREFIX if card else (STANDINGS_PREFIX if stand else REISSUE_PREFIX)
     try:
         done = set(_json.loads(db.get_app_setting(key, db_path=db_path) or "[]"))
     except Exception:
@@ -1907,15 +1928,16 @@ def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
         return {**out, "dry_run": True,
                 "plan": [{"customer_id": m["customer_id"], "name": m["name"],
                           "email": m["email"], "start_line": m.get("start_line")} for m in todo],
-                "sample_subject": ((CARD_PREFIX if card else REISSUE_PREFIX) + todo[0]["subject"]) if todo else None}
+                "sample_subject": (prefix + todo[0]["subject"]) if todo else None,
+                "with_standings": sum(1 for m in todo if "GOING INTO THE" in (m.get("html") or ""))}
     creds = _creds()
     if not creds:
         return {"error": "Email credentials not configured on server"}
     sent, failed = [], []
     for m in todo:
-        subject = (CARD_PREFIX if card else REISSUE_PREFIX) + m["subject"]
-        html = with_banner(m["html"], card_banner((built.get("event") or {}).get("course"))
-                           if card else reissue_banner(m.get("start_line")))
+        subject = prefix + m["subject"]
+        html = with_banner(m["html"], card_banner((built.get("event") or {}).get("course")) if card
+                           else (standings_banner() if stand else reissue_banner(m.get("start_line"))))
         good = False
         try:
             good = _graph_send(creds, m["email"], subject, html)

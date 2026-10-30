@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.1";
+window.TGF_VERSION = "2.635.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.2",
+    date: "2026-10-30",
+    title: "The standings re-issue, and a dry run before the OK",
+    changes: [
+      "scoring-event-day-email:<event>|reissue|<post|dry>|standings[|confirm] re-sends the approved event-day message with \"UPDATED: \" before the subject and a notice (\"We added where you stand going in, plus your yardage and hole handicaps on your card. Your start, group and cart are the same as in our earlier email.\"), once per player per sheet state. A dry run no longer needs the mailbox post (\"dry\" in its place); a send still does. The dry run counts the messages carrying the standings block."
+    ]
+  },
   {
     version: "2.635.1",
     date: "2026-10-30",

@@ -8016,14 +8016,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 # without a mailbox post carrying Kerry's word; dry run
                 # without |confirm; once per player per sheet state.
                 db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
-                if len(_p) < 3 or not _p[2].lstrip("#").isdigit():
-                    return json.dumps({"error": "<event_id>|reissue|<kerry-ok post id>[|confirm]"})
-                # "|card" anywhere after the post id: the CORRECTED SCORECARD
-                # notice instead of the start notice (Kerry 10/30, Kissing Tree)
+                # "|card" / "|standings" anywhere after the post id: the
+                # CORRECTED SCORECARD or the standings-added notice instead of
+                # the start notice (Kerry 10/30). A post id of "dry" (or none)
+                # is a dry run only; a send always needs the post.
+                _flags = [x.lower() for x in _p[3:]]
+                _post = _p[2].lstrip("#") if len(_p) > 2 else ""
+                if _post.isdigit():
+                    _post = int(_post)
+                elif _post in ("", "dry") and "confirm" not in _flags:
+                    _post = None
+                else:
+                    return json.dumps({"error": "<event_id>|reissue|<kerry-ok post id|dry>[|card|standings][|confirm]"})
                 return json.dumps(_ede.send_event_day_reissue(
-                    int(_p[0]), int(_p[2].lstrip("#")),
-                    confirm=("confirm" in [x.lower() for x in _p[3:]]),
-                    kind=("card" if "card" in [x.lower() for x in _p[3:]] else "start")),
+                    int(_p[0]), _post, confirm=("confirm" in _flags),
+                    kind=("card" if "card" in _flags else ("standings" if "standings" in _flags else "start"))),
                     indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "test":
                 # "<event_id>|test|<staff addr>|cid=<id>" (Kerry 10/13): ONE
