@@ -139,16 +139,16 @@ console.log('== projected WON (LIVE) ==');
   ck('board is not no-won while projecting', !/evlb-holes[^"]*no-won/.test(h));
   ck('board carries the projected style', /evlb-projwon/.test(h));
   const net = (h.split('data-panel="net"')[1] || '').split('data-panel=')[0];
-  ck('NET tab: Adam projects $60.00', /Adam Baker[\s\S]*?class="won br">\$60\.00</.test(net), net.slice(0, 600));
-  ck('NET tab: no team money in the NET WON', !/\$80\.00|\$20\.00/.test(net));
+  ck('NET tab: Adam projects $60', /Adam Baker[\s\S]*?class="won br">\$60</.test(net), net.slice(0, 600));
+  ck('NET tab: no team money in the NET WON', !/\$80(?![\d.])|\$20(?![\d.])/.test(net));
   const sk = (h.split('data-panel="skins"')[1] || '').split('data-panel=')[0];
   ck('SKINS tab: Bob projects $22.50', /\$22\.50/.test(sk));
-  ck('SKINS tab: no net money', !/\$60\.00/.test(sk));
+  ck('SKINS tab: no net money', !/\$60(?![\d.])/.test(sk));
   const team = (h.split('data-panel="team"')[1] || '').split('data-panel=')[0];
-  ck('TEAM tab: team purse projected $80', /\$80\.00/.test(team));
+  ck('TEAM tab: team purse projected $80', /\$80(?![\d.])/.test(team));
   // Batch 1 §5: the opened team card is N / ± / USED; per-player shares left it
-  ck('TEAM tab: the opened card carries no per-player share', !/\$20\.00/.test(team));
-  ck('TEAM tab: no net money', !/\$60\.00/.test(team));
+  ck('TEAM tab: the opened card carries no per-player share', !/\$20(?![\d.])/.test(team));
+  ck('TEAM tab: no net money', !/\$60(?![\d.])/.test(team));
   const px = (h.split('data-panel="prox"')[1] || '').split('data-panel=')[0];
   ck('CTPs tab: holder amount kept while LIVE', /\$15</.test(px) && /evlb-projwon/.test(px));
   ck('no SUMMARY while LIVE', !/data-sub="summary"/.test(h));
@@ -177,15 +177,15 @@ console.log('== money only on its own tab ==');
 console.log('== pot headers ==');
 {
   const d = payload('live');
-  ck('LOW flight band text', R.evlbPotBandText(d, 'net', 1) === ' · 10 players · pot $90.00 (1st $60.00 · 2nd $30.00)',
+  ck('LOW flight band text', R.evlbPotBandText(d, 'net', 1) === ' · 10 players · pot $90 (1st $60 · 2nd $30)',
      R.evlbPotBandText(d, 'net', 1));
-  ck('one-place flight has no ladder', R.evlbPotBandText(d, 'net', 2) === ' · 6 players · pot $45.00');
+  ck('one-place flight has no ladder', R.evlbPotBandText(d, 'net', 2) === ' · 6 players · pot $45');
   ck('skins says per skin', /split per skin/.test(R.evlbPotBandText(d, 'skins', 1)));
   ck('no pot, no text', R.evlbPotBandText(d, 'gross', 1) === '');
   const h = R.evlbEventHtml(d);
   ck('the band row carries the pot', /LOW FLIGHT<span class="evlb-bandpot"> · 10 players · pot \$90/.test(h));
   // Batch 1 §4: the team pot shows once, on the dial line
-  ck('TEAM pot line', /Pot <b>\$120\.00<\/b><span class="pl"> &middot; 1st \$80\.00 &middot; 2nd \$40\.00/.test(h));
+  ck('TEAM pot line', /Pot <b>\$120<\/b><span class="pl"> &middot; 1st \$80(?![\d.]) &middot; 2nd \$40(?![\d.])/.test(h));
   // prize amounts moved to a Prize column (Kerry 10/30)
   ck('no CTP pot line: prizes are in the table', !/CTP pot/.test(h));
   ck('proxies: Contest | Hole | Winner | Prize', /<th>Contest<\/th><th[^>]*>Hole<\/th><th>Winner<\/th><th[^>]*>Prize/.test(h));

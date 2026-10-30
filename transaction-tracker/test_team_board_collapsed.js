@@ -129,7 +129,7 @@ console.log('== B8: collapsed row values ==');
   ck('TEAM names every player', ['Player 1', 'Player 2', 'Player 3', 'Player 4'].every(n => txt(cells[1]).includes(n)), cells[1]);
   ck('± is the big number, a true minus: −1', /class="tp red">−1</.test(cells[2]), cells[2]);
   ck('finished: THRU shows ONLY the team net, no F (Kerry 10/20)', txt(cells[3]) === '23' && !/F/.test(txt(cells[3])), cells[3]);
-  ck('WON is the team purse, two decimals, FINAL green', /class="won fin">\$120\.00/.test(cells[4]), cells[4]);
+  ck('WON is the team purse, whole dollars, FINAL green', /class="won fin">\$120(?![\d.])/.test(cells[4]), cells[4]);
   ck('heading reads the dial', html.includes('Team Net · best 2 of 4 · 85%') && !html.includes('allowance'),
      (html.match(/evlb-tdial-l">[^<]*/) || [])[0]);
   ck('every team row is followed by its hidden card',

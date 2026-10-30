@@ -3649,7 +3649,7 @@
             .filter(Boolean).join(" · ");
         let html = `<div class="lsc-bd-sess-h lsc-sk-h"><b>${title}</b><span class="dt">${dt}</span></div>`;
         const d = lscSkinsEvlbData(sess);
-        const $c = (c) => "$" + (c / 100).toFixed(2);
+        const $c = (c) => evlbUsdShort(c / 100);
         const held = (sk.groups || []).some(g => g.entrants && !g.complete);
         // a pot carried in from an earlier no-skin session (Kerry 10/9,
         // ruling 5): "pot $1,150.00 ($575.00 + $575.00 carried from SAT AM)"
@@ -4060,7 +4060,7 @@
     // hidden by CSS class, never removed, so sorting and the scorecard
     // expansion keep working untouched.
     // ONE MONEY FORMAT (R5, design-claude #2147): always two decimals.
-    function evlbFmt(c) { return "$" + (c / 100).toFixed(2); }
+    function evlbFmt(c) { return evlbUsdShort(c / 100); }
     function evlbDate(s) {
         if (!s) return "";
         const d = new Date(s + "T12:00:00");
@@ -4081,7 +4081,7 @@
         const word = EVLB_STATE_WORD[st] || "";
         const pot = ev.money_visible === false
             ? `<div class="pot none" title="The pot shows once every card is in">&mdash;<span class="s">POT</span></div>`
-            : `<div class="pot">$${Number(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>`;
+            : `<div class="pot">${evlbUsdShort(ev.pot)}<span class="s">POT</span></div>`;
         return `<details class="evlb-ev evlb-card" data-ev="${escapeHtml(ev.item_name)}">` +
             `<summary><span class="bar" style="background:${escapeHtml(ev.chapter_color || "#374151")}"></span>` +
             `<span class="chev tgf-exp">&#9654;&#xFE0E;</span>` +
@@ -4963,8 +4963,10 @@
         return evlbProjOn(d) ? ` <span class="evlb-proj" title="${EVLB_PROJ_TITLE}">PROJ.</span>` : "";
     }
     // one money format, always two decimals (R5, design-claude #2147)
+    // Money reads "$32", never "$32.00"; cents only when there are some
+    // (Kerry 10/30: "All locations where it is .00 can be shortened").
     function evlbUsd(v) {
-        return "$" + Number(v || 0).toFixed(2);
+        return evlbUsdShort(v);
     }
     // "$32", not "$32.00", for a whole dollar (Kerry 10/30); cents only when there are some
     function evlbUsdShort(v) {
@@ -5455,7 +5457,7 @@
         const ncol = 3 + (started ? 1 : 0) + (noWon ? 0 : 1);
         const body = rows.map(x => {
             const t = x.t, s = x.s;
-            const money = t.purse != null && Number(t.purse) > 0 ? "$" + Number(t.purse).toFixed(2) : "";
+            const money = t.purse != null && Number(t.purse) > 0 ? evlbUsdShort(t.purse) : "";
             const tp = s.thru || t.gg_total != null ? s.toPar : null;
             return `<tr class="evlb-tsum-row${s.upcoming ? " upcoming" : ""}" data-ti="${x.i}" data-tk="${escapeHtml(evlbTeamKey(t))}" data-pos="${escapeHtml(x.pos || "")}" tabindex="0" role="button" aria-expanded="false">` +
                 `<td class="pos">${escapeHtml(x.pos || "")}</td>` +
@@ -5619,7 +5621,7 @@
             (game ? "" : evlbMvpBadges(r)) +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
-            `<td class="won br">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
+            `<td class="won br">${money > 0 ? evlbUsdShort(money) : ""}</td>` +
             (afterWon ? gcTd : "") +
             `<td class="bl hc">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
             `<td class="br hc"${game === "team" && r._teamHcp != null
@@ -5708,7 +5710,7 @@
         return `<tr class="teamrow">` +
             `<td>${escapeHtml(t.position || "")}</td>` +
             `<td class="nm">TEAM NET${off ? ' <span style="font-weight:400;color:#9CA3AF;">(holes ' + recon + ')</span>' : ""}</td>` +
-            `<td class="won br" title="the team's whole purse">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
+            `<td class="won br" title="the team's whole purse">${money > 0 ? evlbUsdShort(money) : ""}</td>` +
             (afterWon ? gcTeam : "") +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
@@ -6038,15 +6040,15 @@
                 `<span class="who">${t.position ? escapeHtml(t.position) + " · " : ""}` +
                 `${t.players.map(p => escapeHtml(evlbTeamMemberName(p))).join(" · ")}` +
                 `${t.gg_total != null ? ` · <b>${t.gg_total}</b>` : ""}</span>` +
-                `<span class="amt">$${Number(t.purse).toFixed(2)}</span></div>`);
+                `<span class="amt">${evlbUsdShort(t.purse)}</span></div>`);
         const ovProxWins = (d.proxies || [])
             .map(p => `<div class="evlb-winline ctp"><span class="cat">${escapeHtml((p.label || "Closest to Pin").toUpperCase())}</span>` +
                 `<span class="who">${escapeHtml(p.player || "")}${p.detail ? " · " + escapeHtml(p.detail) : ""}</span>` +
-                `<span class="amt">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</span></div>`)
+                `<span class="amt">${p.purse != null ? evlbUsdShort(p.purse) : ""}</span></div>`)
             .concat((d.hio || []).map(p =>
                 `<div class="evlb-winline ctp"><span class="cat">HOLE-IN-ONE</span>` +
                 `<span class="who">${escapeHtml(p.player || "")}${p.detail ? " · " + escapeHtml(p.detail) : ""}</span>` +
-                `<span class="amt">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</span></div>`));
+                `<span class="amt">${p.purse != null ? evlbUsdShort(p.purse) : ""}</span></div>`));
         const ovWinStrips = ovTeamWins.concat(ovProxWins).join("");
 
         // One legend builder for every tab. OVERALL describes all the
@@ -6195,7 +6197,7 @@
                     `<span style="min-width:26px;font-weight:700;">${escapeHtml(t.position || "")}</span>` +
                     `<span class="tm">${names}</span>` +
                     tot +
-                    `<span class="tpurse">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</span>` +
+                    `<span class="tpurse">${t.purse != null ? evlbUsdShort(t.purse) : ""}</span>` +
                     `</summary><div class="evlb-team-card">${evlbTeamCard(d, t)}</div></details>`;
             }).join("")
             : (d.team_board || []).length
@@ -6204,7 +6206,7 @@
               d.team_board.map(t =>
                   `<tr><td>${escapeHtml(t.position || "")}</td><td style="white-space:normal;">${escapeHtml(t.team)}</td>` +
                   `<td class="r">${t.gg_total ?? ""}</td>` +
-                  (d._moneyHeld ? "" : `<td class="r">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</td>`) + `</tr>`).join("") +
+                  (d._moneyHeld ? "" : `<td class="r">${t.purse != null ? evlbUsdShort(t.purse) : ""}</td>`) + `</tr>`).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">Team results not recorded yet.</p>';
         // PROXY WINNERS READ LIKE EVERY OTHER BOARD (Kerry 2026-09-16:
@@ -10557,7 +10559,7 @@
 
         const fmtRefund = r => {
             const amt = (r.refund_amount !== null && r.refund_amount !== undefined)
-                ? `$${Number(r.refund_amount).toFixed(2)}` : "";
+                ? evlbUsdShort(r.refund_amount) : "";
             const parts = [amt, r.refund_method || ""].filter(Boolean);
             return parts.length ? parts.join(" via ") : "—";
         };

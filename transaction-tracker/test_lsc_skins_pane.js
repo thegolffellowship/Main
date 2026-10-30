@@ -71,7 +71,7 @@ g0.pot_cents = 57500; g0.complete = true;
 g0.holes = g0.holes.map(x => x.status === "pending" ? Object.assign({}, x, { status: "tied" }) : x);
 g0.payouts = [{ key: "M1:austin", cents: 38333 }, { key: "M2:sa", cents: 19167 }];
 const hs = pane(staff);
-check("staff see the pot", hs.includes("pot $575.00"), hs);
+check("staff see the pot", hs.includes("pot $575"), hs);
 check("staff see each winner's amount in Won", hs.includes("$383.33") && hs.includes("$191.67") && !/evlb-ovr[^"]*no-won/.test(hs), hs);
 check("staff see flags", hs.includes("x flag"));
 // member, round complete (Kerry 10/10: "skins money winnings wasn't showing
@@ -155,8 +155,8 @@ check("non-buyer rows: no skins, no money, gross only",
 const carS = JSON.parse(JSON.stringify(staff));
 Object.assign(carS.skins, { pot_cents: 115000, own_pot_cents: 57500, carry_in_cents: 57500, carried_from: ["SAT AM"] });
 const hc = pane(carS);
-check("staff pot note: pot $1150.00 ($575.00 + $575.00 carried from SAT AM)",
-      hc.includes("pot $1150.00 ($575.00 + $575.00 carried from SAT AM)"), hc);
+check("staff pot note: pot $1150 ($575 + $575 carried from SAT AM)",
+      hc.includes("pot $1150 ($575 + $575 carried from SAT AM)"), hc);
 const carM = JSON.parse(JSON.stringify(fsMember));
 Object.assign(carM.skins, { carried_from: ["SAT AM"] });
 const hcm = pane(carM);

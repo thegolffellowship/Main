@@ -185,8 +185,8 @@ ck('team tab: no other-game tints', !/title="won Individual Net/.test(htmls.team
 console.log('== Won is whole-event on overall, this game only per tab ==');
 ck('overall shows the full $135.50', /\$135\.50/.test(htmls.overall));
 ck('net tab shows only the $79.50 net money', /\$79\.50/.test(htmls.net) && !/\$135\.50/.test(htmls.net));
-ck('team tab shows only the $56.00 team money', /\$56\.00/.test(htmls.team) && !/\$135\.50/.test(htmls.team));
-ck('skins tab shows only the $39.00 skins money', /\$39\.00/.test(htmls.skins) && !/\$135\.50/.test(htmls.skins));
+ck('team tab shows only the $56 team money', /\$56(?![\d.])/.test(htmls.team) && !/\$135\.50/.test(htmls.team));
+ck('skins tab shows only the $39 skins money', /\$39(?![\d.])/.test(htmls.skins) && !/\$135\.50/.test(htmls.skins));
 ck('gross tab pays nobody (no gross game)', !/\$/.test(htmls.gross.replace(/<thead[\s\S]*?<\/thead>/,'')));
 
 console.log('== buy-in coloring on the NET/GROSS bundle tabs ==');
@@ -290,7 +290,7 @@ console.log('== WON sits right of the name (Kerry 2026-09-13) ==');
     ck(`${label} row keeps its slot in the same place`,
        /class="won[^"]*br"/.test(nth(row, 2)), nth(row, 2));
   ck('the team purse is still in the TEAM NET money cell',
-     /class="won br"[^>]*>\$224\.00</.test(htmls.team),
+     /class="won br"[^>]*>\$224</.test(htmls.team),
      (htmls.team.match(/class="won[^"]*"[^>]*>[^<]*</)||[])[0]);
   for (const k of Object.keys(boards))
     ck(`${k}: exactly one money cell per row`,
@@ -636,7 +636,7 @@ ck('team row shows GG posted total as the score of record',
    /<b>59<\/b>/.test(trow), trow);
 ck('reconstruction disclosed when it differs from GG',
    /\(holes 8\)/.test(trow), trow);
-ck('team row shows the WHOLE purse, not a share', /\$224\.00/.test(trow), trow);
+ck('team row shows the WHOLE purse, not a share', /\$224(?![\d.])/.test(trow), trow);
 ck('team row to-par computed off team par', />\+23</.test(trow), trow);
 ck('team row is not tappable as a player row', !/evlb-plr/.test(trow));
 ck('team row has the same column count as a player row',

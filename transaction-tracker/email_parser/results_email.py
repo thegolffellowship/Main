@@ -189,6 +189,12 @@ def _nine_grid(holes, pars, strokes, dots, tot, whole, split) -> str:
             f'<td {th}>{tot}</td>{extra_h}</tr>{body}</table>')
 
 
+def _usd(v) -> str:
+    """"$32", never "$32.00"; cents only when there are some (Kerry 10/30)."""
+    v = round(float(v or 0), 2)
+    return f"${v:,.0f}" if v == int(v) else f"${v:,.2f}"
+
+
 def money_rows(rows, total) -> str:
     r = "".join(f'<tr><td style="padding:6px 0;border-top:1px solid {LINE};font-size:15px;">{a}</td>'
                 f'<td align="right" style="padding:6px 0;border-top:1px solid {LINE};font-size:15px;font-weight:bold;">{b}</td></tr>'
@@ -535,7 +541,7 @@ def _your_night(facts, cid, person) -> tuple[str, str]:
     html = card(None, stat_row(stats) + '<div style="height:12px"></div>' + scorecard(hn, pars, strokes, dots)
                 + note(legend + hl), head=head)
     won = sum(float(x["amount"] or 0) for x in facts["payouts"].get(cid, []))
-    lead = f"{person['first_name']}, you won ${won:,.2f}. " if won > 0 else f"{person['first_name']}, "
+    lead = f"{person['first_name']}, you won {_usd(won)}. " if won > 0 else f"{person['first_name']}, "
     return html, lead + ("Your card, handicap and points inside." if won > 0
                          else "your card, handicap and points are inside.")
 
@@ -640,8 +646,8 @@ def _winnings(facts, cid) -> str:
     total = sum(float(x["amount"] or 0) for x in rows)
     if total <= 0:
         return ""
-    lines = [(_payout_label(x.get("category"), x.get("description")), f"${float(x['amount']):,.2f}") for x in rows]
-    return card("YOUR WINNINGS", money_rows(lines, f"${total:,.2f}") +
+    lines = [(_payout_label(x.get("category"), x.get("description")), _usd(x['amount'])) for x in rows]
+    return card("YOUR WINNINGS", money_rows(lines, _usd(total)) +
                 note("Paid by Venmo to the handle on file."))
 
 

@@ -677,6 +677,27 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
         return ""
     par = grid.get("par") or {}
     ph_d, net_d = row.get("ph_dots") or {}, row.get("net_dots") or {}
+    # A team pop that falls on a par 3 is dropped (no team pops on par 3s);
+    # the card shows it as an orange X there, as the printed scorecard does
+    # (Kerry 10/30: "The 7 and 6 needs to be shown correctly ... with the
+    # orange X's when a pop falls on a par 3"), so the X's plus the dots add
+    # up to the team handicap while TOT counts the pops played.
+    ghost = {}
+    for k, v in (row.get("net_ghost") or {}).items():
+        try:
+            ghost[int(k)] = int(v or 0)
+        except (TypeError, ValueError):
+            pass
+
+    def _net_cell(h):
+        try:
+            g = ghost.get(int(h), 0)
+        except (TypeError, ValueError):
+            g = 0
+        n = int(net_d.get(h) or 0)
+        if g <= 0:
+            return _dots(n)
+        return (("&#9679;" * n) + f'<b style="font-family:Arial,sans-serif;">{"&#10005;" * g}</b>')
     net_short = "CART" if (net or {}).get("unit") == "cart" else "TEAM"
     cell = 'align="center" style="padding:3px 0;font-size:12px;border-top:1px solid ' + LINE + ';"'
     lab = f'style="padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"'
@@ -714,7 +735,7 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
         head = "".join(f'<td width="{hw}" align="center" style="width:{hw};padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in hs)
         pars = "".join(f"<td {cell}>{par.get(h, '')}</td>" for h in hs)
         ph_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(ph_d.get(h))}</span></td>' for h in hs)
-        net_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(net_d.get(h))}</span></td>' for h in hs)
+        net_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_net_cell(h)}</span></td>' for h in hs)
         head += f"<td {thead}>{tlab}</td>"
         pars += f"<td {tcell}>{_sum(par, hs) or ''}</td>"
         ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, hs)}</span></td>'
@@ -751,9 +772,13 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
             how += ", off the lowest in your " + ("cart" if net_short == "CART" else "group")
         bits.append(f"{_e(net.get('name') or 'Team Net')} uses {how}: <b>{_e(row['net'])}</b>.")
     if net and net.get("par3_suppressed"):
-        bits.append(f"No {net_short.lower()} pops on par 3s.")
+        bits.append(f"No {net_short.lower()} pops on par 3s"
+                    + (f": an orange &#10005; marks a {net_short.lower()} pop that lands on one, so your "
+                       f"{_e(row.get('net'))} plays as {sum(int(v or 0) for v in net_d.values())}." if ghost else "."))
     return (f'<div style="{_EYEBROW}color:{MUTED};padding-bottom:8px;">YOUR CARD '
-            f'<span style="letter-spacing:0;font-weight:normal;">&#9679; = a pop on that hole</span></div>'
+            f'<span style="letter-spacing:0;font-weight:normal;">&#9679; = a pop on that hole'
+            + (f' &nbsp;<b style="color:{ORANGE};">&#10005;</b> = no {net_short.lower()} pop on a par 3' if ghost else "")
+            + '</span></div>'
             + grid_html
             + (f'<div style="font-size:13px;color:#4B5563;padding-top:8px;line-height:1.45;">{" ".join(bits)}</div>'
                if bits else ""))

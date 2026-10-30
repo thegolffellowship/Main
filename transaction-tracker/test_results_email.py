@@ -78,7 +78,7 @@ h = k["html"]
 check("a player's email is clean (no blank, tag or None)", k["held"] == [], k["held"])
 check("...is his own night: gross 41 on the Gold tees", ">41<" in h and "Gold tees · +5" in h, h[:2000])
 check("...birdies listed with yardage", "a <b>3 on the 311-yard 11th</b>" in h, h[h.find("highlight"):][:300])
-check("...his winnings from the recorded rows", "Skins · Flight 1 · hole 11" in h and "$13.00" in h)
+check("...his winnings from the recorded rows", "Skins · Flight 1 · hole 11" in h and "$13<" in h and "$13.00" not in h)
 check("...links go to the specific places",
       "/member/results/3307" in h and "/member/spotlight?player=18" in h)
 check("...the San Antonio recap story, without its UP NEXT list", "first chapter night" in h and "UP NEXT." not in h)
