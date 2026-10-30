@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.633.0";
+window.TGF_VERSION = "2.633.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.633.1",
+    date: "2026-10-30",
+    title: "Email card: team pops given / played on the totals",
+    changes: [
+      "YOUR CARD's TEAM (or CART) totals read \"4/3\" OUT and \"7/6\" TOT when a par 3 took a team pop (Kerry 10/30: \"show 4/3 for the front 9 OUT column and 7/6 for the TOT column ... So a player understands more visually why the 7 from their Team Playing Handicap differs from their actual scorecard pops for that game\"): pops the team handicap gives / pops played. A nine with no par-3 loss shows the one number as before."
+    ]
+  },
   {
     version: "2.633.0",
     date: "2026-10-30",

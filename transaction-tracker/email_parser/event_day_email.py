@@ -696,6 +696,24 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
         except (TypeError, ValueError):
             pass
 
+    def _net_tot(keys):
+        # "4/3" when a par 3 took pops in these holes (Kerry 10/30: "show 4/3
+        # for the front 9 OUT column and 7/6 for the TOT column ... So a
+        # player understands more visually why the 7 from their Team Playing
+        # Handicap differs from their actual scorecard pops"): pops the
+        # handicap gives / pops played.
+        played = _sum(net_d, keys)
+        lost = 0
+        for h in keys:
+            try:
+                lost += ghost.get(int(h), 0)
+            except (TypeError, ValueError):
+                pass
+        if not lost:
+            return f'<span style="color:{ORANGE};">{played}</span>'
+        return (f'<span style="color:{ORANGE};white-space:nowrap;">{played + lost}'
+                f'<span style="color:#D1D5DB;font-weight:normal;">/</span>{played}</span>')
+
     def _net_cell(h):
         try:
             g = ghost.get(int(h), 0)
@@ -750,7 +768,7 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
         yds_row += f'<td {tcell}><span style="font-size:11px;">{_sum(yds, hs) or ""}</span></td>'
         si_row += f'<td {tcell}></td>'
         ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, hs)}</span></td>'
-        net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, hs)}</span></td>'
+        net_row += f'<td {tcell}>{_net_tot(hs)}</td>'
         if split:
             if with_tot:
                 head += f"<td {thead}>TOT</td>"
@@ -758,7 +776,7 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
                 yds_row += f'<td {tcell}><span style="font-size:11px;">{_sum(yds, holes) or ""}</span></td>'
                 si_row += f'<td {tcell}></td>'
                 ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, holes)}</span></td>'
-                net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, holes)}</span></td>'
+                net_row += f'<td {tcell}>{_net_tot(holes)}</td>'
             else:
                 head += f'<td width="{tot_w}%" style="width:{tot_w}%;" bgcolor="{INK}"></td>'
                 pars += blank
