@@ -15,7 +15,8 @@ closeout chain's `payouts` step is done, while the recap is still waiting:
   eagle or better      a hole at par - 2 or better on his published card
   3+ birdies           three or more holes at par - 1
 
-The page asks three questions one at a time (QUESTIONS). When
+The page asks the person's questions one at a time (questions_for: they
+follow the achievement, Kerry 10/30). When
 ANTHROPIC_API_KEY is set it may ask ONE short follow-up per answer, written
 by the recap writer's model (recap_writer.model(), same SDK call shape),
 at most three, so the whole thing stays near two minutes; without a key, or
@@ -55,31 +56,72 @@ MAX_FOLLOWUPS = 3
 AI_TIMEOUT = 8.0
 DEFAULT_PREVIEW_TO = "kerry@thegolffellowship.com"
 
-QUESTIONS = ("What was the shot of the night?",
-             "What was working for you out there?",
-             "Anything you want to say to the field?")
+# The questions follow the achievement (Kerry 10/30: "A leading comment
+# about why they're receiving it ... followed by the questionnaire that
+# might adapt to the achievement"). The biggest achievement sets the first
+# two questions; each other one adds its own question (at most two), and
+# everyone ends with LAST_QUESTION.
+QUESTION_SETS = {
+    "ace": ("Tell us about the hole-in-one on {holes}: the club, the yardage, who saw it.",
+            "What went through your head when it dropped?"),
+    "eagle": ("Walk us through the eagle on {holes}: the shots, the distances, the clubs, "
+              "how it went in.",
+              "How did the rest of your round go?"),
+    "mvp": ("Where did the round turn your way?",
+            "What was working for you out there?"),
+    "birdies": ("Which birdie was the best, and what happened?",
+                "What was working for you out there?"),
+}
+EXTRA_QUESTION = {
+    "ace": "Tell us about the hole-in-one on {holes}.",
+    "eagle": "Tell us about the eagle on {holes}: the shots and the clubs.",
+    "mvp": "Where did the round turn your way?",
+    "birdies": "Which of your {n} birdies was the best, and what happened?",
+}
+LAST_QUESTION = "Is there anything else you'd like to add?"
+PRIORITY = ("ace", "eagle", "mvp", "birdies")      # mvp covers tgf_mvp
+MAX_EXTRA = 2
+# kept for the plain default (a link whose reasons can't be read)
+QUESTIONS = (QUESTION_SETS["mvp"][0], QUESTION_SETS["mvp"][1], LAST_QUESTION)
 
 # The words. Changing any of them changes the hash and locks the send until
 # Kerry stamps the new hash.
 SUBJECT = "{first_name}, a quick word for the recap?"
 BODY = "Hi {first_name},<br><br>Great {day} at {course}. {why}"
-ASK = ("We'd love a quote or two for the recap. Three quick questions, about two "
+ASK = ("We'd love a quote or two for the recap. A few quick questions, about two "
        "minutes, right on your phone.")
 CONSENT_NOTE = ("At the end we'll ask whether we have your permission to use your "
                 "quotes in the event recap. Nothing is used unless you say yes.")
-BUTTON = "Answer 3 quick questions"
+BUTTON = "Answer a few quick questions"
 SIGN = "See you on the course,<br>The Golf Fellowship"
 # Kerry 10/30: a Yes / No permission question, not a tick box
 CONSENT_LABEL = "Do you give us permission to use your quotes in the event recap?"
 CONSENT_YES = "Yes"
 CONSENT_NO = "No"
 THANKS = "Thanks! That's everything."
-REASON_WORDS = {"mvp": "You were the City MVP.", "tgf_mvp": "You were the TGF MVP.",
-                "ace": "A hole-in-one on hole {holes}!",
-                "eagle": "Eagle on hole {holes}!", "birdies": "{n} birdies!"}
+REASON_WORDS = {"mvp": "You were the City MVP!", "tgf_mvp": "You were the TGF MVP!",
+                "both_mvp": "You were the City MVP and the TGF MVP!",
+                "ace": "Hole-in-one on hole {holes}!",
+                "eagle": "Eagle on hole {holes}!",
+                "birdies": "{n} birdies!",
+                "birdies_row": "{n} birdies in a row!",
+                "birdies_some_row": "{n} birdies, and {streak} were in a row!",
+                # with an MVP: what got them there (Kerry: "You were city MVP,
+                # and you had 4 birdies that helped get you there!")
+                "mvp_with": "{mvp_lead}, and {what} helped get you there!",
+                # several card achievements, no MVP
+                "plus": "{first}, plus {rest}!"}
+NOUNS = {"ace": "the hole-in-one on {holes}", "eagle": "the eagle on {holes}",
+         "birdies": "your {n} birdies", "birdies_row": "your {n} birdies in a row",
+         "birdies_some_row": "your {n} birdies ({streak} in a row)"}
+PLUS_NOUNS = {"ace": "a hole-in-one on hole {holes}", "eagle": "an eagle on hole {holes}",
+              "birdies": "{n} birdies", "birdies_row": "{n} birdies in a row",
+              "birdies_some_row": "{n} birdies ({streak} in a row)"}
 FOLLOWUP_SYSTEM = (
     "You are a friendly golf reporter for The Golf Fellowship, a golf community in Texas, "
-    "doing a two-minute post-round interview by text. Read the player's answer and ask ONE "
+    "doing a two-minute post-round interview by text. You know why the player was asked "
+    "(their achievement today); when it fits, tie your question to it. Read the player's "
+    "answer and ask ONE "
     "short, warm follow-up question (at most 20 words) that draws out a specific, quotable "
     "detail: a club, a distance, a moment, a feeling. Plain words, no preamble, no quotes "
     "around it, just the question. If the answer gives nothing to follow up, reply NONE.")
@@ -87,7 +129,10 @@ FOLLOWUP_SYSTEM = (
 
 def template_hash() -> str:
     raw = "\x1f".join((SUBJECT, BODY, ASK, CONSENT_NOTE, BUTTON, SIGN, CONSENT_LABEL, CONSENT_YES, CONSENT_NO, THANKS,
-                       *QUESTIONS, *[REASON_WORDS[k] for k in sorted(REASON_WORDS)]))
+                       LAST_QUESTION, *[q for k in sorted(QUESTION_SETS) for q in QUESTION_SETS[k]],
+                       *[EXTRA_QUESTION[k] for k in sorted(EXTRA_QUESTION)],
+                       *[REASON_WORDS[k] for k in sorted(REASON_WORDS)],
+                       *[NOUNS[k] for k in sorted(NOUNS)], *[PLUS_NOUNS[k] for k in sorted(PLUS_NOUNS)]))
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -156,7 +201,7 @@ def qualify(event_id: int, db_path=None) -> list:
             found.setdefault(int(cid), []).append({"kind": "eagle", "holes": eagles})
         if len(birdies) >= 3:
             found.setdefault(int(cid), []).append({"kind": "birdies", "n": len(birdies),
-                                                   "holes": birdies})
+                                                   "holes": birdies, "streak": _streak(birdies)})
     out = []
     with db._connect(db_path) as conn:
         for cid, reasons in sorted(found.items()):
@@ -166,19 +211,105 @@ def qualify(event_id: int, db_path=None) -> list:
             name = " ".join(x for x in (first, ((r["last_name"] if r else "") or "").strip()) if x)
             out.append({"customer_id": cid, "name": name or f"#{cid}", "first_name": first or "there",
                         "email": _send_email(conn, cid), "reasons": reasons,
-                        "why": reason_text(reasons)})
+                        "why": reason_text(reasons), "questions": questions_for(reasons)})
+    return out
+
+
+def _streak(holes: list) -> int:
+    """The longest run of birdies on consecutive holes."""
+    best = run = 0
+    prev = None
+    for h in sorted(holes):
+        run = run + 1 if prev is not None and h == prev + 1 else 1
+        best, prev = max(best, run), h
+    return best
+
+
+def _holes(r: dict) -> str:
+    hs = [str(h) for h in r.get("holes") or []]
+    return hs[0] if len(hs) == 1 else ", ".join(hs[:-1]) + " and " + hs[-1] if hs else ""
+
+
+def _birdie_key(r: dict) -> str:
+    n, k = int(r.get("n") or 0), int(r.get("streak") or 0)
+    return "birdies_row" if n and k == n else "birdies_some_row" if k >= 3 else "birdies"
+
+
+def _fmt(w: str, r: dict) -> str:
+    return w.format(holes=_holes(r), n=r.get("n"), streak=r.get("streak"))
+
+
+def _cap(t: str) -> str:
+    return t[:1].upper() + t[1:]
+
+
+def _primary(reasons: list) -> list:
+    """The reasons, biggest first (ace, eagle, MVP, birdies); both MVPs count once."""
+    def key(r):
+        k = "mvp" if r.get("kind") in ("mvp", "tgf_mvp") else r.get("kind")
+        return PRIORITY.index(k) if k in PRIORITY else len(PRIORITY)
+    out, seen_mvp = [], False
+    for r in sorted(reasons, key=key):
+        if r.get("kind") in ("mvp", "tgf_mvp"):
+            if seen_mvp:
+                continue
+            seen_mvp = True
+        out.append(r)
     return out
 
 
 def reason_text(reasons: list) -> str:
-    parts = []
-    for r in reasons:
-        w = REASON_WORDS.get(r.get("kind"))
-        if not w:
-            continue
-        holes = ", ".join(str(h) for h in r.get("holes") or [])
-        parts.append(w.format(holes=holes, n=r.get("n")))
-    return " ".join(parts)
+    """The leading comment: why they're being asked, every achievement in one line."""
+    kinds = {r.get("kind") for r in reasons}
+    mvp = ("both_mvp" if {"mvp", "tgf_mvp"} <= kinds else "mvp" if "mvp" in kinds
+           else "tgf_mvp" if "tgf_mvp" in kinds else None)
+    card = [r for r in _primary(reasons) if r.get("kind") in ("ace", "eagle", "birdies")]
+    def key(r):
+        return _birdie_key(r) if r["kind"] == "birdies" else r["kind"]
+    if mvp and card:
+        what = " and ".join(_fmt(NOUNS[key(r)], r) for r in card)
+        return REASON_WORDS["mvp_with"].format(mvp_lead=REASON_WORDS[mvp].rstrip("!"), what=what)
+    if mvp:
+        return REASON_WORDS[mvp]
+    if len(card) == 1:
+        return _fmt(REASON_WORDS[key(card[0])], card[0])
+    if card:
+        nouns = [_fmt(PLUS_NOUNS[key(r)], r) for r in card]
+        return REASON_WORDS["plus"].format(first=_cap(nouns[0]), rest=" and ".join(nouns[1:]))
+    return ""
+
+
+def questions_for(reasons: list) -> list:
+    """The biggest achievement's two questions, one more for each other
+    achievement (at most MAX_EXTRA), then LAST_QUESTION."""
+    rs = _primary(reasons)
+    if not rs:
+        return list(QUESTIONS)
+    def k(r):
+        return "mvp" if r.get("kind") in ("mvp", "tgf_mvp") else r.get("kind")
+    first = rs[0]
+    out = [_fmt(q, first) for q in QUESTION_SETS[k(first)]]
+    for r in rs[1:1 + MAX_EXTRA]:
+        q = _fmt(EXTRA_QUESTION[k(r)], r)
+        if q not in out:
+            out.append(q)
+    return out + [LAST_QUESTION]
+
+
+def person_questions(event_id: int, customer_id: int, db_path=None) -> list:
+    """This person's questions: as sent (saved with the invitation), else
+    worked out now (a staff preview), else the plain default."""
+    rec = (_json(STATE_KEY.format(int(event_id)), db_path).get("people") or {}).get(str(customer_id)) or {}
+    if rec.get("questions"):
+        return list(rec["questions"])
+    try:
+        for p in qualify(int(event_id), db_path=db_path):
+            if p["customer_id"] == int(customer_id):
+                return list(p["questions"])
+    except Exception:
+        logger.warning("ai interview: questions for %s/%s unreadable", event_id, customer_id,
+                       exc_info=True)
+    return list(QUESTIONS)
 
 
 # ── signed links (the handicap ask's pattern, its own prefix) ─────────────
@@ -391,8 +522,8 @@ def _send_all(event_id, st, db_path=None, now=None, sender=None) -> dict:
             ok = bool(sender(p["email"], msg["subject"], msg["html"]))
         except Exception:
             logger.exception("ai interview send failed for %s", p["customer_id"])
-        people[k] = {"why": p["why"], "sent_at": now.strftime("%Y-%m-%d %H:%M") if ok else None,
-                     "failed": not ok}
+        people[k] = {"why": p["why"], "questions": p["questions"],
+                     "sent_at": now.strftime("%Y-%m-%d %H:%M") if ok else None, "failed": not ok}
         if ok:
             sent.append(p["customer_id"])
         try:
@@ -461,10 +592,17 @@ def describe(token: str, db_path=None) -> dict:
     ev = _event(p["v"], db_path) or {}
     st = _json(STATE_KEY.format(int(p["v"])), db_path)
     rec = _json(ANSWERS_KEY.format(int(p["v"])), db_path).get(str(p["c"])) or {}
+    why = (st.get("people") or {}).get(str(p["c"]), {}).get("why") or ""
+    if not why:
+        try:
+            why = next((x["why"] for x in qualify(int(p["v"]), db_path=db_path)
+                        if x["customer_id"] == int(p["c"])), "")
+        except Exception:
+            why = ""
     return {"ok": True, "customer_id": p["c"], "event_id": p["v"], "preview": bool(p.get("p")),
             "first_name": ((r[0] if r else "") or "").strip(), "event": ev.get("item_name") or "",
-            "day": _day(ev) if ev else "", "why": (st.get("people") or {}).get(str(p["c"]), {}).get("why") or "",
-            "questions": list(QUESTIONS), "consent_label": CONSENT_LABEL, "consent_yes": CONSENT_YES, "consent_no": CONSENT_NO, "thanks": THANKS,
+            "day": _day(ev) if ev else "", "why": why,
+            "questions": person_questions(p["v"], p["c"], db_path=db_path), "consent_label": CONSENT_LABEL, "consent_yes": CONSENT_YES, "consent_no": CONSENT_NO, "thanks": THANKS,
             "finished": bool(rec.get("finished_at")), "consent": rec.get("consent"),
             "ai": ai_available()}
 
@@ -489,7 +627,8 @@ def record_answer(token: str, q: int, text: str, followup_q: str | None = None,
         q = int(q)
     except (TypeError, ValueError):
         return {"ok": False, "error": "bad question"}
-    if not 0 <= q < len(QUESTIONS):
+    qs = person_questions(p["v"], p["c"], db_path=db_path)
+    if not 0 <= q < len(qs):
         return {"ok": False, "error": "bad question"}
     text = _clean(text)
     is_followup = bool(followup_q)
@@ -502,17 +641,19 @@ def record_answer(token: str, q: int, text: str, followup_q: str | None = None,
         rec.setdefault("answers", [])
         rec["answers"] = [a for a in rec["answers"]
                           if not (a.get("q") == q and bool(a.get("followup")) == is_followup)]
-        rec["answers"].append({"q": q, "question": _clean(followup_q) if is_followup else QUESTIONS[q],
+        rec["answers"].append({"q": q, "question": _clean(followup_q) if is_followup else qs[q],
                                "answer": text, "followup": is_followup,
                                "at": datetime.utcnow().strftime("%Y-%m-%d %H:%M")})
         _save(key, allans, db_path)
     nxt = None
     if not is_followup and text:
-        nxt = followup(QUESTIONS[q], text, ask=ask, db_path=db_path)
+        why = ((_json(STATE_KEY.format(int(p["v"])), db_path).get("people") or {})
+               .get(str(p["c"])) or {}).get("why") or ""
+        nxt = followup(qs[q], text, ask=ask, db_path=db_path, why=why)
     return {"ok": True, "followup": nxt}
 
 
-def followup(question: str, answer: str, ask=None, db_path=None) -> str | None:
+def followup(question: str, answer: str, ask=None, db_path=None, why: str = "") -> str | None:
     """One short follow-up question from the recap writer's model, or None."""
     if ask is None:
         if not ai_available():
@@ -520,7 +661,7 @@ def followup(question: str, answer: str, ask=None, db_path=None) -> str | None:
         ask = _ask_claude
     try:
         from email_parser.recap_writer import model
-        out = (ask(FOLLOWUP_SYSTEM, f"Question: {question}\nPlayer's answer: {answer}",
+        out = (ask(FOLLOWUP_SYSTEM, (f"Why they were asked: {why}\n" if why else "") + f"Question: {question}\nPlayer's answer: {answer}",
                    model(db_path)) or "").strip().strip('"').strip()
     except Exception:
         logger.warning("ai interview: follow-up failed (plain form continues)", exc_info=True)
@@ -543,7 +684,7 @@ def _ask_claude(system: str, user: str, model_id: str) -> str:
 
 
 def finish(token: str, consent: bool, answers: dict | None = None, db_path=None) -> dict:
-    """The last tap: Yes / No to the permission question (and, from the no-JS form, the three
+    """The last tap: Yes / No to the permission question (and, from the no-JS form, all the
     answers at once)."""
     p = verify_token(token)
     if not p:
@@ -554,12 +695,13 @@ def finish(token: str, consent: bool, answers: dict | None = None, db_path=None)
     allans = _json(key, db_path)
     rec = allans.setdefault(str(p["c"]), {"answers": []})
     if answers:
-        for i in range(len(QUESTIONS)):
+        qs = person_questions(p["v"], p["c"], db_path=db_path)
+        for i in range(len(qs)):
             t = _clean(answers.get(i) or answers.get(str(i)))
             if t:
                 rec["answers"] = [a for a in rec.get("answers") or []
                                   if not (a.get("q") == i and not a.get("followup"))]
-                rec["answers"].append({"q": i, "question": QUESTIONS[i], "answer": t,
+                rec["answers"].append({"q": i, "question": qs[i], "answer": t,
                                        "followup": False,
                                        "at": datetime.utcnow().strftime("%Y-%m-%d %H:%M")})
     rec["consent"] = bool(consent)

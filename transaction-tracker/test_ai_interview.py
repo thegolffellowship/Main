@@ -58,10 +58,37 @@ print("== who qualifies ==")
 q = {p["customer_id"]: p for p in ai.qualify(900)}
 check("City MVP", [r["kind"] for r in q[801]["reasons"]] == ["mvp"], q.get(801))
 check("eagle (2 on a par 4)", q[802]["reasons"][0]["kind"] == "eagle" and q[802]["reasons"][0]["holes"] == [1], q.get(802))
-check("3 birdies", q[803]["reasons"][0] == {"kind": "birdies", "n": 3, "holes": [1, 2, 3]}, q.get(803))
+check("3 birdies", q[803]["reasons"][0] == {"kind": "birdies", "n": 3, "holes": [1, 2, 3], "streak": 3}, q.get(803))
 check("two birdies do not qualify", 804 not in q)
 check("a hole-in-one", q[805]["reasons"][0]["kind"] == "ace" and q[805]["email"] is None, q.get(805))
-check("why reads plainly", q[802]["why"] == "Eagle on hole 1!" and q[803]["why"] == "3 birdies!", (q[802]["why"], q[803]["why"]))
+check("why reads plainly", q[802]["why"] == "Eagle on hole 1!" and q[803]["why"] == "3 birdies in a row!", (q[802]["why"], q[803]["why"]))
+
+print("== the leading comment and the questions follow the achievement (Kerry 10/30) ==")
+B = lambda holes: {"kind": "birdies", "n": len(holes), "holes": holes, "streak": ai._streak(holes)}  # noqa: E731
+check("4 in a row", ai.reason_text([B([4, 5, 6, 7])]) == "4 birdies in a row!")
+check("4, 3 in a row", ai.reason_text([B([2, 5, 6, 7])]) == "4 birdies, and 3 were in a row!")
+check("3 apart", ai.reason_text([B([2, 5, 9])]) == "3 birdies!")
+check("MVP + birdies: what got them there",
+      ai.reason_text([{"kind": "mvp"}, B([2, 5, 9, 14])])
+      == "You were the City MVP, and your 4 birdies helped get you there!",
+      ai.reason_text([{"kind": "mvp"}, B([2, 5, 9, 14])]))
+check("both MVPs + an eagle",
+      ai.reason_text([{"kind": "tgf_mvp"}, {"kind": "mvp"}, {"kind": "eagle", "holes": [7]}])
+      == "You were the City MVP and the TGF MVP, and the eagle on 7 helped get you there!")
+check("eagle + birdies, no MVP", ai.reason_text([B([1, 2, 3]), {"kind": "eagle", "holes": [7]}])
+      == "An eagle on hole 7, plus 3 birdies in a row!")
+qs = ai.questions_for([{"kind": "eagle", "holes": [7]}])
+check("eagle questions", qs == ["Walk us through the eagle on 7: the shots, the distances, the clubs, how it went in.",
+                                "How did the rest of your round go?", "Is there anything else you'd like to add?"], qs)
+qs = ai.questions_for([B([2, 5, 9, 14]), {"kind": "mvp"}])
+check("MVP first, then one birdie question, then anything else",
+      qs == ["Where did the round turn your way?", "What was working for you out there?",
+             "Which of your 4 birdies was the best, and what happened?",
+             "Is there anything else you'd like to add?"], qs)
+qs = ai.questions_for([{"kind": "ace", "holes": [3]}, {"kind": "eagle", "holes": [7, 12]},
+                       {"kind": "mvp"}, B([1, 2, 5])])
+check("at most two extra questions", len(qs) == 5 and qs[2] == "Tell us about the eagle on 7 and 12: the shots and the clubs."
+      and qs[3] == "Where did the round turn your way?", qs)
 
 print("== locked: dial + wording stamp ==")
 SENT = []
@@ -152,7 +179,9 @@ print("== routes ==")
 with appmod.app.test_client() as tc:
     t3 = ai.make_token(803, 900)
     h = tc.get(f"/interview/{t3}")
-    check("GET renders the three questions", h.status_code == 200 and ai.QUESTIONS[0] in h.get_data(as_text=True))
+    check("GET renders this player's questions (the birdie set)", h.status_code == 200
+          and "Which birdie was the best, and what happened?" in h.get_data(as_text=True)
+          and ai.LAST_QUESTION.replace("'", "&#39;") in h.get_data(as_text=True))
     page = h.get_data(as_text=True)
     check("permission is a Yes / No question, not a tick box (Kerry 10/30)",
           ai.CONSENT_LABEL in page and 'value="yes"' in page and 'value="no"' in page

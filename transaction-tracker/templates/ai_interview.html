@@ -42,7 +42,7 @@
         <p>{% if (done and done.consent) or (not done and info.consent) %}We may use your words in the recap. See you on the course!{% else %}We won't put your words in the recap. See you on the course!{% endif %}</p>
     {% else %}
         {% if info.preview %}<div class="pv">Staff preview: nothing on this page is saved.</div>{% endif %}
-        <div class="why">Hi {{ info.first_name or "there" }}! {{ info.why }} A few words for the {{ info.event }} recap: three quick questions, about two minutes.</div>
+        <div class="why">Hi {{ info.first_name or "there" }}! {{ info.why }} A few words for the {{ info.event }} recap: a few quick questions, about two minutes.</div>
         <form method="post" id="ivw">
             {% for q in info.questions %}
             <div class="qs" data-q="{{ loop.index0 }}">

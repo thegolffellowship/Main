@@ -13825,7 +13825,7 @@ def public_ai_interview(token):
     if request.method == "POST":
         f = request.form
         res = _ai.finish(token, consent=(f.get("consent") or "").strip().lower() in ("yes", "1", "true"),
-                         answers={i: f.get(f"a{i}") for i in range(len(_ai.QUESTIONS))})
+                         answers={i: f.get(f"a{i}") for i in range(len(info.get("questions") or _ai.QUESTIONS))})
         return render_template("ai_interview.html", info=_ai.describe(token), done=res)
     return render_template("ai_interview.html", info=info, done=None)
 

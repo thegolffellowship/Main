@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.6";
+window.TGF_VERSION = "2.635.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.7",
+    date: "2026-10-30",
+    title: "Post-round interview: the questions follow the achievement",
+    changes: [
+      "Kerry 10/30: a leading comment about why they're asked, then questions that adapt to the achievement. The opening line names every achievement: \"4 birdies in a row!\", \"4 birdies, and 3 were in a row!\", \"You were the City MVP, and your 4 birdies helped get you there!\", \"An eagle on hole 7, plus 3 birdies!\". The biggest achievement (hole-in-one, eagle, MVP, birdies) sets the first two questions (eagle: \"Walk us through the eagle on 7: the shots, the distances, the clubs, how it went in.\"; birdies: \"Which birdie was the best, and what happened?\"), each other achievement adds one question (at most two), and everyone ends with \"Is there anything else you'd like to add?\" (replaces \"Anything you want to say to the field?\"). The AI follow-up is told why the player was asked. \"Three quick questions\" now reads \"a few quick questions\". New wording hash 131d658b039ef625; the dial ai_interview_email stays off."
+    ]
+  },
   {
     version: "2.635.6",
     date: "2026-10-30",
