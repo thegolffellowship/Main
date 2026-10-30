@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.7";
+window.TGF_VERSION = "2.635.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.8",
+    date: "2026-10-30",
+    title: "Post-round interview: the points race winners",
+    changes: [
+      "Kerry 10/30: \"Same timeline for the race winners. Points need to be tallied and finalized at same time as the rest of the leaderboard results.\" At the FALL CHAMPIONSHIP the San Antonio and Austin Fall race winners (best-ranked ENROLLED player, ties share) and at a month's last event the month's points winner get the interview, read from the standings the closeout chain's points step rebuilds right after payouts. Opening: \"You won the San Antonio Fall Points Race!\" / \"You won the October Points Race!\" (\"You're a co-champion of ...\" on a tie). Questions: \"What's been the secret for you this Fall?\", \"Were you tracking the leaderboard? When did you know you had a real shot?\", \"Which round this Fall stands out, and why?\", then \"Is there anything else you'd like to add?\"; a round achievement the same day adds its question. On a race's last event the second invitation pass (and the recap) waits for both the payouts and the points tally, inside the 90 minutes. New wording hash f3802237c9a44105; the dial ai_interview_email stays off."
+    ]
+  },
   {
     version: "2.635.7",
     date: "2026-10-30",

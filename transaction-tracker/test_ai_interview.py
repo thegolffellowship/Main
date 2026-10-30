@@ -106,7 +106,11 @@ check("CLOSEOUT START: the eagle and the birdies go at once (Kerry 10/30)",
 check("the recap waits for the MVP pass", "MVP" in (ai.recap_wait([900]) or ""), ai.recap_wait([900]))
 check("nothing new before the money", ai.closeout_hook(900, sender=sender) is None and len(SENT) == 2)
 FACTS["payouts"] = _payouts
+# 10/31 ends October: the second pass also waits for the points tally
 db.set_app_setting("closeout_chain:900", json.dumps({"steps": {"payouts": {"ok": True}}}))
+check("month-end: payouts alone are not enough, the points must be tallied",
+      ai.closeout_hook(900, sender=sender) is None and len(SENT) == 2)
+db.set_app_setting("closeout_chain:900", json.dumps({"steps": {"payouts": {"ok": True}, "points": {"ok": True}}}))
 r = ai.closeout_hook(900, sender=sender)
 check("payouts recorded: the MVP gets theirs", r["sent"] == [801] and len(SENT) == 3, r)
 check("the recap now waits on the unfinished answers", "interview answers" in (ai.recap_wait([900]) or ""))
@@ -126,6 +130,41 @@ check("the email carries the signed link and the reason",
       all("/interview/" in h for _, _, h in SENT) and any("Eagle on hole 1!" in h for _, _, h in SENT))
 check("never a second time", ai.closeout_hook(900, sender=sender) is None and len(SENT) == 3)
 check("the hook never raises", ai.closeout_hook("x", sender=sender) in (None, {"error": "failed (logged)"}))
+
+print("== points race winners: same timeline (Kerry 10/30) ==")
+c.execute("INSERT INTO events (id, item_name, event_date, chapter, course) VALUES "
+          "(910, 's18.12 FALL CHAMPIONSHIP | Test', '2026-10-31', 'TGF', 'Test GC'), "
+          "(911, 's9.30 Mid', '2026-10-20', 'San Antonio', 'Test GC')")
+c.commit()
+check("the Fall Championship ends the Fall races and the month",
+      ai.race_final_event(910) == {"fall": True, "month": True}, ai.race_final_event(910))
+check("a mid-month event ends nothing", ai.race_final_event(911) == {"fall": False, "month": False})
+RF = {"races": {"san antonio": {"rows": [
+          {"customer_id": 820, "rank": "1", "enrolled": False},     # tops the table, not in
+          {"customer_id": 821, "rank": "2", "enrolled": True},
+          {"customer_id": 822, "rank": "3", "enrolled": True}]},
+      "austin": {"rows": [{"customer_id": 830, "rank": "T1", "enrolled": True},
+                          {"customer_id": 831, "rank": "T1", "enrolled": True}]}},
+      "month": {"name": "October 2026", "standings": [{"customer_id": 821, "points": 34},
+                                                       {"customer_id": 840, "points": 30}]}}
+w = ai.race_winners(910, RF)
+check("Fall winners are the best-ranked ENROLLED; ties share; month top wins",
+      sorted((cid, r["race"], r["tied"]) for cid, r in w) ==
+      [(821, "October Points Race", False), (821, "San Antonio Fall Points Race", False),
+       (830, "Austin Fall Points Race", True), (831, "Austin Fall Points Race", True)], w)
+check("no race ends mid-month", ai.race_winners(911, RF) == [])
+rs = [r for cid, r in w if cid == 821] + [{"kind": "birdies", "n": 3, "holes": [1, 2, 3], "streak": 3}]
+why = ai.reason_text(rs)
+check("the leading comment names the titles first", why ==
+      "You won the San Antonio Fall Points Race! You won the October Points Race! 3 birdies in a row!", why)
+qs = ai.questions_for(rs)
+check("champion questions for the season, then the month's, then anything else",
+      qs[:3] == ["What's been the secret for you this Fall?",
+                 "Were you tracking the leaderboard? When did you know you had a real shot?",
+                 "Which round this Fall stands out, and why?"]
+      and "What's been the secret for you this month?" in qs and qs[-1] == ai.LAST_QUESTION, qs)
+check("co-champions read as such", ai.reason_text([w[2][1]]) == "You're a co-champion of the Austin Fall Points Race!",
+      ai.reason_text([w[2][1]]))
 
 print("== links ==")
 tok = ai.make_token(802, 900)

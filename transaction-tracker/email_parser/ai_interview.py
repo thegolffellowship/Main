@@ -62,6 +62,11 @@ DEFAULT_PREVIEW_TO = "kerry@thegolffellowship.com"
 # two questions; each other one adds its own question (at most two), and
 # everyone ends with LAST_QUESTION.
 QUESTION_SETS = {
+    # a points race won (Kerry 10/30: "keeping in mind these were season
+    # contests that took the whole fall or month to achieve")
+    "champ": ("What's been the secret for you this {span}?",
+              "Were you tracking the leaderboard? When did you know you had a real shot?",
+              "Which round this {span} stands out, and why?"),
     "ace": ("Tell us about the hole-in-one on {holes}: the club, the yardage, who saw it.",
             "What went through your head when it dropped?"),
     "eagle": ("Walk us through the eagle on {holes}: the shots, the distances, the clubs, "
@@ -73,13 +78,14 @@ QUESTION_SETS = {
                 "What was working for you out there?"),
 }
 EXTRA_QUESTION = {
+    "champ": "What's been the secret for you this {span}?",
     "ace": "Tell us about the hole-in-one on {holes}.",
     "eagle": "Tell us about the eagle on {holes}: the shots and the clubs.",
     "mvp": "Where did the round turn your way?",
     "birdies": "Which of your {n} birdies was the best, and what happened?",
 }
 LAST_QUESTION = "Is there anything else you'd like to add?"
-PRIORITY = ("ace", "eagle", "mvp", "birdies")      # mvp covers tgf_mvp
+PRIORITY = ("champ", "ace", "eagle", "mvp", "birdies")   # mvp covers tgf_mvp
 MAX_EXTRA = 2
 # kept for the plain default (a link whose reasons can't be read)
 QUESTIONS = (QUESTION_SETS["mvp"][0], QUESTION_SETS["mvp"][1], LAST_QUESTION)
@@ -99,7 +105,9 @@ CONSENT_LABEL = "Do you give us permission to use your quotes in the event recap
 CONSENT_YES = "Yes"
 CONSENT_NO = "No"
 THANKS = "Thanks! That's everything."
-REASON_WORDS = {"mvp": "You were the City MVP!", "tgf_mvp": "You were the TGF MVP!",
+REASON_WORDS = {"champ": "You won the {race}!",
+                "champ_tied": "You're a co-champion of the {race}!",
+                "mvp": "You were the City MVP!", "tgf_mvp": "You were the TGF MVP!",
                 "both_mvp": "You were the City MVP and the TGF MVP!",
                 "ace": "Hole-in-one on hole {holes}!",
                 "eagle": "Eagle on hole {holes}!",
@@ -202,6 +210,8 @@ def qualify(event_id: int, db_path=None) -> list:
         if len(birdies) >= 3:
             found.setdefault(int(cid), []).append({"kind": "birdies", "n": len(birdies),
                                                    "holes": birdies, "streak": _streak(birdies)})
+    for cid, r in race_winners(int(event_id), f, db_path=db_path):
+        found.setdefault(int(cid), []).insert(0, r)
     out = []
     with db._connect(db_path) as conn:
         for cid, reasons in sorted(found.items()):
@@ -212,6 +222,63 @@ def qualify(event_id: int, db_path=None) -> list:
             out.append({"customer_id": cid, "name": name or f"#{cid}", "first_name": first or "there",
                         "email": _send_email(conn, cid), "reasons": reasons,
                         "why": reason_text(reasons), "questions": questions_for(reasons)})
+    return out
+
+
+def race_final_event(event_id: int, db_path=None) -> dict:
+    """Which races END at this event: {"fall": bool, "month": bool}.
+    Fall: the FALL CHAMPIONSHIP (the races' last event, as the event-day
+    email reads it). Month: no other event later in the same month."""
+    import re
+    ev = _event(event_id, db_path) or {}
+    name = ev.get("item_name") or ""
+    d = str(ev.get("event_date") or "")[:10]
+    month = False
+    if len(d) == 10:
+        from email_parser import database as db
+        with db._connect(db_path) as conn:
+            later = conn.execute(
+                "SELECT COUNT(*) FROM events WHERE substr(event_date, 1, 7) = ? "
+                "AND substr(event_date, 1, 10) > ? AND id != ?",
+                (d[:7], d, int(event_id))).fetchone()[0]
+        month = not later
+    return {"fall": bool(re.search(r"FALL\s+CHAMPIONSHIP", name, re.I)), "month": month}
+
+
+def race_winners(event_id: int, facts: dict, db_path=None) -> list:
+    """[(customer_id, reason)] for the points races this event finishes, read
+    from the standings the closeout chain's points step has just rebuilt
+    (Kerry 10/30: "Same timeline for the race winners. Points need to be
+    tallied and finalized at same time as the rest of the leaderboard
+    results"). Fall: the best-ranked ENROLLED player(s), as the money and
+    the title are decided (database._race_champions). Month: the top
+    points (winner takes all; ties share)."""
+    out = []
+    try:
+        ends = race_final_event(event_id, db_path)
+        if ends["fall"]:
+            from email_parser.database import _race_champions
+            from email_parser.results_email import FALL_RACE
+            for key, race in (facts.get("races") or {}).items():
+                champs = _race_champions(race.get("rows") or [])
+                label = FALL_RACE.get(key, (None, None, key.title()))[2]
+                for c in champs:
+                    if c.get("customer_id"):
+                        out.append((int(c["customer_id"]),
+                                    {"kind": "champ", "race": f"{label} Fall Points Race",
+                                     "span": "Fall", "tied": len(champs) > 1}))
+        st = (facts.get("month") or {}).get("standings") or []
+        if ends["month"] and st and (st[0].get("points") or 0) > 0:
+            top = st[0].get("points")
+            name = ((facts.get("month") or {}).get("name") or "").strip() or "this month"
+            name = name.split()[0].title() if name != "this month" else name
+            winners = [x for x in st if x.get("points") == top and x.get("customer_id")]
+            for x in winners:
+                out.append((int(x["customer_id"]),
+                            {"kind": "champ", "race": f"{name} Points Race",
+                             "span": "month", "tied": len(winners) > 1}))
+    except Exception:
+        logger.exception("ai interview: race winners unreadable for %s", event_id)
     return out
 
 
@@ -236,7 +303,8 @@ def _birdie_key(r: dict) -> str:
 
 
 def _fmt(w: str, r: dict) -> str:
-    return w.format(holes=_holes(r), n=r.get("n"), streak=r.get("streak"))
+    return w.format(holes=_holes(r), n=r.get("n"), streak=r.get("streak"),
+                    race=r.get("race") or "", span=r.get("span") or "season")
 
 
 def _cap(t: str) -> str:
@@ -260,6 +328,11 @@ def _primary(reasons: list) -> list:
 
 def reason_text(reasons: list) -> str:
     """The leading comment: why they're being asked, every achievement in one line."""
+    champs = [_fmt(REASON_WORDS["champ_tied" if r.get("tied") else "champ"], r)
+              for r in reasons if r.get("kind") == "champ"]
+    rest = reason_text([r for r in reasons if r.get("kind") != "champ"]) if champs else ""
+    if champs:
+        return " ".join(champs + ([rest] if rest else []))
     kinds = {r.get("kind") for r in reasons}
     mvp = ("both_mvp" if {"mvp", "tgf_mvp"} <= kinds else "mvp" if "mvp" in kinds
            else "tgf_mvp" if "tgf_mvp" in kinds else None)
@@ -293,6 +366,8 @@ def questions_for(reasons: list) -> list:
         q = _fmt(EXTRA_QUESTION[k(r)], r)
         if q not in out:
             out.append(q)
+    if k(first) == "champ":
+        out = out[:3] + [q for q in out[3:] if q not in out[:3]]
     return out + [LAST_QUESTION]
 
 
@@ -447,8 +522,16 @@ def send_preview(event_id: int, to_address: str | None = None, db_path=None) -> 
 
 
 def _payouts_recorded(event_id: int, db_path=None) -> bool:
+    """The MVPs (recorded payouts) are known, and, when a points race ends
+    at this event, the points are tallied (the chain's points step)."""
     from email_parser import closeout_chain as cc
-    return bool((cc.state(event_id, db_path).get("steps") or {}).get("payouts", {}).get("ok"))
+    steps = cc.state(event_id, db_path).get("steps") or {}
+    if not steps.get("payouts", {}).get("ok"):
+        return False
+    ends = race_final_event(event_id, db_path)
+    if ends["fall"] or ends["month"]:
+        return bool(steps.get("points", {}).get("ok"))
+    return True
 
 
 def _wait_minutes(db_path=None) -> int:
@@ -565,8 +648,8 @@ def recap_wait(event_ids: list, db_path=None, now=None) -> str | None:
             if left > 0 and not st.get("payouts_pass"):
                 # the MVPs' invitations go when the money is recorded; the
                 # recap never goes before them
-                return (f"waiting up to {int(left) + 1} more minute(s) for the MVP interview "
-                        f"invitations (event {eid}: payouts not recorded yet)")
+                return (f"waiting up to {int(left) + 1} more minute(s) for the MVP and race "
+                        f"winner interview invitations (event {eid}: payouts or points not in yet)")
             invited = {k for k, v in (st.get("people") or {}).items() if v.get("sent_at")}
             done = {k for k, v in _json(ANSWERS_KEY.format(int(eid)), db_path).items()
                     if v.get("finished_at")}
