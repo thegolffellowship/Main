@@ -68,7 +68,7 @@
             // is not applied to any hole, so there is nothing to draw.
             const sr = srOf(h);
             return sr > 0
-                ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#334155;">${"●".repeat(sr)}</span>`
+                ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#1B1B1B;">${"●".repeat(sr)}</span>`
                 : "";
         };
         const sum = (hs, f) => hs.reduce((a, h) => a + (f(h) || 0), 0);

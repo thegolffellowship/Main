@@ -166,7 +166,9 @@ def _nine_grid(holes, pars, strokes, dots, tot, whole, split) -> str:
                     f'border:1.5px solid {INK};">{s}</span>')
         return f"<b>{s}</b>" if d == 1 else str(s)
     sc = "".join(f"<td {cell}>{mark(s, p)}</td>" for s, p in zip(strokes, pars))
-    dot = "".join(f'<td {cell}><span style="color:{ORANGE};">{"&#9679;" * max(0, d) if d else "&nbsp;"}</span></td>'
+    # POP COLOURS (Kerry 10/30: "Black always for individual pops at 100%.
+    # Orange always for team/cart"): this row is the player's own pops.
+    dot = "".join(f'<td {cell}><span style="color:{INK};">{"&#9679;" * max(0, d) if d else "&nbsp;"}</span></td>'
                   for d in dots)
     played = [s for s in strokes if s is not None]
     th = f'width="{tot_w}%" bgcolor="{INK}" align="center" style="width:{tot_w}%;font:bold 11px Arial,sans-serif;color:#fff;padding:0;"'
@@ -522,7 +524,7 @@ def _your_night(facts, cid, person) -> tuple[str, str]:
         hl = " The highlight" + ("s: " if len(birdies) > 1 else ": ") + ", ".join(birdies[:-1]) + \
              (" and " if len(birdies) > 1 else "") + birdies[-1] + "."
     legend = "Circle = birdie, box = double or worse" + \
-             (f', <span style="color:{ORANGE};">&#9679;</span> = a handicap pop.' if any(d > 0 for d in dots) else ".")
+             (f', <span style="color:{INK};">&#9679;</span> = a handicap pop.' if any(d > 0 for d in dots) else ".")
     g = facts["groups"].get(cid) or {}
     sub = " · ".join(x for x in (
         f"Group {g['group']}" if g.get("group") else "",

@@ -373,7 +373,7 @@
         // scorecard convention) — on the NET row in net races, on the
         // GROSS row in gross races (where no net row renders)
         const dotsMark = h => h.dots
-            ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#334155;">${"&#9679;".repeat(Math.min(h.dots, 3))}</span>`
+            ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#1B1B1B;">${"&#9679;".repeat(Math.min(h.dots, 3))}</span>`
             : "";
         // 18-hole totals: gross rides the note line; champ points hang as
         // a bold orange cell right under the LAST block's PTS sum (Kerry
@@ -548,7 +548,7 @@
         const strokeDots = h => {
             const sr = srOf(h);
             return sr > 0
-                ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#334155;">${"●".repeat(sr)}</span>`
+                ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#1B1B1B;">${"●".repeat(sr)}</span>`
                 : "";
         };
         const sum = (hs, f) => hs.reduce((a, h) => a + (f(h) || 0), 0);

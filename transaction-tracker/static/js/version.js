@@ -5,6 +5,7 @@ window.TGF_CHANGELOG = [
     date: "2026-10-30",
     title: "18-hole cards in the emails split into front and back nines",
     changes: [
+      "POP COLOURS, everywhere (Kerry 10/30: \"Black always for individual pops at 100%. Orange always for team/cart\"): the results email's POPS row and its legend dot were orange and are now black; the app's scorecards (Contests, Handicaps, Customers, /me) drew individual stroke dots in slate #334155 and now draw them black #1B1B1B. The event-info card (NET black, TEAM orange) and Live Scoring already followed the rule.",
       "Kerry 10/30, on the event-info YOUR CARD at phone width: \"for 18 hole cards on event info/recaps for mobile view they need to wrap front 9 back 9. They get real scrunched.\" An 18-hole card in the event-info email (event_day_email.card_strip) and the results email (results_email.scorecard) is now two stacked nines: OUT on the front, IN and TOT on the back, hole columns lined up between them. Email apps ignore phone-width rules, so the split is always on, desktop too. A nine is still one grid. The label column is wider, so HOLE no longer wraps."
     ]
   },
