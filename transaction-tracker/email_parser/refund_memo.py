@@ -19,6 +19,8 @@ from __future__ import annotations
 import re
 
 _CODE = re.compile(r"^[a-z]+\d+(?:\.\d+)?$", re.I)
+# Kept upper case when an ALL-CAPS name is cased ("TPC Canyons", "TGF Championship")
+_ACRONYMS = {"TPC", "TGF", "LSC", "MVP", "CC", "GC", "HIO", "PGA"}
 
 
 def display_name(name) -> str:
@@ -26,12 +28,21 @@ def display_name(name) -> str:
     and an ALL-CAPS name ("SAN ANTONIO FALL POINTS RACE") title-cased with
     event codes ("A9.29") lower-cased. A mixed-case name is left alone."""
     s = " ".join(str(name or "").split())
+    # A leading event code ("s9.28") is lower case by design and must not
+    # stop an ALL-CAPS name after it from being cased: "s9.28 TPC CANYONS"
+    # reads "s9.28 TPC Canyons" (Kerry 10/30, the TPC member credits).
+    words = s.split(" ")
+    if len(words) > 1 and _CODE.match(words[0]):
+        rest = " ".join(words[1:])
+        return words[0].lower() + " " + display_name(rest)
     if not s or not any(ch.isalpha() for ch in s) or s != s.upper():
         return s
     out = []
     for w in s.split(" "):
         if _CODE.match(w):
             out.append(w.lower())
+        elif w in _ACRONYMS:
+            out.append(w)
         elif any(ch.isdigit() for ch in w):
             out.append(w)
         else:

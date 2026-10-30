@@ -37,6 +37,11 @@ CASES = [
 ]
 for (w, n), want in CASES:
     check(f"refund_memo({w!r}, {n!r}) -> {want!r}", refund_memo(w, n) == want, refund_memo(w, n))
+# a leading event code doesn't stop an ALL-CAPS name being cased; acronyms stay (Kerry 10/30)
+check("s9.28 TPC CANYONS -> Refund for s9.28 TPC Canyons",
+      refund_memo("Refund", "s9.28 TPC CANYONS") == "Refund for s9.28 TPC Canyons", refund_memo("Refund", "s9.28 TPC CANYONS"))
+check("2026 TGF CHAMPIONSHIP keeps TGF",
+      refund_memo("Refund", "2026 TGF CHAMPIONSHIP") == "Refund for 2026 TGF Championship")
 check("contest name: the product bought wins",
       contest_name("NET Points Race", "San Antonio", "2026", "San Antonio Fall Points Race")
       == "San Antonio Fall Points Race")

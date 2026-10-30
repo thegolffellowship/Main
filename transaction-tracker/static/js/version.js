@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.3";
+window.TGF_VERSION = "2.635.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.4",
+    date: "2026-10-30",
+    title: "Refund memos: event names after a code are cased",
+    changes: [
+      "The refund memo the Refunds console pre-fills read \"Refund for s9.28 TPC CANYONS\" for the four TPC San Antonio member credits (Kerry 10/30: \"you need to set the memo up correctly\"): a leading lower-case event code stopped the ALL-CAPS order label from being cased. Now \"Refund for s9.28 TPC Canyons\" (refund_memo.display_name and its twin in static/js/refund-memo.js), with TPC / TGF / LSC / MVP kept upper case."
+    ]
+  },
   {
     version: "2.635.3",
     date: "2026-10-30",
