@@ -421,8 +421,9 @@ def _month_row(facts, cid):
 
 
 # How close to the last paid place counts as "within reach" for the points
-# card's nudge: roughly one good 18-hole round of net points (Kerry 10/30).
-WITHIN_REACH = 20
+# card's nudge (Kerry 10/30: "realistically someone no more than 10 points
+# back of placing could get that message").
+WITHIN_REACH = 10
 
 
 def _points_card(facts, cid, chapter_label, eyebrow: str = "YOUR POINTS") -> tuple[str, bool]:
