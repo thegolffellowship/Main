@@ -707,6 +707,7 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
     fall_lead = fall_tied = False
     back = 0
     out_of_money = None
+    far = False
     enrolled = bool(r and r.get("enrolled"))
     inactive_line = ""
     if has_fall:
@@ -732,6 +733,12 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
             if ladder and act_place <= len(ladder):
                 if enrolled:
                     fall_line += " \u00b7 in the money"
+            elif cut_gap is not None and cut_gap > WR:
+                # FAR FROM THE MONEY (Kerry 10/30: "I don't think we try to
+                # sell to people that are 10 or more back from the money and
+                # not do the orange bar to activate. Just tell them where they
+                # are"): place and points back only; no strip, no "not in".
+                far = True
             elif cut_gap is not None and cut_gap > 0:
                 # OUT OF THE MONEY: the distance that matters is to the last
                 # paid place, not to the lead (Kerry 10/30: "Points back for
@@ -780,6 +787,8 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
         head = f"You lead the Fall Race, {first}"
     elif month_lead:
         head = f"You lead {mword}, {first}"
+    elif has_fall and far:
+        head = f"Here's where you stand, {first}"
     elif has_fall:
         gap = out_of_money if out_of_money else back
         b = int(gap) if gap == int(gap) else gap
@@ -790,7 +799,7 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
                 else f"{n} {what} going in, {first}")
     else:
         head = f"Here's where you stand, {first}"
-    head = _e(head) + ("\u2026 but you're not in!" if (has_fall and not enrolled) else ".")
+    head = _e(head) + ("\u2026 but you're not in!" if (has_fall and not enrolled and not far) else ".")
     ev = _e((event_name or "").upper())
     fall_key = (R.FALL_RACE.get(ch) or (None, "", ""))[1]
     standings_url = (f"{R.BASE}/member/contests#race={fall_key}&player={cid}" if has_fall and fall_key
@@ -813,7 +822,7 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
                 f'<div style="{sub}">{_e(line)}</div></td>')
 
     strip = ""
-    if has_fall and not enrolled:
+    if has_fall and not enrolled and not far:
         from email_parser.results_email import STORE_CONTESTS
         strip = (f'<tr><td bgcolor="#E87C3E" style="background:#E87C3E;padding:11px 20px;">'
                  f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;"><tr>'
