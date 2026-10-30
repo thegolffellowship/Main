@@ -71,11 +71,29 @@ db.set_app_setting("ai_interview_email", "on")
 check("on but wording unstamped: nothing", ai.closeout_hook(900, sender=sender) is None and not SENT)
 db.set_app_setting("ai_interview_approved", ai.template_hash())
 db.set_app_setting("closeout_start:900", datetime.now().strftime("%Y-%m-%d %H:%M"))
+# the MVP comes from the recorded payouts: hide it until the money is in
+_payouts = FACTS["payouts"]; FACTS["payouts"] = {}
 r = ai.closeout_hook(900, sender=sender)
-check("waits for the night's money", r == {"waiting": "payouts not recorded yet"} and not SENT, r)
+check("CLOSEOUT START: the eagle and the birdies go at once (Kerry 10/30)",
+      sorted(r["sent"]) == [802, 803] and len(SENT) == 2, r)
+check("the recap waits for the MVP pass", "MVP" in (ai.recap_wait([900]) or ""), ai.recap_wait([900]))
+check("nothing new before the money", ai.closeout_hook(900, sender=sender) is None and len(SENT) == 2)
+FACTS["payouts"] = _payouts
 db.set_app_setting("closeout_chain:900", json.dumps({"steps": {"payouts": {"ok": True}}}))
 r = ai.closeout_hook(900, sender=sender)
-check("sends one email per qualifier with an address", sorted(r["sent"]) == [801, 802, 803] and len(SENT) == 3, r)
+check("payouts recorded: the MVP gets theirs", r["sent"] == [801] and len(SENT) == 3, r)
+check("the recap now waits on the unfinished answers", "interview answers" in (ai.recap_wait([900]) or ""))
+check("the wait is 90 minutes from closeout start", ai.DEFAULT_WAIT == 90
+      and "up to 90 more minute" in (ai.recap_wait([900]) or ""), ai.recap_wait([900]))
+check("after 90 minutes the recap goes anyway",
+      ai.recap_wait([900], now=datetime.now() + timedelta(minutes=91)) is None)
+# money recorded only after the wait: the recap has gone, so no late MVP ask
+_old = (datetime.now() - timedelta(minutes=95)).strftime("%Y-%m-%d %H:%M")
+db.set_app_setting("ai_interview:901", json.dumps({"sent_at": _old, "people": {}}))
+db.set_app_setting("closeout_chain:901", json.dumps({"steps": {"payouts": {"ok": True}}}))
+n = len(SENT)
+r9 = ai.closeout_hook(901, sender=sender, now=datetime.now())
+check("payouts after the wait: nobody new is asked", len(SENT) == n and "skipped" in (r9 or {}), r9)
 check("no email on file is skipped, said so", r["skipped"] == [{"customer_id": 805, "why": "no email on file"}], r)
 check("the email carries the signed link and the reason",
       all("/interview/" in h for _, _, h in SENT) and any("Eagle on hole 1!" in h for _, _, h in SENT))

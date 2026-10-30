@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.5";
+window.TGF_VERSION = "2.635.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.6",
+    date: "2026-10-30",
+    title: "Post-round interview: invitations at closeout start, recap holds 90 minutes",
+    changes: [
+      "Kerry 10/30: \"Invitations should go out immediately after the 15 min buffer from last score entered. I'm willing to allow 90 minutes from that point.\" The eagle and 3+ birdie invitations now go at CLOSEOUT START instead of waiting for the payouts; the City / TGF MVPs (who come from the recorded payouts) get theirs the moment the payouts step is done. The recap waits up to 90 minutes from closeout start (was 30): never before the MVP invitations have gone, and no longer than needed once everyone invited has finished. Payouts recorded after the 90 minutes ask nobody new. The dial ai_interview_email stays off; the wording is unchanged (hash 879c71181ff8840a)."
+    ]
+  },
   {
     version: "2.635.5",
     date: "2026-10-30",

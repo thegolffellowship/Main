@@ -4,10 +4,12 @@ perhaps anyone that has an eagle or better, or 3 or more birdies a link to do
 a quick AI interactive interview to get some quotes for inclusion in the
 recap"). The Twilio number is released, so this is the EMAIL version.
 
-At CLOSEOUT START (scoring_window.tick calls `closeout_hook`) once the night's
-money is recorded (closeout chain step `payouts`, or an hour after closeout
-start), every player who qualifies gets ONE email with a signed link
-`/interview/<token>`:
+At CLOSEOUT START, 15 minutes after the last score (scoring_window.tick
+calls `closeout_hook`), every player who qualifies gets ONE email with a
+signed link `/interview/<token>` (Kerry 10/30: "Invitations should go out
+immediately after the 15 min buffer from last score entered"). The MVPs come
+from the recorded payouts, so they get theirs in a second pass once the
+closeout chain's `payouts` step is done, while the recap is still waiting:
 
   City MVP / TGF MVP   a recorded payout row of category mvp / tgf_mvp
   eagle or better      a hole at par - 2 or better on his published card
@@ -44,9 +46,9 @@ DIAL = "ai_interview_email"
 APPROVAL_KEY = "ai_interview_approved"
 STATE_KEY = "ai_interview:{}"
 ANSWERS_KEY = "ai_interview_answers:{}"
-WAIT_KEY = "ai_interview_wait_minutes"       # the recap waits this long for answers (default 30)
-DEFAULT_WAIT = 30
-READY_FALLBACK_MINUTES = 60                   # send without the payouts step after this
+WAIT_KEY = "ai_interview_wait_minutes"       # the recap waits this long for answers
+# Kerry 10/30: "I'm willing to allow 90 minutes from that point" (closeout start)
+DEFAULT_WAIT = 90
 TOKEN_DAYS = 7
 MAX_ANSWER = 1200
 MAX_FOLLOWUPS = 3
@@ -313,23 +315,16 @@ def send_preview(event_id: int, to_address: str | None = None, db_path=None) -> 
     return {"status": "sent" if ok else "failed", "to": to, "subject": subject, "link": msg["link"]}
 
 
-def _ready(event_id: int, db_path=None, now=None) -> bool:
-    """The night's money is recorded (closeout chain step payouts), or an
-    hour has passed since CLOSEOUT START."""
+def _payouts_recorded(event_id: int, db_path=None) -> bool:
     from email_parser import closeout_chain as cc
-    if (cc.state(event_id, db_path).get("steps") or {}).get("payouts", {}).get("ok"):
-        return True
-    from email_parser.scoring_window import CLOSEOUT_KEY
-    from email_parser.timezone_utils import now_central
-    started = _setting(CLOSEOUT_KEY.format(int(event_id)), db_path)
-    if not started:
-        return False
+    return bool((cc.state(event_id, db_path).get("steps") or {}).get("payouts", {}).get("ok"))
+
+
+def _wait_minutes(db_path=None) -> int:
     try:
-        t0 = datetime.strptime(started, "%Y-%m-%d %H:%M")
+        return int(_setting(WAIT_KEY, db_path) or DEFAULT_WAIT)
     except ValueError:
-        return False
-    now = now or now_central()
-    return (now.replace(tzinfo=None) - t0).total_seconds() / 60 >= READY_FALLBACK_MINUTES
+        return DEFAULT_WAIT
 
 
 def closeout_hook(event_id: int, db_path=None, now=None, sender=None) -> dict | None:
@@ -340,10 +335,24 @@ def closeout_hook(event_id: int, db_path=None, now=None, sender=None) -> dict | 
             return None
         key = STATE_KEY.format(int(event_id))
         st = _json(key, db_path)
-        if st.get("sent_at"):
+        if not st.get("sent_at"):
+            # first pass at CLOSEOUT START: eagles and birdies from the cards,
+            # and the MVPs too if the money is already recorded
+            if _payouts_recorded(event_id, db_path):
+                st["payouts_pass"] = "with the first pass"
+            return _send_all(event_id, st, db_path=db_path, now=now, sender=sender)
+        if st.get("payouts_pass") or not _payouts_recorded(event_id, db_path):
             return None
-        if not _ready(event_id, db_path=db_path, now=now):
-            return {"waiting": "payouts not recorded yet"}
+        # second pass: the MVPs, once payouts are recorded, while the recap
+        # still waits; after the wait the recap has gone, so nobody new is asked
+        from email_parser.timezone_utils import now_central
+        t = (now or now_central()).replace(tzinfo=None)
+        t0 = datetime.strptime(st["sent_at"], "%Y-%m-%d %H:%M")
+        if (t - t0).total_seconds() / 60 >= _wait_minutes(db_path):
+            st["payouts_pass"] = "skipped: payouts recorded after the recap wait"
+            _save(key, st, db_path)
+            return {"skipped": st["payouts_pass"]}
+        st["payouts_pass"] = t.strftime("%Y-%m-%d %H:%M")
         return _send_all(event_id, st, db_path=db_path, now=now, sender=sender)
     except Exception:
         logger.exception("ai interview: closeout hook failed for %s", event_id)
@@ -394,7 +403,7 @@ def _send_all(event_id, st, db_path=None, now=None, sender=None) -> dict:
                            db_path=db_path)
         except Exception:
             pass
-    st["sent_at"] = now.strftime("%Y-%m-%d %H:%M")
+    st.setdefault("sent_at", now.strftime("%Y-%m-%d %H:%M"))   # the first pass starts the wait
     _save(STATE_KEY.format(int(event_id)), st, db_path)
     try:
         db.log_agent_action("ai-interview", "ai_interview_sent",
@@ -406,29 +415,32 @@ def _send_all(event_id, st, db_path=None, now=None, sender=None) -> dict:
 
 
 def recap_wait(event_ids: list, db_path=None, now=None) -> str | None:
-    """The recap step waits (closeout_chain.step_recap) while invitations went
-    out less than `ai_interview_wait_minutes` ago and someone has not finished.
+    """The recap step waits (closeout_chain.step_recap) while the first
+    invitations went out less than `ai_interview_wait_minutes` (90) ago and
+    someone has not finished.
     None when the dial is off, nothing was sent, or every invitee finished."""
     try:
         if not dial_on(db_path):
             return None
         from email_parser.timezone_utils import now_central
         now = (now or now_central()).replace(tzinfo=None)
-        try:
-            wait = int(_setting(WAIT_KEY, db_path) or DEFAULT_WAIT)
-        except ValueError:
-            wait = DEFAULT_WAIT
+        wait = _wait_minutes(db_path)
         for eid in event_ids:
             st = _json(STATE_KEY.format(int(eid)), db_path)
             if not st.get("sent_at"):
                 continue
+            t0 = datetime.strptime(st["sent_at"], "%Y-%m-%d %H:%M")
+            left = wait - (now - t0).total_seconds() / 60
+            if left > 0 and not st.get("payouts_pass"):
+                # the MVPs' invitations go when the money is recorded; the
+                # recap never goes before them
+                return (f"waiting up to {int(left) + 1} more minute(s) for the MVP interview "
+                        f"invitations (event {eid}: payouts not recorded yet)")
             invited = {k for k, v in (st.get("people") or {}).items() if v.get("sent_at")}
             done = {k for k, v in _json(ANSWERS_KEY.format(int(eid)), db_path).items()
                     if v.get("finished_at")}
             if not invited - done:
                 continue
-            t0 = datetime.strptime(st["sent_at"], "%Y-%m-%d %H:%M")
-            left = wait - (now - t0).total_seconds() / 60
             if left > 0:
                 return (f"waiting up to {int(left) + 1} more minute(s) for interview answers "
                         f"(event {eid}: {len(invited - done)} not finished)")

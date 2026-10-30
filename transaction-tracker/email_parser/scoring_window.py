@@ -219,9 +219,9 @@ def tick(now=None, db_path=None) -> dict:
                 did["window_post"] = _w
         except Exception:
             logger.exception("scoring window: window post failed for %s", eid)
-        # THE POST-ROUND INTERVIEW BY EMAIL (Kerry 10/29, #2462): once the
-        # night's money is recorded, the MVPs, eagles and 3+ birdies get one
-        # link. Nothing unless dial ai_interview_email = on and the wording is
+        # THE POST-ROUND INTERVIEW BY EMAIL (Kerry 10/29, #2462): at CLOSEOUT
+        # START the eagles and 3+ birdies get one link, the MVPs once the
+        # night's money is recorded (Kerry 10/30). Nothing unless dial ai_interview_email = on and the wording is
         # stamped; the hook never raises.
         if db.get_app_setting(CLOSEOUT_KEY.format(eid), db_path=db_path):
             try:
