@@ -196,7 +196,7 @@ def night_facts(event_ids: list, db_path=None) -> dict:
                             ids.add(row["customer_id"])
                             row["write_as"] = _player(conn, row["customer_id"]).get("write_as")
     # Players' own words from the post-round interview (#2462; only those who
-    # ticked "Use my quote in the recap") and the night's photos (#2460-J;
+    # said Yes to the permission question) and the night's photos (#2460-J;
     # dial event_photos_in_email). Keys appear only when there is something,
     # so a night without either writes exactly as before.
     with db._connect(db_path) as conn:
@@ -295,7 +295,8 @@ def _extras_rules(facts: dict) -> str:
     out = ""
     if any(e.get("quotes") for e in facts.get("events") or []):
         out += ("- An event's `quotes` are players' own words from the post-round interview, given "
-                "with their permission. Use one or two of the best in that event's story, verbatim "
+                "with their permission. Choose the one or two that best serve that event's story (or none "
+                "if none fit); you never have to use them all. Use them verbatim "
                 "inside quotation marks, attributed by write_as. Never change, merge or invent a "
                 "quote.\n")
     if any(e.get("photos") for e in facts.get("events") or []):

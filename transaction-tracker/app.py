@@ -13824,7 +13824,7 @@ def public_ai_interview(token):
         return render_template("ai_interview.html", info=info, done=None), 400
     if request.method == "POST":
         f = request.form
-        res = _ai.finish(token, consent=bool(f.get("consent")),
+        res = _ai.finish(token, consent=(f.get("consent") or "").strip().lower() in ("yes", "1", "true"),
                          answers={i: f.get(f"a{i}") for i in range(len(_ai.QUESTIONS))})
         return render_template("ai_interview.html", info=_ai.describe(token), done=res)
     return render_template("ai_interview.html", info=info, done=None)
@@ -13842,7 +13842,7 @@ def public_ai_interview_answer(token):
 def public_ai_interview_finish(token):
     from email_parser import ai_interview as _ai
     b = request.get_json(silent=True) or {}
-    res = _ai.finish(token, consent=bool(b.get("consent")))
+    res = _ai.finish(token, consent=b.get("consent") is True)
     return (jsonify(res), 400) if not res.get("ok") else jsonify(res)
 
 

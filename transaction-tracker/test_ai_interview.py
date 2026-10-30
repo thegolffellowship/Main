@@ -135,11 +135,18 @@ with appmod.app.test_client() as tc:
     t3 = ai.make_token(803, 900)
     h = tc.get(f"/interview/{t3}")
     check("GET renders the three questions", h.status_code == 200 and ai.QUESTIONS[0] in h.get_data(as_text=True))
+    page = h.get_data(as_text=True)
+    check("permission is a Yes / No question, not a tick box (Kerry 10/30)",
+          ai.CONSENT_LABEL in page and 'value="yes"' in page and 'value="no"' in page
+          and 'type="checkbox"' not in page)
     check("GET saves nothing", "803" not in ai._json(ai.ANSWERS_KEY.format(900)))
     check("a bad link is 400", tc.get("/interview/nope").status_code == 400)
-    r = tc.post(f"/interview/{t3}", data={"a0": "Chip-in on 9", "a1": "", "a2": "", "consent": "1"})
+    r = tc.post(f"/interview/{t3}", data={"a0": "Chip-in on 9", "a1": "", "a2": "", "consent": "yes"})
     check("the no-JS form saves with consent", r.status_code == 200 and any(
         x["customer_id"] == 803 and x["answer"] == "Chip-in on 9" for x in ai.consented_quotes(900)))
+    t5 = ai.make_token(805, 900)
+    tc.post(f"/interview/{t5}", data={"a0": "Keep this private", "a1": "", "a2": "", "consent": "no"})
+    check("the no-JS form: No -> not quoted", all(x["customer_id"] != 805 for x in ai.consented_quotes(900)))
     t1 = ai.make_token(804, 900)
     r = tc.post(f"/interview/{t1}/answer", json={"q": 0, "text": "Driver"})
     check("JSON answer 200", r.status_code == 200 and r.get_json()["ok"])

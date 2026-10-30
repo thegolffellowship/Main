@@ -19,7 +19,7 @@ by the recap writer's model (recap_writer.model(), same SDK call shape),
 at most three, so the whole thing stays near two minutes; without a key, or
 on any error, it is a plain form. Answers are kept in app setting
 `ai_interview_answers:<event_id>`; nothing is used without the explicit
-"Use my quote in the recap" box. `consented_quotes(event_id)` is what the
+Yes to "Do you give us permission to use your quotes in the event recap?". `consented_quotes(event_id)` is what the
 recap writer reads.
 
 LOCKED twice, like the handicap ask: dial `ai_interview_email` = on (default
@@ -63,11 +63,14 @@ SUBJECT = "{first_name}, a quick word for the recap?"
 BODY = "Hi {first_name},<br><br>Great {day} at {course}. {why}"
 ASK = ("We'd love a quote or two for the recap. Three quick questions, about two "
        "minutes, right on your phone.")
-CONSENT_NOTE = ("Your answers only go in the recap if you tick the box saying we can "
-                "use them.")
+CONSENT_NOTE = ("At the end we'll ask whether we have your permission to use your "
+                "quotes in the event recap. Nothing is used unless you say yes.")
 BUTTON = "Answer 3 quick questions"
 SIGN = "See you on the course,<br>The Golf Fellowship"
-CONSENT_LABEL = "Use my quote in the recap"
+# Kerry 10/30: a Yes / No permission question, not a tick box
+CONSENT_LABEL = "Do you give us permission to use your quotes in the event recap?"
+CONSENT_YES = "Yes"
+CONSENT_NO = "No"
 THANKS = "Thanks! That's everything."
 REASON_WORDS = {"mvp": "You were the City MVP.", "tgf_mvp": "You were the TGF MVP.",
                 "ace": "A hole-in-one on hole {holes}!",
@@ -81,7 +84,7 @@ FOLLOWUP_SYSTEM = (
 
 
 def template_hash() -> str:
-    raw = "\x1f".join((SUBJECT, BODY, ASK, CONSENT_NOTE, BUTTON, SIGN, CONSENT_LABEL, THANKS,
+    raw = "\x1f".join((SUBJECT, BODY, ASK, CONSENT_NOTE, BUTTON, SIGN, CONSENT_LABEL, CONSENT_YES, CONSENT_NO, THANKS,
                        *QUESTIONS, *[REASON_WORDS[k] for k in sorted(REASON_WORDS)]))
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
@@ -449,7 +452,7 @@ def describe(token: str, db_path=None) -> dict:
     return {"ok": True, "customer_id": p["c"], "event_id": p["v"], "preview": bool(p.get("p")),
             "first_name": ((r[0] if r else "") or "").strip(), "event": ev.get("item_name") or "",
             "day": _day(ev) if ev else "", "why": (st.get("people") or {}).get(str(p["c"]), {}).get("why") or "",
-            "questions": list(QUESTIONS), "consent_label": CONSENT_LABEL, "thanks": THANKS,
+            "questions": list(QUESTIONS), "consent_label": CONSENT_LABEL, "consent_yes": CONSENT_YES, "consent_no": CONSENT_NO, "thanks": THANKS,
             "finished": bool(rec.get("finished_at")), "consent": rec.get("consent"),
             "ai": ai_available()}
 
@@ -528,7 +531,7 @@ def _ask_claude(system: str, user: str, model_id: str) -> str:
 
 
 def finish(token: str, consent: bool, answers: dict | None = None, db_path=None) -> dict:
-    """The last tap: the consent box (and, from the no-JS form, the three
+    """The last tap: Yes / No to the permission question (and, from the no-JS form, the three
     answers at once)."""
     p = verify_token(token)
     if not p:
@@ -554,7 +557,9 @@ def finish(token: str, consent: bool, answers: dict | None = None, db_path=None)
 
 
 def consented_quotes(event_id: int, db_path=None) -> list:
-    """What the recap may use: answers from players who ticked the box."""
+    """What the recap may choose from: answers from players who said Yes to
+    the permission question. The recap writer picks the best one or two; it
+    never has to use them all."""
     out = []
     for cid, rec in _json(ANSWERS_KEY.format(int(event_id)), db_path).items():
         if rec.get("consent") is not True:

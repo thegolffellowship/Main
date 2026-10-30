@@ -10,7 +10,7 @@
     {# THE POST-ROUND INTERVIEW (Kerry 2026-10-29, #2462). Three questions, one
        at a time; one optional AI follow-up per answer when the server has a
        key. Without JavaScript it is one plain form. Nothing is used in the
-       recap unless the consent box is ticked. email_parser/ai_interview.py #}
+       recap unless the player says Yes to the permission question. email_parser/ai_interview.py #}
     <style>
         body { margin: 0; background: #F8F8F8; color: #1B1B1B; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         .top { background: #1B1B1B; color: #fff; padding: 14px 16px; }
@@ -25,9 +25,6 @@
         .btn { display: block; width: 100%; height: 52px; border-radius: 999px; border: none; margin-top: 12px;
                font: 700 17px 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #0d7556; color: #fff; cursor: pointer; }
         .btn.light { background: #fff; color: #1B1B1B; border: 2px solid #1B1B1B; }
-        .consent { display: flex; gap: 10px; align-items: flex-start; font-size: 16px; margin: 16px 0 4px;
-                   background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px; }
-        .consent input { width: 22px; height: 22px; margin: 0; flex: none; }
         .note { font-size: 13px; color: #6B7280; margin-top: 8px; }
         .err { background: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 10px; }
         .done { font: 700 22px Bitter, Georgia, serif; margin: 20px 0 8px; }
@@ -56,9 +53,10 @@
             </div>
             {% endfor %}
             <div class="fin">
-                <label class="consent"><input type="checkbox" name="consent" value="1"> <span>{{ info.consent_label }}</span></label>
-                <div class="note">Leave it unticked and your answers stay with us; nothing goes in the recap.</div>
-                <button class="btn" type="submit">Send</button>
+                <div class="q">{{ info.consent_label }}</div>
+                <button class="btn" type="submit" name="consent" value="yes">{{ info.consent_yes }}</button>
+                <button class="btn light" type="submit" name="consent" value="no">{{ info.consent_no }}</button>
+                <div class="note">If you say no, your answers stay with us; nothing goes in the recap.</div>
             </div>
         </form>
     {% endif %}
@@ -113,7 +111,7 @@
     skip.onclick = advance;
     form.addEventListener("submit", function (e) {
         e.preventDefault();
-        var c = form.querySelector("input[name=consent]").checked;
+        var c = !!(e.submitter && e.submitter.value === "yes");
         post("/interview/" + tok + "/finish", {consent: c}).then(function (j) {
             if (j && j.preview) { form.outerHTML = '<div class="done">Preview finished. Nothing was saved.</div>'; }
             else { location.reload(); }

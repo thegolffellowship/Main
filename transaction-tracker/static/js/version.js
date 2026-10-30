@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.4";
+window.TGF_VERSION = "2.635.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.5",
+    date: "2026-10-30",
+    title: "Post-round interview: permission is a Yes / No question",
+    changes: [
+      "The interview page's \"Use my quote in the recap\" tick box is now a question with two buttons (Kerry 10/30): \"Do you give us permission to use your quotes in the event recap?\" Yes / No. Only a Yes reaches the recap writer. The email's note says the question comes at the end. The recap writer is told to choose the one or two quotes that best serve the story (or none), never all of them. The wording changed, so the interview needs Kerry's stamp again (new hash 879c71181ff8840a); the dial ai_interview_email stays off."
+    ]
+  },
   {
     version: "2.635.4",
     date: "2026-10-30",
