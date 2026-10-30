@@ -6378,6 +6378,18 @@ def init_db(db_path: str | Path | None = None) -> None:
             apply_migrations(conn)
         except Exception:
             logger.exception("Non-fatal: SQL migrations failed")
+        # THE PAYER on orders already in the Tracker (migration 0044, Kerry
+        # 10/30): unambiguous orders only; the rest are reported by bridge
+        # scoring-payer-backfill. Never overwrites a payer already set.
+        try:
+            from email_parser.payer import backfill as _payer_backfill
+            conn.commit()
+            _pb = _payer_backfill(apply=True, db_path=db_path)
+            if _pb.get("rows_stamped"):
+                logger.info("payer backfill: %s rows stamped, %s orders ambiguous",
+                            _pb.get("rows_stamped"), _pb.get("ambiguous"))
+        except Exception:
+            logger.exception("Non-fatal: payer backfill failed")
 
         # Re-point FK rows orphaned by pre-v2.16.13 merges (which deleted the
         # source customers row without moving memberships/statuses/roles/...),
@@ -30540,6 +30552,7 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
         inserted = 0
         skipped = 0
         _touched_gd_orders = set()  # Track GoDaddy orders for order-level accounting
+        _payer_cache: dict = {}  # (order, email, name) -> payer customer_id
         for row in rows:
             # ── Cross-email-uid dedup gate ──
             # Microsoft Graph occasionally re-keys the same logical email under
@@ -30593,6 +30606,23 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                                              row.get("holes"))
             if _canon_h and (str(row.get("holes") or "").strip() != _canon_h):
                 row["holes"] = _canon_h
+
+            # ── Course from the EVENT (Kerry 10/30, order R293121452) ──
+            # The order email names no course; the parser guessed "ShadowGlen"
+            # on a Silverhorn line. A line for a known event takes the event's
+            # own course. Portable SQL: lower() on both sides.
+            try:
+                _nm = (row.get("item_name") or "").strip()
+                if _nm:
+                    _evc = conn.execute(
+                        """SELECT e.course FROM events e
+                           LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+                           WHERE lower(e.item_name) = lower(?) OR lower(ea.alias_name) = lower(?)
+                           LIMIT 1""", (_nm, _nm)).fetchone()
+                    if _evc and (_evc[0] or "").strip():
+                        row["course"] = _evc[0].strip()
+            except Exception:
+                logger.exception("save_items: course-from-event failed for %s", row.get("item_name"))
 
             # ── Identity-drift guard ──
             # If the order's customer_email/phone differs from what the
@@ -30693,6 +30723,28 @@ def save_items(rows: list[dict], db_path: str | Path | None = None,
                 if cursor.rowcount > 0:
                     inserted += 1
                     new_item_id = cursor.lastrowid
+
+                    # ── THE PAYER (Kerry 10/30, migration 0044) ──
+                    # Who PAID the order, from its header (parser `_payer`,
+                    # untouched by guest swaps), stamped on every line,
+                    # whoever plays it. email_parser/payer.py.
+                    try:
+                        _pay = row.get("_payer") or {}
+                        if _pay and (_pay.get("email") or _pay.get("name")):
+                            _pk = (row.get("order_id") or _uid, (_pay.get("email") or "").lower(), _pay.get("name"))
+                            if _pk not in _payer_cache:
+                                _payer_cache[_pk] = _resolve_or_create_customer(
+                                    conn, _pay.get("name"), _pay.get("email"),
+                                    phone=_pay.get("phone"), chapter=row.get("chapter"),
+                                    email_uid=row.get("email_uid"), order_id=row.get("order_id"),
+                                    item_name=row.get("item_name"))
+                            if _payer_cache[_pk]:
+                                from email_parser import payer as _payer_mod
+                                if _payer_mod.has_column(conn):
+                                    conn.execute("UPDATE items SET payer_customer_id = ? WHERE id = ?",
+                                                 (_payer_cache[_pk], new_item_id))
+                    except Exception:
+                        logger.exception("save_items: payer stamp failed for item %s", new_item_id)
 
                     # ── Auto-replace RSVP placeholder when payment arrives ──
                     # If this is a real payment (GoDaddy), check for existing RSVP item

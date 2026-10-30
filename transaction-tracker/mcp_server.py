@@ -1790,6 +1790,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-courses              course/tee database listing
       scoring-rsvp-deadline:<event_id>|warn|release  who the lock-day 1:00 PM warning / 4:50 PM release would reach now, with a sample (read-only)
       scoring-admin-payout-report[:<YYYY-MM-DD>]  would the same-night admin payout report (PAYMENTS link) go now, and what it says (read-only)
+      scoring-payer-backfill[:apply]  the PAYER of each order (migration 0044): orders without one, by rule, and the ambiguous ones listed (dry run default)
       scoring-payout-timing:<event_id>  paid-at times for an event's payouts: first / last paid, batches (a gap over 30 min starts one), minutes spent paying (read-only)
       scoring-payout-verify:<event_id>  verify-before-pay: stored state, whether Pay is locked and why, and a fresh cross-check (read-only)
       scoring-event-summary:<event_id>[|preview[|<staff email>]]  the event SUMMARY payload + who the manager email would go to (dry run); |preview mails it to one staff address
@@ -4221,6 +4222,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             from email_parser import admin_payout_report as _apr
             _d = (arg or "").strip() or None
             return json.dumps(_apr.run(day=_d, confirm=False), indent=2, default=str)
+        if cmd == "scoring-payer-backfill":
+            # "[apply]" (Kerry 10/30, migration 0044): stamp the payer on orders
+            # already in the Tracker. Dry run by default; ambiguous orders are
+            # listed, never guessed. Boot runs the unambiguous part.
+            from email_parser.payer import backfill as _pbf
+            _ap = (arg or "").strip().lower() == "apply"
+            if _ap:
+                _audit("scoring-payer-backfill", "apply")
+            return json.dumps(_pbf(apply=_ap), indent=2, default=str)
         if cmd == "scoring-payout-timing":
             # "<event_id>" (Kerry 10/28, Event Ops #2460-D): first paid, last
             # paid, batches (30-minute gap), minutes spent paying. Read-only.

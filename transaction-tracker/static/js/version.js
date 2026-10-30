@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.629.3";
+window.TGF_VERSION = "2.630.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.630.0",
+    date: "2026-10-30",
+    title: "The payer of an order, and the Peter Rundqvist fixes",
+    changes: [
+      "THE PAYER OF AN ORDER (Kerry 10/30: \"Yes, build the payer field with the migration\" / \"Seems like all transactions should go under a customer_id, right? ... But there's definitely a parent payer element that is assigned\"). Migration 0044 adds items.payer_customer_id: who PAID the order (the order header's billing name, email and address), kept apart from items.customer_id (who PLAYS the line). It is stamped at import from the parsed order header, which no guest swap touches, and it is not in ITEM_COLUMNS, so Assign Guest, change customer and merges can never move it. Credit, WD credit and transfer (credit_buyer.buyer_of) read it first; a mapped personal coupon owner still wins, and an unmapped coupon no longer holds once the payer is stored.",
+      "Orders already in the Tracker: email_parser/payer.backfill stamps the payer from the one row per order that carries the billing address (only the payer's row has one), else the one row with an email and no Purchased-by note, else a single-customer order. Anything else is listed, never guessed (bridge scoring-payer-backfill[:apply], dry run default); boot stamps only the unambiguous orders and never overwrites a payer already set.",
+      "THE ROOT CAUSE on order R293121452 (Jeff Young's $80 spot plus the $49 1st TIMER spot Peter Rundqvist played). (1) The parser took Jeff's pairing request \"Peter (guest from Mavn) & Pat\" as the guest's name. A partner request is now used as a guest name only when it is ONE clean name (parser._single_guest_name drops a parenthetical and refuses &, and, comma, slash); otherwise the guest line is held as \"Guest of Jeff Young\", Purchased by Jeff Young. (2) Assign Guest took whoever was on the row as the buyer and rewrote the note to \"Purchased by Peter (guest From Mavn) & Pat\". It now keeps the existing Purchased-by buyer, else the stored payer (app._order_buyer_name); the guest's own email still saves. (3) A line for a known event now takes the event's course at import (the email names no course; the parser had guessed ShadowGlen on Silverhorn).",
+      "CLOSED-EVENT REVERSE ASKS \"DID HE PLAY?\" (Kerry 10/30: \"A reversed slot on a closed event should be asked right there one or the other\" / option \"A\"). On an event whose payouts are recorded or closeout is final, Reverse opens a box: He played (the spot comes back into the field and games, as before, with the COO item) or He didn't play (closed_event_guard.reverse_and_recredit: the credit is undone and credited to the payer in the same step; the field, games, HIO line and results audience stay as the event closed; it refuses before changing anything when the payer can't be told). Shared script static/js/closed-reverse.js on Events, Customers and Transactions. Guards test_payer.py, test_closed_event_guard.py."
+    ]
+  },
   {
     version: "2.629.3",
     date: "2026-10-30",

@@ -1506,3 +1506,12 @@ end back: original `expires_at` from the "was to <date>; ended early" note, `ros
 cleared, the notice stamps that carry the same timestamp as `roster_choice_at` cleared, then
 `sync_player_status_with_terms`. Used for Randy Copper (32) the day after: Kerry wants him
 kept as a member who has opted out of invitations, welcome back any time.
+
+
+## The payer of an order (v2.630.0, Kerry 2026-10-30, migration 0044)
+
+Kerry: "Seems like all transactions should go under a customer_id, right? While a guest with it's own new or existing customer_id, or even a member paying for another member with customer_id could be tied to the transaction from a line item/event/playing partner request standpoint. But there's definitely a parent payer element that is assigned" and "Yes, build the payer field with the migration".
+
+`items.payer_customer_id` is who PAID the order: the order header's billing name, email and address, one payer per order. `items.customer_id` stays who PLAYS the line. The parser carries the header on every parsed row as `_payer`, which the guest swaps never touch, and `save_items` resolves it to a customer_id and stamps every line of the order. The column is deliberately NOT in `ITEM_COLUMNS`, so `update_item`, Assign Guest, Assign Member (change customer) and merges cannot write it. `email_parser/payer.py`: `payer_of`, `stamp_order` (never overwrites), `infer` / `backfill` for orders that predate it (the one row carrying the billing address, else the one row with an email and no Purchased-by note, else a single-customer order; ambiguous orders are listed, never guessed). Boot stamps the unambiguous orders; bridge `scoring-payer-backfill[:apply]` (dry run default) lists the rest. Guard `test_payer.py`.
+
+Why: order R293121452. Jeff Young paid $123.17 for his own spot and a 1st TIMER spot Peter Rundqvist played. The parser took Jeff's pairing request "Peter (guest from Mavn) & Pat" as the guest's name; Assign Guest then took that row's name as the buyer and gave the row Peter's email, so the $49 credit followed Peter. Now a partner request becomes a guest name only when it is one clean name (`parser._single_guest_name`), else the line is "Guest of <buyer>"; Assign Guest keeps the existing Purchased-by buyer or the stored payer (`app._order_buyer_name`); and a line for a known event takes the event's course at import.

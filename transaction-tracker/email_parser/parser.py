@@ -828,14 +828,24 @@ def _promote_guest_customers(rows: list[dict]) -> list[dict]:
             m_status = (member_row.get("user_status") or "").upper()
             if "MEMBER" not in m_status:
                 continue
-            guest = (member_row.get("guest_name") or member_row.get("partner_request") or "").strip()
+            guest = (member_row.get("guest_name") or "").strip()
+            if not guest:
+                # A PAIRING request is not a guest's name (Kerry 10/30, order
+                # R293121452: "Peter (guest from Mavn) & Pat" became one
+                # customer). Use it only when it is ONE clean name.
+                guest = _single_guest_name(member_row.get("partner_request"))
             # Strip "(guest)" suffix if present
             guest = guest.replace("(guest)", "").replace("(Guest)", "").strip()
-            if not guest:
-                continue
-            guest_norm = _normalize_customer_name(guest)
+            guest_norm = _normalize_customer_name(guest) if guest else ""
             if not guest_norm:
-                continue
+                # Not one clean name: the companion GUEST / 1st TIMER line is
+                # still not the buyer's own spot. Hold it as "Guest of <buyer>"
+                # so the payer stays the payer until Assign Guest names him.
+                buyer = (member_row.get("customer") or "").strip()
+                if buyer:
+                    guest_norm = f"Guest of {buyer}"
+                else:
+                    continue
             buyer = (member_row.get("customer") or "").strip()
 
             # Find the companion GUEST/1st TIMER item from the same buyer
@@ -851,6 +861,22 @@ def _promote_guest_customers(rows: list[dict]) -> list[dict]:
                         break
 
     return rows
+
+
+_MULTI_NAME = re.compile(r"&|\+|/|,|\band\b|\bwith\b", re.I)
+
+
+def _single_guest_name(text) -> str:
+    """A partner request as ONE person's name, or "" (Kerry 10/30). Drops a
+    parenthetical like "(guest from Mavn)"; refuses two names ("A & B",
+    "A and B", "A, B", "A / B") and anything that isn't two to four words."""
+    t = re.sub(r"\([^)]*\)", " ", str(text or "")).strip()
+    if not t or _MULTI_NAME.search(t):
+        return ""
+    words = t.split()
+    if not 2 <= len(words) <= 4:
+        return ""
+    return t
 
 
 def _do_guest_swap(row: dict, guest_name: str, buyer_name: str) -> None:
@@ -1123,6 +1149,11 @@ def parse_email(email_data: dict) -> list[dict]:
             "fall_net_points_race": _form_flags.get("fall_net_points_race", item.get("fall_net_points_race")) if "FALL" in _body_up else None,
             "subject": subject,
             "from_addr": from_addr,
+            # THE PAYER (Kerry 10/30, migration 0044): the ORDER header, kept
+            # apart from the line's player fields so no guest swap or later
+            # player edit can move it. save_items stamps payer_customer_id.
+            "_payer": {"name": customer, "email": parsed.get("customer_email"),
+                       "phone": parsed.get("customer_phone")},
         })
 
     # Expand any items with quantity > 1 into separate per-player rows

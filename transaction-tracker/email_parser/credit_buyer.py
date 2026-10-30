@@ -73,9 +73,20 @@ def buyer_of(conn, item: dict) -> dict:
             if owner == cid:
                 return {}
             return _named(conn, owner, f"coupon {code}")
-        if len(players) > 1:
-            return {"hold": f"coupon {code} has no owner on file (app setting coupon_owners); "
-                            "set it before crediting this order"}
+    # THE STORED PAYER (Kerry 10/30, migration 0044): who paid the order,
+    # set at import and never moved by a player edit. A mapped personal
+    # coupon's owner (above) still wins; otherwise the stored payer is the
+    # answer, and the coupon hold and the note/email clues below are only
+    # for rows without one.
+    from email_parser.payer import payer_of
+    payer = payer_of(conn, item)
+    if payer:
+        if payer == cid:
+            return {}
+        return _named(conn, payer, f"payer of order {order_id}")
+    if code and len(players) > 1:
+        return {"hold": f"coupon {code} has no owner on file (app setting coupon_owners); "
+                        "set it before crediting this order"}
     if not _is_extra(item):
         return {}
     buyer = next((r for r in rows if (r.get("customer_email") or "").strip()

@@ -3157,6 +3157,30 @@ def api_update_item(item_id):
     return jsonify({"error": "not found or no valid fields"}), 404
 
 
+def _order_buyer_name(conn, item: dict) -> str:
+    """Who BOUGHT this row, for its "Purchased by" note (Kerry 10/30, order
+    R293121452): the existing note's buyer, else the order's stored payer
+    (migration 0044), else the row's current customer. Never the row's
+    current customer when either of the first two exists, so naming the
+    guest can't make the guest his own buyer."""
+    import re as _re
+    m = _re.match(r"\s*Purchased by\s+(.+?)\s*$", item.get("notes") or "", _re.I)
+    if m:
+        return m.group(1)
+    try:
+        from email_parser.payer import payer_of
+        pid = payer_of(conn, item)
+        if pid:
+            r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                             (pid,)).fetchone()
+            nm = f"{(r[0] or '') if r else ''} {(r[1] or '') if r else ''}".strip()
+            if nm:
+                return nm
+    except Exception:
+        pass
+    return item.get("customer") or ""
+
+
 @app.route("/api/items/<int:item_id>/assign-guest", methods=["POST"])
 @require_role("manager")
 def api_assign_guest(item_id):
@@ -3180,7 +3204,7 @@ def api_assign_guest(item_id):
         if not item:
             return jsonify({"error": "Item not found."}), 404
         item = dict(item)
-        buyer = item["customer"] or ""
+        buyer = _order_buyer_name(conn, item)
 
         from email_parser.parser import _normalize_customer_name
         normalized = _normalize_customer_name(guest_name)
@@ -3307,7 +3331,7 @@ def api_assign_member(item_id):
         if not item:
             return jsonify({"error": "Item not found."}), 404
         item = dict(item)
-        buyer = item["customer"] or ""
+        buyer = _order_buyer_name(conn, item)
 
         cust = conn.execute(
             """SELECT c.customer_id,
