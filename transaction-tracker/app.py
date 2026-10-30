@@ -13581,6 +13581,29 @@ def score_entry_short(code):
     return redirect(f"/member/score?t={tok}")
 
 
+_MARQUEE_RE = re.compile(r"CHAMPIONSHIP|KICKOFF|CUP\b|MATCHES|FINALS|CLASSIC|INVITATIONAL", re.I)
+
+
+def _marquee_title(ev: dict):
+    """A BIG EVENT's two-line title (Kerry 10/30: "2026 FALL CHAMPIONSHIP in
+    line one and Kissing Tree Golf Club in line 2 ... this and other big
+    events really need to be branded differently"). None for a regular
+    event, which keeps its event name as is. Line one drops the s18.12 code
+    and the "| course" tail and leads with the year; line two is the
+    event's course as the events table names it."""
+    name = str(ev.get("item_name") or "")
+    if not _MARQUEE_RE.search(name):
+        return None
+    base = re.sub(r"^\s*[sa]\d+(?:\.\d+)?\s+", "", name, flags=re.I).split("|")[0].strip().upper()
+    yr = str(ev.get("event_date") or "")[:4]
+    if yr.isdigit() and not re.match(r"^\d{4}\b", base):
+        base = f"{yr} {base}"
+    course = str(ev.get("course") or "").strip()
+    if not course and "|" in name:
+        course = name.split("|", 1)[1].strip()
+    return {"line1": base, "line2": course}
+
+
 @app.route("/member/score")
 def score_entry_page():
     # The page carries no data; its JS presents the link to /api/score-entry/*.
@@ -13837,7 +13860,7 @@ def score_entry_board_page():
         return render_template("score_entry.html", member_mode=True)
     ev_id = event_of("group", gid)
     with get_connection() as conn:
-        row = conn.execute("SELECT item_name FROM events WHERE id = ?", (ev_id,)).fetchone()
+        row = conn.execute("SELECT item_name, event_date, course FROM events WHERE id = ?", (ev_id,)).fetchone()
     # the Cup look carries over from the scorecard (Kerry 10/8: "When I click
     # leaderboard on the live scoring, it loses the branding and colors from
     # the Lone Star Cup. It needs to maintain that.")
@@ -13850,6 +13873,7 @@ def score_entry_board_page():
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
                            SOLO_EVENT=(row["item_name"] if row else ""), SOLO_T=tok,
+                           SOLO_MARQUEE=_marquee_title(dict(row)) if row else None,
                            SOLO_LSC=group_is_cup(gid),
                            SOLO_CUP=cup_session_of_group(gid),
                            SE_POINTS_TAB=_se_points_tab_on())

@@ -187,7 +187,7 @@ console.log('== pot headers ==');
   // Batch 1 §4: the team pot shows once, on the dial line
   ck('TEAM pot line', /Pot <b>\$120\.00<\/b><span class="pl"> &middot; 1st \$80\.00 &middot; 2nd \$40\.00/.test(h));
   // prize amounts moved to a Prize column (Kerry 10/30)
-  ck('CTP pot line', /CTP pot \$30\.00</.test(h) && !/CTP pot \$30\.00 \(/.test(h));
+  ck('no CTP pot line: prizes are in the table', !/CTP pot/.test(h));
   ck('proxies: Contest | Hole | Winner | Prize', /<th>Contest<\/th><th>Hole<\/th><th>Winner<\/th><th[^>]*>Prize/.test(h));
 }
 

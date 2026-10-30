@@ -462,6 +462,11 @@
         .evlb-solo-bar .nm { font: 700 17px/1.2 'Bitter', serif; color: #1B1B1B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .evlb-solo-bar .st { font: 700 10.5px/1 'Bitter', serif; letter-spacing: .06em; text-transform: uppercase; color: #92400E; white-space: nowrap; }
         .evlb-solo-bar .st.posted { color: #1B7F4B; }
+        /* a big event's two-line title (Kerry 10/30) */
+        .evlb-solo-bar .nm .mq1 { display: block; font: 800 19px/1.15 'Bitter', serif; letter-spacing: .02em; color: #1B1B1B;
+                                  white-space: normal; }
+        .evlb-solo-bar .nm .mq2 { display: block; font: 600 13px/1.3 'Bitter', serif; color: #E87C3E; margin-top: 2px; white-space: normal; }
+        .evlb-solo-bar .nm:has(.mq1) { white-space: normal; }
         body.evlb-solo main { padding-top: 0; }
         /* the Cup look on a Cup scorer's leaderboard (Kerry 10/8): navy where
            it was black, a navy header with the Cup logo */
@@ -2889,7 +2894,7 @@
                for viewing and leaderboards themselves." #}
             {# the Cup's practice round reads just PRACTICE ROUND (Kerry 10/9: "Also just
                PRACTICE ROUND at top of that page too") #}
-            <div class="evlb-solo-bar"><span class="nm">{% if SOLO_LSC and not SOLO_CUP %}PRACTICE ROUND{% else %}{{ SOLO_EVENT }}{% endif %}</span><span class="st" id="evlb-solo-st"></span></div>
+            <div class="evlb-solo-bar"><span class="nm">{% if SOLO_LSC and not SOLO_CUP %}PRACTICE ROUND{% elif SOLO_MARQUEE and not SOLO_LSC %}<span class="mq1">{{ SOLO_MARQUEE.line1 }}</span>{% if SOLO_MARQUEE.line2 %}<span class="mq2">{{ SOLO_MARQUEE.line2 }}</span>{% endif %}{% else %}{{ SOLO_EVENT }}{% endif %}</span><span class="st" id="evlb-solo-st"></span></div>
             {% endif %}
             <div class="evlb-chips"{% if SOLO_EVENT %} hidden{% endif %}>
                 <div class="evlb-seg" id="evlb-chips">
@@ -6265,7 +6270,8 @@
             gross: evlbStdBoard(d, boards.gross, offNotes) + evlbLegendFor("gross"),
             skins: evlbStdBoard(d, boards.skins, offNotes) + evlbLegendFor("skins"),
             points: evlbStdBoard(d, boards.points) + evlbLegendFor("points"),
-            prox: evlbPotLine(d, "prox") + proxHtml,
+            // no pot line: each prize is in the table (Kerry 10/30)
+            prox: proxHtml,
             summary: evlbSummaryHtml(d),
             mp: evlbMatchPlayHtml(d),
         };
