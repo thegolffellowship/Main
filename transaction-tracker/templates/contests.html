@@ -4375,7 +4375,7 @@
                     : `<td style="${td}color:#9CA3AF;">${nets[i][h]}</td>`).join("")}</tr>`).join("")
                 + `<tr style="font:700 13px/1 'Bitter',serif;"><td style="padding:8px;">TEAM</td>${team.map(x => `<td style="padding:8px 4px;text-align:center;">${x}</td>`).join("")}</tr></table>`
                 + `<div style="font-size:12px;color:#6B7280;">Net scores (gross less pops). Green = the ${n === 1 ? "low net ball that counts" : n + " low net balls that count"} on each hole.</div>`;
-            out.push(sec("The game in one line", `Each hole, the ${cart ? "cart's" : "team's"} ${n === 1 ? "lowest net score is" : `${n} lowest net scores are`} the ${cart ? "cart" : "team"} score, and the lowest total wins.`));
+            out.push(sec("The game in one line", `<b>${cart ? "Your cart" : "Your foursome"} vs the field.</b> Each hole, the ${cart ? "cart's" : "team's"} ${n === 1 ? "lowest net score is" : `${n} lowest net scores are`} the ${cart ? "cart" : "team"} score, and the lowest total wins.`));
             out.push(sec("How a hole is scored", card));
         }
         if (game !== "summary" && game !== "mp" && evlbProjOn(d))

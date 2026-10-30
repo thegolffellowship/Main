@@ -28,12 +28,10 @@
         /* CHAPTER COLOURS (Kerry 10/30: "Use chapter colors to enhance title
            bars and use row color bars to signify player chapters in the
            OCTOBER POINTS"): a chapter race's bar wears its chapter; the
-           monthly (both chapters) keeps ink with a two-chapter stripe, and
+           monthly (both chapters) keeps ink, and
            each monthly row carries its player's chapter as a left bar. */
         .pt-h.ch-sa { background: #D3DDE4; color: #1B1B1B; } .pt-h.ch-sa .m { color: #4B6274; }
         .pt-h.ch-aus { background: #BF5700; color: #fff; } .pt-h.ch-aus .m { color: #FDE7D6; }
-        .pt-h.ch-both { border-bottom: 4px solid;
-                        border-image: linear-gradient(90deg, #8FA8B8 0 50%, #BF5700 50% 100%) 1; }
         tr.c-sa td.r { box-shadow: inset 4px 0 0 #8FA8B8; }
         tr.c-aus td.r { box-shadow: inset 4px 0 0 #BF5700; }
         td.r { padding-left: 12px; }
@@ -108,21 +106,24 @@
                 jobs.push(get("/api/season-contests/points-race?race=" + encodeURIComponent(r.key)).catch(function () { return {}; }));
             });
             return Promise.all(jobs).then(function (res) {
-                var html = [];
+                var html = [], monthly = "";
                 // MONTHLY: the event's month, both chapters (it is live at every event)
                 var m = ((res[0] && res[0].months) || []).filter(function (x) { return x.month === ctx.month; })[0];
                 if (m) {
                     var mrows = (m.standings || []).map(function (s) {
                         return {rank: s.rank_label || s.rank, name: s.player_name, points: s.points, customer_id: s.customer_id, ch: chOf(s.chapter)};
                     });
-                    html.push(card((m.name || "Monthly") + " points", m.final ? "FINAL" : "live",
+                    monthly = (card((m.name || "Monthly") + " points", m.final ? "FINAL" : "live",
                                    table(mrows, mine), m.purse ? "$1 per TGF member at month end: $" + m.purse + (m.final ? "" : " so far") : "",
-                                   "both", '<br><span class="pt-key" style="background:#8FA8B8;margin-left:0"></span>San Antonio<span class="pt-key" style="background:#BF5700"></span>Austin'));
+                                   "", '<br><span class="pt-key" style="background:#8FA8B8;margin-left:0"></span>San Antonio<span class="pt-key" style="background:#BF5700"></span>Austin'));
                 } else {
-                    html.push(card("Monthly points", "", '<div class="pt-empty">No points this month yet.</div>'));
+                    monthly = card("Monthly points", "", '<div class="pt-empty">No points this month yet.</div>');
                 }
-                (ctx.races || []).forEach(function (r, i) {
-                    var d = res[i + 1] || {};
+                // Austin first, San Antonio second, the month third (Kerry 10/30)
+                var races = (ctx.races || []).map(function (r, i) { return {r: r, d: res[i + 1] || {}}; })
+                    .sort(function (a, b) { return (chOf(a.r.chapter) === "aus" ? 0 : 1) - (chOf(b.r.chapter) === "aus" ? 0 : 1); });
+                races.forEach(function (x) {
+                    var r = x.r, d = x.d;
                     // ENROLLED rows only, as the member board ranks them
                     var rows = (d.standings || []).filter(function (s) { return s.enrolled; }).map(function (s) {
                         return {rank: s.rank, name: s.display_name || s.player_name, points: s.total_points, customer_id: s.customer_id};
@@ -130,6 +131,7 @@
                     html.push(card(d.label || r.label, d.race_final ? "FINAL" : r.chapter,
                                    d.error ? '<div class="pt-empty">' + esc(d.error) + '</div>' : table(rows, mine), "", chOf(r.chapter)));
                 });
+                html.push(monthly);
                 document.getElementById("pt-body").innerHTML = html.join("");
             });
         }).catch(function (e) {
