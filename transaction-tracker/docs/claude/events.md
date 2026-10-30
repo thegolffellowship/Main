@@ -3721,7 +3721,9 @@ for now"). The Customer Communications lane owns its content and timing
   ink / team or cart in orange) from the scorecard row (Kerry 10/30,
   v2.632.0). CTP lines on the GAMES card and the Events GAMES tab name the
   hole (`ctp_hole_labels`, `/api/events/<id>/ctp-holes`). YOUR CARD draws a par-3-dropped team pop as an orange X (`net_ghost`,
-  v2.632.1), so dots + X's = the team handicap shown in the tees row. YOUR CARD rows: HOLE / YDS (the
+  v2.632.1), so dots + X's = the team handicap shown in the tees row. YOUR
+  STANDINGS GOING IN (v2.634.0): the results email's `_points_card` after the
+  games card, behind dial `event_day_points_card` (preview | on). YOUR CARD rows: HOLE / YDS (the
   player's own band from the scorecard grid) / PAR / SI (his own tee) / NET / TEAM.
 - **GAMES card** (`games_view` + `games_card`): read ONCE per build from the
   GAMES tab (`page_probe.event_games_tab`, the page's own math). Shows total in

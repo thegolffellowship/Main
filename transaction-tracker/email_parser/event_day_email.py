@@ -595,6 +595,7 @@ def games_card(view: dict, cid: int | None, rsvp_only: bool, as_of: str, day: st
 # the results email will show. Behind dial `event_day_pace_card` (off until
 # Kerry approves the words); words here, not in the approved template, so the
 # template's approval hash is untouched.
+POINTS_DIAL = "event_day_points_card"
 PACE_DIAL = "event_day_pace_card"
 _TIME_RE = re.compile(r"(\d{1,2}):(\d\d)\s*([AP]M)", re.I)
 
@@ -910,6 +911,22 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
         except Exception:
             logger.exception("event-day email: pace card unavailable (non-fatal)")
             pace_t = None
+        # STANDINGS GOING IN (Kerry 10/30: "a row that shows their points and
+        # standings for the Chapter Fall Points and the Monthly points (similar
+        # to the Event Recap) so they get to see their place before going into
+        # the event"): the results email's own YOUR POINTS card, read once per
+        # build from results_email.event_facts, so both emails show the same
+        # numbers. Dial event_day_points_card: on = every send, preview (the
+        # default) = staff previews only until Kerry OKs the look.
+        pts_facts = None
+        try:
+            pdial = (db.get_app_setting(POINTS_DIAL, db_path=db_path) or "preview").strip().lower()
+            if pdial == "on" or (preview and pdial == "preview"):
+                from email_parser import results_email as _rx
+                pts_facts = _rx.event_facts(int(event_id), db_path=db_path)
+        except Exception:
+            logger.exception("event-day email: standings card unavailable (non-fatal)")
+            pts_facts = None
         if gview.get("ok"):
             try:
                 pot = float((db.get_hio_pot(db_path=db_path) or {}).get("pot") or 0)
@@ -1073,6 +1090,14 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
             gcard = games_card(gview, cid, bool(r.get("rsvp_only")), as_of, day) if gview.get("ok") else ""
             if pace_t:
                 gcard += pace_card(pace_t[0], pace_t[1], pace_t[2], ev_info.get("course"), g.get("start_line"))
+            if pts_facts and cid:
+                try:
+                    from email_parser import results_email as _rx
+                    _ch = pts_facts["chapter"]
+                    _lab = _rx.FALL_RACE.get(_ch, (None, None, (ev_info.get("chapter") or "").title()))[2]
+                    gcard += _rx._points_card(pts_facts, int(cid), _lab, eyebrow="YOUR STANDINGS GOING IN")[0]
+                except Exception:
+                    logger.exception("event-day email: standings card failed for cid %s", cid)
             sbutton = scoring_button(short_score_url(url)) if url else ""
             first = nm.get("first_name") or (full.split()[0] if full else "")
             vals_html = {

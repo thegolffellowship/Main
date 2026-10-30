@@ -419,7 +419,7 @@ def _month_row(facts, cid):
     return None, (st[0] if st else None)
 
 
-def _points_card(facts, cid, chapter_label) -> tuple[str, bool]:
+def _points_card(facts, cid, chapter_label, eyebrow: str = "YOUR POINTS") -> tuple[str, bool]:
     """(html, bought_in) — empty html when the person is in neither standing."""
     ch = _person_chapter(facts, cid)
     if facts["chapter"] == "tgf" and ch in FALL_RACE:
@@ -451,7 +451,7 @@ def _points_card(facts, cid, chapter_label) -> tuple[str, bool]:
             lines.append(f"The month is automatic for every member: winner takes all, ${purse:g}.")
     if not items:
         return "", enrolled
-    return card("YOUR POINTS", stat_row(items) + (note(" ".join(lines)) if lines else "")), enrolled
+    return card(eyebrow, stat_row(items) + (note(" ".join(lines)) if lines else "")), enrolled
 
 
 def _up_next(facts, cid) -> str:

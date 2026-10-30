@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.633.1";
+window.TGF_VERSION = "2.634.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.634.0",
+    date: "2026-10-30",
+    title: "Event Info email: your standings going in",
+    changes: [
+      "YOUR STANDINGS GOING IN (Kerry 10/30: \"a row that shows their points and standings for the Chapter Fall Points and the Monthly points (similar to the Event Recap) so they get to see their place before going into the event\"): the event-day email carries the results email's own YOUR POINTS card, retitled, after the games card: the player's home-chapter Fall race (points, place, how far back, linked to his row) and the month (points, place, the leader), with the activate-my-points line for a player not bought in. Read once per build from results_email.event_facts, so both emails always show the same numbers. Dial event_day_points_card: preview (default) = staff previews only; on = every send."
+    ]
+  },
   {
     version: "2.633.1",
     date: "2026-10-30",
