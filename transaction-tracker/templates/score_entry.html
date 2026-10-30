@@ -49,6 +49,7 @@
         .se-copy { font-size: 14px; line-height: 1.5; color: #4B5563; white-space: normal; }
         .se-stack { display: flex; flex-direction: column; gap: 10px; }
         .se-gap { height: 18px; }
+        .se-gap.sm { height: 12px; }
         .se-pill { height: 56px; border-radius: 48px; font-size: 17px; font-weight: 600; font-family: inherit;
                    width: 100%; cursor: pointer; }
         .se-pill.go { border: none; background: #0d7556; color: #FFFFFF; font-weight: 700; }
@@ -114,6 +115,7 @@
         /* THIS GROUP on the scanned-link landing (mockup QRLanding): San
            Antonio slate left, Austin burnt orange right. */
         .se-this { background: #FFFFFF; }
+        .se-box.se-this:has(.se-quad) { padding: 10px 14px 12px; }
         .se-grp { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
         .se-grp .r { text-align: right; }
         .se-grp .t { font: 700 11px Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px; }
@@ -123,10 +125,10 @@
         .se-grp .r .se-gw { flex-direction: row-reverse; }
         /* THIS GROUP as a quad (Kerry 10/30): cart 1 (seats 1-2) on the top
            row, cart 2 below, each headshot centred over the name, equal cells */
-        .se-quad { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 14px 10px; margin-top: 10px; }
+        .se-quad { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 8px 10px; margin-top: 4px; }
         .se-qc { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; min-width: 0; }
-        .se-qc .se-face { width: 64px; height: 64px; font-size: 20px; }
-        .se-qn { font: 600 15px/1.25 Bitter, Georgia, serif; margin-top: 6px; }
+        .se-qc .se-face { width: 76px; height: 76px; font-size: 26px; }
+        .se-qn { font: 600 17px/1.2 Bitter, Georgia, serif; margin-top: 6px; }
         .se-face { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none; display: block; }
         .se-face.ini { display: flex; align-items: center; justify-content: center; background: #D3DDE4; color: #1B1B1B;
                        font: 700 15px Arial, sans-serif; }
@@ -1217,8 +1219,6 @@
             const sw = card.scoring_window || {};
             const shut = sw.open === false;
             const shutLabel = sw.closed ? "SCORING HAS CLOSED" : (sw.opens_at ? "SCORING OPENS " + sw.opens_at : "LIVE SCORING NOT ON YET");
-            const shutCopy = sw.closed ? "Scoring has closed for this event."
-                : "Live scoring isn't on yet" + (sw.opens_at ? ". It opens at " + sw.opens_at + ", an hour before the first tee." : ".");
             const sideOf = (p) => ((card.matches || {})[String(p.customer_id)] || {}).side;
             const sa = card.players.filter((p) => sideOf(p) === "sa"), aus = card.players.filter((p) => sideOf(p) === "austin");
             const group = cup && (sa.length || aus.length)
@@ -1232,15 +1232,15 @@
             return `<div class="se-eyebrow">${esc(practiceEyebrow() ? "Practice Round" + (card.round_date ? " | " + dt(card.round_date) : "")
                 : [cupEyebrow() || card.round_label, dt(card.round_date)].filter(Boolean).join(" · "))}</div>
                 <h1 class="se-h1 big">${cup ? "Lone Star Cup" : "Live scoring"}</h1><div class="se-sub">${esc(when)}</div>
-                <div class="se-gap"></div>
+                <div class="se-gap sm"></div>
                 <div class="se-box se-this"><div class="se-lbl">This group</div>${group}</div>
-                ${held}<div class="se-gap"></div>
+                ${held}<div class="se-gap sm"></div>
                 <div class="se-stack">
                   ${shut ? `<button type="button" class="se-pill dark" disabled>${esc(shutLabel)}</button>`
                          : `<button type="button" class="se-pill dark" data-act="gate-score">SCORE THIS GROUP</button>`}
                   <button type="button" class="se-pill line" data-act="gate-follow" data-href="${esc(follow)}">${cup ? "FOLLOW THE CUP" : "FOLLOW THE LEADERBOARD"}</button>
                 </div><div class="se-gap"></div>
-                <div class="se-copy">${shut ? esc(shutCopy) + " " : ""}One phone per group keeps the scores. Everyone else follows along${cup ? " on the Cup leaderboard, with this match open" : " on the leaderboard"}; following claims nothing.${card.lock.state === "held" ? " Take over only if " + esc(first(card.lock.holder_name || "the scorer")) + " can't keep going." : ""}</div>`;
+                ${shut ? "" : `<div class="se-copy">One phone per group keeps the scores. Everyone else follows along${cup ? " on the Cup leaderboard, with this match open" : " on the leaderboard"}; following claims nothing.${card.lock.state === "held" ? " Take over only if " + esc(first(card.lock.holder_name || "the scorer")) + " can't keep going." : ""}</div>`}`;
         }
         // Mockups WhoAreYou / Held: "Sat AM Fourball · Group 2".
         const eyebrowGroup = () => cupEyebrow() || practiceEyebrow() || [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
