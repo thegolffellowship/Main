@@ -729,23 +729,24 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
             fall_line = "Tied for 1st"
         else:
             back = top - pts
-            fall_line = "1 point back" if back == 1 else f"{_pts(back)} back"
+            fall_line = "1 point back" if back == 1 else f"{_pts(back)} points back"
             if ladder and act_place <= len(ladder):
                 if enrolled:
                     fall_line += " \u00b7 in the money"
-            elif cut_gap is not None and cut_gap > WR:
+            elif cut_gap is not None and cut_gap >= WR:
                 # FAR FROM THE MONEY (Kerry 10/30: "I don't think we try to
                 # sell to people that are 10 or more back from the money and
                 # not do the orange bar to activate. Just tell them where they
                 # are"): place and points back only; no strip, no "not in".
                 far = True
+                fall_line = f"{_pts(back)} back"
             elif cut_gap is not None and cut_gap > 0:
                 # OUT OF THE MONEY: the distance that matters is to the last
                 # paid place, not to the lead (Kerry 10/30: "Points back for
                 # some should be based on how far out of the money they are,
                 # not from the lead").
                 out_of_money = cut_gap
-                fall_line = f"{_pts(cut_gap)} out of the money \u00b7 {fall_line}"
+                fall_line = f"{_pts(cut_gap)} pts out of the money \u00b7 {_pts(back)} back"
         if not enrolled:
             pay = ladder[act_place - 1] if 0 < act_place <= len(ladder) else None
             if pay:
@@ -754,7 +755,7 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
                 inactive_line = f"Active today = {R._ordinal(act_place)} place."
                 if cut_gap is not None and 0 < cut_gap <= WR:
                     inactive_line = (f"Active today = {R._ordinal(act_place)} place, "
-                                     f"{_pts(cut_gap)} out of the money.")
+                                     f"{_pts(cut_gap)} pts out of the money.")
     # ── MONTH ──
     month = facts.get("month") or {}
     mname = (month.get("name") or "").upper() or "THIS MONTH"
@@ -788,13 +789,15 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
     elif month_lead:
         head = f"You lead {mword}, {first}"
     elif has_fall and far:
-        head = f"Here's where you stand, {first}"
+        head = (f"Here's where you stand with one round to play, {first}" if finale
+                else f"Here's where you stand going in, {first}")
     elif has_fall:
         gap = out_of_money if out_of_money else back
         b = int(gap) if gap == int(gap) else gap
         n = _NUM_WORDS.get(b) if isinstance(b, int) else None
         n = n or _pts(gap)
-        what = "out of the money" if out_of_money else "back"
+        unit = "point" if gap == 1 else "points"
+        what = f"{unit} out of the money" if out_of_money else f"{unit} back"
         head = (f"{n} {what} with one round to play, {first}" if finale
                 else f"{n} {what} going in, {first}")
     else:
@@ -843,7 +846,8 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
             f'<div style="font-size:22px;font-weight:bold;color:#FFFFFF;line-height:1.2;margin-top:4px;">{head}</div></td>'
             f'</tr></table>'
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;margin-top:14px;table-layout:fixed;"><tr>'
-            + col("FALL RACE", fall_place, fall_pts, fall_line, "#E87C3E", False)
+            + col("FALL RACE" + (f" \u00b7 {(R.FALL_RACE.get(ch) or (None, None, ''))[2].upper()}"
+                                 if R.FALL_RACE.get(ch) else ""), fall_place, fall_pts, fall_line, "#E87C3E", False)
             + col(mlabel, month_place, month_pts, month_line, "#FFFFFF", True)
             + f'</tr></table></td></tr>{strip}'
             f'<tr><td align="center" style="padding:9px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;text-align:center;">'
