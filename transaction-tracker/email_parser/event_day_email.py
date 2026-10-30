@@ -697,7 +697,7 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
             pass
 
     def _net_tot(keys):
-        # "4/3" when a par 3 took pops in these holes (Kerry 10/30: "show 4/3
+        # "4 | 3" when a par 3 took pops in these holes (Kerry 10/30: "show 4/3
         # for the front 9 OUT column and 7/6 for the TOT column ... So a
         # player understands more visually why the 7 from their Team Playing
         # Handicap differs from their actual scorecard pops"): pops the
@@ -712,7 +712,7 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
         if not lost:
             return f'<span style="color:{ORANGE};">{played}</span>'
         return (f'<span style="color:{ORANGE};white-space:nowrap;">{played + lost}'
-                f'<span style="color:#D1D5DB;font-weight:normal;">/</span>{played}</span>')
+                f'<span style="color:#D1D5DB;font-weight:normal;padding:0 2px;">|</span>{played}</span>')
 
     def _net_cell(h):
         try:
