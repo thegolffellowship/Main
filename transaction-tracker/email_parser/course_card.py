@@ -249,3 +249,87 @@ def read_course_card(course_id: int, db_path=None) -> dict:
             tees.append(t)
         return {"course_id": c["course_id"], "course": c["name"],
                 "n_tees": len(tees), "tees": tees}
+
+
+def archive_tee_versions(course_id: int, as_of: str, label: str, apply: bool = False,
+                         db_path=None) -> dict:
+    """VERSION A COURSE'S TEES BEFORE A CORRECTION (Kerry 10/30, Kissing Tree:
+    "Those past events are what they are and nothing should change for them.
+    Version control updates to the course's tees").
+
+    For every tee of the course that carries hole data and is not itself an
+    archive, a copy is made of the tee as it stands now (row, ratings, holes)
+    named "<tee> (before <as_of>)", with version_label=<label>,
+    valid_to=<the day before as_of>, no TGF bands
+    and no GG alias, so nothing that picks a tee by band or name finds it.
+    Every scoring round on that tee dated BEFORE as_of is re-pointed to the
+    copy, so a past event keeps the par, stroke index, yardage and rating it
+    was played on. The live tee keeps its id and its bands; the corrected
+    card is then loaded onto it (load_course_card). Idempotent: a tee that
+    already has a copy under this label is skipped. Dry run by default."""
+    from datetime import date, timedelta
+    from . import database as db
+    try:
+        valid_to = (date.fromisoformat(as_of) - timedelta(days=1)).isoformat()
+    except ValueError:
+        return {"error": f"as_of must be YYYY-MM-DD, got {as_of!r}"}
+    out = {"course_id": course_id, "as_of": as_of, "label": label, "applied": False, "tees": []}
+    with db._connect(db_path) as conn:
+        db._ensure_scoring_tables(conn)
+        tees = [dict(r) for r in conn.execute(
+            """SELECT * FROM course_tees WHERE course_id = ?
+                 AND COALESCE(version_label, '') = '' AND COALESCE(valid_to, '') = ''
+                 AND EXISTS (SELECT 1 FROM course_tee_holes h WHERE h.tee_id = course_tees.tee_id)
+               ORDER BY tee_id""", (int(course_id),))]
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(course_tees)")]
+        for t in tees:
+            # The archive is named "<tee> (before <as_of>)": the schema's
+            # unique key (course, name, gender, holes, nine, slope, rating)
+            # forbids a same-named twin, and a tee lookup by name ("Back")
+            # must never land on the archive.
+            arc_name = f"{t['tee_name']} (before {as_of})"
+            done = conn.execute(
+                """SELECT tee_id FROM course_tees WHERE course_id = ? AND lower(tee_name) = lower(?)
+                     AND gender = ? AND holes = ? AND version_label = ?""",
+                (t["course_id"], arc_name, t["gender"], t["holes"], label)).fetchone()
+            rounds = conn.execute(
+                "SELECT COUNT(*) FROM scoring_rounds WHERE tee_id = ? AND COALESCE(round_date, '') < ?",
+                (t["tee_id"], as_of)).fetchone()[0]
+            plan = {"tee_id": t["tee_id"], "tee_name": t["tee_name"], "gender": t["gender"],
+                    "bands": t.get("tgf_bands"), "past_rounds": rounds,
+                    "action": "skip (already archived)" if done else "archive"}
+            out["tees"].append(plan)
+            if done or not apply:
+                if done:
+                    plan["archive_tee_id"] = done[0]
+                continue
+            copy = {c: t.get(c) for c in cols if c != "tee_id"}
+            copy.update({"tee_name": arc_name, "tgf_bands": None, "gg_alias": None, "version_label": label,
+                         "valid_to": valid_to, "source": "admin"})  # the schema allows import|course_card|usga_crdb|admin
+            names = list(copy)
+            new_id = conn.execute(
+                f"INSERT INTO course_tees ({', '.join(names)}) VALUES ({', '.join('?' for _ in names)}) "
+                "RETURNING tee_id", [copy[n] for n in names]).fetchone()[0]
+            conn.execute("""INSERT INTO course_tee_holes (tee_id, hole_number, par, yardage, stroke_index)
+                            SELECT ?, hole_number, par, yardage, stroke_index
+                              FROM course_tee_holes WHERE tee_id = ?""", (new_id, t["tee_id"]))
+            rcols = [r[1] for r in conn.execute("PRAGMA table_info(tee_set_ratings)")
+                     if r[1] not in ("id", "tee_id")]
+            conn.execute(f"""INSERT INTO tee_set_ratings (tee_id, {', '.join(rcols)})
+                             SELECT ?, {', '.join(rcols)} FROM tee_set_ratings WHERE tee_id = ?""",
+                         (new_id, t["tee_id"]))
+            moved = conn.execute(
+                "UPDATE scoring_rounds SET tee_id = ? WHERE tee_id = ? AND COALESCE(round_date, '') < ?",
+                (new_id, t["tee_id"], as_of)).rowcount
+            plan.update({"archive_tee_id": new_id, "rounds_repointed": moved})
+        if apply:
+            conn.commit()
+            out["applied"] = True
+            try:
+                db.log_agent_action("course_card", "tee_versions_archived",
+                                    f"course {course_id}: {label}, valid_to {valid_to}, "
+                                    f"{sum(p.get('rounds_repointed', 0) for p in out['tees'])} past rounds kept on the archive",
+                                    db_path=db_path)
+            except Exception:
+                pass
+    return out

@@ -1915,6 +1915,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-lsc-recap:<saturday|final>[|send[|force]]  Cup recap DRAFT from the board (Kerry 10/9): dry run = plain text + guard (refused until the sessions are final); send = DRAFT to Kerry only, once per kind (lsc_recap_sent); force re-runs. No dollars
       scoring-se-round-si:<round_id>[|apply]  re-read a seeded round's par + stroke index from the course record's <50 tee (holes only; scores, groups, links untouched); dry run default
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
+      scoring-course-archive:<course_id>|<as_of>|<label>[|apply]  version a course before a correction: copy each tee (row, ratings, holes) to an archive with valid_to, keep every round before as_of on the copy (Kerry 10/30, Kissing Tree)
       scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, LSC skins pot, tax reserve by month
@@ -4934,6 +4935,20 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _res = db.ensure_tgf_events(_ids, apply=_apply)
             if _apply:
                 _audit("scoring-tgf-event-ensure", json.dumps(_res["events"])[:900])
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-course-archive":
+            # "<course_id>|<as_of YYYY-MM-DD>|<version label>[|apply]" (Kerry
+            # 10/30, Kissing Tree): copy each tee as it stands to an archive
+            # version and keep every round before as_of on the copy, so a
+            # course correction never changes a past event. Dry run default.
+            from email_parser.course_card import archive_tee_versions
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 3 or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-course-archive:<course_id>|<as_of>|<label>[|apply]"})
+            _res = archive_tee_versions(int(_p[0]), _p[1], _p[2],
+                                        apply=(len(_p) > 3 and _p[3].lower() == "apply"))
+            if _res.get("applied"):
+                _audit("scoring-course-archive", f"course {_p[0]} as_of {_p[1]}: {_p[2]}")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-course-card":
             # "<course_id>" reads the card as held; "<course_id>|<card json>"
@@ -8003,9 +8018,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
                 if len(_p) < 3 or not _p[2].lstrip("#").isdigit():
                     return json.dumps({"error": "<event_id>|reissue|<kerry-ok post id>[|confirm]"})
+                # "|card" anywhere after the post id: the CORRECTED SCORECARD
+                # notice instead of the start notice (Kerry 10/30, Kissing Tree)
                 return json.dumps(_ede.send_event_day_reissue(
                     int(_p[0]), int(_p[2].lstrip("#")),
-                    confirm=(len(_p) > 3 and _p[3].lower() == "confirm")),
+                    confirm=("confirm" in [x.lower() for x in _p[3:]]),
+                    kind=("card" if "card" in [x.lower() for x in _p[3:]] else "start")),
                     indent=2, default=str)
             if len(_p) > 1 and _p[1].lower() == "test":
                 # "<event_id>|test|<staff addr>|cid=<id>" (Kerry 10/13): ONE

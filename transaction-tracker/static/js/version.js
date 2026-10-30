@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.632.1";
+window.TGF_VERSION = "2.633.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.633.0",
+    date: "2026-10-30",
+    title: "Versioned course corrections; the corrected-scorecard re-issue",
+    changes: [
+      "VERSIONED COURSE CORRECTIONS (Kerry 10/30, Kissing Tree: \"Those past events are what they are and nothing should change for them. Version control updates to the course's tees based on our database standards\"). course_card.archive_tee_versions (bridge scoring-course-archive:<course>|<as_of>|<label>[|apply], dry run default) copies each tee with hole data, as it stands, to an archive tee named \"<tee> (before <as_of>)\" with version_label and valid_to (the day before), no bands and no GG alias, its ratings and holes copied; every scoring round dated before as_of moves to the copy, so a past event keeps the par, stroke index, yardage and rating it was played on. The live tee keeps its id and bands, and the corrected card is then loaded onto it with scoring-course-card. Idempotent. Guard test_course_versions.py.",
+      "THE CORRECTED-SCORECARD RE-ISSUE: scoring-event-day-email:<event>|reissue|<kerry-ok post>|card[|confirm] sends the approved event-day message again with \"UPDATED SCORECARD: \" before the subject and a notice that the course's hole handicaps and yardages were corrected to the club's own card (start, group and cart unchanged). Once per player per sheet state, same Kerry-word gate as the start re-issue."
+    ]
+  },
   {
     version: "2.632.1",
     date: "2026-10-30",

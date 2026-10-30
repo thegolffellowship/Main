@@ -1586,8 +1586,24 @@ def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: b
             "counts": {**out["counts"], "sent": len(sent), "failed": len(failed)}}
 
 
+CARD_PREFIX = "UPDATED SCORECARD: "
+
+
+def card_banner(course: str | None) -> str:
+    """The notice at the top of a re-issue after the course card was
+    corrected (Kerry 10/30, Kissing Tree)."""
+    c = _e(course or "the course")
+    return (f'<table {_T} style="margin:0 0 14px;"><tr><td bgcolor="#FFF7ED" '
+            f'style="background:#FFF7ED;border:2px solid {ORANGE};border-radius:8px;padding:12px 14px;">'
+            f'<div style="font:bold 13px Georgia,serif;letter-spacing:1px;color:{ORANGE};">UPDATED SCORECARD</div>'
+            f'<div style="padding-top:4px;color:{INK};">We corrected {c}\u2019s scorecard to the club\u2019s '
+            f'own card: the hole handicaps (stroke index) and yardages. Your pops may be on different holes '
+            f'than in our earlier email. This replaces it. Your start, group and cart are the same.</div>'
+            f'</td></tr></table>')
+
+
 def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
-                           db_path=None) -> dict:
+                           db_path=None, kind: str = "start") -> dict:
     """RE-ISSUE the event-day email after the start holes change: every ready
     player gets the same approved message with "UPDATED START: " before the
     subject and an orange notice at the top. The template hash must still
@@ -1619,6 +1635,10 @@ def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
     if built["template_hash"] != appr["template_hash"]:
         return {"refused": "template changed during the build"}
     key = reissue_key(event_id, built["messages"])
+    card = (kind == "card")
+    if card:
+        # one card correction per event per sheet state
+        key += ":card"
     try:
         done = set(_json.loads(db.get_app_setting(key, db_path=db_path) or "[]"))
     except Exception:
@@ -1631,14 +1651,15 @@ def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
         return {**out, "dry_run": True,
                 "plan": [{"customer_id": m["customer_id"], "name": m["name"],
                           "email": m["email"], "start_line": m.get("start_line")} for m in todo],
-                "sample_subject": (REISSUE_PREFIX + todo[0]["subject"]) if todo else None}
+                "sample_subject": ((CARD_PREFIX if card else REISSUE_PREFIX) + todo[0]["subject"]) if todo else None}
     creds = _creds()
     if not creds:
         return {"error": "Email credentials not configured on server"}
     sent, failed = [], []
     for m in todo:
-        subject = REISSUE_PREFIX + m["subject"]
-        html = with_banner(m["html"], reissue_banner(m.get("start_line")))
+        subject = (CARD_PREFIX if card else REISSUE_PREFIX) + m["subject"]
+        html = with_banner(m["html"], card_banner((built.get("event") or {}).get("course"))
+                           if card else reissue_banner(m.get("start_line")))
         good = False
         try:
             good = _graph_send(creds, m["email"], subject, html)
