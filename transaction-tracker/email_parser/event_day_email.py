@@ -1095,7 +1095,16 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                     from email_parser import results_email as _rx
                     _ch = pts_facts["chapter"]
                     _lab = _rx.FALL_RACE.get(_ch, (None, None, (ev_info.get("chapter") or "").title()))[2]
-                    gcard += _rx._points_card(pts_facts, int(cid), _lab, eyebrow="YOUR STANDINGS GOING IN")[0]
+                    _pts = _rx._points_card(pts_facts, int(cid), _lab, eyebrow="YOUR STANDINGS GOING IN")[0]
+                    # A FINALE puts the standings first, above YOUR START
+                    # (Kerry 10/30: "Standing need to be above your card in this
+                    # case because this is the finale and perhaps we could
+                    # capture one or two more entrants"): a championship or a
+                    # TGF event; a regular night keeps them after the games.
+                    if _pts and (_ch == "tgf" or re.search(r"CHAMPIONSHIP", ev_info.get("item_name") or "", re.I)):
+                        spot = _pts + spot
+                    else:
+                        gcard += _pts
                 except Exception:
                     logger.exception("event-day email: standings card failed for cid %s", cid)
             sbutton = scoring_button(short_score_url(url)) if url else ""
