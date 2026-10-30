@@ -188,7 +188,7 @@ console.log('== pot headers ==');
   ck('TEAM pot line', /Pot <b>\$120\.00<\/b><span class="pl"> &middot; 1st \$80\.00 &middot; 2nd \$40\.00/.test(h));
   // prize amounts moved to a Prize column (Kerry 10/30)
   ck('no CTP pot line: prizes are in the table', !/CTP pot/.test(h));
-  ck('proxies: Contest | Hole | Winner | Prize', /<th>Contest<\/th><th>Hole<\/th><th>Winner<\/th><th[^>]*>Prize/.test(h));
+  ck('proxies: Contest | Hole | Winner | Prize', /<th>Contest<\/th><th[^>]*>Hole<\/th><th>Winner<\/th><th[^>]*>Prize/.test(h));
 }
 
 console.log('== Match Play tab ==');

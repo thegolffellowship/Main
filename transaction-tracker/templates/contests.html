@@ -6246,11 +6246,11 @@
             if (p.game === "ctp") proxCtpI++;
             return `<tr class="evlb-plr" data-rid="${w.rid}">` +
                 `<td>${escapeHtml(label)}</td>` +
-                `<td>${escapeHtml(hole || (hm ? "" : det))}${rest && hole ? ` <span style="color:var(--text-muted);font-size:12px;">${escapeHtml(rest)}</span>` : ""}</td>${w.cell}` +
-                `<td class="r">${prize != null ? "$" + Number(prize).toFixed(2) : ""}</td></tr>`;
+                `<td style="text-align:center;">${escapeHtml(hole || (hm ? "" : det))}${rest && hole ? ` <span style="color:var(--text-muted);font-size:12px;">${escapeHtml(rest)}</span>` : ""}</td>${w.cell}` +
+                `<td class="r" style="text-align:center;">${prize != null ? "$" + Number(prize).toFixed(2) : ""}</td></tr>`;
         };
         const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
-            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${evlbProjOn(d) ? " evlb-projwon" : ""}"><thead><tr><th>Contest</th><th>Hole</th><th>Winner</th><th style="text-align:right;">Prize${evlbProjMark(d)}</th></tr></thead><tbody>` +
+            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${evlbProjOn(d) ? " evlb-projwon" : ""}"><thead><tr><th>Contest</th><th style="text-align:center;">Hole</th><th>Winner</th><th style="text-align:center;">Prize${evlbProjMark(d)}</th></tr></thead><tbody>` +
               (d.proxies || []).map(p => proxRow(p.label || "", p)).join("") +
               (d.hio || []).map(p => proxRow("Hole-in-One", p)).join("") +
               `</tbody></table></div>`
