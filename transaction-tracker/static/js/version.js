@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.0";
+window.TGF_VERSION = "2.635.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.1",
+    date: "2026-10-30",
+    title: "NEW TO TGF? only for 1st Timers and guests",
+    changes: [
+      "The event-day email's NEW TO TGF? Rules of Play note goes to a 1st Timer or a guest only, no longer to a member who joined this year (Kerry 10/30 on Jeff Rideout, a 2026 member with 40+ events: \"Nobody does, but Eric. He's our only 1st Timer\")."
+    ]
+  },
   {
     version: "2.635.0",
     date: "2026-10-30",

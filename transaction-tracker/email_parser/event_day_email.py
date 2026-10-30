@@ -1341,7 +1341,10 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                 msg["html"] = with_banner(msg["html"], add_handicap_note(hurl))
                 msg["text"] = f"No handicap on file: add yours at {hurl}\n\n" + msg["text"]
                 msg["no_handicap"] = True
-            if kind:
+            # NEW TO TGF? goes to a 1st Timer or a guest only, not to a member
+            # who joined this year (Kerry 10/30, Jeff Rideout: "Nobody does,
+            # but Eric. He's our only 1st Timer").
+            if kind in ("first", "guest"):
                 msg["html"] = with_banner(msg["html"], rules_note())
                 msg["text"] = f"New to TGF? Please review our TGF Rules of Play: {RULES_OF_PLAY_URL}\n\n" + msg["text"]
             messages.append(msg)
