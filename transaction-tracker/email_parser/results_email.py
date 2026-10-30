@@ -125,13 +125,32 @@ def button(label, url, solid=True) -> str:
 
 
 def scorecard(holes, pars, strokes, dots) -> str:
+    """The player's card. An 18 is two stacked nines (Kerry 10/30: "for 18
+    hole cards ... they need to wrap front 9 back 9. They get real
+    scrunched"): OUT on the front, IN + TOT on the back, hole columns
+    aligned between them. Email clients ignore media queries, so the split
+    is always on."""
+    holes, pars, strokes, dots = list(holes), list(pars), list(strokes), list(dots)
+    if len(holes) > 9:
+        whole = (sum(pars), sum(s for s in strokes if s is not None), sum(d for d in dots if d > 0))
+        return (_nine_grid(holes[:9], pars[:9], strokes[:9], dots[:9], "OUT", None, split=True)
+                + '<div style="height:6px;line-height:6px;font-size:0;">&nbsp;</div>'
+                + _nine_grid(holes[9:], pars[9:], strokes[9:], dots[9:], "IN", whole, split=True))
+    tot = "OUT" if holes and holes[0] == 1 and len(holes) == 9 else ("IN" if holes and holes[0] == 10 else "TOT")
+    return _nine_grid(holes, pars, strokes, dots, tot, None, split=False)
+
+
+def _nine_grid(holes, pars, strokes, dots, tot, whole, split) -> str:
     cell = f'align="center" style="padding:4px 0;font-size:13px;border-top:1px solid {LINE};"'
-    lab = (f'style="padding:4px 6px 4px 0;font:bold 10px Arial,sans-serif;letter-spacing:1px;'
+    tcell = f'align="center" style="padding:4px 0;font-size:13px;border-top:1px solid {LINE};border-left:1px solid {LINE};"'
+    lab = (f'style="padding:4px 6px 4px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;'
            f'color:{MUTED};border-top:1px solid {LINE};white-space:nowrap;"')
     # EQUAL HOLE COLUMNS (Kerry 10/29: "scorecard displays to always have
-    # equal hole column widths"): fixed layout, each hole the same share.
-    lab_w, tot_w = 12, 9
-    hw = f"{(100 - lab_w - tot_w) / max(1, len(holes)):.2f}%"
+    # equal hole column widths"): fixed layout, each hole the same share;
+    # the totals have their own width.
+    lab_w, tot_w = 15, 10
+    n_tot = 2 if split else 1
+    hw = f"{(100 - lab_w - tot_w * n_tot) / (9 if split else max(1, len(holes))):.2f}%"
     head = "".join(f'<td width="{hw}" align="center" bgcolor="{INK}" style="width:{hw};padding:4px 0;font:bold 12px Arial,sans-serif;color:#fff;">{h}</td>' for h in holes)
     par = "".join(f"<td {cell}>{p}</td>" for p in pars)
 
@@ -149,14 +168,23 @@ def scorecard(holes, pars, strokes, dots) -> str:
     sc = "".join(f"<td {cell}>{mark(s, p)}</td>" for s, p in zip(strokes, pars))
     dot = "".join(f'<td {cell}><span style="color:{ORANGE};">{"&#9679;" * max(0, d) if d else "&nbsp;"}</span></td>'
                   for d in dots)
-    tot = "OUT" if holes and holes[0] == 1 and len(holes) == 9 else ("IN" if holes and holes[0] == 10 else "TOT")
     played = [s for s in strokes if s is not None]
+    th = f'width="{tot_w}%" bgcolor="{INK}" align="center" style="width:{tot_w}%;font:bold 11px Arial,sans-serif;color:#fff;padding:0;"'
+    rows = [(par, sum(pars)), (sc, f"<b>{sum(played)}</b>"), (dot, sum(d for d in dots if d > 0))]
+    extra_h, extra = "", ["", "", ""]
+    if split:
+        if whole:
+            extra_h = f"<td {th}>TOT</td>"
+            extra = [f"<td {tcell}>{whole[0]}</td>", f"<td {tcell}><b>{whole[1]}</b></td>", f"<td {tcell}>{whole[2]}</td>"]
+        else:
+            extra_h = f'<td width="{tot_w}%" bgcolor="{INK}" style="width:{tot_w}%;"></td>'
+            extra = [f'<td width="{tot_w}%" style="width:{tot_w}%;"></td>'] * 3
+    labels = ["PAR", "YOU", "POPS"]
+    body = "".join(f"<tr><td {lab}>{labels[i]}</td>{r}<td {tcell}>{t}</td>{extra[i]}</tr>"
+                   for i, (r, t) in enumerate(rows))
     return (f'<table {T} style="border:1px solid {LINE};border-radius:6px;table-layout:fixed;">'
             f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:4px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#fff;">HOLE</td>{head}'
-            f'<td width="{tot_w}%" bgcolor="{INK}" align="center" style="width:{tot_w}%;font:bold 11px Arial,sans-serif;color:#fff;padding:0;">{tot}</td></tr>'
-            f'<tr><td {lab}>PAR</td>{par}<td {cell}>{sum(pars)}</td></tr>'
-            f'<tr><td {lab}>YOU</td>{sc}<td {cell}><b>{sum(played)}</b></td></tr>'
-            f'<tr><td {lab}>POPS</td>{dot}<td {cell}>{sum(d for d in dots if d > 0)}</td></tr></table>')
+            f'<td {th}>{tot}</td>{extra_h}</tr>{body}</table>')
 
 
 def money_rows(rows, total) -> str:

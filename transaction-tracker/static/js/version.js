@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.629.1";
+window.TGF_VERSION = "2.629.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.629.2",
+    date: "2026-10-30",
+    title: "18-hole cards in the emails split into front and back nines",
+    changes: [
+      "Kerry 10/30, on the event-info YOUR CARD at phone width: \"for 18 hole cards on event info/recaps for mobile view they need to wrap front 9 back 9. They get real scrunched.\" An 18-hole card in the event-info email (event_day_email.card_strip) and the results email (results_email.scorecard) is now two stacked nines: OUT on the front, IN and TOT on the back, hole columns lined up between them. Email apps ignore phone-width rules, so the split is always on, desktop too. A nine is still one grid. The label column is wider, so HOLE no longer wraps."
+    ]
+  },
   {
     version: "2.629.1",
     date: "2026-10-30",

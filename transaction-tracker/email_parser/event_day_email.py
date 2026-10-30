@@ -629,12 +629,6 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
     # EQUAL HOLE COLUMNS (Kerry 10/29: "I would like scorecard displays to
     # always have equal hole column widths though. Makes it look more
     # professional"): fixed layout, every hole the same share of the width.
-    lab_w, tot_w = 13, 9
-    hw = f"{(100 - lab_w - tot_w) / len(holes):.2f}%"
-    head = "".join(f'<td width="{hw}" align="center" style="width:{hw};padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in holes)
-    pars = "".join(f"<td {cell}>{par.get(h, '')}</td>" for h in holes)
-    ph_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(ph_d.get(h))}</span></td>' for h in holes)
-    net_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(net_d.get(h))}</span></td>' for h in holes)
     # TOT column (Kerry 10/20): par total, and the pops each game gives.
     def _sum(d, keys):
         t = 0
@@ -644,19 +638,51 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
             except (TypeError, ValueError):
                 pass
         return t
+    # FRONT / BACK (Kerry 10/30: "for 18 hole cards ... they need to wrap
+    # front 9 back 9. They get real scrunched"): an 18 is two stacked nines,
+    # OUT on the front, IN + TOT on the back, the hole columns aligned
+    # between the two (the front carries an empty TOT slot). Email clients
+    # ignore media queries, so the split is always on. Hole columns are one
+    # width (Kerry 10/29); the totals have their own.
+    lab_w, tot_w = 16, 10
+    split = len(holes) > 9
+    segs = ([(holes[:9], "OUT", False), (holes[9:], "IN", True)] if split
+            else [(holes, "TOT", False)])
+    n_tot = 2 if split else 1
+    hw = f"{(100 - lab_w - tot_w * n_tot) / 9 if split else (100 - lab_w - tot_w) / len(holes):.2f}%"
     tcell = ('align="center" style="padding:3px 0;font:bold 12px Arial,sans-serif;border-top:1px solid '
              + LINE + ';border-left:1px solid ' + LINE + ';"')
-    head += (f'<td width="{tot_w}%" align="center" style="width:{tot_w}%;padding:3px 0;font:bold 10px Arial,sans-serif;letter-spacing:1px;'
-             f'color:#ffffff;" bgcolor="{INK}">TOT</td>')
-    pars += f"<td {tcell}>{_sum(par, holes) or ''}</td>"
-    ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, holes)}</span></td>'
-    net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, holes)}</span></td>'
-    grid_html = (
-        f'<table {_T} style="border:1px solid {LINE};border-radius:6px;table-layout:fixed;">'
-        f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
-        f'<tr><td {lab}>PAR</td>{pars}</tr>'
-        f'<tr><td {lab}>NET</td>{ph_row}</tr>'
-        f'<tr><td {lab}>{net_short}</td>{net_row}</tr></table>')
+    thead = (f'width="{tot_w}%" align="center" style="width:{tot_w}%;padding:3px 0;font:bold 10px Arial,sans-serif;'
+             f'letter-spacing:1px;color:#ffffff;" bgcolor="{INK}"')
+    blank = f'<td width="{tot_w}%" style="width:{tot_w}%;"></td>'
+    grids = []
+    for hs, tlab, with_tot in segs:
+        head = "".join(f'<td width="{hw}" align="center" style="width:{hw};padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in hs)
+        pars = "".join(f"<td {cell}>{par.get(h, '')}</td>" for h in hs)
+        ph_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(ph_d.get(h))}</span></td>' for h in hs)
+        net_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_dots(net_d.get(h))}</span></td>' for h in hs)
+        head += f"<td {thead}>{tlab}</td>"
+        pars += f"<td {tcell}>{_sum(par, hs) or ''}</td>"
+        ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, hs)}</span></td>'
+        net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, hs)}</span></td>'
+        if split:
+            if with_tot:
+                head += f"<td {thead}>TOT</td>"
+                pars += f"<td {tcell}>{_sum(par, holes) or ''}</td>"
+                ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, holes)}</span></td>'
+                net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, holes)}</span></td>'
+            else:
+                head += f'<td width="{tot_w}%" style="width:{tot_w}%;" bgcolor="{INK}"></td>'
+                pars += blank
+                ph_row += blank
+                net_row += blank
+        grids.append(
+            f'<table {_T} style="border:1px solid {LINE};border-radius:6px;table-layout:fixed;margin:0 0 6px;">'
+            f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
+            f'<tr><td {lab}>PAR</td>{pars}</tr>'
+            f'<tr><td {lab}>NET</td>{ph_row}</tr>'
+            f'<tr><td {lab}>{net_short}</td>{net_row}</tr></table>')
+    grid_html = "".join(grids)
     idx = (dump or {}).get("index")
     bits = []
     if row.get("ph"):
