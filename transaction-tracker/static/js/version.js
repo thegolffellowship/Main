@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.634.1";
+window.TGF_VERSION = "2.635.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.0",
+    date: "2026-10-30",
+    title: "Standings going in: design-claude option 1c",
+    changes: [
+      "STANDINGS GOING IN, option 1c (design-claude #2564, Kerry-approved 10/30): on a championship or TGF event the event-day email opens with a navy band: the orange trophy-star, \"GOING INTO THE {EVENT}\", a personal headline (You lead both races / You're tied for the lead / You lead the Fall Race / You lead {Month} / \"Four back with one round to play, Michael\" on the Fall finale, \"... going in\" otherwise, and \"... but you're not in!\" when fall points are not active), FALL RACE and {MONTH} · {prize} columns with place | points and a status line (Leading by N, Tied for 1st, N back · in the money, N back · leader has N), an orange Points not active strip with \"Active today = 4th place, $60.\" and ACTIVATE, and \"See the full standings\". event_day_email.standings_going_in, from the results email's own race and month readers. Per player beyond the spec (Kerry: \"per player updates that make sense\"): a bought-in player within 10 points of the last paid place reads \"N back · M from the money\", and an inactive one \"Active today = 3rd place, 4 from the money.\" Regular nights keep the white card after the games. Icon static/email/trophy-star-orange-68.png (our trophy-star recoloured)."
+    ]
+  },
   {
     version: "2.634.1",
     date: "2026-10-30",

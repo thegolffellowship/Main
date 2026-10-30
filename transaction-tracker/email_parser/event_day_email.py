@@ -666,6 +666,173 @@ def _dots(n) -> str:
     return ("&#9679;" * n) if n > 0 else "&nbsp;"
 
 
+_NUM_WORDS = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven",
+              8: "Eight", 9: "Nine", 10: "Ten"}
+
+
+def _pts(v) -> str:
+    v = float(v or 0)
+    return f"{v:.0f}" if v == int(v) else f"{v:.1f}"
+
+
+def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
+                       finale: bool = False) -> str:
+    """STANDINGS GOING IN, design-claude option 1c (Kerry-approved 10/30,
+    mailbox #2564): a navy band with a personal headline, FALL RACE and
+    {MONTH} · {prize} columns (place | points, a status line), an orange
+    "Points not active" strip with ACTIVATE for a player whose fall points
+    are not active, and "See the full standings". Read from the results
+    email's own race and month readers (results_email.event_facts), so the
+    numbers are the same everywhere. Beyond the spec, per player (Kerry:
+    "per player updates that make sense"): a bought-in player within
+    results_email.WITHIN_REACH points of the last paid place, and an
+    inactive one, are told how far they are from the money. "" when the
+    person has no points in either race."""
+    from email_parser import results_email as R
+    cid = int(cid)
+    ch = R._person_chapter(facts, cid)
+    race = R._race_of(facts, cid)
+    rows = race.get("rows") or []
+    r = R._race_row(facts, cid)
+    m, _lead = R._month_row(facts, cid)
+    has_fall = bool(r and (r.get("total_points") or 0) > 0)
+    has_month = bool(m and (m.get("points") or 0) > 0)
+    if not (has_fall or has_month):
+        return ""
+    first = (first or "").strip() or "friend"
+    ladder = race.get("payouts") or []
+    WR = getattr(R, "WITHIN_REACH", 10)
+    # ── FALL ──
+    fall_place, fall_pts, fall_line = "—", "0", "No fall points yet"
+    fall_lead = fall_tied = False
+    back = 0
+    enrolled = bool(r and r.get("enrolled"))
+    inactive_line = ""
+    if has_fall:
+        pts = float(r["total_points"])
+        tots = sorted((float(x.get("total_points") or 0) for x in rows), reverse=True)
+        top = tots[0] if tots else pts
+        n_top = sum(1 for t in tots if t == top)
+        fall_place = R._rank_text(r.get("rank"))
+        fall_pts = _pts(pts)
+        ins = sorted((float(x.get("total_points") or 0) for x in rows if x.get("enrolled")), reverse=True)
+        act_place = 1 + sum(1 for v in ins if v > pts)
+        cut_gap = (ins[len(ladder) - 1] - pts) if (ladder and len(ins) >= len(ladder)) else None
+        if pts == top and n_top == 1:
+            fall_lead = True
+            second = tots[1] if len(tots) > 1 else pts
+            fall_line = f"Leading by {_pts(pts - second)}"
+        elif pts == top:
+            fall_tied = True
+            fall_line = "Tied for 1st"
+        else:
+            back = top - pts
+            fall_line = "1 point back" if back == 1 else f"{_pts(back)} back"
+            if enrolled and ladder and act_place <= len(ladder):
+                fall_line += " \u00b7 in the money"
+            elif enrolled and cut_gap is not None and 0 < cut_gap <= WR:
+                fall_line += f" \u00b7 {_pts(cut_gap)} from the money"
+        if not enrolled:
+            pay = ladder[act_place - 1] if 0 < act_place <= len(ladder) else None
+            if pay:
+                inactive_line = f"Active today = {R._ordinal(act_place)} place, {R._usd(pay / 100)}."
+            else:
+                inactive_line = f"Active today = {R._ordinal(act_place)} place."
+                if cut_gap is not None and 0 < cut_gap <= WR:
+                    inactive_line = (f"Active today = {R._ordinal(act_place)} place, "
+                                     f"{_pts(cut_gap)} from the money.")
+    # ── MONTH ──
+    month = facts.get("month") or {}
+    mname = (month.get("name") or "").upper() or "THIS MONTH"
+    purse = month.get("purse")
+    mlabel = f"{mname} \u00b7 ${purse:g}" if purse else mname
+    month_place, month_pts, month_line = "—", "0", "No points yet"
+    month_lead = False
+    if has_month:
+        st = month.get("standings") or []
+        mp = float(m.get("points") or 0)
+        mt = sorted((float(x.get("points") or 0) for x in st), reverse=True)
+        mtop = mt[0] if mt else mp
+        rl = str(m.get("rank_label") or m.get("rank") or "")
+        month_place = R._rank_text(rl)
+        month_pts = _pts(mp)
+        if mp == mtop and mt.count(mtop) == 1:
+            month_lead = True
+            month_line = f"Leading by {_pts(mp - (mt[1] if len(mt) > 1 else mp))} \u00b7 winner takes all"
+        elif mp == mtop:
+            month_line = "Tied for 1st \u00b7 winner takes all"
+        else:
+            month_line = f"{_pts(mtop - mp)} back \u00b7 leader has {_pts(mtop)}"
+    # ── HEADLINE (§3, first match wins) ──
+    mword = (month.get("name") or "the month").title()
+    if fall_lead and month_lead:
+        head = f"You lead both races, {first}"
+    elif fall_tied:
+        head = f"You're tied for the lead, {first}"
+    elif fall_lead:
+        head = f"You lead the Fall Race, {first}"
+    elif month_lead:
+        head = f"You lead {mword}, {first}"
+    elif has_fall:
+        b = int(back) if back == int(back) else back
+        n = _NUM_WORDS.get(b) if isinstance(b, int) else None
+        n = n or _pts(back)
+        head = (f"{n} back with one round to play, {first}" if finale
+                else f"{n} back going in, {first}")
+    else:
+        head = f"Here's where you stand, {first}"
+    head = _e(head) + ("\u2026 but you're not in!" if (has_fall and not enrolled) else ".")
+    ev = _e((event_name or "").upper())
+    fall_key = (R.FALL_RACE.get(ch) or (None, "", ""))[1]
+    standings_url = (f"{R.BASE}/member/contests#race={fall_key}&player={cid}" if has_fall and fall_key
+                     else f"{R.BASE}/member/contests#race=monthly&player={cid}")
+    icon = f"{R.BASE}/static/email/trophy-star-orange-68.png"
+    num = "font-size:28px;font-weight:bold;color:#FFFFFF;line-height:1;"
+    ptsl = ("font-family:Helvetica,Arial,sans-serif;font-size:10px;font-weight:bold;letter-spacing:1.2px;"
+            "color:#9DB4D6;padding-left:4px;")
+    lab = "font-size:10px;font-weight:bold;letter-spacing:1.6px;color:#9DB4D6;"
+    sub = "font-family:Helvetica,Arial,sans-serif;font-size:11.5px;color:#C9D6EA;margin-top:4px;"
+
+    def col(label, place, points, line, place_color, left):
+        return (f'<td width="50%" valign="top" style="border-top:1px solid #33517F;'
+                + ('border-left:1px solid #33517F;padding:12px 0 0 16px;' if left else 'padding-top:12px;') + '">'
+                f'<div style="{lab}">{_e(label)}</div>'
+                f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:6px;"><tr>'
+                f'<td valign="bottom" style="font-size:30px;font-weight:bold;color:{place_color};line-height:1;padding-right:14px;">{_e(place)}</td>'
+                f'<td valign="bottom" style="border-left:1px solid #4E6EA5;padding-left:14px;white-space:nowrap;">'
+                f'<span style="{num}">{_e(points)}</span><span style="{ptsl}">PTS</span></td></tr></table>'
+                f'<div style="{sub}">{_e(line)}</div></td>')
+
+    strip = ""
+    if has_fall and not enrolled:
+        from email_parser.results_email import STORE_CONTESTS
+        strip = (f'<tr><td bgcolor="#E87C3E" style="background:#E87C3E;padding:11px 20px;">'
+                 f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;"><tr>'
+                 f'<td style="font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.45;color:#FFFFFF;">'
+                 f'<b>Points not active.</b> {_e(inactive_line)}</td>'
+                 f'<td align="right" style="text-align:right;white-space:nowrap;padding-left:10px;">'
+                 f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;display:inline-table;"><tr>'
+                 f'<td bgcolor="#FFFFFF" style="background:#FFFFFF;border-radius:9999px;">'
+                 f'<a href="{_e(STORE_CONTESTS)}" style="display:inline-block;color:#BF5700;font-family:Georgia,serif;font-weight:bold;'
+                 f'padding:8px 16px;font-size:11.5px;letter-spacing:1px;text-decoration:none;">ACTIVATE</a></td>'
+                 f'</tr></table></td></tr></table></td></tr>')
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'style="border-collapse:collapse;width:100%;margin:16px 0;font-family:Georgia,\'Times New Roman\',serif;">'
+            f'<tr><td bgcolor="#002868" style="background:#002868;padding:18px 20px 16px;">'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;"><tr>'
+            f'<td width="44" valign="middle" style="width:44px;"><img src="{icon}" alt="" width="34" height="34" style="display:block;border:0;"></td>'
+            f'<td valign="middle"><div style="font-size:10.5px;font-weight:bold;letter-spacing:2px;color:#9DB4D6;">GOING INTO THE {ev}</div>'
+            f'<div style="font-size:22px;font-weight:bold;color:#FFFFFF;line-height:1.2;margin-top:4px;">{head}</div></td>'
+            f'</tr></table>'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;margin-top:14px;table-layout:fixed;"><tr>'
+            + col("FALL RACE", fall_place, fall_pts, fall_line, "#E87C3E", False)
+            + col(mlabel, month_place, month_pts, month_line, "#FFFFFF", True)
+            + f'</tr></table></td></tr>{strip}'
+            f'<tr><td align="center" style="padding:9px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;text-align:center;">'
+            f'<a href="{_e(standings_url)}" style="color:#BF5700;font-weight:bold;text-decoration:underline;">See the full standings \u203a</a></td></tr>'
+            f'</table>')
+
+
 def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: str | None) -> str:
     """YOUR CARD (Kerry 10/13: "a view of their scorecard to see where their
     pops are going ... how their PHs are calculated for each game"): the
@@ -1095,7 +1262,14 @@ def build_event_day_emails(event_id: int, db_path=None, games_tab: dict | None =
                     from email_parser import results_email as _rx
                     _ch = pts_facts["chapter"]
                     _lab = _rx.FALL_RACE.get(_ch, (None, None, (ev_info.get("chapter") or "").title()))[2]
-                    _pts = _rx._points_card(pts_facts, int(cid), _lab, eyebrow="YOUR STANDINGS GOING IN")[0]
+                    _fin = bool(re.search(r"FALL\s+CHAMPIONSHIP", ev_info.get("item_name") or "", re.I))
+                    if _ch == "tgf" or re.search(r"CHAMPIONSHIP", ev_info.get("item_name") or "", re.I):
+                        # design-claude 1c (Kerry-approved, #2564)
+                        _fn = (nm.get("first_name") if isinstance(nm, dict) else "") or (full.split()[0] if full else "")
+                        _pts = standings_going_in(pts_facts, int(cid), _fn,
+                                                  event_short_name(ev_info.get("item_name"), None), finale=_fin)
+                    else:
+                        _pts = _rx._points_card(pts_facts, int(cid), _lab, eyebrow="YOUR STANDINGS GOING IN")[0]
                     # A FINALE puts the standings first, above YOUR START
                     # (Kerry 10/30: "Standing need to be above your card in this
                     # case because this is the finale and perhaps we could
