@@ -706,6 +706,7 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
     fall_place, fall_pts, fall_line = "—", "0", "No fall points yet"
     fall_lead = fall_tied = False
     back = 0
+    out_of_money = None
     enrolled = bool(r and r.get("enrolled"))
     inactive_line = ""
     if has_fall:
@@ -728,10 +729,16 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
         else:
             back = top - pts
             fall_line = "1 point back" if back == 1 else f"{_pts(back)} back"
-            if enrolled and ladder and act_place <= len(ladder):
-                fall_line += " \u00b7 in the money"
-            elif enrolled and cut_gap is not None and 0 < cut_gap <= WR:
-                fall_line += f" \u00b7 {_pts(cut_gap)} from the money"
+            if ladder and act_place <= len(ladder):
+                if enrolled:
+                    fall_line += " \u00b7 in the money"
+            elif cut_gap is not None and cut_gap > 0:
+                # OUT OF THE MONEY: the distance that matters is to the last
+                # paid place, not to the lead (Kerry 10/30: "Points back for
+                # some should be based on how far out of the money they are,
+                # not from the lead").
+                out_of_money = cut_gap
+                fall_line = f"{_pts(cut_gap)} out of the money \u00b7 {fall_line}"
         if not enrolled:
             pay = ladder[act_place - 1] if 0 < act_place <= len(ladder) else None
             if pay:
@@ -740,7 +747,7 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
                 inactive_line = f"Active today = {R._ordinal(act_place)} place."
                 if cut_gap is not None and 0 < cut_gap <= WR:
                     inactive_line = (f"Active today = {R._ordinal(act_place)} place, "
-                                     f"{_pts(cut_gap)} from the money.")
+                                     f"{_pts(cut_gap)} out of the money.")
     # ── MONTH ──
     month = facts.get("month") or {}
     mname = (month.get("name") or "").upper() or "THIS MONTH"
@@ -774,11 +781,13 @@ def standings_going_in(facts: dict, cid: int, first: str, event_name: str,
     elif month_lead:
         head = f"You lead {mword}, {first}"
     elif has_fall:
-        b = int(back) if back == int(back) else back
+        gap = out_of_money if out_of_money else back
+        b = int(gap) if gap == int(gap) else gap
         n = _NUM_WORDS.get(b) if isinstance(b, int) else None
-        n = n or _pts(back)
-        head = (f"{n} back with one round to play, {first}" if finale
-                else f"{n} back going in, {first}")
+        n = n or _pts(gap)
+        what = "out of the money" if out_of_money else "back"
+        head = (f"{n} {what} with one round to play, {first}" if finale
+                else f"{n} {what} going in, {first}")
     else:
         head = f"Here's where you stand, {first}"
     head = _e(head) + ("\u2026 but you're not in!" if (has_fall and not enrolled) else ".")
