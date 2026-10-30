@@ -677,6 +677,13 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
         return ""
     par = grid.get("par") or {}
     ph_d, net_d = row.get("ph_dots") or {}, row.get("net_dots") or {}
+    # YARDS and SI on the player's OWN tees (Kerry 10/30: "add a yardage and
+    # SI row ... based on the tees they're playing, so they can prepare
+    # accordingly or really understand"): the printed scorecard's grid
+    # yardage for his band, and his own stroke index (which his pops follow).
+    yds = ((grid.get("yards") or {}).get(row.get("band")) or {})
+    si = row.get("si_by_hole") or {}
+    ycell = 'align="center" style="padding:3px 0;font-size:11px;color:#4B5563;border-top:1px solid ' + LINE + ';"'
     # A team pop that falls on a par 3 is dropped (no team pops on par 3s);
     # the card shows it as an orange X there, as the printed scorecard does
     # (Kerry 10/30: "The 7 and 6 needs to be shown correctly ... with the
@@ -734,28 +741,38 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
     for hs, tlab, with_tot in segs:
         head = "".join(f'<td width="{hw}" align="center" style="width:{hw};padding:3px 0;font:bold 12px Arial,sans-serif;color:#ffffff;" bgcolor="{INK}">{h}</td>' for h in hs)
         pars = "".join(f"<td {cell}>{par.get(h, '')}</td>" for h in hs)
+        yds_row = "".join(f'<td {ycell}>{_e(yds.get(h) or "")}</td>' for h in hs)
+        si_row = "".join(f'<td {ycell}>{_e(si.get(h) or si.get(str(h)) or "")}</td>' for h in hs)
         ph_row = "".join(f'<td {cell}><span style="color:{INK};">{_dots(ph_d.get(h))}</span></td>' for h in hs)
         net_row = "".join(f'<td {cell}><span style="color:{ORANGE};">{_net_cell(h)}</span></td>' for h in hs)
         head += f"<td {thead}>{tlab}</td>"
         pars += f"<td {tcell}>{_sum(par, hs) or ''}</td>"
+        yds_row += f'<td {tcell}><span style="font-size:11px;">{_sum(yds, hs) or ""}</span></td>'
+        si_row += f'<td {tcell}></td>'
         ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, hs)}</span></td>'
         net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, hs)}</span></td>'
         if split:
             if with_tot:
                 head += f"<td {thead}>TOT</td>"
                 pars += f"<td {tcell}>{_sum(par, holes) or ''}</td>"
+                yds_row += f'<td {tcell}><span style="font-size:11px;">{_sum(yds, holes) or ""}</span></td>'
+                si_row += f'<td {tcell}></td>'
                 ph_row += f'<td {tcell}><span style="color:{INK};">{_sum(ph_d, holes)}</span></td>'
                 net_row += f'<td {tcell}><span style="color:{ORANGE};">{_sum(net_d, holes)}</span></td>'
             else:
                 head += f'<td width="{tot_w}%" style="width:{tot_w}%;" bgcolor="{INK}"></td>'
                 pars += blank
+                yds_row += blank
+                si_row += blank
                 ph_row += blank
                 net_row += blank
         grids.append(
             f'<table {_T} style="border:1px solid {LINE};border-radius:6px;table-layout:fixed;margin:0 0 6px;">'
             f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:3px 4px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:0.5px;color:#ffffff;white-space:nowrap;">HOLE</td>{head}</tr>'
-            f'<tr><td {lab}>PAR</td>{pars}</tr>'
-            f'<tr><td {lab}>NET</td>{ph_row}</tr>'
+            + (f'<tr><td {lab}>YDS</td>{yds_row}</tr>' if yds else "")
+            + f'<tr><td {lab}>PAR</td>{pars}</tr>'
+            + (f'<tr><td {lab}>SI</td>{si_row}</tr>' if si else "")
+            + f'<tr><td {lab}>NET</td>{ph_row}</tr>'
             f'<tr><td {lab}>{net_short}</td>{net_row}</tr></table>')
     grid_html = "".join(grids)
     idx = (dump or {}).get("index")

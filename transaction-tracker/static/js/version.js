@@ -3,10 +3,11 @@ window.TGF_CHANGELOG = [
   {
     version: "2.632.1",
     date: "2026-10-30",
-    title: "Whole dollars without .00; the par-3 X on the email card",
+    title: "Whole dollars without .00; the email card gets yardage, SI and the par-3 X",
     changes: [
       "WHOLE DOLLARS (Kerry 10/30: \"No need to include .00 if it's a whole dollar amount\" / \"All locations where it is .00 can be shortened\"): every amount on the member leaderboards (CTP prizes, WON / PROJ., team purses, pot lines and flight bands, the event cards' POT, the Lone Star Cup skins, refunds) and the results email's winnings reads $32, not $32.00; cents show only when there are some. One helper each: evlbUsdShort (contests.html, evlbUsd now calls it) and results_email._usd. Admin money pages keep their cents.",
-      "THE PAR-3 X ON THE EMAIL CARD (Kerry 10/30: \"The 7 and 6 needs to be shown correctly then, like we do it on the scorecard with the orange X's when a pop falls on a par 3\"): a team or cart pop the rule drops on a par 3 shows as an orange X in YOUR CARD's TEAM row, with a key beside the title and the line \"No team pops on par 3s: an orange X marks a team pop that lands on one, so your 7 plays as 6\". The dots plus the X's make the team handicap in the tees row; TOT counts the pops played. Read from the printed scorecard's own net_ghost."
+      "THE PAR-3 X ON THE EMAIL CARD (Kerry 10/30: \"The 7 and 6 needs to be shown correctly then, like we do it on the scorecard with the orange X's when a pop falls on a par 3\"): a team or cart pop the rule drops on a par 3 shows as an orange X in YOUR CARD's TEAM row, with a key beside the title and the line \"No team pops on par 3s: an orange X marks a team pop that lands on one, so your 7 plays as 6\". The dots plus the X's make the team handicap in the tees row; TOT counts the pops played. Read from the printed scorecard's own net_ghost.",
+      "YDS AND SI ON THE EMAIL CARD (Kerry 10/30: \"add a yardage and SI row for the event info scorecard emails based on the tees they're playing, so they can prepare accordingly or really understand\"): YOUR CARD now reads HOLE / YDS / PAR / SI / NET / TEAM. Yardage is the printed scorecard's grid for the player's own tee band (OUT, IN and TOT totals); SI is his own tee's stroke index, the one his pops follow. A row is left off when the course has no data for it."
     ]
   },
   {
