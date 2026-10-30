@@ -61029,6 +61029,7 @@ def _entry_ctp_proxies(conn, ev: dict, db_path=None) -> list:
                     "player": nm or h.get("name") or "No winner",
                     "customer_id": h.get("customer_id"),
                     "detail": f"Hole {h['hole']}" + (" · to be confirmed" if pending else ""),
+                    "hole": h.get("hole"), "prize": amt,
                     "pending": pending,
                     "purse": amt if h.get("customer_id") and not pending else None})
     return out

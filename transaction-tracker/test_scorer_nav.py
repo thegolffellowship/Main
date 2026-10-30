@@ -170,8 +170,9 @@ if sync_playwright and CHROME:
         seg = pg.evaluate("(() => { const s = document.querySelector('.evlb-seg-sub'); const r = s.getBoundingClientRect(); return {w: s.scrollWidth, cw: s.clientWidth, right: r.right, rows: new Set([...s.children].map(b => Math.round(b.getBoundingClientRect().top))).size, n: s.children.length}; })()")
         # six since OVERALL retired behind evlb_overall_tab (Kerry 10/19)
         check("six game tabs fit the phone width in two rows", seg["n"] == 6 and seg["rows"] == 2 and seg["w"] <= seg["cw"] and seg["right"] <= 390, str(seg))
-        check("Won column hidden while scores are out (every board + proxies)", pg.evaluate("[...document.querySelectorAll('table.evlb-holes')].every(t => t.classList.contains('no-won') && getComputedStyle(t.querySelector('th.won')).display === 'none')")
-              and pg.evaluate("[...document.querySelectorAll('table.evlb-prox')].every(t => t.classList.contains('no-won'))"))
+        # proxies show the contest's PRIZE from the start (Kerry 10/30), so
+        # only the boards hide Won
+        check("Won column hidden while scores are out (every board)", pg.evaluate("[...document.querySelectorAll('table.evlb-holes')].every(t => t.classList.contains('no-won') && getComputedStyle(t.querySelector('th.won')).display === 'none')"))
         # nobody in this fixture bought in, and OVERALL (which showed every
         # player) is retired: bring the field onto the visible NET board
         pg.locator(".evlb-panel:not([hidden]) input[data-ovr-all]").check(); pg.wait_for_timeout(300)

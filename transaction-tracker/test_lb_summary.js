@@ -186,7 +186,9 @@ console.log('== pot headers ==');
   ck('the band row carries the pot', /LOW FLIGHT<span class="evlb-bandpot"> · 10 players · pot \$90/.test(h));
   // Batch 1 §4: the team pot shows once, on the dial line
   ck('TEAM pot line', /Pot <b>\$120\.00<\/b><span class="pl"> &middot; 1st \$80\.00 &middot; 2nd \$40\.00/.test(h));
-  ck('CTP pot line', /CTP pot \$30\.00 \(\$15\.00 · \$15\.00\)/.test(h));
+  // prize amounts moved to a Prize column (Kerry 10/30)
+  ck('CTP pot line', /CTP pot \$30\.00</.test(h) && !/CTP pot \$30\.00 \(/.test(h));
+  ck('proxies: Contest | Hole | Winner | Prize', /<th>Contest<\/th><th>Hole<\/th><th>Winner<\/th><th[^>]*>Prize/.test(h));
 }
 
 console.log('== Match Play tab ==');

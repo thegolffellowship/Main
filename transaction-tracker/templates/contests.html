@@ -4993,7 +4993,7 @@
             txt = `Team pot ${evlbUsd(pg.total)}` + ((pg.places || []).length > 1
                 ? " (" + pg.places.map((a, i) => `${evlbOrd(i + 1)} ${evlbUsd(a)}`).join(" · ") + ")" : "");
         } else if (game === "prox" && pg) {
-            txt = `CTP pot ${evlbUsd(pg.total)} (${pg.each.map(evlbUsd).join(" · ")})`;
+            txt = `CTP pot ${evlbUsd(pg.total)}`;
         } else if (game === "points") {
             const tot = (d.overall_board || []).reduce((t, r) => t + evlbGameMoney(r, "points"), 0);
             if (tot > 0) txt = `MVP pot ${evlbUsd(Math.round(tot * 100) / 100)}`;
@@ -6223,15 +6223,29 @@
                       evlbTeeDot(d, r || { player_name: nm }, "right") + `</td>`,
             };
         };
+        // CONTEST | HOLE | WINNER | PRIZE (Kerry 10/30: "This should show
+        // the hole before the winner, and it should show HOLE not DETAIL -
+        // Prize amounts could be in a column after rather than above"). The
+        // prize is the contest's value from the start (the winner's purse
+        // once there is one).
+        const proxEach = (((d.pots || {}).prox || {}).each) || [];
+        let proxCtpI = 0;
         const proxRow = (label, p) => {
             const w = proxWinner(p.player);
+            const det = String(p.detail || "");
+            const hm = det.match(/Hole\s*(\d+)/i);
+            const hole = p.hole != null ? String(p.hole) : (hm ? hm[1] : "");
+            const rest = det.replace(/^\s*Hole\s*\d+\s*(·\s*)?/i, "").trim();
+            const prize = p.purse != null ? p.purse
+                : (p.prize != null ? p.prize : (p.game === "ctp" ? proxEach[proxCtpI] : null));
+            if (p.game === "ctp") proxCtpI++;
             return `<tr class="evlb-plr" data-rid="${w.rid}">` +
-                `<td>${escapeHtml(label)}</td>${w.cell}` +
-                `<td>${escapeHtml(p.detail || "")}</td>` +
-                `<td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`;
+                `<td>${escapeHtml(label)}</td>` +
+                `<td>${escapeHtml(hole || (hm ? "" : det))}${rest && hole ? ` <span style="color:var(--text-muted);font-size:12px;">${escapeHtml(rest)}</span>` : ""}</td>${w.cell}` +
+                `<td class="r">${prize != null ? "$" + Number(prize).toFixed(2) : ""}</td></tr>`;
         };
         const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
-            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${d._moneyHeld && !evlbProjOn(d) ? " no-won" : ""}${evlbProjOn(d) ? " evlb-projwon" : ""}"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$${evlbProjMark(d)}</th></tr></thead><tbody>` +
+            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${evlbProjOn(d) ? " evlb-projwon" : ""}"><thead><tr><th>Contest</th><th>Hole</th><th>Winner</th><th style="text-align:right;">Prize${evlbProjMark(d)}</th></tr></thead><tbody>` +
               (d.proxies || []).map(p => proxRow(p.label || "", p)).join("") +
               (d.hio || []).map(p => proxRow("Hole-in-One", p)).join("") +
               `</tbody></table></div>`
