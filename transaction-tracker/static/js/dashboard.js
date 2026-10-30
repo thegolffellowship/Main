@@ -1548,14 +1548,19 @@ async function reverseCreditAction(itemId) {
     const item = allItems.find(r => r.id === itemId);
     if (!item) return;
     const status = item.transaction_status || "active";
-    if (!confirm(await tgfReactivationWarning(itemId) + `Reverse ${status} for ${item.customer}? This will restore the original transaction.`)) return;
+    // Closed event: "Did he play?" (Kerry 10/30, closed-reverse.js).
+    const ask = await window.tgfReverseAsk(itemId, item.customer, status);
+    if (!ask) return;
 
     try {
         const res = await fetch(`/api/items/${itemId}/reverse-credit`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(ask),
         });
-        if (!res.ok) throw new Error((await res.json()).error || "Reverse failed");
+        const out = await res.json();
+        if (!res.ok) throw new Error(out.error || "Reverse failed");
+        if (out.message) alert(out.message);
         cachedEvents = null;
         await fetchItems();
         await fetchStats();

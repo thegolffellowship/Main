@@ -10352,8 +10352,16 @@ def api_reverse_credit(item_id):
     email_parser/closed_event_guard.py)."""
     from email_parser import closed_event_guard as _ceg
     pre = _ceg.check(item_id)
+    body = request.get_json(silent=True) or {}
+    who = f"ui:{session.get('role') or '?'}"
+    # CLOSED EVENT, "He didn't play" (Kerry 10/30, option A): undo the credit
+    # and credit the BUYER in the same step, so the field stays as it closed
+    # and the money never sits on nobody.
+    if pre.get("closed") and body.get("played") is False:
+        r = _ceg.reverse_and_recredit(item_id, by=who)
+        return jsonify(r), (409 if r.get("error") else 200)
     if reverse_credit(item_id):
-        flag = _ceg.after_reactivate(item_id, "Reverse", f"ui:{session.get('role') or '?'}", pre=pre)
+        flag = _ceg.after_reactivate(item_id, "Reverse", who, pre=pre)
         return jsonify({"status": "ok", **({"closed_event": flag} if flag else {})})
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
 

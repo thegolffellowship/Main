@@ -424,6 +424,7 @@
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/refund-memo.js?v={{ app_version }}"></script>
+    <script src="/static/js/closed-reverse.js?v={{ app_version }}"></script>
     <script src="/static/js/tgf-standards.js?v={{ app_version }}"></script>
     <script src="/static/js/points-render.js?v={{ app_version }}"></script>
     <script src="/static/js/course-label.js"></script>
@@ -3350,12 +3351,17 @@
         const item = allItems.find(r => r.id === itemId);
         if (!item) return;
         const label = item.transaction_status === "wd" ? "WD" : item.transaction_status;
-        if (!confirm(await tgfReactivationWarning(itemId) + `Reverse ${label} for ${item.customer}?`)) return;
+        // Closed event: "Did he play?" (Kerry 10/30, closed-reverse.js).
+        const ask = await window.tgfReverseAsk(itemId, item.customer, label);
+        if (!ask) return;
         try {
             const res = await fetch(`/api/items/${itemId}/reverse-credit`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(ask),
             });
-            if (!res.ok) throw new Error((await res.json()).error || "Reverse failed");
+            const out = await res.json();
+            if (!res.ok) throw new Error(out.error || "Reverse failed");
+            if (out.message) alert(out.message);
             custCachedEvents = null;
             await init();
         } catch (err) { alert(err.message); }

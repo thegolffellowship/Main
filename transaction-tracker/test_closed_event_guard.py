@@ -91,8 +91,16 @@ check("setting active on an already-active row raises nothing more", len(open_it
 print("the confirms and the MCP tool")
 for p in ("templates/events.html", "templates/customers.html", "static/js/dashboard.js"):
     src = open(p).read()
-    check(f"{p}: the Reverse confirm carries the closed-event warning",
-          "reactivation-check" in src and "confirm(await tgfReactivationWarning(itemId) +" in src)
+    # Kerry 10/30: on a closed event Reverse asks "Did he play?"
+    # (closed-reverse.js tgfReverseAsk), and the answer rides the POST.
+    check(f"{p}: Reverse asks through tgfReverseAsk and sends the answer",
+          "window.tgfReverseAsk(itemId" in src and "body: JSON.stringify(ask)" in src)
+js = open("static/js/closed-reverse.js").read()
+check("closed-reverse.js: closed -> the played / didn't play box; open -> plain confirm",
+      "reactivation-check" in js and "played: true" in js and "played: false" in js and "confirm(" in js)
+ap = open("app.py").read()
+check("app: closed + played=false -> reverse_and_recredit",
+      'body.get("played") is False' in ap and "_ceg.reverse_and_recredit(item_id" in ap)
 src = open("mcp_server.py").read()
 check("MCP undo_credit_or_transfer warns in its preview and raises the item after",
       "_ceg.WARNING" in src and "_ceg.after_reactivate(transaction_id" in src)

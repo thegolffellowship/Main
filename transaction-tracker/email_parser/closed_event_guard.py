@@ -120,3 +120,50 @@ def after_reactivate(item_id: int, how: str, by: str = "", pre: dict | None = No
     except Exception:
         logger.exception("closed-event guard failed for item %s", item_id)
         return None
+
+
+def reverse_and_recredit(item_id: int, by: str = "", db_path=None) -> dict:
+    """Reverse on a CLOSED event, answered "He didn't play" (Kerry 10/30,
+    option A: "A reversed slot on a closed event should be asked right there
+    one or the other" / "A"). Undo the credit and credit the BUYER in the
+    same step: the row never stays active, so the closed event's field,
+    games, HIO line and results audience never count him, and the money
+    never sits on nobody. Refuses before changing anything when the buyer
+    can't be told (a personal coupon with no owner on file)."""
+    from email_parser import database as db
+    from email_parser import credit_buyer as cb
+    with db._connect(db_path) as conn:
+        it = _item(conn, item_id)
+        if not it:
+            return {"error": "no such item"}
+        if (it.get("transaction_status") or "active") not in ("credited", "transferred", "wd"):
+            return {"error": "Item is not credited, transferred or WD; nothing to reverse."}
+        b = cb.buyer_of(conn, it)
+    if b.get("hold"):
+        return {"error": f"Nothing changed. Credit held: {b['hold']}"}
+    if not db.reverse_credit(item_id, db_path=db_path):
+        return {"error": "Item not found or not in credited/transferred state."}
+    try:
+        ok = db.credit_item(item_id, note="Re-credited after Reverse on a closed event: did not play",
+                            db_path=db_path)
+    except db.CreditHold as e:
+        ok, why = False, str(e)
+    else:
+        why = ""
+    if not ok:
+        # The row is active again on a closed event: say so loudly, once.
+        after_reactivate(item_id, "Reverse (re-credit failed)", by, db_path=db_path)
+        return {"error": f"Reversed, but the re-credit did not run{': ' + why if why else ''}. "
+                         "The spot is active again; press Credit."}
+    who = b.get("buyer_name") or it.get("customer") or "the player"
+    msg = (f"Credit moved to {who} (bought on their order). The event stays as it closed."
+           if b.get("buyer_id") else
+           f"Credit put back on {who}. The event stays as it closed.")
+    try:
+        db.log_agent_action("closed-event-guard", "closed_event_recredit",
+                            f"item {int(item_id)} on closed event: reversed and re-credited to "
+                            f"{who} (customer {b.get('buyer_id') or it.get('customer_id')}); by {by or '?'}",
+                            db_path=db_path)
+    except Exception:
+        pass
+    return {"status": "ok", "recredited_to": who, "buyer_id": b.get("buyer_id"), "message": msg}
