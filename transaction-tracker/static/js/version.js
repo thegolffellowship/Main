@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.632.0";
+window.TGF_VERSION = "2.632.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.632.1",
+    date: "2026-10-30",
+    title: "CTP prizes in whole dollars",
+    changes: [
+      "The CTPs tab's PRIZE column reads $32, not $32.00, for a whole-dollar amount; cents show only when there are some (Kerry 10/30: \"No need to include .00 if it's a whole dollar amount\"). evlbUsdShort in contests.html."
+    ]
+  },
   {
     version: "2.632.0",
     date: "2026-10-30",

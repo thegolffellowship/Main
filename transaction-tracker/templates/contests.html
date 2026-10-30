@@ -4966,6 +4966,11 @@
     function evlbUsd(v) {
         return "$" + Number(v || 0).toFixed(2);
     }
+    // "$32", not "$32.00", for a whole dollar (Kerry 10/30); cents only when there are some
+    function evlbUsdShort(v) {
+        const n = Math.round(Number(v || 0) * 100) / 100;
+        return "$" + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+    }
     function evlbOrd(n) {
         return n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
     }
@@ -6247,7 +6252,7 @@
             return `<tr class="evlb-plr" data-rid="${w.rid}">` +
                 `<td>${escapeHtml(label)}</td>` +
                 `<td style="text-align:center;">${escapeHtml(hole || (hm ? "" : det))}${rest && hole ? ` <span style="color:var(--text-muted);font-size:12px;">${escapeHtml(rest)}</span>` : ""}</td>${w.cell}` +
-                `<td class="r" style="text-align:center;">${prize != null ? "$" + Number(prize).toFixed(2) : ""}</td></tr>`;
+                `<td class="r" style="text-align:center;">${prize != null ? evlbUsdShort(prize) : ""}</td></tr>`;
         };
         const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
             ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${evlbProjOn(d) ? " evlb-projwon" : ""}"><thead><tr><th>Contest</th><th style="text-align:center;">Hole</th><th>Winner</th><th style="text-align:center;">Prize${evlbProjMark(d)}</th></tr></thead><tbody>` +

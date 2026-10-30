@@ -150,7 +150,7 @@ console.log('== projected WON (LIVE) ==');
   ck('TEAM tab: the opened card carries no per-player share', !/\$20\.00/.test(team));
   ck('TEAM tab: no net money', !/\$60\.00/.test(team));
   const px = (h.split('data-panel="prox"')[1] || '').split('data-panel=')[0];
-  ck('CTPs tab: holder amount kept while LIVE', /\$15\.00/.test(px) && /evlb-projwon/.test(px));
+  ck('CTPs tab: holder amount kept while LIVE', /\$15</.test(px) && /evlb-projwon/.test(px));
   ck('no SUMMARY while LIVE', !/data-sub="summary"/.test(h));
 }
 {
