@@ -1013,7 +1013,12 @@ def teesheet_button(url: str) -> str:
     return (f'<table {_T} style="margin:0 0 16px;"><tr><td align="center" '
             f'style="border:2px solid {INK};border-radius:999px;padding:10px;">'
             f'<a href="{_e(url)}" style="color:{INK};text-decoration:none;font:bold 15px Arial,sans-serif;'
-            f'display:block;">See the full tee sheet</a></td></tr></table>')
+            f'display:block;">See the full tee sheet</a></td></tr></table>'
+            # Rules of Play for every player, as a plain link (Kerry 10/30:
+            # "Having a Rules of Play link is still a good idea but not within
+            # a New to TGF wrapper")
+            f'<div style="text-align:center;margin:-6px 0 16px;font:bold 13px Arial,sans-serif;">'
+            f'<a href="{RULES_OF_PLAY_URL}" style="color:{ORANGE};">TGF Rules of Play &rsaquo;</a></div>')
 
 
 def frame(inner: str, chapter_label: str, title: str) -> str:

@@ -5,7 +5,7 @@ window.TGF_CHANGELOG = [
     date: "2026-10-30",
     title: "NEW TO TGF? only for 1st Timers and guests",
     changes: [
-      "The event-day email's NEW TO TGF? Rules of Play note goes to a 1st Timer or a guest only, no longer to a member who joined this year (Kerry 10/30 on Jeff Rideout, a 2026 member with 40+ events: \"Nobody does, but Eric. He's our only 1st Timer\")."
+      "The event-day email's NEW TO TGF? Rules of Play note goes to a 1st Timer or a guest only, no longer to a member who joined this year (Kerry 10/30 on Jeff Rideout, a 2026 member with 40+ events: \"Nobody does, but Eric. He's our only 1st Timer\"). Every player now gets a plain \"TGF Rules of Play\" link under the tee sheet button instead (\"Having a Rules of Play link is still a good idea but not within a New to TGF wrapper\")."
     ]
   },
   {
