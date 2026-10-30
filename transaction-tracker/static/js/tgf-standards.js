@@ -24,6 +24,10 @@
             // have equal hole column widths"): one fixed width per cell, so
             // 1 and 18 take the same room; a cell only grows if it must.
             td: `padding:${compact ? "1px 1px" : "2px 2px"};text-align:center;border:1px solid #e2e8f0;width:${compact ? "1.5em" : "2.4em"};min-width:${compact ? "1.5em" : "2.4em"};white-space:nowrap;`,
+            // TOTAL columns (OUT / IN / TOT / PH / NET) are NOT hole columns:
+            // one width of their own, slightly wider, the printed card's rule
+            // (Kerry 10/30: equal widths are for the holes only).
+            totW: `width:${compact ? "2em" : "3em"};min-width:${compact ? "2em" : "3em"};`,
             lbl: `padding:${compact ? "1px 2px" : "2px 8px"};border:1px solid #e2e8f0;font-weight:600;color:#475569;text-align:left;white-space:nowrap;`,
             fs: compact ? "0.58rem" : "0.8rem",
             spanW: compact ? "1.08em" : "1.4em",

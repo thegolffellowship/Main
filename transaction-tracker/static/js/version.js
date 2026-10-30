@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.629.0";
+window.TGF_VERSION = "2.629.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.629.1",
+    date: "2026-10-30",
+    title: "Scorecards: equal widths are for the hole columns only",
+    changes: [
+      "Kerry 10/30: the equal-width rule (v2.628.1) is for the HOLE columns only, not every column. On the app's scorecards (Contests, Handicaps, Customers, /me, the live card) v2.628.1 had given the OUT / IN / TOT / PH / NET cells the same fixed width as the holes. Those totals now take their own, slightly wider width (TGF_CARD_STYLE totW: 3em, 2em compact), the printed card's rule, while holes 1-18 stay equal. The event-info and results emails already had it right (label and TOT columns set apart)."
+    ]
+  },
   {
     version: "2.629.0",
     date: "2026-10-29",

@@ -31,7 +31,7 @@
         // Physical-screen check catches desktop-site mode on phones too
         const compact = (window.matchMedia && window.matchMedia("(max-width: 640px)").matches)
             || (window.screen && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 640);
-        const { td, lbl, fs, spanW, sectTop, sectBot, grey, info, dark, deco: decoFor } = window.TGF_CARD_STYLE(compact);
+        const { td, totW, lbl, fs, spanW, sectTop, sectBot, grey, info, dark, deco: decoFor } = window.TGF_CARD_STYLE(compact);
         const L = compact
             ? { yds: "YDS", gs: "GROSS", gp: "G PTS", ns: "NET", np: "N PTS", adj: "ADJ" }
             : { yds: "YARDS", gs: "GROSS SCORE", gp: "GROSS PTS", ns: "NET SCORE", np: "NET PTS", adj: "ADJ SCORE" };
@@ -132,13 +132,13 @@
                 return `<td style="${td}${sectTop}font-weight:700;position:relative;">${strokeDots(h)}<span style="display:inline-block;min-width:${spanW};line-height:${spanW};${decoFor(nvp)}">${n}</span></td>`;
             }).join("");
             const npRow = hs.map(h => `<td style="${td}${grey}${sectBot}">${netPtsOf(h) ?? ""}</td>`).join("");
-            const tot = `style="${td}font-weight:700;background:#f1f5f9;"`;
-            const totG = `style="${td}${sectTop}font-weight:700;background:#f1f5f9;"`;
-            const totGP = `style="${td}${grey}font-weight:600;"`;
-            const totN = `style="${td}${sectTop}font-weight:700;background:#f1f5f9;"`;
-            const totNP = `style="${td}${grey}${sectBot}font-weight:600;"`;
-            const totHead = `style="${td}font-weight:700;${dark}"`;
-            const totADJ = `style="${td}font-weight:700;background:#f1f5f9;color:#E87C3E;"`;
+            const tot = `style="${td}${totW}font-weight:700;background:#f1f5f9;"`;
+            const totG = `style="${td}${totW}${sectTop}font-weight:700;background:#f1f5f9;"`;
+            const totGP = `style="${td}${totW}${grey}font-weight:600;"`;
+            const totN = `style="${td}${totW}${sectTop}font-weight:700;background:#f1f5f9;"`;
+            const totNP = `style="${td}${totW}${grey}${sectBot}font-weight:600;"`;
+            const totHead = `style="${td}${totW}font-weight:700;${dark}"`;
+            const totADJ = `style="${td}${totW}font-weight:700;background:#f1f5f9;color:#E87C3E;"`;
             const two = st => `<td ${st} colspan="2"></td>`;
             const phNet = closes
                 ? `<td ${totG} title="Playing handicap">${phTxt}</td><td ${totG} title="Gross − PH = Net">${roundNet}</td>`
