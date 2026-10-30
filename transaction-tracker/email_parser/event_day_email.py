@@ -678,7 +678,7 @@ def card_strip(row: dict, grid: dict, net: dict, dump: dict | None, tee_name: st
                 net_row += blank
         grids.append(
             f'<table {_T} style="border:1px solid {LINE};border-radius:6px;table-layout:fixed;margin:0 0 6px;">'
-            f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:3px 6px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#ffffff;">HOLE</td>{head}</tr>'
+            f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:3px 4px 3px 8px;font:bold 10px Arial,sans-serif;letter-spacing:0.5px;color:#ffffff;white-space:nowrap;">HOLE</td>{head}</tr>'
             f'<tr><td {lab}>PAR</td>{pars}</tr>'
             f'<tr><td {lab}>NET</td>{ph_row}</tr>'
             f'<tr><td {lab}>{net_short}</td>{net_row}</tr></table>')

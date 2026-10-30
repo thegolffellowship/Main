@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.629.2";
+window.TGF_VERSION = "2.629.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.629.3",
+    date: "2026-10-30",
+    title: "Results card: tighter circles and squares, HOLE on one line",
+    changes: [
+      "Kerry 10/30, on the results email at phone width: \"Can the circles and squares be a little tighter to the number?\" The birdie circle and double-or-worse box are 17px (were 20px). The HOLE label no longer wraps to \"HOL / E\" on the results card or the event-info card (no-wrap, tighter letter spacing, a slightly wider label column)."
+    ]
+  },
   {
     version: "2.629.2",
     date: "2026-10-30",

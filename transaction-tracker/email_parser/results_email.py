@@ -148,7 +148,7 @@ def _nine_grid(holes, pars, strokes, dots, tot, whole, split) -> str:
     # EQUAL HOLE COLUMNS (Kerry 10/29: "scorecard displays to always have
     # equal hole column widths"): fixed layout, each hole the same share;
     # the totals have their own width.
-    lab_w, tot_w = 15, 10
+    lab_w, tot_w = 17, 10
     n_tot = 2 if split else 1
     hw = f"{(100 - lab_w - tot_w * n_tot) / (9 if split else max(1, len(holes))):.2f}%"
     head = "".join(f'<td width="{hw}" align="center" bgcolor="{INK}" style="width:{hw};padding:4px 0;font:bold 12px Arial,sans-serif;color:#fff;">{h}</td>' for h in holes)
@@ -159,10 +159,10 @@ def _nine_grid(holes, pars, strokes, dots, tot, whole, split) -> str:
             return "–"
         d = s - p
         if d <= -1:
-            return (f'<span style="display:inline-block;width:20px;height:20px;line-height:20px;'
-                    f'border:1.5px solid {INK};border-radius:10px;font-weight:bold;">{s}</span>')
+            return (f'<span style="display:inline-block;width:17px;height:17px;line-height:17px;'
+                    f'border:1.5px solid {INK};border-radius:9px;font-weight:bold;">{s}</span>')
         if d >= 2:
-            return (f'<span style="display:inline-block;width:20px;height:20px;line-height:20px;'
+            return (f'<span style="display:inline-block;width:17px;height:17px;line-height:17px;'
                     f'border:1.5px solid {INK};">{s}</span>')
         return f"<b>{s}</b>" if d == 1 else str(s)
     sc = "".join(f"<td {cell}>{mark(s, p)}</td>" for s, p in zip(strokes, pars))
@@ -185,7 +185,7 @@ def _nine_grid(holes, pars, strokes, dots, tot, whole, split) -> str:
     body = "".join(f"<tr><td {lab}>{labels[i]}</td>{r}<td {tcell}>{t}</td>{extra[i]}</tr>"
                    for i, (r, t) in enumerate(rows))
     return (f'<table {T} style="border:1px solid {LINE};border-radius:6px;table-layout:fixed;">'
-            f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:4px 6px;font:bold 10px Arial,sans-serif;letter-spacing:1px;color:#fff;">HOLE</td>{head}'
+            f'<tr><td width="{lab_w}%" bgcolor="{INK}" style="width:{lab_w}%;padding:4px 4px 4px 6px;font:bold 10px Arial,sans-serif;letter-spacing:0.5px;color:#fff;white-space:nowrap;">HOLE</td>{head}'
             f'<td {th}>{tot}</td>{extra_h}</tr>{body}</table>')
 
 
