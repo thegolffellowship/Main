@@ -1750,14 +1750,11 @@ def send_event_day_late_adds(event_id: int, late_cids, kerry_ok_post, confirm: b
     if not appr["approved"]:
         return {"refused": "template not approved: app setting "
                            f"{APPROVAL_KEY} must equal the current template hash", **appr}
-    if kerry_ok_post is None and confirm is not True:
-        ok, why = True, "dry run (no send; a send needs a post carrying Kerry's word)"
-    else:
-        conn = db.get_connection(db_path)
-        try:
-            ok, why = _kerry_ok(conn, kerry_ok_post)
-        finally:
-            conn.close()
+    conn = db.get_connection(db_path)
+    try:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+    finally:
+        conn.close()
     if not ok:
         return {"refused": f"rule 3b: {why}"}
     _ensure_scoring(event_id, db_path)
@@ -1894,11 +1891,14 @@ def send_event_day_reissue(event_id: int, kerry_ok_post, confirm: bool = False,
     if not appr["approved"]:
         return {"refused": "template not approved: app setting "
                            f"{APPROVAL_KEY} must equal the current template hash", **appr}
-    conn = db.get_connection(db_path)
-    try:
-        ok, why = _kerry_ok(conn, kerry_ok_post)
-    finally:
-        conn.close()
+    if kerry_ok_post is None and confirm is not True:
+        ok, why = True, "dry run (no send; a send needs a post carrying Kerry's word)"
+    else:
+        conn = db.get_connection(db_path)
+        try:
+            ok, why = _kerry_ok(conn, kerry_ok_post)
+        finally:
+            conn.close()
     if not ok:
         return {"refused": f"rule 3b: {why}"}
     _ensure_scoring(event_id, db_path)

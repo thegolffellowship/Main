@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.2";
+window.TGF_VERSION = "2.635.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.3",
+    date: "2026-10-30",
+    title: "Fix: the dry run belongs to the re-issue, not the late-add send",
+    changes: [
+      "2.635.2's \"dry run without the post\" landed in send_event_day_late_adds (the same code block appears there first) instead of send_event_day_reissue, so the standings re-issue's dry run was refused. Moved to the re-issue; the late-add send is back to needing the post for its dry run too, as before."
+    ]
+  },
   {
     version: "2.635.2",
     date: "2026-10-30",
