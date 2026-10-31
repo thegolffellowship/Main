@@ -155,7 +155,18 @@ def step_points(ev, db_path=None):
         return False, f"points rebuild refused: {r['refused']}"
     if r.get("error"):
         return False, r["error"]
-    return True, "points rebuilt"
+    # The month's prize posts as soon as its last event is closed out (Kerry
+    # 10/30); idempotent, and only a month whose last event day has closed
+    # out (or that has ended) records.
+    msg = "points rebuilt"
+    try:
+        from . import database as db
+        rec = db.record_monthly_points_payouts(db_path=db_path)
+        if rec.get("recorded"):
+            msg += "; monthly prize recorded: " + ", ".join(x["code"] for x in rec["recorded"])
+    except Exception:
+        logger.exception("closeout chain: monthly prize recording failed")
+    return True, msg
 
 
 def step_pace(ev, db_path=None):

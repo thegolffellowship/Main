@@ -21181,21 +21181,25 @@ def _monthly_month_entry(conn, key: str, best: dict) -> dict:
     except sqlite3.OperationalError:
         _last_ev = None
     final = complete or bool(_last_ev and today > _last_ev)
-    # ...or the same day, once every event on that last day has reached
-    # CLOSEOUT START (Kerry 2026-10-30: "Closeout needs to also closeout the
-    # races on the standings page and put the winner banners up"). Still
-    # DISPLAY ONLY: the money waits for `complete`.
-    if not final and _last_ev and today == str(_last_ev)[:10]:
+    # ...or once every event on that last day has reached CLOSEOUT START
+    # (Kerry 2026-10-30: "Closeout needs to also closeout the races on the
+    # standings page and put the winner banners up" and "Monthly prize money
+    # can post as soon as the last event of the month is closed out along
+    # with the event itself"): FINAL and PAYABLE from that moment.
+    closed_out = False
+    if _last_ev:
         try:
             _ids = [r["id"] for r in conn.execute(
                 """SELECT id FROM events WHERE substr(event_date, 1, 10) = ?
                      AND lower(COALESCE(status, 'active')) NOT IN ('cancelled', 'canceled')""",
                 (str(_last_ev)[:10],)).fetchall()]
-            final = bool(_ids) and all(conn.execute(
+            closed_out = bool(_ids) and all(conn.execute(
                 "SELECT 1 FROM app_settings WHERE key = ? AND COALESCE(value, '') != ''",
                 (f"closeout_start:{i}",)).fetchone() for i in _ids)
         except sqlite3.OperationalError:
-            pass
+            closed_out = False
+    final = final or closed_out
+    payable = complete or closed_out
     member_count = conn.execute(
         """SELECT COUNT(DISTINCT customer_id) AS c
            FROM customer_memberships
@@ -21214,7 +21218,7 @@ def _monthly_month_entry(conn, key: str, best: dict) -> dict:
     winners = [x for x in standings
                if top is not None and x["points"] == top and top > 0]
     share = (round(member_count / len(winners), 2)
-             if complete and winners else None)
+             if payable and winners else None)
     return {
         "month": key,
         "name": calendar.month_name[mnum].upper(),
@@ -21222,8 +21226,10 @@ def _monthly_month_entry(conn, key: str, best: dict) -> dict:
         "complete": complete,
         "final": final,
         "last_event_date": _last_ev,
+        "payable": payable,
         # the leaders, shown once the month is FINAL; `winners`
-        # below (with the $ share) still waits for `complete`
+        # below (with the $ share) waits for `payable` (the calendar
+        # month over, or its last event closed out)
         "final_winners": ([{"player_name": w["player_name"],
                             "customer_id": w["customer_id"],
                             "points": w["points"]} for w in winners]
@@ -21233,7 +21239,7 @@ def _monthly_month_entry(conn, key: str, best: dict) -> dict:
         "winners": ([{"player_name": w["player_name"],
                       "customer_id": w["customer_id"],
                       "share": share} for w in winners]
-                    if complete else []),
+                    if payable else []),
         "standings": standings,
     }
 
@@ -37929,14 +37935,16 @@ def record_monthly_points_payouts(force: bool = False, db_path=None) -> dict:
         return {"error": "no monthly points snapshot"}
     recorded, skipped = [], []
     for m in snapshot["months"]:
-        if not m.get("complete") or not m.get("winners"):
+        if not (m.get("complete") or m.get("payable")) or not m.get("winners"):
             skipped.append({"month": m.get("month"), "reason": "incomplete or no winners"})
             continue
         # UNTETHERED (Kerry 10/8): a month that runs into gg_untether_from
         # (October 2026 on) is not Golf Genius's to settle; its money is
         # the Tracker's, settled from the Tracker's own results.
         from email_parser.gg_untether import gg_allowed_month
-        if not gg_allowed_month(m.get("month"), db_path):
+        # A month the Tracker built itself (tracker_points.rebuild_monthly,
+        # source "tracker") IS the Tracker's own result, so it records.
+        if m.get("source") != "tracker" and not gg_allowed_month(m.get("month"), db_path):
             skipped.append({"month": m.get("month"), "reason": "untethered from Golf Genius"})
             continue
         year, mnum = int(m["month"][:4]), int(m["month"][5:7])

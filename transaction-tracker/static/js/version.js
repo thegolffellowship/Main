@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.9";
+window.TGF_VERSION = "2.635.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.10",
+    date: "2026-10-30",
+    title: "The month's prize posts at its last event's closeout",
+    changes: [
+      "Kerry 10/30: \"Monthly prize money can post as soon as the last event of the month is closed out along with the event itself.\" A month is PAYABLE once every event on its last event day has reached CLOSEOUT START (or the calendar month has ended); the closeout chain's points step then records the winner's prize (SEASON CONTESTS payout account '<MONTH> Points <YYYY>', $1 per member, ties split, unpaid, the usual Pay buttons). The Tracker's own months (October on, untethered from Golf Genius) now record: before this, nothing recorded them at all. A Golf Genius month after the untether date still never does."
+    ]
+  },
   {
     version: "2.635.9",
     date: "2026-10-30",

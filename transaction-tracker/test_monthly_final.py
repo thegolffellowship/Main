@@ -43,7 +43,13 @@ _c.commit(); _c.close()
 m = sept(date(2026, 9, 29))
 check("the last event's CLOSEOUT START: FINAL the same day, winner shown",
       m["final"] is True and [w["player_name"] for w in m["final_winners"]] == ["Luke Mazanec"], m.get("final"))
-check("…still no money before the month is complete", m["complete"] is False and m["winners"] == [])
+check("…and the prize is payable at that closeout (Kerry 10/30), before the month ends",
+      m["complete"] is False and m["payable"] is True and m["winners"]
+      and m["winners"][0]["share"] is not None, m.get("winners"))
+# without a closeout, the old rules stand
+_c = sqlite3.connect(tmp)
+_c.execute("DELETE FROM app_settings WHERE key = 'closeout_start:1'")
+_c.commit(); _c.close()
 m = sept(date(2026, 9, 30))
 check("the day after the month's last (non-cancelled) event: FINAL", m["final"] is True and m["last_event_date"] == "2026-09-29", m)
 check("…the winner comes from the final numbers, not a hand pick",
@@ -52,6 +58,21 @@ check("…but the month is not COMPLETE, so no $ share and no payout recording y
       m["complete"] is False and m["winners"] == [])
 m = sept(date(2026, 10, 1))
 check("Oct 1: complete, winners carry the share (payout path unchanged)", m["complete"] is True and m["winners"])
+
+# The Tracker's own October (untethered from GG) records once payable (Kerry 10/30)
+oct_entry = {"month": "2026-10", "name": "OCTOBER", "month_end": "2026-10-31", "complete": False,
+             "payable": True, "final": True, "source": "tracker", "purse": 140,
+             "winners": [{"player_name": "Adam Baker", "customer_id": None, "share": 140.0}],
+             "standings": []}
+gg_entry = dict(oct_entry, source="gg", month="2026-11", name="NOVEMBER", month_end="2026-11-30")
+db.save_gg_snapshot("monthly_points", {"months": [oct_entry, gg_entry]}, tmp)
+r = db.record_monthly_points_payouts(db_path=tmp)
+check("the Tracker's own month records at closeout (untethered is no bar)",
+      [x["code"] for x in r.get("recorded", [])] == ["OCTOBER Points 2026"], r)
+check("a Golf Genius month after the untether still does not",
+      any(x["month"] == "2026-11" and "untethered" in x["reason"] for x in r.get("skipped", [])), r)
+check("recording twice records nothing new",
+      not db.record_monthly_points_payouts(db_path=tmp).get("recorded"))
 
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)
