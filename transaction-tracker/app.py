@@ -11084,6 +11084,24 @@ def api_send_messages():
         else:
             filtered.append(r)
 
+    # ONE email per person (Kerry 10/31, Larry Anthis got two: his
+    # registration plus the "balance due" payment row on the same event).
+    # Payment-only child rows (parent_item_id) are never a recipient, and a
+    # person with several rows counts once, by customer_id (else by
+    # email + name, so two people sharing an inbox still each get theirs).
+    _seen_people = set()
+    _deduped = []
+    for r in filtered:
+        if r.get("parent_item_id") and str(r.get("transaction_status") or "active") != "gg_rsvp":
+            continue
+        _key = (("c", int(r["customer_id"])) if r.get("customer_id") is not None
+                else ("e", (resolve_email(r) or "").lower(), (r.get("customer") or "").strip().lower()))
+        if _key in _seen_people:
+            continue
+        _seen_people.add(_key)
+        _deduped.append(r)
+    filtered = _deduped
+
     # Build recipient list from filtered registrants
     recipients = [
         {"player_name": r.get("customer") or "Player", "email": resolve_email(r)}

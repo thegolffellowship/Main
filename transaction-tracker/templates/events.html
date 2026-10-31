@@ -13535,6 +13535,10 @@ function ctpHolesLoad(evId) {
 
         const _ev = allEvents.find(e => e.item_name === eventName) || {};
         const evCancelled = (_ev.status === 'cancelled' || _ev.status === 'postponed');
+        // ONE email per person, as the server sends (Kerry 10/31): payment-only
+        // child rows (parent_item_id) never count, and a person with several
+        // rows counts once by customer_id (else email + name).
+        const _seenPeople = new Set();
         return allRegs.filter(r => {
             const status = (r.transaction_status || "active");
             // Credited/refunded players stay in the audience on a
@@ -13557,6 +13561,13 @@ function ctpHolesLoad(evId) {
                 // Approximate: use RSVP data if available
                 return true; // server-side will do accurate filtering
             }
+            return true;
+        }).filter(r => {
+            if (r.parent_item_id) return false;
+            const _k = r.customer_id != null ? `c${r.customer_id}`
+                : `e${(r.customer_email || "").toLowerCase()}|${(r.customer || "").toLowerCase()}`;
+            if (_seenPeople.has(_k)) return false;
+            _seenPeople.add(_k);
             return true;
         }).map(r => {
             // Ensure customer_email is populated for display and sending

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.16";
+window.TGF_VERSION = "2.635.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.17",
+    date: "2026-10-31",
+    title: "Messages: one email per person",
+    changes: [
+      "Kerry 10/31, \"Why is Larry on there twice?\" ... \"Build it now\": Larry Anthis got two copies of the 7:18 AM notice, one for his registration and one for its balance-due payment row. The composer and /api/messages/send now skip payment-only rows (parent_item_id) and count each person once, by customer card, else by email plus name (two guests sharing an inbox still each get theirs)."
+    ]
+  },
   {
     version: "2.635.16",
     date: "2026-10-30",

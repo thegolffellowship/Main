@@ -86,6 +86,7 @@ Center texts and the Message Players `{event_url}` variable both read it.
   disables); `POST /api/events/<id>/registration-url/check` (Edit Event
   → Verify, and Add Event right after create); bridge
   `scoring-event-links[|apply][|<event id>]` (no arg = dry run).
+- **Composer, one email per person (v2.635.17, Kerry 10/31, Larry Anthis got two):** `getComposeRecipients` and `/api/messages/send` skip payment-only child rows (`parent_item_id`) and dedupe by `customer_id`, else by email + name. Test: `test_composer_one_per_person.py`.
 - **Composer**: `{event_url}` button + `KNOWN_VARS`; `/api/messages/send`
   refuses with the reason when a template uses it and the link is
   missing, rejected or expired (same class as the `{manager_phone}`
