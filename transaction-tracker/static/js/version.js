@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.12";
+window.TGF_VERSION = "2.635.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.13",
+    date: "2026-10-30",
+    title: "Fix: race winners only after the points are tallied",
+    changes: [
+      "Switching the interview on for the Fall Championship showed Luke Youngs and Adam Baker as race winners the night before: the winner check read the standings going in. Race winners now qualify only once the closeout chain's points step has tallied the finale, so the closeout-start invitations can never go to a leader who is passed on the day. A player with two titles reads the Fall race first, then the month."
+    ]
+  },
   {
     version: "2.635.12",
     date: "2026-10-30",

@@ -147,6 +147,9 @@ RF = {"races": {"san antonio": {"rows": [
                           {"customer_id": 831, "rank": "T1", "enrolled": True}]}},
       "month": {"name": "October 2026", "standings": [{"customer_id": 821, "points": 34},
                                                        {"customer_id": 840, "points": 30}]}}
+check("before the points are tallied: no race winners (the leader can still change)",
+      ai.race_winners(910, RF) == [])
+db.set_app_setting("closeout_chain:910", json.dumps({"steps": {"points": {"ok": True}}}))
 w = ai.race_winners(910, RF)
 check("Fall winners are the best-ranked ENROLLED; ties share; month top wins",
       sorted((cid, r["race"], r["tied"]) for cid, r in w) ==

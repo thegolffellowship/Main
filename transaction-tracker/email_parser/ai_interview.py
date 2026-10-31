@@ -210,8 +210,12 @@ def qualify(event_id: int, db_path=None) -> list:
         if len(birdies) >= 3:
             found.setdefault(int(cid), []).append({"kind": "birdies", "n": len(birdies),
                                                    "holes": birdies, "streak": _streak(birdies)})
+    _champ_n: dict = {}
     for cid, r in race_winners(int(event_id), f, db_path=db_path):
-        found.setdefault(int(cid), []).insert(0, r)
+        # titles lead, in race order (the Fall race, then the month)
+        i = _champ_n.get(int(cid), 0)
+        found.setdefault(int(cid), []).insert(i, r)
+        _champ_n[int(cid)] = i + 1
     out = []
     with db._connect(db_path) as conn:
         for cid, reasons in sorted(found.items()):
@@ -256,6 +260,13 @@ def race_winners(event_id: int, facts: dict, db_path=None) -> list:
     out = []
     try:
         ends = race_final_event(event_id, db_path)
+        if not (ends["fall"] or ends["month"]):
+            return out
+        # Only once the closeout chain has tallied the points: before that
+        # the standings are the ones going in, and the leader can change.
+        from email_parser import closeout_chain as cc
+        if not ((cc.state(event_id, db_path).get("steps") or {}).get("points") or {}).get("ok"):
+            return out
         if ends["fall"]:
             from email_parser.database import _race_champions
             from email_parser.results_email import FALL_RACE
