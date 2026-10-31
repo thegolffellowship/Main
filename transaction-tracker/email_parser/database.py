@@ -38567,12 +38567,23 @@ def get_refunds_overview(db_path: str | Path | None = None,
                ORDER BY rw.initiated_at"""
         ).fetchall():
             w = dict(w)
+            # The memo is built fresh, never the one saved at the tap: a
+            # watch from before 10/30 carried no player name, and its row
+            # offers the Venmo button again after 5 minutes (Kerry 10/30:
+            # "These still didn't have their names in the memos").
+            try:
+                from email_parser.refund_memo import refund_memo as _refund_memo
+                _wi = conn.execute("SELECT * FROM items WHERE id = ?", (w["item_id"],)).fetchone()
+                _worigin = (_credit_origin_event(conn, dict(_wi)) if _wi else None) or w.get("event")
+                _wmemo = _refund_memo("Refund", _worigin, w.get("customer_name"))
+            except Exception:
+                _wmemo = w.get("memo")
             in_flight.append({
                 "item_id": w["item_id"], "customer": w.get("customer_name"),
                 "customer_id": w.get("customer_id"), "event": w.get("event"),
                 "amount": round(float(w.get("amount") or 0), 2),
                 "method": w.get("method"), "handle": w.get("handle"),
-                "memo": w.get("memo"), "initiated_at": w.get("initiated_at"),
+                "memo": _wmemo, "initiated_at": w.get("initiated_at"),
                 "age_days": _age(w.get("initiated_at")),
             })
 

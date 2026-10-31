@@ -101,6 +101,17 @@ check("a removal with no source item: '<player> - Refund for Match Play 2026' (s
       any(m.endswith(" - Refund for Match Play 2026") for m in memos.values()), memos)
 check("no memo is all caps or pipe-separated",
       all(m and m != m.upper() and "|" not in m for m in memos.values()), memos)
+# A watch saved before 10/30 carried no name; the board shows a fresh memo
+# (Kerry 10/30: "These still didn't have their names in the memos")
+with db._connect(DB) as c:
+    c.execute("INSERT INTO refund_watches (item_id, customer_id, customer_name, method, handle, amount, memo) "
+              "VALUES (8101, 60, 'Amy Memo', 'Venmo', 'amy-memo', 40, 'Refund for a9.29 Teravista')")
+    c.commit()
+fl = {r["item_id"]: r["memo"] for r in db.get_refunds_overview(db_path=DB).get("in_flight", [])}
+check("an in-flight refund's memo is rebuilt with the name, not the one saved at the tap",
+      fl.get(8101) == "Amy Memo - Refund for a9.29 Teravista", fl)
+with db._connect(DB) as c:
+    c.execute("DELETE FROM refund_watches WHERE item_id = 8101"); c.commit()
 
 # A memo without a name never verifies another player's refund watch.
 with db._connect(DB) as c:

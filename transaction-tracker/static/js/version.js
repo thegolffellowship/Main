@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.14";
+window.TGF_VERSION = "2.635.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.15",
+    date: "2026-10-30",
+    title: "Refunds: a re-offered Venmo button carries the name in its memo",
+    changes: [
+      "Kerry 10/30, Jeff Young and Mary Wade after the 5-minute reset: \"These still didn't have their names in the memos.\" Their watches were saved at a tap before v2.635.9, and the re-offered button reused that saved memo. The Refunds overview now builds every in-flight memo fresh (\"Jeff Young - Refund for s9.28 TPC Canyons\"), the same way as an outstanding one."
+    ]
+  },
   {
     version: "2.635.14",
     date: "2026-10-30",
