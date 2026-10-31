@@ -1406,7 +1406,29 @@
                     }),
                 }).catch(() => {});
             } catch (_) { /* never block the pay link */ }
+            // Same as Unpaid (Kerry 10/30): the row stays where it is and
+            // reads "Sent · verifying…" until the Venmo receipt lands.
+            setTimeout(() => {
+                try { a.outerHTML = REFUND_VERIFYING_PILL; } catch (_) {}
+                _refundPollSoon();
+            }, 0);
         }, true);
+
+        const REFUND_VERIFYING_PILL = `<span class="venmo-verifying" title="You tapped Venmo — waiting for the Venmo receipt to confirm this refund. It moves to Completed when it's verified."><span class="vspin"></span>Sent · verifying…</span>`;
+        // While any refund is being verified, re-read the board every
+        // minute (Refunds tab open only) so a verified one moves on its own.
+        let _refundPollTimer = null;
+        function _refundPollSoon() {
+            if (_refundPollTimer) return;
+            _refundPollTimer = setTimeout(async () => {
+                _refundPollTimer = null;
+                if (payFilter !== "refunds" || document.hidden) return;
+                try {
+                    const resp = await fetch("/api/refunds/overview");
+                    if (resp.ok) renderRefunds(await resp.json());
+                } catch (_) {}
+            }, 60 * 1000);
+        }
 
         function renderRefunds(data) {
             const el = $("#refunds-main");
@@ -1435,14 +1457,21 @@
                         : meth === "cashapp" ? "#00D632" : "#374151";
                     action = `<span title="${escR(r.payment_handle || "")}"
                            style="display:inline-block;background:${bg};color:#fff;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;white-space:nowrap;">${label} ${fmt(r.amount)}</span>${moreLink}`;
-                } else if (r.venmo_handle) {
+                } else if (r.venmo_handle || r.item_id) {
+                    // No handle on file (Kerry 10/30, Will Wallace): Venmo
+                    // still opens with the amount and memo; pick the person
+                    // in Venmo. The watch still registers on the tap.
                     const memo = encodeURIComponent(r.memo || window.refundMemo("Refund", r.event || "", r.customer));
                     const amt = Number(r.amount || 0).toFixed(2);
-                    const h = r.venmo_handle.replace(/^@/, "");
+                    const h = (r.venmo_handle || "").replace(/^@/, "");
                     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                    const href = isMobile
-                        ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(h)}&amount=${amt}&note=${memo}`
-                        : `https://venmo.com/${encodeURIComponent(h)}?txn=pay&amount=${amt}&note=${memo}`;
+                    const href = h
+                        ? (isMobile
+                            ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(h)}&amount=${amt}&note=${memo}`
+                            : `https://venmo.com/${encodeURIComponent(h)}?txn=pay&amount=${amt}&note=${memo}`)
+                        : (isMobile
+                            ? `venmo://paycharge?txn=pay&amount=${amt}&note=${memo}`
+                            : `https://venmo.com/?txn=pay&amount=${amt}&note=${memo}`);
                     // Tapping the pill must REGISTER THE WATCH (Kerry
                     // 2026-07-28: he initiated four refunds right here and
                     // In Flight stayed empty — the pill was a bare deep
@@ -1468,15 +1497,18 @@
                 </tr>`;
             }).join("");
 
-            const flightRows = (data.in_flight || []).map(r => `
+            // A tapped refund stays in Outstanding, "Sent · verifying…",
+            // like a tapped payout on Unpaid (Kerry 10/30); it moves to
+            // Completed when the receipt verifies it.
+            const flight = data.in_flight || [];
+            const flightRows = flight.map(r => `
                 <tr>
                     <td>${playerCell(r.customer, r.customer_id, r.event)}</td>
-                    <td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">
-                        ${escR(r.method || "")}${r.handle ? " · " + escR(r.handle) : ""}</td>
                     <td class="right">${ageChip(r.age_days)}</td>
                     <td class="right total-amount" style="white-space:nowrap;">${fmt(r.amount)}</td>
-                    <td class="right"><span style="font-size:0.7rem;font-weight:600;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;white-space:nowrap;">watching…</span></td>
+                    <td class="right" style="white-space:nowrap;" title="${escR((r.method || "") + (r.handle ? " · " + r.handle : ""))}">${REFUND_VERIFYING_PILL}</td>
                 </tr>`).join("");
+            if (flight.length) _refundPollSoon();
 
             const doneRows = (data.completed || []).map(r => `
                 <tr>
@@ -1557,12 +1589,10 @@
                     <h1 style="font-size:1.25rem;margin:0;">Refunds</h1>
                     <span style="font-size:0.8rem;color:var(--text-muted);">Every credit owed, in flight, or paid — one place.</span>
                 </div>
-                ${section("Outstanding", t.outstanding_count || 0, t.outstanding_amount || 0, "#b45309",
+                ${section("Outstanding", (t.outstanding_count || 0) + (t.in_flight_count || 0),
+                    (t.outstanding_amount || 0) + (t.in_flight_amount || 0), "#b45309",
                     tbl(`<th>Player / Event</th><th class="right">Age</th><th class="right">Credit</th><th class="right" style="width:110px;"></th>`,
-                        outRows, "No held credits awaiting refund &#127881;"))}
-                ${section("In Flight", t.in_flight_count || 0, t.in_flight_amount || 0, "#1e40af",
-                    tbl(`<th>Player / Event</th><th>Method</th><th class="right">Age</th><th class="right">Amount</th><th class="right" style="width:90px;"></th>`,
-                        flightRows, "No refunds currently being verified."))}
+                        outRows + flightRows, "No held credits awaiting refund &#127881;"))}
                 ${section("Referral Fees", (ref.owed || []).length, ref.owed_total || 0, "#7c3aed",
                     tbl(`<th>Referrer / Referred</th><th class="right">Fee</th><th class="right" style="width:110px;"></th>`,
                         refOwedRows, "No referral fees owed.")

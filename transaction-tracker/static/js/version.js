@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.635.10";
+window.TGF_VERSION = "2.635.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.11",
+    date: "2026-10-30",
+    title: "Refunds board works like Unpaid: Sent · verifying in place",
+    changes: [
+      "Kerry 10/30: \"update the Refunds board to act same as the Unpaid and All sections that track the inflight Venmo clicks right in place.\" Tapping a refund's Venmo pill now turns it into \"Sent · verifying…\" right in its row (the Unpaid style); the row stays in Outstanding until the Venmo receipt verifies it and it moves to Completed. The separate In Flight list is gone (those rows sit in Outstanding, counted in its total), and the board re-reads itself every minute while any refund is being verified.",
+      "A credit with no Venmo handle on file (Will Wallace) now gets a Venmo pill too instead of \"Refund…\": Venmo opens with the amount and the memo filled in and you pick the person; the tap still registers the watch."
+    ]
+  },
   {
     version: "2.635.10",
     date: "2026-10-30",
