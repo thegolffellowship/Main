@@ -75,9 +75,19 @@ check("Silverhorn: $0.06 over is under half a player, no email (Kerry #2475-3)",
       s["status"] == "within half a player" and abs(s["overcharge"] - 0.06) < 0.001 and "html" not in s, s)
 check("the meal row is not counted as a course charge", len(s["charges"]) == 1)
 half = csf.compute({"course_cost": 54.13}, [{"amount": 54.13 * 6 + 27.07, "id": 1}], [{"holes": 9}] * 6)
-check("exactly half a player's rate sends", half["due"])
+check("half a player over is NOT extra players: a rate gap for Kerry, no email (Kerry 10/30)",
+      not half["due"] and half["rate_gap"], half)
 under = csf.compute({"course_cost": 54.13}, [{"amount": 54.13 * 6 + 27.0, "id": 1}], [{"holes": 9}] * 6)
-check("a little under half does not", not under["due"])
+check("a little under half is noise: neither", not under["due"] and not under["rate_gap"])
+oly = csf.compute({"course_cost": 37.89}, [{"amount": 825.09, "id": 1}], [{"holes": 9}] * 21)
+check("Olympia Hills 10/6: $825.09 for 21 at $37.89 is a rate/tax gap, not 1 extra player",
+      not oly["due"] and oly["rate_gap"] and oly["credit_players"] == 0 and oly["per_round"] == 39.29, oly)
+one = csf.compute({"course_cost": 37.89}, [{"amount": 37.89 * 22 + 0.30, "id": 1}], [{"holes": 9}] * 21)
+check("one extra player at our rate (cents off) is a credit request for 1",
+      one["due"] and one["credit_players"] == 1 and one["charged_players"] == 22, one)
+r = csf.review_text({"event": "s9.26 Olympia Hills", "event_date": "2026-10-06", **oly})
+check("the review shows the arithmetic and says nothing was sent",
+      "$39.29 a round" in r and "not a whole number of players" in r and "Nothing was sent" in r, r)
 combo = csf.compute({"course_cost_9": 30.0, "course_cost_18": 55.0},
                     [{"amount": 30 + 55 + 55, "id": 1}], [{"holes": 9}, {"holes": 18}])
 check("a 9/18 combo prices each card by its holes (an unplayed 18 seat = $55 over)",
@@ -160,5 +170,13 @@ check("a staff-only preview refuses a course address",
 src = open("mcp_server.py").read()
 check("bridge scoring-course-shortfall exists", 'cmd == "scoring-course-shortfall"' in src)
 check("the job is on the scheduler", 'id="course_shortfall"' in open("app.py").read())
+print("a rate gap goes to Kerry once, never to the course")
+rv = {"event": "s9.26 Olympia Hills", "event_date": "2026-10-06", "charge_ids": [77], **oly}
+rv["why"] = csf.review_text(rv)
+check("first time: one COO item", csf._raise_review(990, rv, db_path=DB) is True)
+check("same charges again: nothing new", csf._raise_review(990, rv, db_path=DB) is False)
+items = [i for i in db.get_action_items(db_path=DB) if "COURSE CHARGE DIFFERS" in (i.get("subject") or "")]
+check("exactly one item, carrying the arithmetic", len(items) == 1 and "$39.29" in (items[0].get("summary") or ""), items)
+
 print(f"\n{'ALL PASS' if not F else str(len(F)) + ' FAILED: ' + ', '.join(F)}")
 sys.exit(1 if F else 0)

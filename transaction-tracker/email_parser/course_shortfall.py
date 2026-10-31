@@ -17,9 +17,16 @@ credit on the same event counts against it). Then
                  holes from course_cost_9 / course_cost_18)
     played     = the event's TGF scorecards (`scoring_rounds`), one per person
 
-The email goes only when the overcharge is at least HALF of one player's
-course rate (Silverhorn 10/27 was over by $0.06: no email). Teravista 10/27:
-$433.00 charged at $54.13, 6 played, $108.22 over -> "(2 players)".
+The email goes only when the overcharge is a WHOLE NUMBER OF PLAYERS at our
+rate (within WHOLE_TOLERANCE; a 9/18 combo may mix its two rates), i.e. we
+were billed for golfers who did not play (Kerry 10/30, after Olympia Hills
+10/6: "build it"). Teravista 10/27: $433.00 charged at $54.13, 6 played,
+$108.22 over -> "(2 players)". An overcharge under half a player is noise
+(Silverhorn 10/27, $0.06). Anything else at half a player or more is a RATE
+or TAX DIFFERENCE, never extra players (Olympia Hills: $825.09 = 21 x $35.00
++ $90.09 tax at 12.26% instead of 8.25%, $29.40 over): no email to the
+course; one COO item for Kerry with the arithmetic, once per event per
+charge (`course_shortfall_review:<event_id>`).
 
 THE EMAIL (the mockup Kerry approved, #2475-3 / #2476-1): From Kerry (the
 Tracker mailbox); To the course's primary TGF contact (the event's course
@@ -52,6 +59,8 @@ CC_KEY = "course_shortfall_cc"
 CATEGORIES_KEY = "course_shortfall_categories"
 KERRY = "kerry@thegolffellowship.com"
 LOOKBACK_DAYS = 30
+REVIEW_KEY = "course_shortfall_review:{}"
+MAX_EXTRA_PLAYERS = 12     # the whole-player search stops here
 DEFAULT_CATEGORIES = ("course fees", "course fee", "golf course fees / green fees", "green fees")
 CREDIT_TYPES = ("refund", "credit", "income")
 
@@ -160,9 +169,38 @@ def _rate_for(ev: dict, holes: int):
     return None
 
 
+def _tolerance(rate: float) -> float:
+    """How close to a whole player the overcharge must be: $1.00, or 2% of
+    the rate when that is more (rounding and card surcharges)."""
+    return max(1.00, round(0.02 * rate, 2))
+
+
+def whole_players(over: float, rates: list) -> int | None:
+    """The number of extra players the overcharge is, when it is (within the
+    tolerance) a whole count at the event's rate(s); a 9/18 combo may mix its
+    two rates. None when it is not whole players."""
+    rs = sorted({round(float(r), 2) for r in rates if r})
+    if not rs or over <= 0:
+        return None
+    tol = _tolerance(min(rs))
+    best = None
+    if len(rs) == 1:
+        n = int(round(over / rs[0]))
+        if n >= 1 and abs(over - n * rs[0]) <= tol:
+            best = n
+    else:
+        lo, hi = rs[0], rs[-1]
+        for a in range(0, MAX_EXTRA_PLAYERS + 1):
+            for b in range(0, MAX_EXTRA_PLAYERS + 1 - a):
+                if a + b and abs(over - (a * lo + b * hi)) <= tol:
+                    if best is None or a + b < best:
+                        best = a + b
+    return best
+
+
 def compute(ev: dict, chg: list[dict], who: list[dict]) -> dict:
     """The pure arithmetic. {charged, expected, overcharge, rate, played,
-    charged_players, credit_players, due, held[]}."""
+    charged_players, credit_players, due, rate_gap, per_round, held[]}."""
     held = []
     charged = round(sum(c["amount"] for c in chg), 2)
     rates = [_rate_for(ev, p["holes"]) for p in who] if who else [_rate_for(ev, 0)]
@@ -172,12 +210,30 @@ def compute(ev: dict, chg: list[dict], who: list[dict]) -> dict:
     rate = min(rates)
     expected = round(sum(rates), 2) if who else 0.0
     over = round(charged - expected, 2)
+    n = whole_players(over, rates) if over >= round(rate / 2.0, 2) else None
     out = {"charged": charged, "expected": expected, "overcharge": over, "rate": rate,
            "played": len(who), "held": held,
-           "charged_players": int(round(charged / rate)) if rate else None,
-           "credit_players": max(1, int(round(over / rate))) if rate and over > 0 else 0}
-    out["due"] = bool(chg) and over >= round(rate / 2.0, 2)
+           "per_round": round(charged / len(who), 2) if who else None,
+           "charged_players": (len(who) + n) if n else len(who),
+           "credit_players": n or 0}
+    out["due"] = bool(chg) and bool(n)
+    # half a player or more, but not whole players: a rate or tax difference
+    out["rate_gap"] = bool(chg) and not n and over >= round(rate / 2.0, 2)
     return out
+
+
+def review_text(b: dict) -> str:
+    """The arithmetic Kerry needs before he contacts the course."""
+    lines = [f"Charged {_money(b['charged'])} for {b['event']} ({b.get('event_date')}).",
+             f"Expected {_money(b['expected'])}: {b['played']} played at our rate {_money(b['rate'])}.",
+             f"Over by {_money(b['overcharge'])}, which is not a whole number of players."]
+    if b.get("per_round"):
+        lines.append(f"Charged works out to {_money(b['per_round'])} a round for the {b['played']} who played "
+                     f"({_money(b['per_round'] - b['rate'])} a round more than our rate): a rate, tax or comp "
+                     "difference, not extra players.")
+    lines.append("Nothing was sent to the course. Check the course's itemized receipt (base rate, tax, any "
+                 "comped round) and contact the course yourself if it's wrong.")
+    return "\n".join(lines)
 
 
 def build(event_id: int, db_path=None) -> dict:
@@ -200,6 +256,9 @@ def build(event_id: int, db_path=None) -> dict:
            "charges": chg, "charge_ids": sorted(c["id"] for c in chg), **calc}
     if not chg:
         return {**out, "status": "no course charge"}
+    if calc.get("rate_gap"):
+        return {**out, "status": "rate difference: for Kerry",
+                "why": review_text(out)}
     if not calc.get("due"):
         return {**out, "status": "within half a player",
                 "why": (f"over by {_money(calc.get('overcharge') or 0)}, under half of "
@@ -299,6 +358,30 @@ def run_event(event_id: int, confirm: bool = False, db_path=None, sender=None) -
     return {**out, "status": "sent" if ok else "failed"}
 
 
+def _raise_review(event_id: int, b: dict, db_path=None) -> bool:
+    """One COO item for Kerry per event per set of charges; never an email."""
+    from email_parser import database as db
+    key = REVIEW_KEY.format(int(event_id))
+    ids = sorted(b.get("charge_ids") or [])
+    try:
+        if json.loads(_setting(key, db_path) or "{}").get("charge_ids") == ids:
+            return False
+    except ValueError:
+        pass
+    try:
+        db.save_action_item({
+            "subject": f"COURSE CHARGE DIFFERS: {b.get('event')}",
+            "from_name": "Course shortfall check",
+            "summary": b.get("why") or review_text(b),
+            "urgency": "medium", "category": "finance"}, db_path=db_path)
+        db.set_app_setting(key, json.dumps({"charge_ids": ids, "overcharge": b.get("overcharge")}),
+                           db_path=db_path)
+        return True
+    except Exception:
+        logger.exception("course shortfall review item failed for %s", event_id)
+        return False
+
+
 def recent_event_ids(today: str | None = None, days: int = LOOKBACK_DAYS, db_path=None) -> list[int]:
     """Events played in the last `days` days (not today) that carry a course charge."""
     from email_parser import database as db
@@ -320,6 +403,10 @@ def check(today: str | None = None, db_path=None, sender=None) -> dict:
     for eid in recent_event_ids(today, db_path=db_path):
         try:
             r = run_event(eid, confirm=True, db_path=db_path, sender=sender)
+            if r.get("status") == "rate difference: for Kerry":
+                if _raise_review(eid, r, db_path):
+                    out[eid] = "review raised for Kerry"
+                continue
             if r.get("status") not in ("no course charge", "within half a player", "already sent"):
                 out[eid] = r.get("status")
         except Exception as exc:

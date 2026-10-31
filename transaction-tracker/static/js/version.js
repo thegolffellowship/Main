@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.15";
+window.TGF_VERSION = "2.635.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.16",
+    date: "2026-10-30",
+    title: "Course shortfall: credit requests only for whole extra players; rate gaps go to Kerry",
+    changes: [
+      "Kerry 10/30, \"Yes, build it\", after Olympia Hills 10/6: the check had read a $29.40 overage as \"1 extra player\" when the itemized receipt shows 21 rounds at $35.00 with $90.09 tax (12.26% instead of 8.25%). The automatic credit request to the course now goes only when the overcharge is a whole number of players at our rate (within $1.00 or 2% of the rate; a 9/18 combo may mix both rates), as at Teravista. Anything else of half a player or more is a rate, tax or comp difference: nothing goes to the course, and Kerry gets one COO item (COURSE CHARGE DIFFERS) with the arithmetic, once per event per set of charges."
+    ]
+  },
   {
     version: "2.635.15",
     date: "2026-10-30",
