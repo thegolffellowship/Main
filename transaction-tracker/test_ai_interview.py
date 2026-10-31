@@ -166,6 +166,25 @@ check("champion questions for the season, then the month's, then anything else",
 check("co-champions read as such", ai.reason_text([w[2][1]]) == "You're a co-champion of the Austin Fall Points Race!",
       ai.reason_text([w[2][1]]))
 
+print("== one real invitation (Kerry 10/30: a test to Scott) ==")
+SENT1 = []
+s1 = lambda to, sj, h: SENT1.append((to, sj, h)) or True      # noqa: E731
+db.set_app_setting("ai_interview_approved", "old")
+check("refused without the wording stamp", "refused" in ai.send_one(911, 803, "#1 (kerry)", confirm=True, sender=s1))
+db.set_app_setting("ai_interview_approved", ai.template_hash())
+check("refused for someone who doesn't qualify", "refused" in ai.send_one(911, 804, "#1 (kerry)", sender=s1))
+r = ai.send_one(911, 803, "#1 (kerry)", sender=s1)
+check("dry run without confirm sends nothing", r.get("dry_run") and not SENT1, r)
+r = ai.send_one(911, 803, "#1 (kerry)", confirm=True, sender=s1)
+check("confirm sends ONE email to that player", r.get("status") == "sent" and len(SENT1) == 1
+      and SENT1[0][0] == "p803@example.com", r)
+st911 = ai._json(ai.STATE_KEY.format(911))
+check("the event's automatic send and recap wait are untouched (no event sent_at)",
+      not st911.get("sent_at") and ai.recap_wait([911]) is None, st911)
+check("once per player", "refused" in ai.send_one(911, 803, "#1 (kerry)", confirm=True, sender=s1) and len(SENT1) == 1)
+tk = ai.make_token(803, 911)
+check("the real link shows that player's questions", ai.describe(tk)["questions"][0] == "Which birdie was the best, and what happened?")
+
 print("== links ==")
 tok = ai.make_token(802, 900)
 check("verifies", ai.verify_token(tok)["c"] == 802)

@@ -573,6 +573,69 @@ def closeout_hook(event_id: int, db_path=None, now=None, sender=None) -> dict | 
         return {"error": "failed (logged)"}
 
 
+def send_one(event_id: int, customer_id: int, kerry_ok: str, confirm: bool = False,
+             db_path=None, now=None, sender=None) -> dict:
+    """ONE real invitation to one qualifier (Kerry 10/30: "send to Scott to
+    test out from Tuesday's Silverhorn event"). The caller checks Kerry's
+    word (a mailbox post); the wording must carry his stamp. The dial is not
+    needed (that only arms the automatic closeout send). Dry run without
+    confirm; once per person per event, like the closeout send."""
+    if not approved(db_path):
+        return {"refused": f"the wording is not stamped ({APPROVAL_KEY} != {template_hash()})"}
+    person = next((p for p in qualify(int(event_id), db_path=db_path)
+                   if p["customer_id"] == int(customer_id)), None)
+    if not person:
+        return {"refused": f"customer {customer_id} does not qualify for event {event_id}"}
+    key = STATE_KEY.format(int(event_id))
+    st = _json(key, db_path)
+    if ((st.get("people") or {}).get(str(customer_id)) or {}).get("sent_at"):
+        return {"refused": "already sent to this player for this event"}
+    ev = _event(event_id, db_path)
+    msg = build_message(person, ev)
+    out = {"event_id": int(event_id), "customer_id": int(customer_id), "name": person["name"],
+           "email": person["email"], "why": person["why"], "questions": person["questions"],
+           "subject": msg["subject"], "held": msg["held"], "authority": kerry_ok}
+    if msg["held"] or not person["email"]:
+        out["refused"] = "held: " + ", ".join(msg["held"] or ["no email on file"])
+        return out
+    if not confirm:
+        out["dry_run"] = True
+        return out
+    if sender is None:
+        from email_parser.event_day_email import _creds, _graph_send
+        creds = _creds()
+        if not creds:
+            return {"error": "Email credentials not configured on server"}
+        sender = lambda to, sj, h: _graph_send(creds, to, sj, h)   # noqa: E731
+    from email_parser import database as db
+    from email_parser.timezone_utils import now_central
+    now = now or now_central()
+    ok = False
+    try:
+        ok = bool(sender(person["email"], msg["subject"], msg["html"]))
+    except Exception:
+        logger.exception("ai interview single send failed for %s", customer_id)
+    # the link in this email is the real one, so its answers save; no
+    # "sent_at" on the event, so the automatic closeout send and the recap
+    # wait are untouched
+    st.setdefault("people", {})[str(customer_id)] = {
+        "why": person["why"], "questions": person["questions"], "single": kerry_ok,
+        "sent_at": now.strftime("%Y-%m-%d %H:%M") if ok else None, "failed": not ok}
+    _save(key, st, db_path)
+    try:
+        db.log_message({"event_name": ev.get("item_name"), "channel": "email",
+                        "recipient_name": person["name"], "recipient_address": person["email"],
+                        "subject": msg["subject"], "body_preview": "post-round interview (single send)",
+                        "status": "sent" if ok else "failed", "sent_by": "ai_interview"}, db_path=db_path)
+        db.log_agent_action("ai-interview", "ai_interview_single_send",
+                            f"event {event_id} customer {customer_id}: {'sent' if ok else 'failed'} ({kerry_ok})",
+                            db_path=db_path)
+    except Exception:
+        pass
+    out["status"] = "sent" if ok else "failed"
+    return out
+
+
 def _send_all(event_id, st, db_path=None, now=None, sender=None) -> dict:
     from email_parser import database as db
     from email_parser.timezone_utils import now_central

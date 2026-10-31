@@ -1866,7 +1866,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-waitlist:<event_id> / add|<event_id>|<cid>[|<note>][|apply] / remove|<event_id>|<cid>[|apply] / move|<event_id>|<cid>|<pos> / preview|<joined|offered|expired|morning>|<event_id> / tick  the event's ordered waitlist; an RSVP-only player on it leaves the roster (RSVP override not_playing); paid rows untouched
       scoring-closeout-chain:status|<id> / run|<id> / reset|<id>[|<step>]  the in-Tracker closeout chain (publish, final, payouts, flights, pairings, handicaps, points, pace, recap); runs itself at CLOSEOUT START
       scoring-recap-writer:facts|<ids> / write|<ids> / read|db:<key> / list  the night's recap written by the Tracker (one Claude call, linted, stored as db:<key>)
-      scoring-ai-interview:<event_id>[|preview[|<staff addr>]]  THE POST-ROUND INTERVIEW BY EMAIL (Kerry 10/29 #2462): bare = READ-ONLY who qualifies and why (City/TGF MVP, eagle or better, 3+ birdies), dial ai_interview_email, wording stamp ai_interview_approved, sent, consented quotes; preview mails ONE sample to STAFF only
+      scoring-ai-interview:<event_id>[|preview[|<staff addr>] | |send|<cid>|<kerry-ok post id>[|confirm]]  THE POST-ROUND INTERVIEW BY EMAIL (send = ONE real invitation to one qualifier, Kerry's word + the wording stamp, dry run without confirm, Kerry 10/30) (Kerry 10/29 #2462): bare = READ-ONLY who qualifies and why (City/TGF MVP, eagle or better, 3+ birdies), dial ai_interview_email, wording stamp ai_interview_approved, sent, consented quotes; preview mails ONE sample to STAFF only
       scoring-event-photos:<event_id>  READ-ONLY an event's photos (Kerry 10/29 #2460-J) and dials event_photos_capture / event_photos_in_email
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
@@ -7334,6 +7334,18 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if not _b or not _b[0].isdigit():
                 return json.dumps({"error": "ops: <event_id>[|preview[|<staff addr>]]",
                                    "template_hash": _ai.template_hash()})
+            if len(_b) > 3 and _b[1].lower() == "send":
+                # "<event_id>|send|<cid>|<kerry-ok post id>[|confirm]": ONE
+                # real invitation (Kerry 10/30, a test to Scott Marroquin).
+                from email_parser.customer_query import _kerry_ok
+                with db._connect() as _c:
+                    _ok, _why = _kerry_ok(_c, _b[3])
+                if not _ok:
+                    return json.dumps({"refused": f"rule 3b: {_why}"})
+                db.log_agent_action("mcp-claude", "scoring-ai-interview", arg)
+                return json.dumps(_ai.send_one(int(_b[0]), int(_b[2]), _why,
+                                               confirm="confirm" in [x.lower() for x in _b[4:]]),
+                                  indent=2, default=str)
             if len(_b) > 1 and _b[1].lower() == "preview":
                 db.log_agent_action("mcp-claude", "scoring-ai-interview", arg)
                 return json.dumps(_ai.send_preview(int(_b[0]), next((x for x in _b[2:] if "@" in x), None)),

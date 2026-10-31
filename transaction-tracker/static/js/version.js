@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.11";
+window.TGF_VERSION = "2.635.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.12",
+    date: "2026-10-30",
+    title: "Post-round interview: one real invitation to one player",
+    changes: [
+      "Kerry 10/30: \"Let's go ahead and send to Scott to test our from Tuesday's Silverhorn event.\" scoring-ai-interview:<event>|send|<cid>|<kerry-ok post id>[|confirm] sends ONE real invitation (its link saves answers) to a player who qualifies: refused without a mailbox post carrying Kerry's word or without the wording stamp, dry run without confirm, once per player per event. It leaves the event's automatic closeout send and the recap wait untouched."
+    ]
+  },
   {
     version: "2.635.11",
     date: "2026-10-30",
