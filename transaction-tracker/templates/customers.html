@@ -3424,7 +3424,7 @@
     // Kerry 10/28 (#2475-2 / #2476-4): "[What] for [Event or Season
     // Contest name]" -> "Refund for s9.18 Cedar Creek" (refund-memo.js).
     function _custRefundMemo() {
-        return window.refundMemo("Refund", _custRefundSource().event);
+        return window.refundMemo("Refund", _custRefundSource().event, (custPayoutCtx || {}).playerName);
     }
 
     // Deep links mirror the Payouts tab (tgf.html payAction): venmo://
@@ -3633,7 +3633,7 @@
                 // venmo:// scheme on phones — the https universal link shows
                 // literal '+' for memo spaces (Kerry, 2026-07-08)
                 // Excess reads FROM the source event (Kerry 2026-07-15)
-                const venmoNote = encodeURIComponent(window.refundMemo("Refund", sourceEvent || ''));
+                const venmoNote = encodeURIComponent(window.refundMemo("Refund", sourceEvent || '', customerName));
                 const _vMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                 const venmoPayUrl = handle
                     ? (_vMobile

@@ -8,7 +8,8 @@ Every refund the Tracker starts pre-fills the Venmo / PayPal / Cash App note
 as "<What> for <Event or Season Contest name>":
     Refund for San Antonio Fall Points Race
     Refund for a9.29 Teravista
-Not all caps, not pipe-separated, no player-name prefix. One helper here
+Not all caps, not pipe-separated. Kerry 10/30 put the player's name back in
+front: "Jeff Young - Refund for s9.28 TPC Canyons". One helper here
 for the server (get_refunds_overview) and its twin `refundMemo` in
 static/js/refund-memo.js for the pages that build the note in the browser
 (customers.html Refund modal + apply-credit excess, events.html excess,
@@ -50,11 +51,25 @@ def display_name(name) -> str:
     return " ".join(out)
 
 
-def refund_memo(what: str = "Refund", name: str = "") -> str:
-    """"<What> for <name>", e.g. refund_memo("Refund", "a9.29 Teravista")."""
+def refund_memo(what: str = "Refund", name: str = "", player: str = "") -> str:
+    """"<First> <Last> - <What> for <name>", e.g. refund_memo("Refund",
+    "s9.28 TPC CANYONS", "Jeff Young") -> "Jeff Young - Refund for s9.28 TPC
+    Canyons" (Kerry 10/30: "They all should be including the [First Name]
+    [Last Name] - [What]..."). Without a player it is "<What> for <name>"."""
     w = " ".join(str(what or "").split()) or "Refund"
     n = display_name(name)
-    return f"{w} for {n}" if n else w
+    body = f"{w} for {n}" if n else w
+    p = player_name(player)
+    return f"{p} - {body}" if p else body
+
+
+def player_name(name) -> str:
+    """"First Last": a stored "YOUNG, Jeff" is turned round; spaces collapsed."""
+    s = " ".join(str(name or "").split())
+    if "," in s:
+        last, first = (x.strip() for x in s.split(",", 1))
+        s = f"{first} {last.title() if last.isupper() else last}".strip()
+    return s
 
 
 def contest_name(contest_type: str = "", chapter: str = "", season: str = "",

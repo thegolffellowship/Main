@@ -21181,6 +21181,21 @@ def _monthly_month_entry(conn, key: str, best: dict) -> dict:
     except sqlite3.OperationalError:
         _last_ev = None
     final = complete or bool(_last_ev and today > _last_ev)
+    # ...or the same day, once every event on that last day has reached
+    # CLOSEOUT START (Kerry 2026-10-30: "Closeout needs to also closeout the
+    # races on the standings page and put the winner banners up"). Still
+    # DISPLAY ONLY: the money waits for `complete`.
+    if not final and _last_ev and today == str(_last_ev)[:10]:
+        try:
+            _ids = [r["id"] for r in conn.execute(
+                """SELECT id FROM events WHERE substr(event_date, 1, 10) = ?
+                     AND lower(COALESCE(status, 'active')) NOT IN ('cancelled', 'canceled')""",
+                (str(_last_ev)[:10],)).fetchall()]
+            final = bool(_ids) and all(conn.execute(
+                "SELECT 1 FROM app_settings WHERE key = ? AND COALESCE(value, '') != ''",
+                (f"closeout_start:{i}",)).fetchone() for i in _ids)
+        except sqlite3.OperationalError:
+            pass
     member_count = conn.execute(
         """SELECT COUNT(DISTINCT customer_id) AS c
            FROM customer_memberships
@@ -38417,7 +38432,7 @@ def get_refunds_overview(db_path: str | Path | None = None,
             # Kerry 10/28 (#2475-2 / #2476-4): "[What] for [Event or
             # Season Contest name]" -> "Refund for s9.18 Cedar Creek".
             from email_parser.refund_memo import refund_memo as _refund_memo
-            _memo = _refund_memo("Refund", _origin)
+            _memo = _refund_memo("Refund", _origin, r.get("customer"))
             outstanding.append({
                 "item_id": r["id"], "customer": r.get("customer"),
                 "customer_id": r.get("customer_id"), "event": r.get("item_name"),
@@ -38500,7 +38515,8 @@ def get_refunds_overview(db_path: str | Path | None = None,
                                        (rm["source_item_id"],)).fetchone()
                     _src_name = (_si["item_name"] if _si else "") or ""
                 memo = _refund_memo("Refund", _contest_name(
-                    rm.get("contest_type"), rm.get("chapter"), rm.get("season"), _src_name))
+                    rm.get("contest_type"), rm.get("chapter"), rm.get("season"), _src_name),
+                    rm.get("customer_name"))
                 if paid:
                     age = _age(paid["date"])
                     if age is None or age <= completed_days:

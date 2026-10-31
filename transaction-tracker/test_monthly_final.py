@@ -36,6 +36,14 @@ def sept(day):
 
 m = sept(date(2026, 9, 29))
 check("on the day of the last event: not final yet", m["final"] is False and not m["final_winners"], m.get("final"))
+# Kerry 10/30: closeout puts the winner banner up the same day
+_c = sqlite3.connect(tmp)
+_c.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('closeout_start:1', '2026-09-29 13:05')")
+_c.commit(); _c.close()
+m = sept(date(2026, 9, 29))
+check("the last event's CLOSEOUT START: FINAL the same day, winner shown",
+      m["final"] is True and [w["player_name"] for w in m["final_winners"]] == ["Luke Mazanec"], m.get("final"))
+check("…still no money before the month is complete", m["complete"] is False and m["winners"] == [])
 m = sept(date(2026, 9, 30))
 check("the day after the month's last (non-cancelled) event: FINAL", m["final"] is True and m["last_event_date"] == "2026-09-29", m)
 check("…the winner comes from the final numbers, not a hand pick",

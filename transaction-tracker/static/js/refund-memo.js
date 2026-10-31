@@ -20,9 +20,22 @@
         }).join(" ");
     }
     window.refundMemoName = displayName;
-    window.refundMemo = function (what, name) {
+    // "First Last": a stored "YOUNG, Jeff" is turned round
+    function playerName(name) {
+        let s = String(name == null ? "" : name).split(/\s+/).filter(Boolean).join(" ");
+        if (s.includes(",")) {
+            const i = s.indexOf(",");
+            const last = s.slice(0, i).trim(), first = s.slice(i + 1).trim();
+            s = `${first} ${last === last.toUpperCase() ? last.charAt(0) + last.slice(1).toLowerCase() : last}`.trim();
+        }
+        return s;
+    }
+    // Kerry 10/30: "[First Name] [Last Name] - [What] for [Event]"
+    window.refundMemo = function (what, name, player) {
         const w = String(what || "").split(/\s+/).filter(Boolean).join(" ") || "Refund";
         const n = displayName(name);
-        return n ? `${w} for ${n}` : w;
+        const body = n ? `${w} for ${n}` : w;
+        const p = playerName(player);
+        return p ? `${p} - ${body}` : body;
     };
 })();

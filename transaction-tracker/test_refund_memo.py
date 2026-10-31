@@ -34,14 +34,21 @@ CASES = [
     (("Refund", "  s9.18   Cedar Creek "), "Refund for s9.18 Cedar Creek"),
     (("", "s9.18 Cedar Creek"), "Refund for s9.18 Cedar Creek"),
     (("Refund", ""), "Refund"),
+    (("Refund", "s9.28 TPC CANYONS", "Jeff Young"), "Jeff Young - Refund for s9.28 TPC Canyons"),
+    (("Refund", "a9.29 Teravista", "WADE, Mary"), "Mary Wade - Refund for a9.29 Teravista"),
 ]
-for (w, n), want in CASES:
-    check(f"refund_memo({w!r}, {n!r}) -> {want!r}", refund_memo(w, n) == want, refund_memo(w, n))
+for a, want in CASES:
+    check(f"refund_memo{a!r} -> {want!r}", refund_memo(*a) == want, refund_memo(*a))
 # a leading event code doesn't stop an ALL-CAPS name being cased; acronyms stay (Kerry 10/30)
 check("s9.28 TPC CANYONS -> Refund for s9.28 TPC Canyons",
       refund_memo("Refund", "s9.28 TPC CANYONS") == "Refund for s9.28 TPC Canyons", refund_memo("Refund", "s9.28 TPC CANYONS"))
 check("2026 TGF CHAMPIONSHIP keeps TGF",
       refund_memo("Refund", "2026 TGF CHAMPIONSHIP") == "Refund for 2026 TGF Championship")
+# Kerry 10/30: "[First Name] [Last Name] - [What]..."
+check("player first: Jeff Young - Refund for s9.28 TPC Canyons",
+      refund_memo("Refund", "s9.28 TPC CANYONS", "Jeff Young") == "Jeff Young - Refund for s9.28 TPC Canyons")
+check("a stored 'YOUNG, Jeff' reads 'Jeff Young'",
+      refund_memo("Refund", "s9.28 TPC CANYONS", "YOUNG, Jeff") == "Jeff Young - Refund for s9.28 TPC Canyons")
 check("contest name: the product bought wins",
       contest_name("NET Points Race", "San Antonio", "2026", "San Antonio Fall Points Race")
       == "San Antonio Fall Points Race")
@@ -51,7 +58,7 @@ check("contest name fallback: chapter + contest (no 'City') + season",
 # The JS twin agrees on every case.
 js = ("global.window={};require('./static/js/refund-memo.js');"
       "const c=JSON.parse(process.argv[1]);"
-      "console.log(JSON.stringify(c.map(x=>window.refundMemo(x[0],x[1]))));")
+      "console.log(JSON.stringify(c.map(x=>window.refundMemo(x[0],x[1],x[2]))));")
 try:
     out = subprocess.run(["node", "-e", js, json.dumps([list(a) for a, _ in CASES])],
                          capture_output=True, text=True, timeout=30)
@@ -84,13 +91,14 @@ with db._connect(DB) as c:
     c.commit()
 ov = db.get_refunds_overview(db_path=DB)
 memos = {(r.get("item_id") or ("rm", r.get("removal_id"))): r.get("memo") for r in ov.get("outstanding", [])}
-check("credit refund memo: 'Refund for a9.29 Teravista'", memos.get(8101) == "Refund for a9.29 Teravista", memos)
+check("credit refund memo: 'Amy Memo - Refund for a9.29 Teravista' (Kerry 10/30: name first)",
+      memos.get(8101) == "Amy Memo - Refund for a9.29 Teravista", memos)
 with db._connect(DB) as c:
     rid = c.execute("SELECT id FROM season_contest_removals WHERE customer_id = 61").fetchone()[0]
-check("season-contest removal memo: 'Refund for San Antonio Fall Points Race'",
-      memos.get(("rm", rid)) == "Refund for San Antonio Fall Points Race", memos)
-check("a removal with no source item: 'Refund for Match Play 2026' (seeded rows)",
-      "Refund for Match Play 2026" in memos.values(), memos)
+check("season-contest removal memo: 'Ben Memo - Refund for San Antonio Fall Points Race'",
+      memos.get(("rm", rid)) == "Ben Memo - Refund for San Antonio Fall Points Race", memos)
+check("a removal with no source item: '<player> - Refund for Match Play 2026' (seeded rows)",
+      any(m.endswith(" - Refund for Match Play 2026") for m in memos.values()), memos)
 check("no memo is all caps or pipe-separated",
       all(m and m != m.upper() and "|" not in m for m in memos.values()), memos)
 
@@ -111,10 +119,10 @@ check("same memo + amount but a different customer's receipt: watch stays open",
 
 # Wiring: every refund the Tracker starts uses the helper.
 cu, ev, tg = (open(f"templates/{n}.html").read() for n in ("customers", "events", "tgf"))
-check("customers.html Refund modal uses refundMemo", 'window.refundMemo("Refund", _custRefundSource().event)' in cu)
-check("customers.html excess Venmo-back uses refundMemo", 'window.refundMemo("Refund", sourceEvent' in cu)
+check("customers.html Refund modal uses refundMemo, with the player", 'window.refundMemo("Refund", _custRefundSource().event, (custPayoutCtx || {}).playerName)' in cu)
+check("customers.html excess Venmo-back uses refundMemo, with the player", "window.refundMemo(\"Refund\", sourceEvent || '', customerName)" in cu)
 check("events.html both excess Venmo-backs use refundMemo", ev.count('window.refundMemo("Refund"') == 2)
-check("tgf.html console fallback uses refundMemo", 'window.refundMemo("Refund", r.event' in tg)
+check("tgf.html console fallback uses refundMemo, with the player", 'window.refundMemo("Refund", r.event || "", r.customer)' in tg)
 check("the three pages load refund-memo.js",
       all('/static/js/refund-memo.js' in s for s in (cu, ev, tg)))
 check("no old 'Excess credit from' memo left in the pages",

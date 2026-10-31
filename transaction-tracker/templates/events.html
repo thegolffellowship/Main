@@ -14378,7 +14378,8 @@ function ctpHolesLoad(evId) {
                 let excess_venmo = null;
                 if (excess_action === "venmo" && _pv.venmo_username) {
                     const handle = String(_pv.venmo_username).replace(/^@/, "");
-                    const memo = window.refundMemo("Refund", _pv.source_event || "");
+                    const memo = window.refundMemo("Refund", _pv.source_event || "",
+                        (allItems.find(r => r.id === evCreditItemId) || {}).customer);
                     excess_venmo = { handle, amount: Number(_net.excess).toFixed(2), memo };
                     window.open(venmoPayHref(handle, _net.excess, memo), "_blank");
                 }
@@ -19222,7 +19223,7 @@ function ctpHolesLoad(evId) {
                         // transfer chain; event_name is a fallback.
                         const _c0 = (info.credits && info.credits[0]) || {};
                         const _srcEv = _c0.origin_event || _c0.event_name || '';
-                        const _exMemo = window.refundMemo("Refund", _srcEv);
+                        const _exMemo = window.refundMemo("Refund", _srcEv, (applyCreditState || {}).customer);
                         const vUrl = vH ? venmoPayHref(vH, eAmt, _exMemo) : '';
                         // Captured so "Apply Credit & Register" can auto-open Venmo
                         // in the click gesture + arm the refund watch (Kerry 2026-07-16).

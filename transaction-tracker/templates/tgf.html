@@ -1436,7 +1436,7 @@
                     action = `<span title="${escR(r.payment_handle || "")}"
                            style="display:inline-block;background:${bg};color:#fff;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:12px;white-space:nowrap;">${label} ${fmt(r.amount)}</span>${moreLink}`;
                 } else if (r.venmo_handle) {
-                    const memo = encodeURIComponent(r.memo || window.refundMemo("Refund", r.event || ""));
+                    const memo = encodeURIComponent(r.memo || window.refundMemo("Refund", r.event || "", r.customer));
                     const amt = Number(r.amount || 0).toFixed(2);
                     const h = r.venmo_handle.replace(/^@/, "");
                     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);

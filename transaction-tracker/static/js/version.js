@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.635.8";
+window.TGF_VERSION = "2.635.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.9",
+    date: "2026-10-30",
+    title: "Venmo memos lead with the player; the month's winner banner at closeout",
+    changes: [
+      "Refund memos now read \"[First Name] [Last Name] - Refund for [Event]\" (Kerry 10/30, the TPC credits: \"They all should be including the [First Name] [Last Name] - [What]...\"): \"Jeff Young - Refund for s9.28 TPC Canyons\". Every place the Tracker builds one: the Refunds console (server memo and its fallback), the customer Refund modal, the apply-credit excess and both Events-page excess Venmo-backs; a stored \"YOUNG, Jeff\" reads \"Jeff Young\". refund_memo.py and its twin static/js/refund-memo.js.",
+      "The month's points winner banner goes up at the month's last event's CLOSEOUT START instead of the next day (Kerry 10/30: \"Closeout needs to also closeout the races on the standings page and put the winner banners up\"). Display only: the month's money still waits for the calendar month to end. The Fall races were already closed at the Fall Championship's closeout (race_close: prizes recorded, race declared FINAL, champions named)."
+    ]
+  },
   {
     version: "2.635.8",
     date: "2026-10-30",
