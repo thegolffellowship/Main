@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.635.13";
+window.TGF_VERSION = "2.635.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.635.14",
+    date: "2026-10-30",
+    title: "Refunds: Sent · verifying times out after 5 minutes",
+    changes: [
+      "Kerry 10/30, Jeff Young and Mary Wade stuck on \"Sent · verifying…\": \"I wasn't able to send those. It should have timed out already and reset.\" Like Unpaid, a tapped refund reads \"Sent · verifying…\" for 5 minutes, then its Venmo button comes back (the page flips it on time, no reload). The watch stays open, so a receipt that lands late still verifies it, and a new tap replaces it."
+    ]
+  },
   {
     version: "2.635.13",
     date: "2026-10-30",

@@ -1411,9 +1411,11 @@
             setTimeout(() => {
                 try { a.outerHTML = REFUND_VERIFYING_PILL; } catch (_) {}
                 _refundPollSoon();
+                setTimeout(() => { if (payFilter === "refunds") loadRefunds(); }, REFUND_VERIFY_MS + 1000);
             }, 0);
         }, true);
 
+        const REFUND_VERIFY_MS = 5 * 60 * 1000;     // same as Unpaid's PAY_VERIFY_MS
         const REFUND_VERIFYING_PILL = `<span class="venmo-verifying" title="You tapped Venmo — waiting for the Venmo receipt to confirm this refund. It moves to Completed when it's verified."><span class="vspin"></span>Sent · verifying…</span>`;
         // While any refund is being verified, re-read the board every
         // minute (Refunds tab open only) so a verified one moves on its own.
@@ -1434,7 +1436,20 @@
             const el = $("#refunds-main");
             const t = data.totals || {};
 
-            const outRows = (data.outstanding || []).map(r => {
+            // A tapped refund reads "Sent · verifying…" for 5 minutes, then
+            // its Venmo button comes back, like Unpaid (Kerry 10/30: "It
+            // should have timed out already and reset"). The watch stays
+            // open on the server, so a late receipt still verifies it, and
+            // a new tap replaces it.
+            const _watchAgeMs = r => {
+                const t = Date.parse(String(r.initiated_at || "").replace(" ", "T") + "Z");
+                return isNaN(t) ? Infinity : Date.now() - t;
+            };
+            const flight = (data.in_flight || []).filter(r => _watchAgeMs(r) < REFUND_VERIFY_MS);
+            const lapsed = (data.in_flight || []).filter(r => _watchAgeMs(r) >= REFUND_VERIFY_MS)
+                .map(r => ({ ...r, venmo_handle: r.handle || null,
+                             payment_method: (r.method || "venmo").toLowerCase().replace(/\s+/g, "") }));
+            const outRows = [...(data.outstanding || []), ...lapsed].map(r => {
                 // Season-contest removal refunds (kind contest_refund) get a
                 // direct Venmo pay link — the receipt lands via the expense
                 // inbox and flips the row to COMPLETED on its own (Kerry
@@ -1500,7 +1515,6 @@
             // A tapped refund stays in Outstanding, "Sent · verifying…",
             // like a tapped payout on Unpaid (Kerry 10/30); it moves to
             // Completed when the receipt verifies it.
-            const flight = data.in_flight || [];
             const flightRows = flight.map(r => `
                 <tr>
                     <td>${playerCell(r.customer, r.customer_id, r.event)}</td>
@@ -1509,6 +1523,14 @@
                     <td class="right" style="white-space:nowrap;" title="${escR((r.method || "") + (r.handle ? " · " + r.handle : ""))}">${REFUND_VERIFYING_PILL}</td>
                 </tr>`).join("");
             if (flight.length) _refundPollSoon();
+            // flip a verifying row back the moment its 5 minutes are up
+            if (flight.length) {
+                const next = Math.min(...flight.map(r => REFUND_VERIFY_MS - _watchAgeMs(r)));
+                clearTimeout(window._refundLapseTimer);
+                window._refundLapseTimer = setTimeout(() => {
+                    if (payFilter === "refunds") renderRefunds(data);
+                }, Math.max(1000, next + 500));
+            }
 
             const doneRows = (data.completed || []).map(r => `
                 <tr>
